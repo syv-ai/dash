@@ -14,6 +14,7 @@ import {
 import type { DiffComment, PrProvider, PrReviewThread } from '../../../../shared/types';
 import { Button } from '../../ui/Button';
 import { IconButton } from '../../ui/IconButton';
+import { replyAnchor } from '../../../../shared/diffComments';
 import { useCommentsStore } from '../../../stores/commentsStore';
 import { threadLocation } from '../../../utils/prReviewNotices';
 import { CommentInputBar } from '../comments/CommentInputBar';
@@ -144,9 +145,7 @@ export function PrThreadCard({
   const addReply = (text: string) => {
     if (!draftScope) return;
     useCommentsStore.getState().addComment({
-      filePath: thread.path,
-      startLine: thread.startLine ?? thread.line ?? 1,
-      endLine: thread.line ?? 1,
+      ...replyAnchor(thread),
       text,
       viewScope: draftScope,
       replyTo: thread.id,

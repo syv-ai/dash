@@ -1,7 +1,16 @@
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
-import type { DiffComment, PrProvider, PrRef, Task } from '../../../shared/types';
+import type {
+  DiffComment,
+  PrProvider,
+  PrRef,
+  PrReview,
+  PrReviewComment,
+  PrReviewThread,
+  Task,
+} from '../../../shared/types';
 import { prScope } from '../../../shared/prScope';
+import { canDemote, replyAnchor } from '../../../shared/diffComments';
 import { ControlError, defineCapability, type Registry } from '../registry';
 import type { TaskReviews } from '../../services/prReview/taskReview';
 
@@ -10,13 +19,24 @@ export interface ReviewCapabilityDeps {
   providerFor(projectId: string): PrProvider;
   getTask(id: string): Task | undefined;
   reviews: TaskReviews;
+  /** The PR the task reviews: its stored target, else its own open PR, else null. */
+  reviewTarget(taskId: string): Promise<PrRef | null>;
+  /** The PR's review as the editor loads it, from the task's checkout. Reads only. */
+  loadReview(task: Task, pr: PrRef): Promise<PrReview>;
 }
 
 const TASK_ID_FIELD = z
   .string()
   .optional()
   .describe('The task whose drafts these are; an agent inside a task may leave it out for its own');
-const NUMBER = z.number().int().positive().describe('The PR number (ADO: the pull request id)');
+const NUMBER = z
+  .number()
+  .int()
+  .positive()
+  .optional()
+  .describe(
+    "The PR number (ADO: the pull request id); defaults to the PR the task reviews, else the task's own open PR",
+  );
 const PROVIDER = z
   .enum(['github', 'ado'])
   .optional()
@@ -46,20 +66,115 @@ function view(c: DiffComment) {
   };
 }
 
+/** What an agent sees of a posted comment. */
+const commentView = (c: PrReviewComment) => ({
+  id: c.id,
+  author: c.author,
+  body: c.body,
+  createdAt: c.createdAt,
+});
+
+/** What an agent sees of a review thread. */
+function threadView(t: PrReviewThread) {
+  return {
+    id: t.id,
+    path: t.path,
+    line: t.line,
+    startLine: t.startLine,
+    side: t.side,
+    outdated: t.isOutdated,
+    resolved: t.resolved,
+    url: t.comments[0]?.url ?? null,
+    comments: t.comments.map(commentView),
+  };
+}
+
+/** What an agent sees of a PR: what it is, where it stands, what it changes. */
+function prView(r: PrReview, conversation: boolean) {
+  return {
+    provider: r.provider,
+    number: r.number,
+    title: r.title,
+    body: r.body,
+    url: r.url,
+    author: r.author,
+    viewerIsAuthor: r.viewerIsAuthor,
+    state: r.state,
+    baseRef: r.baseRef,
+    headRef: r.headRef,
+    commits: r.commits,
+    behindBase: r.behindBase,
+    reviewers: r.reviewers,
+    assignees: r.assignees,
+    checks: r.checks.map(({ name, state }) => ({ name, state })),
+    files: r.files.map(({ path, oldPath, status, additions, deletions }) => ({
+      path,
+      ...(oldPath ? { oldPath } : {}),
+      status,
+      additions,
+      deletions,
+    })),
+    ...(conversation ? { conversation: r.conversation.map(commentView) } : {}),
+  };
+}
+
+const byLocation = (a: PrReviewThread, b: PrReviewThread) =>
+  a.path.localeCompare(b.path) || (a.line ?? 0) - (b.line ?? 0);
+
 /**
- * Write notes and draft PR review comments in a task's diff editor, for the
- * person to edit and submit. Nothing here touches the PR itself: submitting,
- * resolving and voting stay with the person, in the UI.
+ * Read the PR a task reviews and its threads, and write notes and draft PR
+ * review comments in the task's diff editor, for the person to edit and post.
+ * Nothing here writes to the PR itself: posting, resolving and voting stay
+ * with the person, in the UI.
  */
 export function registerReviewCapabilities(registry: Registry, deps: ReviewCapabilityDeps): void {
-  /** The task's project's PR `number`, refusing a provider it isn't on. */
-  const prFor = (taskId: string, number: number, asked?: PrProvider): PrRef => {
+  /** The PR a call is about: `number` on the task's project's provider, else
+   *  the PR the task reviews. Refuses a provider it isn't on, and no PR at all. */
+  const prFor = async (taskId: string, number?: number, asked?: PrProvider): Promise<PrRef> => {
     const task = deps.getTask(taskId)!;
-    const provider = deps.providerFor(task.projectId);
-    if (asked && asked !== provider) {
-      throw new ControlError(400, `this project's PRs are on ${provider}`);
+    const pr =
+      number === undefined
+        ? await deps.reviewTarget(taskId)
+        : { provider: deps.providerFor(task.projectId), number };
+    if (!pr) throw new ControlError(400, 'No pull request to review: pass --number');
+    if (asked && asked !== pr.provider) {
+      throw new ControlError(400, `this PR is on ${pr.provider}`);
     }
-    return { provider, number };
+    return pr;
+  };
+
+  /** The PR's review, loaded from the task's checkout. */
+  const reviewOf = (taskId: string, pr: PrRef) => deps.loadReview(deps.getTask(taskId)!, pr);
+
+  /** A line draft's file and lines, as given. */
+  const lines = (input: {
+    path?: string;
+    startLine?: number;
+    endLine?: number;
+  }): Pick<DiffComment, 'filePath' | 'startLine' | 'endLine'> => {
+    if (!input.path || input.startLine === undefined) {
+      throw new ControlError(400, 'pass --path and --start-line, or --reply-to <thread-id>');
+    }
+    const endLine = input.endLine ?? input.startLine;
+    if (endLine < input.startLine) throw new ControlError(400, '--end-line is before --start-line');
+    return { filePath: input.path.replace(/^\/+/, ''), startLine: input.startLine, endLine };
+  };
+
+  /** A reply's file and lines: its thread's, which must be on the PR. */
+  const replyLines = async (
+    taskId: string,
+    pr: PrRef,
+    input: { replyTo?: string; kind: string; path?: string; startLine?: number; endLine?: number },
+  ): Promise<Pick<DiffComment, 'filePath' | 'startLine' | 'endLine'>> => {
+    if (input.kind !== 'comment') {
+      throw new ControlError(400, 'a reply is a comment: pass --kind comment');
+    }
+    if (input.path !== undefined || input.startLine !== undefined || input.endLine !== undefined) {
+      throw new ControlError(400, "a reply sits on its thread's lines: drop --path and the lines");
+    }
+    const thread = (await reviewOf(taskId, pr)).threads.find((t) => t.id === input.replyTo);
+    if (!thread) throw new ControlError(404, `thread not found on PR #${pr.number}`);
+    return replyAnchor(thread);
   };
 
   /** The target task's PR note or draft, the person's or an agent's, or a 404.
@@ -72,6 +187,62 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
 
   registry.register(
     defineCapability({
+      name: 'review.pr',
+      summary:
+        "Read a PR's overview, without its threads. It has the title, description, author, branches, state, reviewers, checks and changed files; `viewerIsAuthor` says whether it is the person's own PR.",
+      input: z.object({
+        taskId: TASK_ID_FIELD,
+        number: NUMBER,
+        provider: PROVIDER,
+        conversation: z
+          .boolean()
+          .optional()
+          .describe("Add the PR's general comments and review summaries, oldest first"),
+      }),
+      callers: ['orchestrator', 'task'],
+      readOnly: true,
+      target: { taskId: 'taskId' },
+      defaultTargetToSelf: true,
+      handler: async (_ctx, input) => {
+        const taskId = input.taskId!;
+        const review = await reviewOf(taskId, await prFor(taskId, input.number, input.provider));
+        return prView(review, input.conversation ?? false);
+      },
+    }),
+  );
+
+  registry.register(
+    defineCapability({
+      name: 'review.threads',
+      summary:
+        "Read a PR's review threads on its files, unresolved ones by default. Each has its file and lines, whether it is resolved or outdated, and its comments.",
+      input: z.object({
+        taskId: TASK_ID_FIELD,
+        number: NUMBER,
+        provider: PROVIDER,
+        state: z
+          .enum(['unresolved', 'resolved', 'all'])
+          .optional()
+          .describe('Which threads; defaults to unresolved'),
+      }),
+      callers: ['orchestrator', 'task'],
+      readOnly: true,
+      target: { taskId: 'taskId' },
+      defaultTargetToSelf: true,
+      handler: async (_ctx, input) => {
+        const taskId = input.taskId!;
+        const review = await reviewOf(taskId, await prFor(taskId, input.number, input.provider));
+        const state = input.state ?? 'unresolved';
+        return review.threads
+          .filter((t) => state === 'all' || t.resolved === (state === 'resolved'))
+          .sort(byLocation)
+          .map(threadView);
+      },
+    }),
+  );
+
+  registry.register(
+    defineCapability({
       name: 'review.drafts_list',
       summary:
         "List a task's notes and draft review comments on a PR (on lines, or replies to its threads), the user's and the agent's.",
@@ -81,7 +252,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
       target: { taskId: 'taskId' },
       defaultTargetToSelf: true,
       handler: async (_ctx, input) => {
-        const pr = prFor(input.taskId!, input.number, input.provider);
+        const pr = await prFor(input.taskId!, input.number, input.provider);
         return deps.reviews
           .drafts(input.taskId!, pr)
           .sort((a, b) => a.filePath.localeCompare(b.filePath) || a.startLine - b.startLine)
@@ -94,20 +265,29 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
     defineCapability({
       name: 'review.drafts_create',
       summary:
-        "Write a note or draft a review comment on a PR's lines (or a reply to one of its threads) in the task's diff editor. Nothing is posted: the person reviews, edits and submits comments; notes stay local. For a comment on the whole PR, use `dashctl review summary-set` instead.",
+        "Write a note or draft a review comment on a PR's lines, or draft a reply to one of its threads, in the task's diff editor. Nothing is posted: the person reviews, edits and posts comments; notes stay local. For a comment on the whole PR, use `dashctl review summary-set` instead.",
       input: z.object({
         taskId: TASK_ID_FIELD,
         number: NUMBER,
         provider: PROVIDER,
-        path: z.string().min(1).describe("Repo-relative path in the PR's version of the file"),
-        startLine: LINE.describe("First line, in the PR's version of the file"),
+        path: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("Repo-relative path in the PR's version of the file; not with --reply-to"),
+        startLine: LINE.optional().describe(
+          "First line, in the PR's version of the file; not with --reply-to",
+        ),
         endLine: LINE.optional().describe('Last line; defaults to startLine'),
         body: BODY,
         kind: KIND,
         replyTo: z
           .string()
+          .min(1)
           .optional()
-          .describe("Reply to this thread (the provider's thread id) instead of starting one"),
+          .describe(
+            "Reply to this thread (its id from `dashctl review threads`) instead of starting one; it sits on the thread's lines, and is a comment",
+          ),
       }),
       callers: ['orchestrator', 'task'],
       cli: { stdin: 'body' },
@@ -116,18 +296,14 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
       defaultTargetToSelf: true,
       handler: async (_ctx, input) => {
         const taskId = input.taskId!;
-        const { provider, number } = prFor(taskId, input.number, input.provider);
-        const endLine = input.endLine ?? input.startLine;
-        if (endLine < input.startLine)
-          throw new ControlError(400, '--end-line is before --start-line');
+        const pr = await prFor(taskId, input.number, input.provider);
+        const where = input.replyTo ? await replyLines(taskId, pr, input) : lines(input);
         const draft = deps.reviews.saveAgentDraft({
           id: randomUUID(),
           taskId,
-          filePath: input.path.replace(/^\/+/, ''),
-          startLine: input.startLine,
-          endLine,
+          ...where,
           text: input.body,
-          viewScope: prScope(provider, number),
+          viewScope: prScope(pr.provider, pr.number),
           replyTo: input.replyTo ?? null,
           kind: input.kind,
         });
@@ -166,6 +342,9 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
           throw new ControlError(400, 'nothing to change: give a body, startLine, endLine or kind');
         }
         const draft = draftOrThrow(taskId, input.id);
+        if (input.kind === 'note' && input.kind !== draft.kind && !canDemote(draft)) {
+          throw new ControlError(400, 'a reply stays a comment');
+        }
         const startLine = input.startLine ?? draft.startLine;
         const endLine = input.endLine ?? Math.max(startLine, draft.endLine);
         if (endLine < startLine) throw new ControlError(400, '--end-line is before --start-line');
@@ -218,7 +397,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
       target: { taskId: 'taskId' },
       defaultTargetToSelf: true,
       handler: async (_ctx, input) => {
-        const pr = prFor(input.taskId!, input.number, input.provider);
+        const pr = await prFor(input.taskId!, input.number, input.provider);
         return deps.reviews.getSummary(input.taskId!, pr);
       },
     }),
@@ -242,7 +421,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
       defaultTargetToSelf: true,
       handler: async (_ctx, input) => {
         const taskId = input.taskId!;
-        const pr = prFor(taskId, input.number, input.provider);
+        const pr = await prFor(taskId, input.number, input.provider);
         deps.reviews.setSummary(taskId, pr, { body: input.body, author: 'agent' });
         return deps.reviews.getSummary(taskId, pr);
       },

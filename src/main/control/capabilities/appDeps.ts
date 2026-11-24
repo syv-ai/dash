@@ -29,7 +29,9 @@ import type { ServiceCapabilityDeps } from './services';
 import type { TaskCapabilityDeps } from './tasks';
 import type { ReviewCapabilityDeps } from './review';
 import { taskReviews } from '../../services/prReview/taskReview';
-import { prProviderFor } from '../../services/prReview/resolve';
+import { prContextFor, prProviderFor } from '../../services/prReview/resolve';
+import { appPrContextDeps, appReviewTarget } from '../../services/prReview/appDeps';
+import { loadPrReview } from '../../services/prReview/loadReview';
 import { GithubService } from '../../services/GithubService';
 import { AzureDevOpsService } from '../../services/AzureDevOpsService';
 import { ConnectionConfigService } from '../../services/ConnectionConfigService';
@@ -157,6 +159,14 @@ export function reviewDeps(): ReviewCapabilityDeps {
     // Read per call, so a database that failed to open fails the call, not the API's start.
     get reviews() {
       return taskReviews();
+    },
+    reviewTarget: appReviewTarget,
+    async loadReview(task, pr) {
+      const { provider, adapter, ctx } = prContextFor(task.projectId, task.path, appPrContextDeps);
+      if (provider !== pr.provider) {
+        throw new ControlError(400, `this project's PRs are on ${provider}`);
+      }
+      return loadPrReview(adapter, ctx, pr.number);
     },
   };
 }

@@ -16,7 +16,9 @@ describe('read-only capabilities', () => {
     expect(registry.readOnlyNames().sort()).toEqual([
       'projects.list',
       'review.drafts_list',
+      'review.pr',
       'review.summary_get',
+      'review.threads',
       'services.list',
       'services.output',
       'tasks.get',

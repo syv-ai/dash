@@ -34,7 +34,7 @@ export function dashSkill(dashctl: string | null): string {
     : '';
   return `---
 name: dash
-description: How to reach Dash from a Dash task with the dashctl command — tasks, services, and above all PR review drafts (notes vs comments, line drafts, replies, the review summary). Use before running dashctl, and whenever asked to review a PR or leave review notes or comments in Dash.
+description: How to reach Dash from a Dash task with the dashctl command — tasks, services, and above all PR review (reading the PR and its threads, notes vs comments, line drafts, replies, the review summary). Use before running dashctl, and whenever asked to review a PR or leave review notes or comments in Dash.
 ---
 
 ${MARKER}
@@ -60,32 +60,50 @@ EOF
 
 ## Reviewing a PR
 
-\`dashctl review …\` writes into the PR view of the task's diff editor (Compare → Pull requests). **Nothing you write reaches the PR**: the person reads everything, edits it, picks the verdict and submits. You can't submit, resolve threads or vote, and don't post to the PR any other way (\`gh\`, \`az\`, scripts) unless the person explicitly asks for that and has seen the text.
+\`dashctl review …\` works on the PR the task reviews: the one the person opened for review in this task, else the task's own open PR. Pass \`--number <pr>\` for another one; with neither, the command says so. What you write lands in the task's Review view and diff editor. **Nothing you write reaches the PR**: the person reads it, edits it and posts it. You can't post, resolve threads or vote, and don't do it any other way (\`gh\`, \`az\`, scripts) unless the person explicitly asks and has seen the text.
+
+### Read before you write
+
+- \`dashctl review pr\`: title, description, branches, reviewers, checks and changed files. \`viewerIsAuthor\` is true on the person's own PR. Add \`--conversation\` for its general comments and review summaries.
+- \`dashctl review threads\`: the unresolved review threads, each with its id, file, lines and comments (\`--state resolved\` or \`all\` for the rest).
+- \`dashctl review drafts-list\` and \`summary-get\`: what the person and you have already drafted, so you don't repeat it.
 
 ### Note or comment
 
 Every draft has a \`--kind\`:
 
-- **comment**: review feedback for the PR's author, posted when the person submits. Write these when you're reviewing someone else's PR.
-- **note**: for whoever works on this task (the person, or you later). It is never posted. Use it for things to check, fix or keep in mind that aren't feedback for the author, for example findings to act on in this branch. The person can promote a note to a comment.
+- **note**: for whoever works on this task (the person, or you later). It is never posted. Use it for things to check, fix or keep in mind.
+- **comment**: for the PR's author, posted when the person posts the review. A reply to a thread is always a comment.
 
 If the person hasn't said which they want, ask rather than guess.
 
-### Where a draft goes
+### Someone else's PR
 
-- **On lines**: \`dashctl review drafts-create --number <pr> --path <file> --start-line <n> [--end-line <n>] --kind comment\`, the body on stdin. \`--path\` is repo-relative, and the lines are in the PR's version of the file (its head commit, not the base).
-- **As a reply to an existing thread**: the same command with \`--reply-to\`, the thread's id from the provider.
-- **On the whole PR**: not a line draft. \`dashctl review summary-set --number <pr>\` writes the review's summary from stdin, the PR-level comment posted with the verdict. There is one per review; setting it replaces the current one, and \`--body ''\` clears it.
+When \`viewerIsAuthor\` is false:
+
+
+- **On lines**: \`dashctl review drafts-create --path <file> --start-line <n> [--end-line <n>] --kind comment\`, the body on stdin. \`--path\` is repo-relative, and the lines are in the PR's version of the file (its head commit, not the base).
+- **As a reply to a thread**: \`dashctl review drafts-create --reply-to <thread-id> --kind comment\`. It sits on the thread's lines; give no \`--path\` or lines.
+- **On the whole PR**: \`dashctl review summary-set\` writes the review's summary from stdin, the PR-level comment posted with the verdict. There is one per review; setting it replaces the current one, and \`--body ''\` clears it.
 
 \`\`\`sh
-dashctl review drafts-create --number 12 --path src/auth.ts --start-line 40 --kind comment <<'EOF'
+dashctl review drafts-create --path src/auth.ts --start-line 40 --kind comment <<'EOF'
 This can be null when the session expired; guard it before reading \`user.id\`.
 EOF
 \`\`\`
 
-### Working with what's there
+### The person's own PR
 
-- Read \`dashctl review drafts-list --number <pr>\` and \`summary-get\` before writing, so you don't repeat what exists.
+When \`viewerIsAuthor\` is true, work through the unresolved threads: fix the code first, then propose a reply to each thread you dealt with, saying what changed. The person posts each reply (Post reply, or Post & resolve). Don't write a summary here.
+
+\`\`\`sh
+dashctl review drafts-create --reply-to <thread-id> --kind comment <<'EOF'
+Guarded in \`session.ts\`; the expired case now returns 401.
+EOF
+\`\`\`
+
+### Changing drafts
+
 - You can change (\`drafts-update <id>\`: \`--body -\` with the new body on stdin, \`--start-line\`, \`--end-line\` or \`--kind\`) or delete (\`drafts-delete <id>\`) any draft, the person's too. Keep the person's wording unless they ask you to change it.
 - Write in Markdown; it is rendered in the editor.
 `;

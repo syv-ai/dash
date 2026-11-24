@@ -45,7 +45,9 @@ describe('dashctl argv', () => {
     expect(r.kind).toBe('help');
     const text = (r as { text: string }).text;
     expect(text).toContain('dashctl tasks create <name> --project <project> [options]');
-    expect(text).toContain('dashctl review drafts-create --number <number>');
+    expect(text).toContain(
+      'dashctl review drafts-create --kind note|comment (body on stdin) [options]',
+    );
     expect(text).toContain('(body on stdin)');
     expect(text).toContain('dashctl review drafts-update <id> [options]');
     expect(text.split('\n').length).toBe(2 + commands.length * 2 + 2);

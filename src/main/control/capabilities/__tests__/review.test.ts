@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
-import type { DiffComment } from '../../../../shared/types';
+import type { DiffComment, PrRef, PrReview, PrReviewThread } from '../../../../shared/types';
 import { ControlError, createRegistry, type Registry } from '../../registry';
 import { fakeLookups, makeProject, makeTask } from '../../__tests__/fixtures';
 import { registerReviewCapabilities } from '../review';
@@ -24,6 +24,66 @@ const tasks = [
 let registry: Registry;
 let comments: DiffCommentsRepo;
 let changed: string[];
+/** The task's review target (`effectiveReviewTarget`), and the PRs `loadReview` was asked for. */
+let target: PrRef | null;
+let loaded: PrRef[];
+
+const thread = (over: Partial<PrReviewThread> & { id: string }): PrReviewThread => ({
+  path: 'src/a.ts',
+  line: 10,
+  startLine: null,
+  side: 'RIGHT',
+  isOutdated: false,
+  resolved: false,
+  comments: [
+    {
+      id: `${over.id}-c1`,
+      author: 'ana',
+      body: 'Why?',
+      createdAt: '2026-11-20',
+      url: `u/${over.id}`,
+    },
+  ],
+  ...over,
+});
+
+const review = (pr: PrRef): PrReview => ({
+  ...pr,
+  title: 'Guard sessions',
+  body: 'Fixes the crash.',
+  url: 'https://github.com/o/r/pull/12',
+  viewerIsAuthor: true,
+  viewerIsRequestedReviewer: false,
+  verdicts: ['comment'],
+  base: 'b0',
+  head: 'h0',
+  threads: [
+    thread({ id: 'T3', path: 'src/b.ts', line: 2 }),
+    thread({ id: 'T1', line: 20, startLine: 18 }),
+    thread({ id: 'T2', line: null, isOutdated: true, resolved: true }),
+  ],
+  conversation: [{ id: 'C1', author: 'bo', body: 'LGTM', createdAt: '2026-11-21', url: 'u/C1' }],
+  author: 'me',
+  state: 'open',
+  baseRef: 'main',
+  headRef: 'fix',
+  commits: 2,
+  behindBase: 1,
+  reviewers: [{ name: 'ana', state: 'commented' }],
+  assignees: [],
+  checks: [{ name: 'ci', state: 'passing', url: 'https://ci' }],
+  files: [
+    { path: 'src/a.ts', status: 'modified', additions: 3, deletions: 1, blob: 'x' },
+    {
+      path: 'src/c.ts',
+      oldPath: 'src/b.ts',
+      status: 'renamed',
+      additions: 0,
+      deletions: 0,
+      blob: 'y',
+    },
+  ],
+});
 
 const row = (over: Partial<DiffComment> & { id: string }): DiffComment => ({
   taskId: 'me',
@@ -75,6 +135,8 @@ beforeEach(() => {
   }
   comments = createDiffCommentsRepo(db);
   changed = [];
+  target = { provider: 'github', number: 12 };
+  loaded = [];
   registry = createRegistry(fakeLookups([makeProject({ id: 'pA' })], tasks));
   registerReviewCapabilities(registry, {
     providerFor: () => 'github',
@@ -84,6 +146,11 @@ beforeEach(() => {
       summaries: createPrReviewSummariesRepo(db),
       changed: (taskId) => void changed.push(taskId),
     }),
+    reviewTarget: async () => target,
+    loadReview: async (_task, pr) => {
+      loaded.push(pr);
+      return review(pr);
+    },
   });
 });
 
@@ -242,5 +309,131 @@ describe('review.summary_get / summary_set', () => {
         }),
       ),
     ).toBe(404);
+  });
+});
+
+describe('the PR a command is about', () => {
+  it("defaults to the task's review target, and refuses when there is none", async () => {
+    target = { provider: 'github', number: 7 };
+    const created = (await registry.call(asTask('me'), 'review.drafts_create', {
+      path: 'a.ts',
+      startLine: 1,
+      body: 'b',
+      kind: 'note',
+    })) as { id: string };
+    expect(comments.get(created.id)!.viewScope).toBe('pr:github:7');
+    await registry.call(asTask('me'), 'review.pr', {});
+    expect(loaded).toEqual([{ provider: 'github', number: 7 }]);
+
+    target = null;
+    await expect(registry.call(asTask('me'), 'review.drafts_list', {})).rejects.toMatchObject({
+      status: 400,
+      message: 'No pull request to review: pass --number',
+    });
+    expect(await status(registry.call(asTask('me'), 'review.drafts_list', { number: 3 }))).toBe(
+      200,
+    );
+  });
+});
+
+describe('review.pr', () => {
+  it('gives the overview, with the conversation only when asked', async () => {
+    const pr = (await registry.call(asTask('me'), 'review.pr', { number: 12 })) as Record<
+      string,
+      unknown
+    >;
+    expect(pr).toMatchObject({
+      provider: 'github',
+      number: 12,
+      title: 'Guard sessions',
+      viewerIsAuthor: true,
+      baseRef: 'main',
+      headRef: 'fix',
+      behindBase: 1,
+      checks: [{ name: 'ci', state: 'passing' }],
+      files: [
+        { path: 'src/a.ts', status: 'modified', additions: 3, deletions: 1 },
+        { path: 'src/c.ts', oldPath: 'src/b.ts', status: 'renamed', additions: 0, deletions: 0 },
+      ],
+    });
+    expect(pr).not.toHaveProperty('threads');
+    expect(pr).not.toHaveProperty('conversation');
+    expect(pr.files).toEqual([
+      expect.not.objectContaining({ blob: expect.anything() }),
+      expect.anything(),
+    ]);
+    const withTalk = await registry.call(asTask('me'), 'review.pr', { conversation: true });
+    expect(withTalk).toMatchObject({
+      conversation: [{ id: 'C1', author: 'bo', body: 'LGTM', createdAt: '2026-11-21' }],
+    });
+  });
+});
+
+describe('review.threads', () => {
+  it('lists the unresolved threads by file and line, or the resolved ones, or all', async () => {
+    const ids = async (state?: string) =>
+      (
+        (await registry.call(asTask('me'), 'review.threads', state ? { state } : {})) as {
+          id: string;
+        }[]
+      ).map((t) => t.id);
+    expect(await ids()).toEqual(['T1', 'T3']);
+    expect(await ids('resolved')).toEqual(['T2']);
+    expect(await ids('all')).toEqual(['T2', 'T1', 'T3']);
+    const [t1] = (await registry.call(asTask('me'), 'review.threads', {})) as unknown[];
+    expect(t1).toEqual({
+      id: 'T1',
+      path: 'src/a.ts',
+      line: 20,
+      startLine: 18,
+      side: 'RIGHT',
+      outdated: false,
+      resolved: false,
+      url: 'u/T1',
+      comments: [{ id: 'T1-c1', author: 'ana', body: 'Why?', createdAt: '2026-11-20' }],
+    });
+  });
+});
+
+describe('review.drafts_create --reply-to', () => {
+  it("drafts a reply on its thread's lines", async () => {
+    const created = (await registry.call(asTask('me'), 'review.drafts_create', {
+      replyTo: 'T1',
+      body: 'Fixed in 3f2a.',
+      kind: 'comment',
+    })) as { id: string };
+    expect(comments.get(created.id)).toMatchObject({
+      filePath: 'src/a.ts',
+      startLine: 18,
+      endLine: 20,
+      replyTo: 'T1',
+      kind: 'comment',
+      viewScope: 'pr:github:12',
+    });
+    const outdated = (await registry.call(asTask('me'), 'review.drafts_create', {
+      replyTo: 'T2',
+      body: 'x',
+      kind: 'comment',
+    })) as { id: string };
+    expect(comments.get(outdated.id)).toMatchObject({ startLine: 1, endLine: 1 });
+  });
+
+  it('refuses a note, given lines, an unknown thread, and neither lines nor a thread', async () => {
+    const reply = { replyTo: 'T1', body: 'b', kind: 'comment' };
+    const call = (input: object) =>
+      status(registry.call(asTask('me'), 'review.drafts_create', input));
+    expect(await call({ ...reply, kind: 'note' })).toBe(400);
+    expect(await call({ ...reply, path: 'a.ts', startLine: 1 })).toBe(400);
+    expect(await call({ ...reply, replyTo: 'nope' })).toBe(404);
+    expect(await call({ body: 'b', kind: 'comment' })).toBe(400);
+    expect(await call({ body: 'b', kind: 'comment', path: 'a.ts' })).toBe(400);
+    expect(changed).toEqual([]);
+  });
+
+  it("won't turn a reply into a note", async () => {
+    put(row({ id: 'r1', replyTo: 'T1' }));
+    expect(
+      await status(registry.call(asTask('me'), 'review.drafts_update', { id: 'r1', kind: 'note' })),
+    ).toBe(400);
   });
 });

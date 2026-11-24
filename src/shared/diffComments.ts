@@ -1,5 +1,5 @@
 import { isPrScope } from './prScope';
-import type { DiffComment, DiffCommentKind } from './types';
+import type { DiffComment, DiffCommentKind, PrReviewThread } from './types';
 
 /*
  * What a note, a comment and a reply are, and which of them each action may
@@ -16,6 +16,19 @@ type Scoped = { viewScope: string };
 
 /** A draft reply to a PR thread, rather than a comment on lines. */
 export const isReplyDraft = (c: Pick<DiffComment, 'replyTo'>): boolean => c.replyTo != null;
+
+/** Where a draft reply to `thread` sits: its thread's file and lines (line 1
+ *  for a whole-file or outdated thread, which has none). */
+export const replyAnchor = (
+  thread: Pick<PrReviewThread, 'path' | 'line' | 'startLine'>,
+): Pick<DiffComment, 'filePath' | 'startLine' | 'endLine'> => {
+  const endLine = thread.line ?? 1;
+  return {
+    filePath: thread.path,
+    startLine: Math.min(thread.startLine ?? endLine, endLine),
+    endLine,
+  };
+};
 
 /** A PR review comment (a draft until Submit), rather than a note for the agent. */
 export const isPrComment = (c: Kinded): boolean => c.kind === 'comment';
