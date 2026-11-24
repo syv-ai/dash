@@ -251,6 +251,10 @@ export type IpcErrorCode =
   | 'NOT_FOUND'
   | 'UNSUPPORTED_CLI'
   | 'UNTRUSTED_WORKSPACE'
+  /** The caller cancelled the request (`lsp:cancel`). */
+  | 'CANCELLED'
+  /** The language server for the document isn't installed or has failed. */
+  | 'UNAVAILABLE'
   | 'UNKNOWN';
 
 /** Result of the startup `claude --version` probe, as exposed to the renderer. */
