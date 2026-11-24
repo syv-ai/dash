@@ -20,7 +20,9 @@ export interface EditorGroup {
 export interface EditorLayout {
   /** One group, or two side by side. */
   groups: EditorGroup[];
-  /** The group keyboard and "open" act on. */
+  /** The last focused group: the one keyboard and a plain "open" act on.
+   *  Clicking or focusing into a group, activating a tab and opening a file
+   *  all move it. */
   focused: GroupIndex;
 }
 
@@ -29,7 +31,8 @@ const EMPTY_GROUP: EditorGroup = { tabs: [], active: null, preview: null };
 export const EMPTY_LAYOUT: EditorLayout = { groups: [EMPTY_GROUP], focused: 0 };
 
 export interface OpenOptions {
-  /** Open in the other group (splitting first if there is only one). */
+  /** "Open in new pane": the group that isn't focused, splitting first if
+   *  there is only one. */
   toSide?: boolean;
   /** Only add the tab; the group keeps its active file. */
   background?: boolean;
@@ -122,6 +125,24 @@ export function closeTab(layout: EditorLayout, group: GroupIndex, path: string):
   }
   const preview = g.preview === path ? null : g.preview;
   return { ...layout, groups: withGroup(layout, group, { tabs, active, preview }) };
+}
+
+/** Which of a group's tabs a "Close …" command takes, relative to `path`. */
+export type CloseScope = 'others' | 'right' | 'all';
+
+/** The tabs (a group's, in order) that `scope` closes, relative to `path`. */
+export function tabsInScope(tabs: string[], path: string, scope: CloseScope): string[] {
+  const i = tabs.indexOf(path);
+  if (i < 0) return [];
+  if (scope === 'all') return tabs;
+  if (scope === 'right') return tabs.slice(i + 1);
+  return tabs.filter((t) => t !== path);
+}
+
+/** Close `paths` in `group`, as `closeTab` would one by one. The group only
+ *  collapses once its last tab goes, so the index stays valid throughout. */
+export function closeTabs(layout: EditorLayout, group: GroupIndex, paths: string[]): EditorLayout {
+  return paths.reduce((l, p) => closeTab(l, group, p), layout);
 }
 
 /** Close every tab `keep` turns down (told whether it is its group's

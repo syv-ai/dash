@@ -74,6 +74,7 @@ export interface EditorWorkspace {
   openFile(path: string, opts?: OpenOptions): void;
   activateTab(group: GroupIndex, path: string): void;
   closeTab(group: GroupIndex, path: string): void;
+  closeTabs(group: GroupIndex, paths: string[]): void;
   /** Keep a preview tab open. */
   pinTab(group: GroupIndex, path: string): void;
   focusGroup(group: GroupIndex): void;
@@ -137,6 +138,11 @@ export function useEditorWorkspace({
   );
   const closeTab = useCallback(
     (group: GroupIndex, path: string) => useEditorTabs.getState().close(tabsKey, group, path),
+    [tabsKey],
+  );
+  const closeTabs = useCallback(
+    (group: GroupIndex, paths: string[]) =>
+      useEditorTabs.getState().closeMany(tabsKey, group, paths),
     [tabsKey],
   );
   const focusGroup = useCallback(
@@ -393,6 +399,7 @@ export function useEditorWorkspace({
     openFile,
     activateTab,
     closeTab,
+    closeTabs,
     pinTab,
     focusGroup,
     badgeCounts,

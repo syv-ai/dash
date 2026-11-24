@@ -3,6 +3,7 @@ import {
   EMPTY_LAYOUT,
   activateTab,
   closeTab,
+  closeTabs,
   focusGroup,
   openTab,
   parseLayout,
@@ -48,6 +49,8 @@ interface EditorTabsState {
   open(key: string, path: string, opts?: OpenOptions): void;
   activate(key: string, group: GroupIndex, path: string): void;
   close(key: string, group: GroupIndex, path: string): void;
+  /** Close several of `group`'s tabs at once. */
+  closeMany(key: string, group: GroupIndex, paths: string[]): void;
   /** Keep a preview tab open. */
   pin(key: string, group: GroupIndex, path: string): void;
   /** Close every tab `keep` turns down. */
@@ -116,6 +119,7 @@ export const useEditorTabs = create<EditorTabsState>((set, get) => {
     open: (key, path, opts) => update(key, (l) => openTab(l, path, opts)),
     activate: (key, group, path) => update(key, (l) => activateTab(l, group, path)),
     close: (key, group, path) => update(key, (l) => closeTab(l, group, path)),
+    closeMany: (key, group, paths) => update(key, (l) => closeTabs(l, group, paths)),
     pin: (key, group, path) => update(key, (l) => pinTab(l, group, path)),
     retain: (key, keep) => update(key, (l) => retainTabs(l, keep)),
     focusGroup: (key, group) => update(key, (l) => focusGroup(l, group)),

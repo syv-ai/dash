@@ -4,6 +4,7 @@ import {
   activateTab,
   activePath,
   closeTab,
+  closeTabs,
   focusGroup,
   openPaths,
   openTab,
@@ -11,6 +12,7 @@ import {
   pinTab,
   retainTabs,
   serializeLayout,
+  tabsInScope,
   type EditorLayout,
 } from '../editorLayout';
 
@@ -64,6 +66,46 @@ describe('openTab', () => {
   });
 });
 
+describe('two panes: open in new pane, plain open to the last focused', () => {
+  // Two panes: 'a' left, 'b' right; the right one was focused last.
+  const split = () => openTab(open('a'), 'b', { toSide: true });
+
+  it('opens in a new pane as a kept tab, focusing it', () => {
+    const l = openTab(open('a'), 'b', { toSide: true });
+    expect(l.groups).toHaveLength(2);
+    expect(l.groups[1]).toEqual({ tabs: ['b'], active: 'b', preview: null });
+    expect(l.focused).toBe(1);
+  });
+
+  it('with two panes, "open in new pane" goes to the pane that is not focused', () => {
+    const l = openTab(split(), 'c', { toSide: true });
+    expect(l.groups[0]!.tabs).toEqual(['a', 'c']);
+    expect(l.groups[1]!.tabs).toEqual(['b']);
+    expect(l.focused).toBe(0);
+    expect(l.groups).toHaveLength(2);
+  });
+
+  it('a plain open lands in the last focused pane', () => {
+    let l = openTab(split(), 'c', { preview: true });
+    expect(l.groups[1]).toEqual({ tabs: ['b', 'c'], active: 'c', preview: 'c' });
+    l = openTab(focusGroup(l, 0), 'd', { preview: true });
+    expect(l.groups[0]).toEqual({ tabs: ['a', 'd'], active: 'd', preview: 'd' });
+    expect(l.focused).toBe(0);
+  });
+
+  it('activating a tab makes its pane the last focused', () => {
+    const l = openTab(activateTab(split(), 0, 'a'), 'c');
+    expect(l.groups[0]!.tabs).toEqual(['a', 'c']);
+    expect(l.groups[1]!.tabs).toEqual(['b']);
+  });
+
+  it('a file open in the other pane opens again in the focused one', () => {
+    const l = openTab(split(), 'a');
+    expect(l.groups[1]!.tabs).toEqual(['b', 'a']);
+    expect(l.groups[0]!.tabs).toEqual(['a']);
+  });
+});
+
 describe('activateTab / focusGroup', () => {
   it("activates and focuses the tab's group", () => {
     let l = openTab(open('a', 'b'), 'c', { toSide: true });
@@ -112,6 +154,39 @@ describe('closeTab', () => {
   it('moves the second group into the first when the first empties', () => {
     const l = closeTab(openTab(open('a'), 'b', { toSide: true }), 0, 'a');
     expect(l).toEqual({ groups: [{ tabs: ['b'], active: 'b', preview: null }], focused: 0 });
+  });
+});
+
+describe('tabsInScope / closeTabs', () => {
+  const l = open('a', 'b', 'c', 'd');
+
+  it('names the tabs each close command takes', () => {
+    const tabs = l.groups[0]!.tabs;
+    expect(tabsInScope(tabs, 'b', 'others')).toEqual(['a', 'c', 'd']);
+    expect(tabsInScope(tabs, 'b', 'right')).toEqual(['c', 'd']);
+    expect(tabsInScope(tabs, 'b', 'all')).toEqual(['a', 'b', 'c', 'd']);
+    expect(tabsInScope(tabs, 'd', 'right')).toEqual([]);
+    expect(tabsInScope(tabs, 'zz', 'all')).toEqual([]);
+  });
+
+  it('closes others, leaving the tab active', () => {
+    const next = closeTabs(l, 0, tabsInScope(l.groups[0]!.tabs, 'b', 'others'));
+    expect(next.groups[0]).toEqual({ tabs: ['b'], active: 'b', preview: null });
+  });
+
+  it('closes to the right; an active tab among them hands over to the left', () => {
+    const next = closeTabs(l, 0, tabsInScope(l.groups[0]!.tabs, 'b', 'right'));
+    expect(next.groups[0]).toEqual({ tabs: ['a', 'b'], active: 'b', preview: null });
+  });
+
+  it('closing all of the first pane collapses the split onto the second', () => {
+    const split = openTab(l, 'x', { toSide: true });
+    const next = closeTabs(split, 0, tabsInScope(split.groups[0]!.tabs, 'a', 'all'));
+    expect(next).toEqual({ groups: [{ tabs: ['x'], active: 'x', preview: null }], focused: 0 });
+  });
+
+  it('closing all of the only pane leaves it empty', () => {
+    expect(closeTabs(l, 0, tabsInScope(l.groups[0]!.tabs, 'a', 'all'))).toEqual(EMPTY_LAYOUT);
   });
 });
 
