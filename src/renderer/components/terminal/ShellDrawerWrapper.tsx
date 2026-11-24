@@ -1,4 +1,11 @@
-import React, { useRef, useCallback } from 'react';
+import {
+  useRef,
+  useCallback,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -6,28 +13,41 @@ import {
   type PanelImperativeHandle,
 } from '../ui/Resizable';
 import { TerminalTabs } from './TerminalTabs';
+import { cn } from '../../lib/cn';
 
 interface ShellDrawerWrapperProps {
-  enabled: boolean;
-  taskId: string | null;
-  cwd: string | null;
+  taskId: string;
+  cwd: string;
   collapsed: boolean;
   label?: string;
-  panelRef: React.RefObject<PanelImperativeHandle | null>;
+  /** The terminal palette's background, for the drawer's sheet. */
+  terminalBg?: string;
+  panelRef: RefObject<PanelImperativeHandle | null>;
   animating: boolean;
   onAnimate: () => void;
   onCollapse: () => void;
   onExpand: () => void;
   onTuiActiveChange?: (active: boolean, canvasPx?: number) => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
+/** The drawer's height when collapsed: the 8px gap above its sheet plus the
+ *  tab bar. Pixels, so it doesn't drift with the window height. */
+const COLLAPSED_PX = 44;
+const MIN_PX = 120;
+const EXPANDED_DEFAULT = '40%';
+
+/**
+ * The task sidebar's vertical split: `children` on top, the task's terminals
+ * below on their own sheet, resizable and collapsible down to the tab bar.
+ * The split persists.
+ */
 export function ShellDrawerWrapper({
-  enabled,
   taskId,
   cwd,
   collapsed,
   label,
+  terminalBg,
   panelRef,
   animating,
   onAnimate,
@@ -37,6 +57,9 @@ export function ShellDrawerWrapper({
   children,
 }: ShellDrawerWrapperProps) {
   const groupRef = useRef<HTMLDivElement>(null);
+  // The default size follows the collapsed state at mount only: a changing
+  // defaultSize re-registers the panel, which forgets the size to expand to.
+  const [startedCollapsed] = useState(collapsed);
 
   // Grow the drawer to at least `px` tall (expanding first if collapsed) —
   // side-car TUI start screens need a minimum height to render fully.
@@ -55,43 +78,56 @@ export function ShellDrawerWrapper({
     [panelRef, onAnimate],
   );
 
-  if (!enabled || !taskId || !cwd) {
-    return <>{children}</>;
-  }
-
   return (
     <div ref={groupRef} className="h-full">
-      <ResizablePanelGroup orientation="vertical">
-        <ResizablePanel minSize="0%">{children}</ResizablePanel>
+      <ResizablePanelGroup orientation="vertical" autoSaveId="task-terminal">
+        <ResizablePanel id="task-content" minSize="15%">
+          {children}
+        </ResizablePanel>
         {/* Stays live while collapsed so the bar can be dragged back open. */}
         <ResizableHandle />
         <ResizablePanel
+          id="task-terminal"
           panelRef={panelRef}
           animate={animating}
-          defaultSize={collapsed ? '3%' : '45%'}
-          minSize="8%"
+          defaultSize={startedCollapsed ? COLLAPSED_PX : EXPANDED_DEFAULT}
+          minSize={MIN_PX}
           collapsible
-          collapsedSize="3%"
+          collapsedSize={COLLAPSED_PX}
           onCollapse={onCollapse}
           onExpand={onExpand}
         >
-          <TerminalTabs
-            key={taskId}
-            taskId={taskId}
-            cwd={cwd}
-            collapsed={collapsed}
-            label={label}
-            onCollapse={() => {
-              onAnimate();
-              panelRef.current?.collapse();
-            }}
-            onExpand={() => {
-              onAnimate();
-              panelRef.current?.expand();
-            }}
-            onEnsureHeight={ensureHeight}
-            onTuiActiveChange={onTuiActiveChange}
-          />
+          <div className="h-full pt-2">
+            <div
+              className={cn(
+                'h-full overflow-hidden rounded-xl border border-line',
+                terminalBg ? 'bg-(--sheet-bg)' : 'bg-well',
+              )}
+              style={{ '--sheet-bg': terminalBg } as CSSProperties}
+            >
+              <TerminalTabs
+                key={taskId}
+                taskId={taskId}
+                cwd={cwd}
+                collapsed={collapsed}
+                label={label}
+                onCollapse={() => {
+                  onAnimate();
+                  panelRef.current?.collapse();
+                }}
+                onExpand={() => {
+                  const panel = panelRef.current;
+                  if (!panel) return;
+                  onAnimate();
+                  panel.expand();
+                  // Collapsed since launch, it has no size to go back to.
+                  if (panel.getSize().inPixels <= MIN_PX) panel.resize(EXPANDED_DEFAULT);
+                }}
+                onEnsureHeight={ensureHeight}
+                onTuiActiveChange={onTuiActiveChange}
+              />
+            </div>
+          </div>
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>

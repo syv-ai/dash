@@ -51,8 +51,6 @@ describe('settings registry', () => {
     expect(byField.terminalTheme!.codec.decode('legacy')).toBe('default'); // removed palette
     expect(byField.terminalTheme!.codec.decode('nord')).toBe('nord');
     expect(byField.notificationSound!.codec.decode(null)).toBe('off');
-    expect(byField.shellDrawerPosition!.codec.decode('bogus')).toBe('right');
-    expect(byField.shellDrawerPosition!.codec.decode('main')).toBe('main');
   });
 
   it('registers the phase-1d json settings', () => {

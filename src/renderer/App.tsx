@@ -11,10 +11,8 @@ import { MainContent } from './components/MainContent';
 import { openInIde } from './lib/openInIde';
 import { headerModelName } from './lib/modelName';
 import { RightInspector } from './components/rightInspector/RightInspector';
-import { PortsDrawerWrapper } from './components/rightInspector/PortsDrawerWrapper';
 import { editorOpening } from './components/diffEditor/data/viewPersistence';
 const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
-import { ShellDrawerWrapper } from './components/terminal/ShellDrawerWrapper';
 import { useSetup } from './stores/setupStore';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
 import { MemoryModal } from './components/memory/MemoryModal';
@@ -67,11 +65,14 @@ const TUI_PANEL_CHROME_PX = 52;
  *  the panel can sit narrower than the full canvas without clipping content. */
 const TUI_PANEL_WIDTH_SCALE = 0.85;
 /** Bounds for the hugged right-panel width (%) — matches the panel's min/max. */
-const TUI_PANEL_MIN_PCT = 12;
+const TUI_PANEL_MIN_PCT = 14;
 const TUI_PANEL_MAX_PCT = 40;
-/** The shell group's panels; `changes` mounts only with an active task. */
+/** The shell group's panels; the task sidebar mounts only with an active task.
+ *  With a diff open it is `changes-wide`, so its wide size persists apart
+ *  from its narrow one. */
 const SHELL_PANELS = ['sidebar', 'main'];
-const SHELL_PANELS_WITH_TASK = ['sidebar', 'main', 'changes'];
+const SHELL_PANELS_NARROW = ['sidebar', 'main', 'changes'];
+const SHELL_PANELS_WIDE = ['sidebar', 'main', 'changes-wide'];
 const isMac = window.electronAPI.getPlatform() === 'darwin';
 
 export function App() {
@@ -121,13 +122,6 @@ export function App() {
   const desktopNotification = useSettings((s) => s.desktopNotification);
   const autoUpdateEnabled = useSettings((s) => s.autoUpdateEnabled);
   const setAutoUpdateEnabled = useSettings((s) => s.setAutoUpdateEnabled);
-  const shellDrawerCollapsed = useSettings((s) => s.shellDrawerCollapsed);
-  const setShellDrawerCollapsed = useSettings((s) => s.setShellDrawerCollapsed);
-  // Ports drawer defaults to collapsed so it doesn't intrude on projects
-  // that aren't using port management; the collapsed bar still shows status.
-  const portsDrawerCollapsed = useSettings((s) => s.portsDrawerCollapsed);
-  const setPortsDrawerCollapsed = useSettings((s) => s.setPortsDrawerCollapsed);
-  const shellDrawerPosition = useSettings((s) => s.shellDrawerPosition);
   const terminalTheme = useSettings((s) => s.terminalTheme);
   const terminalFontFamily = useSettings((s) => s.terminalFontFamily);
   const webglHeldLimit = useSettings((s) => s.webglHeldLimit);
@@ -299,10 +293,6 @@ export function App() {
     });
   }, [activeTaskId]);
 
-  // Right-sidebar: 5-hour / 7-day rate limit bars
-  const showRateLimits = useSettings((s) => s.showRateLimits);
-  const showUsageInline = useSettings((s) => s.showUsageInline);
-
   // Token-stats rollups (runtimeStore; live-updated via its init() tokenStats subscription).
   const globalTokenStats = useRuntime((s) => s.globalTokenStats);
 
@@ -365,6 +355,13 @@ export function App() {
   const changesPanelCollapsed = useSettings((s) => s.changesPanelCollapsed);
   const setChangesPanelCollapsed = useSettings((s) => s.setChangesPanelCollapsed);
 
+  // Panels take their collapsed state at launch as their default size, and
+  // keep it: a changing defaultSize re-registers the panel, which forgets the
+  // size to expand back to.
+  const [startedCollapsed] = useState(() => {
+    const { sidebarCollapsed, changesPanelCollapsed } = useSettings.getState();
+    return { sidebar: sidebarCollapsed, inspector: changesPanelCollapsed };
+  });
   const sidebarPanelRef = useRef<PanelImperativeHandle>(null);
   const changesPanelRef = useRef<PanelImperativeHandle>(null);
   const shellDrawerPanelRef = useRef<PanelImperativeHandle>(null);
@@ -372,7 +369,6 @@ export function App() {
   const setSidebarAnimating = useUi((s) => s.setSidebarAnimating);
   const changesAnimating = useUi((s) => s.changesAnimating);
   const setChangesAnimating = useUi((s) => s.setChangesAnimating);
-  const shellDrawerAnimating = useUi((s) => s.shellDrawerAnimating);
   const setShellDrawerAnimating = useUi((s) => s.setShellDrawerAnimating);
   const activeProject = useProjects(selectActiveProject);
 
@@ -768,6 +764,15 @@ export function App() {
         toggleSidebar();
         return;
       }
+      if (
+        shellChord &&
+        keybindings.toggleInspector &&
+        matchesBinding(e, keybindings.toggleInspector)
+      ) {
+        e.preventDefault();
+        toggleInspector();
+        return;
+      }
       if (shellChord && keybindings.findTask && matchesBinding(e, keybindings.findTask)) {
         e.preventDefault();
         setTaskFinderOpen((v) => !v);
@@ -827,7 +832,7 @@ export function App() {
           setDeleteProjectTarget(null);
         } else if (diffFile) {
           e.preventDefault();
-          setDiffFile(null);
+          closeDiff();
         } else if (showCommitGraph) {
           e.preventDefault();
           setShowCommitGraph(false);
@@ -906,38 +911,88 @@ export function App() {
     }
   }, []);
 
-  const toggleChangesPanel = useCallback(() => {
+  // A diff of the active task's worktree opens inline, in the widened task
+  // sidebar; any other folder's (Claude's memory) in the modal.
+  const inlineDiff = diffFile && activeTask && diffFile.cwd === activeTask.path ? diffFile : null;
+  const modalDiff = diffFile && !inlineDiff ? diffFile : null;
+
+  // Close the diff and hand the keyboard back to the task's Claude Code TUI.
+  // RAF defers past React's commit so the editor is gone before xterm grabs
+  // focus. Not while the memory modal is still up: typing would reach Claude
+  // unseen.
+  const closeDiff = useCallback(() => {
+    setDiffFile(null);
+    const id = useProjects.getState().activeTaskId;
+    if (id && !useUi.getState().memoryProjectId) {
+      requestAnimationFrame(() => sessionRegistry.get(id)?.focus());
+    }
+  }, [setDiffFile]);
+
+  // A diff belongs to the task it was opened on: switching tasks closes it.
+  const diffTaskPathRef = useRef(activeTask?.path);
+  useEffect(() => {
+    const prev = diffTaskPathRef.current;
+    diffTaskPathRef.current = activeTask?.path;
+    if (prev && prev !== activeTask?.path && useGit.getState().diffFile?.cwd === prev) {
+      setDiffFile(null);
+    }
+  }, [activeTask?.path, setDiffFile]);
+
+  // The wide sidebar (a diff open) doesn't collapse: hiding it closes the diff
+  // first, and the narrow panel collapses once it is back.
+  const collapseWhenNarrowRef = useRef(false);
+  const toggleInspector = useCallback(() => {
     const panel = changesPanelRef.current;
     if (!panel) return;
-    setChangesAnimating(true);
-    if (changesPanelCollapsed) {
-      panel.expand();
-    } else {
-      panel.collapse();
+    if (useGit.getState().diffFile && !panel.isCollapsed()) {
+      collapseWhenNarrowRef.current = true;
+      closeDiff();
+      return;
     }
-  }, [changesPanelCollapsed]);
+    setChangesAnimating(true);
+    if (panel.isCollapsed()) panel.expand();
+    else panel.collapse();
+  }, [closeDiff, setChangesAnimating]);
+  useEffect(() => {
+    if (inlineDiff || !collapseWhenNarrowRef.current) return;
+    collapseWhenNarrowRef.current = false;
+    requestAnimationFrame(() => {
+      setChangesAnimating(true);
+      changesPanelRef.current?.collapse();
+    });
+  }, [inlineDiff, setChangesAnimating]);
 
-  // A Setup tab request needs the drawer mounted: with the drawer in the
-  // inspector, a collapsed inspector unmounts it, so open the inspector.
-  // Once per request: a later collapse must not reopen it.
+  // Opening or closing a diff swaps the sidebar between its narrow and wide
+  // panels; ease the width change.
+  const inspectorWide = !!inlineDiff;
+  const prevInspectorWideRef = useRef(inspectorWide);
+  useEffect(() => {
+    if (prevInspectorWideRef.current === inspectorWide) return;
+    prevInspectorWideRef.current = inspectorWide;
+    setChangesAnimating(true);
+    const id = setTimeout(() => setChangesAnimating(false), 200);
+    return () => clearTimeout(id);
+  }, [inspectorWide, setChangesAnimating]);
+
+  // A Setup tab request needs the drawer mounted: a collapsed task sidebar
+  // unmounts it, so open the sidebar. Once per request: a later collapse
+  // must not reopen it.
   const setupTabRequest = useSetup((s) => s.setupTabRequest);
   const handledSetupSeqRef = useRef(0);
   useEffect(() => {
     if (!setupTabRequest || handledSetupSeqRef.current === setupTabRequest.seq) return;
     handledSetupSeqRef.current = setupTabRequest.seq;
-    if (shellDrawerPosition === 'right' && changesPanelCollapsed) toggleChangesPanel();
-  }, [setupTabRequest, shellDrawerPosition, changesPanelCollapsed, toggleChangesPanel]);
+    if (changesPanelCollapsed) toggleInspector();
+  }, [setupTabRequest, changesPanelCollapsed, toggleInspector]);
 
+  // Reads the panel, not the setting, so the keyboard handler's closure can't go stale.
   const toggleShellDrawer = useCallback(() => {
     const panel = shellDrawerPanelRef.current;
     if (!panel) return;
     setShellDrawerAnimating(true);
-    if (shellDrawerCollapsed) {
-      panel.expand();
-    } else {
-      panel.collapse();
-    }
-  }, [shellDrawerCollapsed]);
+    if (panel.isCollapsed()) panel.expand();
+    else panel.collapse();
+  }, [setShellDrawerAnimating]);
 
   // While a side-car TUI is the active drawer tab, smoothly size the right
   // panel (the drawer lives inside it) to hug the TUI's pinned canvas — clack
@@ -987,7 +1042,11 @@ export function App() {
   const handleDeleteTaskConfirm = useUi((s) => s.confirmDeleteTask);
 
   // Git actions live in gitStore (they resolve the active task themselves).
-  const refreshGitStatus = useGit((s) => s.refreshGitStatus);
+  // Stable, so the commit run's success effect fires once.
+  const refreshActiveGitStatus = useCallback(() => {
+    const task = selectActiveTask(useProjects.getState());
+    if (task) void useGit.getState().refreshGitStatus(task.path);
+  }, []);
   // Kept as App aliases because the stage-all / unstage-all keybindings call them.
   const handleStageAll = useGit((s) => s.stageAll);
   const handleUnstageAll = useGit((s) => s.unstageAll);
@@ -1092,13 +1151,15 @@ export function App() {
         orientation="horizontal"
         className="flex-1"
         autoSaveId="shell"
-        panelIds={activeTask ? SHELL_PANELS_WITH_TASK : SHELL_PANELS}
+        panelIds={
+          !activeTask ? SHELL_PANELS : inspectorWide ? SHELL_PANELS_WIDE : SHELL_PANELS_NARROW
+        }
       >
         <ResizablePanel
           id="sidebar"
           panelRef={sidebarPanelRef}
           animate={sidebarAnimating}
-          defaultSize={sidebarCollapsed ? '3%' : '18%'}
+          defaultSize={startedCollapsed.sidebar ? '3%' : '18%'}
           minSize="12%"
           maxSize="28%"
           collapsible
@@ -1159,95 +1220,65 @@ export function App() {
         </ResizablePanel>
         <ResizableHandle disabled={sidebarCollapsed} />
 
-        <ResizablePanel id="main" animate={sidebarAnimating || changesAnimating} minSize="35%">
-          <ShellDrawerWrapper
-            enabled={shellDrawerPosition === 'main'}
-            taskId={activeTask?.id ?? null}
-            cwd={activeTask?.path ?? null}
-            collapsed={shellDrawerCollapsed}
-            label={activeTask?.useWorktree ? 'Worktree' : 'Terminal'}
-            panelRef={shellDrawerPanelRef}
-            animating={shellDrawerAnimating}
-            onAnimate={() => setShellDrawerAnimating(true)}
-            onCollapse={() => {
-              setShellDrawerCollapsed(true);
-              setTimeout(() => setShellDrawerAnimating(false), 200);
+        <ResizablePanel id="main" animate={sidebarAnimating || changesAnimating} minSize="20%">
+          <MainContent
+            activeTask={activeTask}
+            activeProject={activeProject}
+            tasks={activeProjectTasks}
+            terminalBg={terminalBg}
+            sidebarCollapsed={sidebarCollapsed}
+            inspectorCollapsed={changesPanelCollapsed}
+            onToggleSidebar={toggleSidebar}
+            onToggleInspector={toggleInspector}
+            onSelectTask={setActiveTaskId}
+            onEnableRemoteControl={() => activeTask && setRemoteControlModalPtyId(activeTask.id)}
+            modelName={
+              activeTask
+                ? headerModelName(statusLineData[activeTask.id]?.model, activeTask.model)
+                : null
+            }
+            onOpenIde={() => {
+              if (activeTask) void openInIde(activeTask.path);
             }}
-            onExpand={() => {
-              setShellDrawerCollapsed(false);
-              setTimeout(() => setShellDrawerAnimating(false), 200);
+            onNewTask={() => {
+              if (activeProjectId) void handleNewTask(activeProjectId);
             }}
-          >
-            <MainContent
-              activeTask={activeTask}
-              activeProject={activeProject}
-              tasks={activeProjectTasks}
-              isMac={isMac}
-              terminalBg={terminalBg}
-              sidebarCollapsed={sidebarCollapsed}
-              changesPanelCollapsed={changesPanelCollapsed}
-              onToggleSidebar={toggleSidebar}
-              onToggleChangesPanel={toggleChangesPanel}
-              onSelectTask={setActiveTaskId}
-              onEnableRemoteControl={() => activeTask && setRemoteControlModalPtyId(activeTask.id)}
-              modelName={
-                activeTask
-                  ? headerModelName(statusLineData[activeTask.id]?.model, activeTask.model)
-                  : null
-              }
-              onOpenIde={() => {
-                if (activeTask) void openInIde(activeTask.path);
-              }}
-              onNewTask={() => {
-                if (activeProjectId) void handleNewTask(activeProjectId);
-              }}
-              onProjectSettings={() => {
-                if (activeProject) setProjectSettingsTarget(activeProject);
-              }}
-              onShowCommitGraph={() => {
-                if (activeProjectId) {
-                  setActiveProjectId(activeProjectId);
-                  setShowCommitGraph(true);
-                }
-              }}
-              onDeleteProject={() => {
-                if (activeProject) handleDeleteProject(activeProject.id);
-              }}
-              archivedTasks={
-                activeProjectId
-                  ? (tasksByProject[activeProjectId] || []).filter((t) => t.archivedAt)
-                  : []
-              }
-              onCloseTask={(id) => void handleCloseTask(id)}
-              onTaskSettings={handleTaskSettings}
-              onDeleteTask={handleDeleteTask}
-              onArchiveTask={(id) => {
-                void handleArchiveTask(id);
-              }}
-              onRestoreTask={(id) => {
-                void handleRestoreTask(id);
-              }}
-            />
-          </ShellDrawerWrapper>
+            onProjectSettings={() => {
+              if (activeProject) setProjectSettingsTarget(activeProject);
+            }}
+            onShowCommitGraph={() => setShowCommitGraph(true)}
+            onDeleteProject={() => {
+              if (activeProject) handleDeleteProject(activeProject.id);
+            }}
+            archivedTasks={
+              activeProjectId
+                ? (tasksByProject[activeProjectId] || []).filter((t) => t.archivedAt)
+                : []
+            }
+            onCloseTask={(id) => void handleCloseTask(id)}
+            onTaskSettings={handleTaskSettings}
+            onDeleteTask={handleDeleteTask}
+            onArchiveTask={(id) => {
+              void handleArchiveTask(id);
+            }}
+            onRestoreTask={(id) => {
+              void handleRestoreTask(id);
+            }}
+          />
         </ResizablePanel>
 
         {activeTask && (
           <>
             <ResizableHandle disabled={changesPanelCollapsed} />
             <ResizablePanel
-              id="changes"
+              id={inspectorWide ? 'changes-wide' : 'changes'}
               panelRef={changesPanelRef}
               animate={changesAnimating}
-              style={
-                changesPanelCollapsed
-                  ? { background: terminalBg }
-                  : { background: terminalBg, padding: '24px 24px 24px 0' }
-              }
-              defaultSize={changesPanelCollapsed ? '0.5%' : '22%'}
-              minSize="12%"
-              maxSize="40%"
-              collapsible
-              collapsedSize="0.5%"
+              defaultSize={inspectorWide ? '50%' : startedCollapsed.inspector ? '0%' : '26%'}
+              minSize={inspectorWide ? '30%' : `${TUI_PANEL_MIN_PCT}%`}
+              maxSize={inspectorWide ? '65%' : `${TUI_PANEL_MAX_PCT}%`}
+              collapsible={!inspectorWide}
+              collapsedSize="0%"
               onCollapse={() => {
                 setChangesPanelCollapsed(true);
                 setTimeout(() => setChangesAnimating(false), 200);
@@ -1257,67 +1288,28 @@ export function App() {
                 setTimeout(() => setChangesAnimating(false), 200);
               }}
             >
-              <div
-                className={
-                  changesPanelCollapsed
-                    ? 'h-full flex flex-col overflow-hidden'
-                    : 'right-inspector-shell h-full flex flex-col overflow-hidden rounded-xl'
-                }
-              >
-                <ShellDrawerWrapper
-                  enabled={shellDrawerPosition === 'right' && !changesPanelCollapsed}
-                  taskId={activeTask?.id ?? null}
-                  cwd={activeTask?.path ?? null}
-                  collapsed={shellDrawerCollapsed}
-                  panelRef={shellDrawerPanelRef}
-                  animating={shellDrawerAnimating}
+              {!changesPanelCollapsed && (
+                <RightInspector
+                  task={activeTask}
+                  rateLimits={latestRateLimits ?? {}}
+                  contextUsage={contextUsage[activeTask.id]}
+                  diff={inlineDiff}
+                  terminalTheme={resolvedTerminalTheme}
+                  isDark={theme === 'dark'}
+                  onViewDiff={handleViewDiff}
+                  onOpenEditor={() => {
+                    setDiffFile({
+                      cwd: activeTask.path,
+                      ...editorOpening(activeTask.path, gitStatus?.files ?? []),
+                    });
+                  }}
+                  onCloseDiff={closeDiff}
+                  onCommitFinished={refreshActiveGitStatus}
+                  onShowCommitGraph={() => setShowCommitGraph(true)}
+                  shellDrawerRef={shellDrawerPanelRef}
                   onTuiActiveChange={handleTuiPanelActive}
-                  onAnimate={() => setShellDrawerAnimating(true)}
-                  onCollapse={() => {
-                    setShellDrawerCollapsed(true);
-                    setTimeout(() => setShellDrawerAnimating(false), 200);
-                  }}
-                  onExpand={() => {
-                    setShellDrawerCollapsed(false);
-                    setTimeout(() => setShellDrawerAnimating(false), 200);
-                  }}
-                >
-                  {!changesPanelCollapsed && (
-                    <PortsDrawerWrapper
-                      taskId={activeTask?.id ?? null}
-                      collapsed={portsDrawerCollapsed}
-                      onCollapse={() => {
-                        setPortsDrawerCollapsed(true);
-                      }}
-                      onExpand={() => {
-                        setPortsDrawerCollapsed(false);
-                      }}
-                    >
-                      <RightInspector
-                        activeTask={activeTask}
-                        rateLimits={showRateLimits && latestRateLimits ? latestRateLimits : {}}
-                        contextUsage={
-                          showUsageInline && activeTask ? contextUsage[activeTask.id] : undefined
-                        }
-                        onViewDiff={handleViewDiff}
-                        onCommitFinished={() => {
-                          if (activeTask) void refreshGitStatus(activeTask.path);
-                        }}
-                        onShowCommitGraph={() => setShowCommitGraph(true)}
-                        onOpenEditor={() => {
-                          if (!activeTask) return;
-                          setDiffFile({
-                            cwd: activeTask.path,
-                            ...editorOpening(activeTask.path, gitStatus?.files ?? []),
-                          });
-                        }}
-                        collapsed={changesPanelCollapsed}
-                        onToggleCollapse={toggleChangesPanel}
-                      />
-                    </PortsDrawerWrapper>
-                  )}
-                </ShellDrawerWrapper>
-              </div>
+                />
+              )}
             </ResizablePanel>
           </>
         )}
@@ -1504,7 +1496,7 @@ export function App() {
             )
           }
           focusHash={commitGraphFocusHash}
-          elevated={!!diffFile}
+          elevated={!!modalDiff}
           onClose={() => {
             setShowCommitGraph(false);
             setCommitGraphFocusHash(null);
@@ -1521,29 +1513,18 @@ export function App() {
         <MemoryModal project={memoryProject} onClose={() => setMemoryProjectId(null)} />
       )}
 
-      {diffFile && (
+      {modalDiff && (
         <Suspense fallback={null}>
           <DiffEditorModal
-            cwd={diffFile.cwd}
-            initialFilePath={diffFile.filePath}
-            initialStaged={diffFile.staged}
-            initialView={diffFile.initialView}
+            cwd={modalDiff.cwd}
+            initialFilePath={modalDiff.filePath}
+            initialStaged={modalDiff.staged}
+            initialView={modalDiff.initialView}
             activeTaskId={activeTaskId}
             projectId={activeTask?.projectId ?? activeProjectId}
             terminalTheme={resolvedTerminalTheme}
             isDark={theme === 'dark'}
-            onClose={() => {
-              setDiffFile(null);
-              // Refocus the active task's Claude Code TUI so the user can
-              // keep typing without an extra click. RAF defers past React's
-              // commit so the modal's DOM is gone before xterm grabs focus.
-              // Not while the memory modal is still up: typing would reach
-              // Claude unseen.
-              const id = activeTaskId;
-              if (id && !memoryProject) {
-                requestAnimationFrame(() => sessionRegistry.get(id)?.focus());
-              }
-            }}
+            onClose={closeDiff}
           />
         </Suspense>
       )}

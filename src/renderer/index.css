@@ -405,45 +405,6 @@
     flex-shrink 200ms ease-out;
 }
 
-/* ── Usage Strip Responsive Detail ────────────────────────── */
-
-.usage-strip {
-  container-type: inline-size;
-  container-name: usage;
-}
-
-@container usage (max-width: 220px) {
-  .usage-detail-prefix {
-    display: none;
-  }
-}
-@container usage (max-width: 160px) {
-  .usage-detail {
-    display: none;
-  }
-}
-
-/* ── Right-sidebar headers: responsive to panel width ─────────
-   The right inspector can be resized narrow; its header rows pack more than
-   fits and the trailing elements clip off the right edge. Mirror the usage
-   strip's container-query approach: drop non-essential bits as the panel
-   narrows so the always-relevant controls stay visible. */
-
-.inspector-controls {
-  container-type: inline-size;
-  container-name: inspector;
-}
-@container inspector (max-width: 230px) {
-  .inspector-aheadbehind {
-    display: none;
-  }
-}
-@container inspector (max-width: 190px) {
-  .inspector-gitstats {
-    display: none;
-  }
-}
-
 .ports-header {
   container-type: inline-size;
   container-name: portshead;
@@ -663,25 +624,6 @@
   position: relative;
   background: hsl(var(--ground));
 }
-/* shim: delete in phase 4 */
-.right-inspector-shell {
-  position: relative;
-  background: hsl(var(--well));
-  box-shadow: 0 0 0 1px hsl(var(--line));
-}
-/* shim: delete in phase 4 — a 1px hairline element, or a border substitute. */
-.glass-hairline {
-  height: 1px;
-  background: hsl(var(--line));
-  pointer-events: none;
-}
-.glass-hairline-b {
-  box-shadow: inset 0 -1px 0 hsl(var(--line));
-}
-.glass-hairline-t {
-  box-shadow: inset 0 1px 0 hsl(var(--line));
-}
-
 /* shim: delete in phase 4 */
 .sidebar-pill-active {
   background: hsl(var(--select));

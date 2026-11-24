@@ -24,7 +24,6 @@ import {
   Puzzle,
   Info,
   ChevronDown,
-  Terminal as TerminalIcon,
   GitCommit,
   Shield,
   Copy,
@@ -72,7 +71,6 @@ const DASH_DEFAULT_ATTRIBUTION =
 type SettingsTab =
   | 'appearance'
   | 'notifications'
-  | 'terminal'
   | 'ide'
   | 'attribution'
   | 'claude-code'
@@ -85,7 +83,7 @@ type SettingsTab =
 
 const NAV_GROUPS: Array<{ label: string; ids: SettingsTab[] }> = [
   { label: 'Interface', ids: ['appearance', 'notifications'] },
-  { label: 'Editor', ids: ['terminal', 'ide'] },
+  { label: 'Editor', ids: ['ide'] },
   { label: 'Workflow', ids: ['attribution', 'claude-code', 'keybindings', 'usage'] },
   { label: 'System', ids: ['add-ons', 'updates', 'privacy', 'about'] },
 ];
@@ -107,12 +105,6 @@ const NAV_ITEMS: Array<{
     label: 'Notifications',
     description: 'Sound and desktop alerts when tasks need attention.',
     Icon: Bell,
-  },
-  {
-    id: 'terminal',
-    label: 'Terminal',
-    description: 'The shell drawer that runs alongside Claude.',
-    Icon: TerminalIcon,
   },
   {
     id: 'ide',
@@ -431,12 +423,12 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
           control={<Switch checked={showUsageInline} onCheckedChange={onShowUsageInlineChange} />}
         />
         <SettingsRow
-          label="Show task token badge"
-          description="Display the token count in the task header (right side)."
+          label="Show task tokens"
+          description="The task's token count, under the usage in the right sidebar."
           control={<Switch checked={showTaskTokens} onCheckedChange={onShowTaskTokensChange} />}
         />
         <SettingsRow
-          label="Show cost on token badge"
+          label="Show task cost"
           description="Include the USD cost alongside the token count."
           control={
             <Switch
@@ -806,8 +798,6 @@ export function SettingsModal({
   const onAutoUpdateEnabledChange = useSettings((s) => s.setAutoUpdateEnabled);
   const updateNotificationsEnabled = useSettings((s) => s.updateNotificationsEnabled);
   const onUpdateNotificationsEnabledChange = useSettings((s) => s.setUpdateNotificationsEnabled);
-  const shellDrawerPosition = useSettings((s) => s.shellDrawerPosition);
-  const onShellDrawerPositionChange = useSettings((s) => s.setShellDrawerPosition);
   const terminalTheme = useSettings((s) => s.terminalTheme);
   const onTerminalThemeChange = useSettings((s) => s.setTerminalTheme);
   const terminalFontFamily = useSettings((s) => s.terminalFontFamily);
@@ -1054,23 +1044,6 @@ export function SettingsModal({
                             ? 'border-border/40 text-fg-fade-40 cursor-default'
                             : 'border-border/60 text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary/40 focus:border-primary/40'
                         }`}
-                      />
-                    </SettingsBlock>
-                  </SettingsCard>
-                </SettingsPane>
-              )}
-
-              {tab === 'terminal' && (
-                <SettingsPane key={`pane-${tab}`}>
-                  <SettingsCard title="Shell drawer" hint="Cmd+J">
-                    <SettingsBlock label="Position">
-                      <Segmented
-                        value={shellDrawerPosition}
-                        options={[
-                          { value: 'main', label: 'Main' },
-                          { value: 'right', label: 'Right' },
-                        ]}
-                        onChange={onShellDrawerPositionChange}
                       />
                     </SettingsBlock>
                   </SettingsCard>

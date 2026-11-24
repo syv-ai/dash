@@ -7,7 +7,6 @@ import {
   GitCommit,
   GitPullRequestArrow,
   History,
-  ListFilter,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { HoverSwapSlot } from '../ui/HoverSwapSlot';
@@ -29,6 +28,8 @@ interface EditorSidebarProps {
   allPaths: string[];
   /** Subset of paths that have a diff for this view, with status + line stats. */
   changedFiles: FileChange[];
+  /** List only the changed files (and their folders), not the whole repo. */
+  changedOnly: boolean;
   filesLoading: boolean;
   selectedPath: string;
   onSelectFile: (path: string) => void;
@@ -72,7 +73,6 @@ export interface PrEntry {
 
 const COMMITS_DRAWER_KEY = 'diffEditor.commitsDrawerSize';
 const COMMITS_PANEL_ID = 'commits';
-const CHANGED_ONLY_KEY = 'diffEditor.changedOnly';
 
 export function EditorSidebar(props: EditorSidebarProps) {
   const initialDrawerSize = parseInitial(localStorage.getItem(COMMITS_DRAWER_KEY), 35);
@@ -83,6 +83,7 @@ export function EditorSidebar(props: EditorSidebarProps) {
       view={props.view}
       paths={props.allPaths}
       changedFiles={props.changedFiles}
+      changedOnly={props.changedOnly}
       loading={props.filesLoading}
       selectedPath={props.selectedPath}
       onSelectFile={props.onSelectFile}
@@ -374,6 +375,7 @@ interface FileTreePanelProps {
   view: EditorView;
   paths: string[];
   changedFiles: FileChange[];
+  changedOnly: boolean;
   loading: boolean;
   selectedPath: string;
   onSelectFile: (path: string) => void;
@@ -386,22 +388,14 @@ function FileTreePanel({
   view,
   paths,
   changedFiles,
+  changedOnly: changedOnlyProp,
   loading,
   selectedPath,
   onSelectFile,
   badgeCounts,
 }: FileTreePanelProps) {
-  const [changedOnlyPref, setChangedOnly] = useState<boolean>(
-    () => localStorage.getItem(CHANGED_ONLY_KEY) === 'true',
-  );
   // Plain files have no changes to filter on, and nothing git ignores.
-  const changedOnly = git && changedOnlyPref;
-  const toggleChangedOnly = () =>
-    setChangedOnly((v) => {
-      const next = !v;
-      localStorage.setItem(CHANGED_ONLY_KEY, String(next));
-      return next;
-    });
+  const changedOnly = git && changedOnlyProp;
 
   // "Show all files" means every local file, gitignored ones included, so the
   // user can reach a local-only config or scratch file. Ignored files are a
@@ -462,24 +456,6 @@ function FileTreePanel({
                 <span className="text-[hsl(var(--git-deleted))]">−{totals.deletions}</span>
               )}
             </span>
-          )}
-        </span>
-        <span className="flex items-center gap-0.5">
-          {git && (
-            <Tooltip content={changedOnly ? 'Show all files' : 'Show changed files only'}>
-              <button
-                type="button"
-                onClick={toggleChangedOnly}
-                aria-pressed={changedOnly}
-                className={`shrink-0 p-1 -mr-1 rounded-md transition-colors ${
-                  changedOnly
-                    ? 'text-primary'
-                    : 'text-muted-fade-50 hover:text-foreground hover:bg-[hsl(var(--surface-2)/0.6)]'
-                }`}
-              >
-                <ListFilter size={13} strokeWidth={1.8} />
-              </button>
-            </Tooltip>
           )}
         </span>
       </div>

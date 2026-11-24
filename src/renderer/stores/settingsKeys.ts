@@ -41,7 +41,6 @@ export interface SettingsState {
    *  renderer (see WebglLifecycle). Clamped to WEBGL_HELD_MIN..MAX. */
   webglHeldLimit: number;
   effortLevel: string;
-  shellDrawerPosition: 'main' | 'right';
   customIDE: { path: string; args: string[] };
   customClaudeEnvVars: Record<string, string>;
   usageThresholds: UsageThresholds;
@@ -97,7 +96,8 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('showRateLimits', 'showRateLimits', boolNotFalse()),
   entry('showUsageInline', 'showUsageInline', boolNotFalse()),
   // Removed keys (showActiveTasksSection, showContextUsageOnTaskCards,
-  // showContextBarOnTaskCards) are simply no longer read; stored values linger, unused.
+  // showContextBarOnTaskCards, shellDrawerPosition) are simply no longer read;
+  // stored values linger, unused.
   entry('sidebarView', 'sidebarView', strEnum(['tasks', 'projects'] as const, 'tasks')),
   entry('showProjectTokens', 'showProjectTokens', boolDefaultTrue()),
   entry('desktopNotification', 'desktopNotification', boolDefaultFalse()),
@@ -116,7 +116,6 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
     encode: (v) => String(v),
   }),
   entry('effortLevel', 'claudeEffortLevel', str('auto')),
-  entry('shellDrawerPosition', 'shellDrawerPosition', strEnum(['main', 'right'] as const, 'right')),
   entry(
     'customIDE',
     'customIDE',

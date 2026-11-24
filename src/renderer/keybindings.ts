@@ -97,6 +97,15 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
     alt: false,
     key: 'b',
   },
+  toggleInspector: {
+    id: 'toggleInspector',
+    label: 'Toggle Task Sidebar',
+    category: 'Navigation',
+    mod: true,
+    shift: false,
+    alt: true,
+    key: 'b',
+  },
   openFolder: {
     id: 'openFolder',
     label: 'Open Folder',
@@ -183,11 +192,18 @@ export function saveKeybindings(bindings: KeyBindingMap): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(bindings));
 }
 
-export function matchesBinding(e: KeyboardEvent, binding: KeyBinding): boolean {
+export function matchesBinding(
+  e: Pick<KeyboardEvent, 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey' | 'key' | 'code'>,
+  binding: KeyBinding,
+): boolean {
   const modMatch = binding.mod ? e.metaKey || e.ctrlKey : !e.metaKey && !e.ctrlKey;
   const shiftMatch = binding.shift ? e.shiftKey : !e.shiftKey;
   const altMatch = binding.alt ? e.altKey : !e.altKey;
-  const keyMatch = e.key.toLowerCase() === binding.key.toLowerCase();
+  const key = binding.key.toLowerCase();
+  // On macOS ⌥ turns a letter into another character (⌥B types "∫"), so an
+  // ⌥ chord also matches on the physical key.
+  const keyMatch =
+    e.key.toLowerCase() === key || (e.altKey && e.code === `Key${key.toUpperCase()}`);
   return modMatch && shiftMatch && altMatch && keyMatch;
 }
 

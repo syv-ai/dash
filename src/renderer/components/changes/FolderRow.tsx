@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ChevronDown, ChevronRight, Undo2, EyeOff } from 'lucide-react';
-import { Tooltip } from '../ui/Tooltip';
+import { ListRow } from '../ui/ListRow';
+import { IconButton } from '../ui/IconButton';
 import { Popover, PopoverTrigger, PopoverContent, PopoverArrow } from '../ui/Popover';
-import { Checkbox } from './FileRow';
+import { cn } from '../../lib/cn';
+import { Checkbox } from '../ui/Checkbox';
+import { LineStats, rowKeys } from './FileRow';
 import { DiscardFolderConfirm } from './DiscardFolderConfirm';
 import type { NodeAggregate } from './buildTree';
-import type { FileChangeStatus } from '../../../shared/types';
 
 interface FolderRowProps {
   displayName: string;
@@ -24,17 +26,9 @@ interface FolderRowProps {
   onAddToGitignore: () => void;
 }
 
-const FOLDER_TINT: Record<FileChangeStatus, string> = {
-  modified: 'text-[hsl(var(--git-modified)/0.85)]',
-  added: 'text-[hsl(var(--git-added)/0.85)]',
-  deleted: 'text-[hsl(var(--git-deleted)/0.85)]',
-  renamed: 'text-[hsl(var(--git-renamed)/0.85)]',
-  untracked: 'text-[hsl(var(--git-untracked))]',
-  conflicted: 'text-[hsl(var(--git-conflicted)/0.85)]',
-  // `git status` never emits 'ignored'; key present only for the record type.
-  ignored: 'text-muted-fade-40',
-};
-
+/** A folder in the changes tree: stage-all checkbox, chevron, name, file
+ *  count (and its line stats while closed); on hover, discard its changes
+ *  (after a confirm) or .gitignore a wholly untracked folder. */
 export function FolderRow({
   displayName,
   agg,
@@ -50,112 +44,96 @@ export function FolderRow({
   onAddToGitignore,
 }: FolderRowProps) {
   const [discardOpen, setDiscardOpen] = useState(false);
-  // A folder is only tinted when the folder itself was renamed/moved (agg.status
-  // === 'renamed'); changes to its contents don't tint it. Otherwise the name is
-  // a muted foreground — dimmer than full white, but kept warm so it never reads
-  // as the grey untracked tint.
-  const nameTint = agg.status !== 'mixed' ? FOLDER_TINT[agg.status] : 'text-fg-fade-75';
+  const hasActions = canDiscard || canIgnore;
+  const Chevron = open ? ChevronDown : ChevronRight;
   return (
-    <div
-      role="button"
-      tabIndex={0}
+    <ListRow
+      as="div"
+      size="sm"
+      {...rowKeys(onToggleOpen)}
       onClick={onToggleOpen}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onToggleOpen();
-        }
-      }}
-      className="group relative flex items-center gap-2 px-2 py-1 rounded-md text-base cursor-pointer hover:bg-[hsl(var(--surface-2)/0.6)] min-h-[24px] transition-colors duration-150"
-    >
-      <Checkbox checked={agg.stageState} onChange={onToggleStage} />
-      {Array.from({ length: indent }, (_, i) => (
-        <span key={i} className="w-1 h-full relative inline-block shrink-0">
-          <span className="absolute left-px top-[-2px] bottom-[-2px] w-px bg-[hsl(var(--border)/0.5)]" />
-        </span>
-      ))}
-      <span className="shrink-0 w-[14px] h-[14px] inline-flex items-center justify-center text-muted-fade-55">
-        {open ? (
-          <ChevronDown size={12} strokeWidth={1.8} />
-        ) : (
-          <ChevronRight size={12} strokeWidth={1.8} />
-        )}
-      </span>
-      <span className={`flex-1 min-w-0 font-mono text-sm truncate font-medium ${nameTint}`}>
-        {displayName}/
-      </span>
-      <span className="font-mono text-xs font-semibold tabular-nums shrink-0 text-muted-fade-70">
-        {agg.count}
-      </span>
-      {!open && (
-        <span className="font-mono text-xs flex gap-1.5 shrink-0 group-hover:invisible">
-          {agg.add || agg.del ? (
-            <>
-              {/* New files count too, so the folders sum to the inspector's headline. */}
-              {agg.add + agg.untrackedAdd ? (
-                <span className="text-[hsl(var(--git-added)/0.75)]">
-                  +{agg.add + agg.untrackedAdd}
-                </span>
-              ) : null}
-              {agg.del ? (
-                <span className="text-[hsl(var(--git-deleted)/0.75)]">−{agg.del}</span>
-              ) : null}
-            </>
-          ) : agg.untrackedAdd ? (
-            <span className="text-muted-fade-70">+{agg.untrackedAdd}</span>
-          ) : null}
-        </span>
-      )}
-      {(canDiscard || canIgnore) && (
-        <div
-          className={`absolute right-2 top-1/2 -translate-y-1/2 items-center gap-1 ${
-            discardOpen ? 'flex' : 'hidden group-hover:flex'
-          }`}
-        >
-          {canIgnore && (
-            <Tooltip content="Add folder to .gitignore">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddToGitignore();
-                }}
-                aria-label="Add folder to .gitignore"
-                className="flex items-center justify-center w-[22px] h-[22px] rounded-md bg-[hsl(var(--surface-3))] border border-[hsl(var(--border)/0.5)] text-muted-foreground hover:bg-[hsl(var(--git-untracked)/0.18)] hover:border-[hsl(var(--git-untracked)/0.5)] hover:text-foreground"
-              >
-                <EyeOff size={11} strokeWidth={2.4} />
-              </button>
-            </Tooltip>
-          )}
-          {canDiscard && (
-            <Popover open={discardOpen} onOpenChange={setDiscardOpen}>
-              <Tooltip content="Discard folder changes">
-                <PopoverTrigger asChild>
-                  <button
-                    onClick={(e) => e.stopPropagation()}
-                    aria-label="Discard folder changes"
-                    className="flex items-center justify-center w-[22px] h-[22px] rounded-md bg-[hsl(var(--surface-3))] border border-[hsl(var(--border)/0.5)] text-muted-foreground hover:bg-destructive/12 hover:border-destructive/50 hover:text-destructive aria-expanded:bg-destructive/12 aria-expanded:border-destructive/50 aria-expanded:text-destructive"
-                  >
-                    <Undo2 size={11} strokeWidth={2.4} />
-                  </button>
-                </PopoverTrigger>
-              </Tooltip>
-              <PopoverContent side="left" align="end" sideOffset={8}>
-                <DiscardFolderConfirm
-                  folderName={displayName}
-                  folderBasePath={folderBasePath}
-                  paths={discardPaths}
-                  onClose={() => setDiscardOpen(false)}
-                  onConfirm={() => {
-                    onDiscard();
-                    setDiscardOpen(false);
+      aria-expanded={open}
+      indent={indent}
+      className="cursor-pointer"
+      leading={
+        <>
+          <Checkbox
+            checked={agg.stageState}
+            onChange={onToggleStage}
+            aria-label={agg.stageState === true ? 'Unstage folder' : 'Stage folder'}
+          />
+          <Chevron size={14} strokeWidth={1.8} className="ml-2 text-ink-3" />
+        </>
+      }
+      trailing={
+        <>
+          <span
+            className={cn(
+              'flex items-center gap-2',
+              hasActions && (discardOpen ? 'hidden' : 'group-hover/row:hidden'),
+            )}
+          >
+            {/* New files count too, so the folders sum to the panel's total. */}
+            {!open && <LineStats add={agg.add + agg.untrackedAdd} del={agg.del} />}
+            <span className="tabular-nums">{agg.count}</span>
+          </span>
+          {hasActions && (
+            <span
+              className={cn(
+                'items-center gap-0.5',
+                discardOpen ? 'flex' : 'hidden group-hover/row:flex',
+              )}
+            >
+              {canIgnore && (
+                <IconButton
+                  title="Add folder to .gitignore"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAddToGitignore();
                   }}
-                />
-                <PopoverArrow />
-              </PopoverContent>
-            </Popover>
+                >
+                  <EyeOff size={14} strokeWidth={1.8} />
+                </IconButton>
+              )}
+              {canDiscard && (
+                <Popover open={discardOpen} onOpenChange={setDiscardOpen}>
+                  <PopoverTrigger asChild>
+                    <IconButton
+                      title="Discard folder changes"
+                      size="sm"
+                      variant="destructive"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Undo2 size={14} strokeWidth={1.8} />
+                    </IconButton>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    side="left"
+                    align="end"
+                    sideOffset={8}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <DiscardFolderConfirm
+                      folderName={displayName}
+                      folderBasePath={folderBasePath}
+                      paths={discardPaths}
+                      onClose={() => setDiscardOpen(false)}
+                      onConfirm={() => {
+                        onDiscard();
+                        setDiscardOpen(false);
+                      }}
+                    />
+                    <PopoverArrow />
+                  </PopoverContent>
+                </Popover>
+              )}
+            </span>
           )}
-        </div>
-      )}
-    </div>
+        </>
+      }
+    >
+      <span className="text-sm text-ink-2">{displayName}/</span>
+    </ListRow>
   );
 }

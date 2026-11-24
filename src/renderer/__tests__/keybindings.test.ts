@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseKeybindings, DEFAULT_KEYBINDINGS } from '../keybindings';
+import { parseKeybindings, matchesBinding, DEFAULT_KEYBINDINGS } from '../keybindings';
 
 describe('parseKeybindings', () => {
   it('returns the defaults when raw is null', () => {
@@ -24,6 +24,15 @@ describe('DEFAULT_KEYBINDINGS', () => {
     expect(DEFAULT_KEYBINDINGS.findTask).toMatchObject({ mod: true, shift: false, key: 'k' });
   });
 
+  it('binds the task sidebar toggle to ⌘⌥B', () => {
+    expect(DEFAULT_KEYBINDINGS.toggleInspector).toMatchObject({
+      mod: true,
+      shift: false,
+      alt: true,
+      key: 'b',
+    });
+  });
+
   it('gives every default a distinct chord', () => {
     const chords = Object.values(DEFAULT_KEYBINDINGS).map(
       (b) => `${b.mod}|${b.shift}|${b.alt}|${b.key.toLowerCase()}`,
@@ -35,8 +44,44 @@ describe('DEFAULT_KEYBINDINGS', () => {
     const older: Partial<typeof DEFAULT_KEYBINDINGS> = { ...DEFAULT_KEYBINDINGS };
     delete older.toggleSidebar;
     delete older.findTask;
+    delete older.toggleInspector;
     const result = parseKeybindings(JSON.stringify(older));
     expect(result.toggleSidebar).toEqual(DEFAULT_KEYBINDINGS.toggleSidebar);
     expect(result.findTask).toEqual(DEFAULT_KEYBINDINGS.findTask);
+    expect(result.toggleInspector).toEqual(DEFAULT_KEYBINDINGS.toggleInspector);
+  });
+});
+
+describe('matchesBinding', () => {
+  const chord = (over: Partial<KeyboardEvent>) => ({
+    metaKey: false,
+    ctrlKey: false,
+    shiftKey: false,
+    altKey: false,
+    key: '',
+    code: '',
+    ...over,
+  });
+  const inspector = DEFAULT_KEYBINDINGS.toggleInspector!;
+  const sidebar = DEFAULT_KEYBINDINGS.toggleSidebar!;
+
+  it('matches an ⌥ chord on the physical key when ⌥ changed the character', () => {
+    expect(
+      matchesBinding(chord({ metaKey: true, altKey: true, key: '∫', code: 'KeyB' }), inspector),
+    ).toBe(true);
+  });
+
+  it('keeps ⌘B and ⌘⌥B apart', () => {
+    const cmdB = chord({ metaKey: true, key: 'b', code: 'KeyB' });
+    const cmdAltB = chord({ metaKey: true, altKey: true, key: '∫', code: 'KeyB' });
+    expect(matchesBinding(cmdB, sidebar)).toBe(true);
+    expect(matchesBinding(cmdB, inspector)).toBe(false);
+    expect(matchesBinding(cmdAltB, sidebar)).toBe(false);
+  });
+
+  it('does not match another physical key under ⌥', () => {
+    expect(
+      matchesBinding(chord({ metaKey: true, altKey: true, key: '¬', code: 'KeyL' }), inspector),
+    ).toBe(false);
   });
 });

@@ -5,8 +5,8 @@ import { useGit } from '../../stores/gitStore';
 import { selectTaskByPath, useProjects } from '../../stores/projectsStore';
 import { EditorSidebar } from './EditorSidebar';
 import { EditorPane } from './EditorPane';
+import type { ITheme as XtermTheme } from '@xterm/xterm';
 import type { EditorView } from './types';
-import type { DiffEditorModalProps } from './DiffEditorModal';
 import { useEditorViewData } from './data/useEditorViewData';
 import { pickFirstChangedFile } from './data/viewData';
 import { readStoredView, writeStoredFile, writeStoredView } from './data/viewPersistence';
@@ -22,8 +22,31 @@ import { parsePrScope } from '../../../shared/prScope';
 
 const NO_COMMENTS: Record<string, DiffComment[]> = {};
 
+export interface DiffEditorProps {
+  cwd: string;
+  /** File the user clicked, or '' to let the editor pick the first file in the view. */
+  initialFilePath: string;
+  /** Whether the clicked file was the staged version. Used only when initialView is omitted. */
+  initialStaged: boolean;
+  /** Initial view. When set it overrides the per-repo stored view; when omitted the
+   *  editor restores the stored view, falling back to the working tree at HEAD/index. */
+  initialView?: EditorView;
+  activeTaskId: string | null;
+  /** The project `cwd` belongs to; PR review calls name it. */
+  projectId: string | null;
+  terminalTheme: XtermTheme;
+  isDark: boolean;
+  /** The file tree lists only the changed files, not the whole repo. */
+  changedOnly?: boolean;
+  /** Laid out in the task sidebar rather than a modal: a narrower pane, so the
+   *  tree takes a larger share, remembered apart from the modal's. */
+  inline?: boolean;
+  onClose: () => void;
+}
+
 /** Composition-root workspace: owns view state, drives the data loaders, and
- *  lays out the sidebar + editor pane. Rendered inside <DiffEditorModal>. */
+ *  lays out the sidebar + editor pane. Rendered in the task sidebar for a
+ *  task's worktree, or in <DiffEditorModal> for any other folder. */
 export function DiffEditor({
   cwd,
   initialFilePath,
@@ -33,8 +56,10 @@ export function DiffEditor({
   projectId,
   terminalTheme,
   isDark,
+  changedOnly = false,
+  inline = false,
   onClose,
-}: DiffEditorModalProps) {
+}: DiffEditorProps) {
   // Git belongs to a task's worktree, and the task's comments to the active
   // task's. Any other folder (Claude's memory, opened from the memory modal)
   // is plain files: no git, no comments.
@@ -278,14 +303,24 @@ export function DiffEditor({
 
   return (
     <div className="h-full w-full overflow-hidden" style={{ background: bg }}>
-      <ResizablePanelGroup orientation="horizontal" autoSaveId="diff-editor-shell">
+      <ResizablePanelGroup
+        orientation="horizontal"
+        autoSaveId={inline ? 'diff-editor-inline' : 'diff-editor-shell'}
+      >
         {/* pr-3 keeps the 12px gutter the old handle took up. */}
-        <ResizablePanel id="sidebar" defaultSize="22%" minSize="14%" maxSize="45%" className="pr-3">
+        <ResizablePanel
+          id="sidebar"
+          defaultSize={inline ? '32%' : '22%'}
+          minSize="14%"
+          maxSize="45%"
+          className="pr-3"
+        >
           <EditorSidebar
             cwd={cwd}
             git={git}
             allPaths={repoPaths}
             changedFiles={changedFiles}
+            changedOnly={changedOnly}
             filesLoading={repoPathsLoading || changedFilesLoading}
             selectedPath={selectedPath}
             onSelectFile={setSelectedPath}

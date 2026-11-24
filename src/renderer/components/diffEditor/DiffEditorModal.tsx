@@ -1,26 +1,10 @@
-import type { ITheme as XtermTheme } from '@xterm/xterm';
 import { Modal } from '../ui/Modal';
-import type { EditorView } from './types';
-import { DiffEditor } from './DiffEditor';
+import { DiffEditor, type DiffEditorProps } from './DiffEditor';
 
-export interface DiffEditorModalProps {
-  cwd: string;
-  /** File the user clicked, or '' to let the editor pick the first file in the view. */
-  initialFilePath: string;
-  /** Whether the clicked file was the staged version. Used only when initialView is omitted. */
-  initialStaged: boolean;
-  /** Initial view. When set it overrides the per-repo stored view; when omitted the
-   *  editor restores the stored view, falling back to the working tree at HEAD/index. */
-  initialView?: EditorView;
-  activeTaskId: string | null;
-  /** The project `cwd` belongs to; PR review calls name it. */
-  projectId: string | null;
-  terminalTheme: XtermTheme;
-  isDark: boolean;
-  onClose: () => void;
-}
-
-export function DiffEditorModal(props: DiffEditorModalProps) {
+/** The diff editor over everything, for a folder that isn't the active task's
+ *  worktree (Claude's memory, opened from the memory modal). A task's own
+ *  diffs open inline in the task sidebar instead. */
+export function DiffEditorModal(props: DiffEditorProps) {
   return (
     <Modal onClose={props.onClose} size="w-[92vw] h-[88vh]">
       <DiffEditor {...props} />

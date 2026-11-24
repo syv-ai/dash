@@ -3,14 +3,15 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { buildTree, collectFiles } from './buildTree';
 import { flattenTree, type FlatRow } from './flattenTree';
 import { folderActions, type Callbacks } from './TreeNode';
-import { FileRow } from './FileRow';
+import { FileRow, MoreRow } from './FileRow';
 import { FolderRow } from './FolderRow';
+import { SectionLabel } from './SectionLabel';
 import type { FileChange } from '../../../shared/types';
 
 /** Above this many changed files the panel renders this list instead of the animated tree. */
 export const VIRTUALIZE_THRESHOLD = 300;
 
-const ROW_ESTIMATE_PX = 26;
+const ROW_ESTIMATE_PX = 28;
 
 export interface FileSection extends Omit<Callbacks, 'onToggleFolderStage'> {
   id: string;
@@ -84,14 +85,10 @@ export function VirtualFileList({ sections, filesVersion, scrollRef }: VirtualFi
   const renderRow = (row: Row, section: FileSection) => {
     switch (row.kind) {
       case 'header':
-        return (
-          <div className="px-3 pt-2 pb-1 font-mono text-xs uppercase tracking-wider text-muted-foreground">
-            {row.label}
-          </div>
-        );
+        return <SectionLabel>{row.label}</SectionLabel>;
       case 'file':
         return (
-          <div className="px-1 pb-0.5">
+          <div className="px-1.5">
             <FileRow
               file={row.file}
               indent={row.indent}
@@ -108,7 +105,7 @@ export function VirtualFileList({ sections, filesVersion, scrollRef }: VirtualFi
         const { discardable, canDiscard, canIgnore } = folderActions(terminal);
         const openKey = `${section.id}:${terminal.path}`;
         return (
-          <div className="px-1 pb-0.5">
+          <div className="px-1.5">
             <FolderRow
               displayName={row.display}
               agg={terminal.agg}
@@ -132,16 +129,11 @@ export function VirtualFileList({ sections, filesVersion, scrollRef }: VirtualFi
       }
       case 'more':
         return (
-          <div className="px-1 pb-0.5">
-            <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground italic">
-              <span className="flex-1">+{row.hidden} more in this folder</span>
-              <button
-                onClick={() => setShowAll((s) => new Set(s).add(`${section.id}:${row.folderPath}`))}
-                className="text-primary text-xs hover:underline"
-              >
-                Show all
-              </button>
-            </div>
+          <div className="px-1.5">
+            <MoreRow
+              hidden={row.hidden}
+              onShowAll={() => setShowAll((s) => new Set(s).add(`${section.id}:${row.folderPath}`))}
+            />
           </div>
         );
     }

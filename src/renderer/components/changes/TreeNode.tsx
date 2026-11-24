@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { FolderRow } from './FolderRow';
-import { FileRow } from './FileRow';
+import { FileRow, MoreRow } from './FileRow';
 import { compressedDisplay, type TreeNode } from './buildTree';
 import { ROW_TRANSITION, rowEnterExit } from './motionConfig';
 import { FOLDER_TRUNCATION_CAP, SMART_COLLAPSE_THRESHOLD } from './flattenTree';
@@ -73,8 +73,7 @@ function DirNode({ node, indent, ...callbacks }: TreeNodeProps) {
       layout
       {...rowEnterExit}
       transition={ROW_TRANSITION}
-      style={{ overflow: 'hidden' }}
-      className="flex flex-col gap-0.5"
+      className="flex flex-col overflow-hidden"
     >
       <FolderRow
         displayName={display}
@@ -98,7 +97,7 @@ function DirNode({ node, indent, ...callbacks }: TreeNodeProps) {
         style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
       >
         <div className="overflow-hidden">
-          <div className="flex flex-col gap-0.5">
+          <div className="flex flex-col">
             <TreeNodeView node={terminal} indent={indent + 1} {...callbacks} />
           </div>
         </div>
@@ -144,15 +143,12 @@ function FileSection({
           layout
           {...rowEnterExit}
           transition={ROW_TRANSITION}
-          style={{ overflow: 'hidden' }}
-          className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground italic"
+          className="overflow-hidden"
         >
-          <span className="flex-1">
-            +{files.length - FOLDER_TRUNCATION_CAP} more in this folder
-          </span>
-          <button onClick={() => setShowAll(true)} className="text-primary text-xs hover:underline">
-            Show all
-          </button>
+          <MoreRow
+            hidden={files.length - FOLDER_TRUNCATION_CAP}
+            onShowAll={() => setShowAll(true)}
+          />
         </motion.div>
       )}
     </AnimatePresence>

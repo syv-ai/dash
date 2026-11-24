@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { sessionRegistry } from '../../terminal/SessionRegistry';
 import { Tooltip } from '../ui/Tooltip';
+import { IconButton } from '../ui/IconButton';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -509,14 +510,14 @@ export function TerminalTabs({
       {collapsed ? (
         <button
           onClick={onExpand}
-          className={`h-full w-full flex items-center gap-2 px-4 transition-colors border-t border-edge/8 ${
+          className={`h-full w-full flex items-center gap-2 px-3 text-sm transition-colors ${
             hasUnseenTui
-              ? 'bg-primary/10 text-primary hover:bg-primary/15'
-              : 'text-fg-fade-80 hover:text-foreground hover:bg-edge/4'
+              ? 'bg-state-needs/12 text-state-needs hover:bg-state-needs/20'
+              : 'text-ink-2 hover:text-ink hover:bg-hover'
           }`}
         >
-          <Terminal size={12} strokeWidth={1.8} />
-          <span className="text-xs font-semibold uppercase tracking-[0.08em]">{label}</span>
+          <Terminal size={14} strokeWidth={1.8} />
+          <span className="font-medium">{label}</span>
           {setupRun?.status === 'running' && (
             <Loader2 size={11} strokeWidth={1.8} className="animate-spin" />
           )}
@@ -528,10 +529,10 @@ export function TerminalTabs({
               <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--git-added))] shadow-[0_0_6px_hsl(var(--git-added)/0.55)]" />
             )
           )}
-          <ChevronUp size={12} strokeWidth={1.8} className="ml-auto" />
+          <ChevronUp size={14} strokeWidth={1.8} className="ml-auto text-ink-3" />
         </button>
       ) : (
-        <div className="relative flex items-center h-7 shrink-0 border-t border-edge/8 pl-1">
+        <div className="relative flex items-center h-9 shrink-0 pl-1">
           {/* Hidden measuring row — lays out every shell/service tab off-screen
               so the overflow split below uses real measured widths even for tabs
               currently collapsed into the dropdown. */}
@@ -633,12 +634,9 @@ export function TerminalTabs({
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
-          <button
-            onClick={onCollapse}
-            className="p-1 mr-1 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
-          >
-            <ChevronDown size={12} strokeWidth={2} />
-          </button>
+          <IconButton title="Collapse" size="sm" onClick={onCollapse} className="mr-1">
+            <ChevronDown size={14} strokeWidth={1.8} />
+          </IconButton>
         </div>
       )}
       {/* Terminal container always in DOM to avoid re-attach on expand.

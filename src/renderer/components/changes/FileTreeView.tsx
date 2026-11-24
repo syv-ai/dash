@@ -28,7 +28,7 @@ export function FileTreeView({
 }: FileTreeViewProps) {
   const tree = useMemo(() => buildTree(files), [files]);
   return (
-    <div className="flex flex-col gap-0.5 px-1">
+    <div className="flex flex-col px-1.5">
       <TreeNodeView
         node={tree}
         indent={0}
