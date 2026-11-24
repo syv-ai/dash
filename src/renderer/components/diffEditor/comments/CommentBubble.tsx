@@ -95,7 +95,7 @@ export function CommentBubble({
                 e.stopPropagation();
                 onDoubleClick();
               }}
-              className="flex h-[20px] w-[20px] items-center justify-center rounded-[4px] text-muted-fade-60 opacity-0 group-hover/bubble:opacity-40 hover:opacity-100! hover:text-foreground hover:bg-foreground/10 transition-opacity"
+              className="flex h-[20px] w-[20px] items-center justify-center rounded-sm text-muted-fade-60 opacity-0 group-hover/bubble:opacity-40 hover:opacity-100! hover:text-foreground hover:bg-foreground/10 transition-opacity"
             >
               <Pencil size={12} strokeWidth={1.8} />
             </button>
@@ -108,7 +108,7 @@ export function CommentBubble({
                   e.stopPropagation();
                   onPromote();
                 }}
-                className="flex h-[20px] w-[20px] items-center justify-center rounded-[4px] text-muted-fade-60 opacity-40 hover:opacity-100 hover:text-primary hover:bg-primary/10 transition-opacity"
+                className="flex h-[20px] w-[20px] items-center justify-center rounded-sm text-muted-fade-60 opacity-40 hover:opacity-100 hover:text-primary hover:bg-primary/10 transition-opacity"
               >
                 <ArrowUpRight size={12} strokeWidth={1.8} />
               </button>
@@ -122,7 +122,7 @@ export function CommentBubble({
                   e.stopPropagation();
                   onReopen();
                 }}
-                className="flex h-[20px] w-[20px] items-center justify-center rounded-[4px] text-muted-fade-60 opacity-40 hover:opacity-100 hover:text-primary hover:bg-primary/10 transition-opacity"
+                className="flex h-[20px] w-[20px] items-center justify-center rounded-sm text-muted-fade-60 opacity-40 hover:opacity-100 hover:text-primary hover:bg-primary/10 transition-opacity"
               >
                 <Undo2 size={12} strokeWidth={1.8} />
               </button>
@@ -135,36 +135,36 @@ export function CommentBubble({
                 e.stopPropagation();
                 onDelete();
               }}
-              className="flex h-[20px] w-[20px] items-center justify-center rounded-[4px] text-muted-fade-60 opacity-40 hover:opacity-100 hover:text-foreground hover:bg-foreground/10 transition-opacity"
+              className="flex h-[20px] w-[20px] items-center justify-center rounded-sm text-muted-fade-60 opacity-40 hover:opacity-100 hover:text-foreground hover:bg-foreground/10 transition-opacity"
             >
               <X size={13} strokeWidth={1.8} />
             </button>
           </div>
           <div className="flex items-center gap-[6px] mb-[2px]">
-            <span className="font-mono text-[10px] text-muted-fade-55 tracking-normal">{meta}</span>
+            <span className="font-mono text-xs text-muted-fade-55 tracking-normal">{meta}</span>
             {kindTag === 'comment' && (
-              <span className="rounded-[3px] bg-primary/12 px-[5px] py-[1px] text-[9px] font-medium uppercase tracking-[0.04em] text-primary/80">
+              <span className="rounded-sm bg-primary/12 px-[5px] py-[1px] text-xs font-medium uppercase tracking-[0.04em] text-primary/80">
                 Comment
               </span>
             )}
             {kindTag === 'note' && (
-              <span className="rounded-[3px] bg-foreground/10 px-[5px] py-[1px] text-[9px] font-medium uppercase tracking-[0.04em] text-muted-fade-75">
+              <span className="rounded-sm bg-foreground/10 px-[5px] py-[1px] text-xs font-medium uppercase tracking-[0.04em] text-muted-fade-75">
                 Note
               </span>
             )}
             {scopeLabel && (
-              <span className="rounded-[3px] bg-primary/12 px-[5px] py-[1px] text-[9px] font-medium text-primary/80">
+              <span className="rounded-sm bg-primary/12 px-[5px] py-[1px] text-xs font-medium text-primary/80">
                 {scopeLabel}
               </span>
             )}
             {byAgent && (
-              <span className="inline-flex items-center gap-[3px] rounded-[3px] bg-foreground/10 px-[5px] py-[1px] text-[9px] font-medium uppercase tracking-[0.04em] text-muted-fade-75">
+              <span className="inline-flex items-center gap-[3px] rounded-sm bg-foreground/10 px-[5px] py-[1px] text-xs font-medium uppercase tracking-[0.04em] text-muted-fade-75">
                 <Bot size={10} strokeWidth={1.8} />
                 Agent
               </span>
             )}
             {sent && (
-              <span className="rounded-[3px] bg-foreground/10 px-[5px] py-[1px] text-[9px] font-medium uppercase tracking-[0.04em] text-muted-fade-75">
+              <span className="rounded-sm bg-foreground/10 px-[5px] py-[1px] text-xs font-medium uppercase tracking-[0.04em] text-muted-fade-75">
                 Sent
               </span>
             )}

@@ -24,7 +24,7 @@ export function CircleCheck({ checked, onChange, label, className = '' }: Circle
       >
         {checked && <Check size={10} strokeWidth={3} className="text-primary-foreground" />}
       </span>
-      <span className="text-[13px] text-fg-fade-80 group-hover:text-foreground transition-colors">
+      <span className="text-base text-fg-fade-80 group-hover:text-foreground transition-colors">
         {label}
       </span>
     </button>

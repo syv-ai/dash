@@ -57,8 +57,8 @@ export function UsageBar({
   detail,
   height = 6,
   width,
-  labelClassName = 'text-[12px] text-fg-fade-80',
-  detailClassName = 'text-[11px]',
+  labelClassName = 'text-sm text-fg-fade-80',
+  detailClassName = 'text-xs',
 }: UsageBarProps) {
   const pct = Math.min(percentage, 100);
   const color = usageColor(pct);

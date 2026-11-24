@@ -39,12 +39,12 @@ export function CommentIcon({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       title={title}
-      className="inline-flex items-center justify-center gap-[2px] min-w-[20px] h-4 px-[3px] bg-transparent border-0 cursor-pointer rounded transition-colors duration-150 hover:bg-[hsl(var(--primary)/0.14)]"
+      className="inline-flex items-center justify-center gap-[2px] min-w-[20px] h-4 px-[3px] bg-transparent border-0 cursor-pointer rounded-md transition-colors duration-150 hover:bg-[hsl(var(--primary)/0.14)]"
       style={{ color }}
     >
       <MessageSquare size={12} strokeWidth={2} />
       {showCount && (
-        <span className="font-sans text-[9.5px] font-bold leading-none tabular-nums">{count}</span>
+        <span className="font-sans text-xs font-bold leading-none tabular-nums">{count}</span>
       )}
     </button>
   );

@@ -110,7 +110,7 @@ export function LeftSidebar({
                       <Tooltip content={task.name}>
                         <button
                           onClick={() => onSelectTask(task.projectId, task.id)}
-                          className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 text-[11px] font-medium transition-colors titlebar-no-drag ${
+                          className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 text-xs font-medium transition-colors titlebar-no-drag ${
                             isActiveTask
                               ? 'sidebar-pill-active text-primary'
                               : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'

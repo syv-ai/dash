@@ -132,7 +132,7 @@ export function TerminalPane({ id, cwd, permissionMode, terminalBg }: TerminalPa
             <rect x="136" y="240" width="240" height="36" rx="18" fill="url(#restart-dash)" />
             <rect x="396" y="232" width="4" height="52" rx="2" fill="#00ff88" opacity="0.7" />
           </svg>
-          <span className="text-[13px] dark:text-neutral-400 text-neutral-500 font-medium">
+          <span className="text-base dark:text-neutral-400 text-neutral-500 font-medium">
             Resuming your session...
           </span>
         </div>
@@ -143,7 +143,7 @@ export function TerminalPane({ id, cwd, permissionMode, terminalBg }: TerminalPa
           style={{ background: terminalBg }}
         >
           <Loader2 size={14} strokeWidth={1.8} className="animate-spin text-muted-fade-60" />
-          <span className="text-[12px] text-muted-foreground">Reconnecting…</span>
+          <span className="text-sm text-muted-foreground">Reconnecting…</span>
         </div>
       )}
       {detached && !detached.reconnecting && (
@@ -159,8 +159,8 @@ export function TerminalPane({ id, cwd, permissionMode, terminalBg }: TerminalPa
               <PlugZap size={16} strokeWidth={1.8} />
             </div>
             <div>
-              <p className="text-[13px] font-medium text-foreground">Detached from session</p>
-              <p className="text-[11.5px] text-muted-foreground leading-relaxed mt-1">
+              <p className="text-base font-medium text-foreground">Detached from session</p>
+              <p className="text-sm text-muted-foreground leading-relaxed mt-1">
                 The session keeps running under Claude Code. Re-attach to pick up where it is, with
                 a recap of what happened meanwhile.
               </p>
@@ -168,7 +168,7 @@ export function TerminalPane({ id, cwd, permissionMode, terminalBg }: TerminalPa
             <Button size="sm" onClick={reattach}>
               Re-attach
             </Button>
-            <p className="text-[10.5px] text-muted-fade-60 leading-relaxed">
+            <p className="text-xs text-muted-fade-60 leading-relaxed">
               Inside the pane: <kbd className="font-mono">←</kbd> on an empty prompt opens agent
               view, <kbd className="font-mono">Esc</kbd> leaves it,{' '}
               <kbd className="font-mono">Ctrl+Z</kbd> detaches.
@@ -178,7 +178,7 @@ export function TerminalPane({ id, cwd, permissionMode, terminalBg }: TerminalPa
       )}
       {isDragOver && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-primary/5 pointer-events-none animate-fade-in">
-          <div className="px-4 py-2 rounded-lg bg-primary/15 text-primary text-[12px] font-medium">
+          <div className="px-4 py-2 rounded-lg bg-primary/15 text-primary text-sm font-medium">
             Drop files to paste paths
           </div>
         </div>

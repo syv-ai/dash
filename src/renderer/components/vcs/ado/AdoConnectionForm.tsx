@@ -60,10 +60,8 @@ export function AdoConnectionForm({ projectId }: AdoConnectionFormProps) {
             )}
           </div>
           <div className="min-w-0">
-            <p className="text-[13px] font-medium text-fg-fade-90">Azure DevOps</p>
-            <p className="text-[11px] text-fg-fade-50">
-              {configured ? 'Connected' : 'Not configured'}
-            </p>
+            <p className="text-base font-medium text-fg-fade-90">Azure DevOps</p>
+            <p className="text-xs text-fg-fade-50">{configured ? 'Connected' : 'Not configured'}</p>
           </div>
         </button>
         <button
@@ -103,7 +101,7 @@ export function AdoConnectionForm({ projectId }: AdoConnectionFormProps) {
                 onClick={() => {
                   void conn.handleTest();
                 }}
-                className="px-3 py-1.5 rounded-lg text-[11px] font-medium border border-border/60 text-fg-fade-70 hover:bg-accent/40 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium border border-border/60 text-fg-fade-70 hover:bg-accent/40 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
               >
                 {conn.testing ? 'Testing...' : 'Test Connection'}
               </button>
@@ -113,7 +111,7 @@ export function AdoConnectionForm({ projectId }: AdoConnectionFormProps) {
                 onClick={() => {
                   void conn.handleSave();
                 }}
-                className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
               >
                 {conn.saving ? 'Saving...' : 'Save'}
               </button>

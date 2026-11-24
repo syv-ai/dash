@@ -21,7 +21,7 @@ export function Segmented<T extends string | number | null>({
   size?: 'sm' | 'md';
 }) {
   const activeIdx = options.findIndex((o) => o.value === value);
-  const pad = size === 'sm' ? 'py-[5px] text-[11px]' : 'py-[7px] text-[12px]';
+  const pad = size === 'sm' ? 'py-[5px] text-xs' : 'py-[7px] text-sm';
   const slot = 100 / options.length;
   return (
     <div

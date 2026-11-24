@@ -59,9 +59,9 @@ function block(t: Token, key: number): ReactNode {
       return (
         <div key={key}>
           {c.lang === 'suggestion' && (
-            <div className="text-[10.5px] text-muted-fade-70">Suggested change</div>
+            <div className="text-xs text-muted-fade-70">Suggested change</div>
           )}
-          <pre className="whitespace-pre-wrap break-all rounded-md bg-foreground/6 px-2 py-1.5 font-mono text-[11px] leading-snug">
+          <pre className="whitespace-pre-wrap break-all rounded-md bg-foreground/6 px-2 py-1.5 font-mono text-xs leading-snug">
             {c.text}
           </pre>
         </div>
@@ -171,7 +171,7 @@ function inline(tokens: Token[]): ReactNode[] {
         return (
           <code
             key={i}
-            className="rounded-[3px] bg-foreground/8 px-1 py-px font-mono text-[0.92em] break-all"
+            className="rounded-sm bg-foreground/8 px-1 py-px font-mono text-[0.92em] break-all"
           >
             {(t as Tokens.Codespan).text}
           </code>

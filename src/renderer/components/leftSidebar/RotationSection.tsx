@@ -117,7 +117,7 @@ export function RotationSection({
   return (
     <div className="px-2 pt-1.5 pb-1.5 mb-0.5">
       <Tooltip content="Cycle with Ctrl+Tab">
-        <span className="block px-2 pb-1 font-mono text-[10px] uppercase tracking-wider text-muted-fade-70 select-none">
+        <span className="block px-2 pb-1 font-mono text-xs uppercase tracking-wider text-muted-fade-70 select-none">
           Active tasks
         </span>
       </Tooltip>
@@ -141,7 +141,7 @@ export function RotationSection({
               >
                 <div className="overflow-hidden">
                   <span
-                    className={`block truncate pl-3.5 pr-2 pb-0.5 text-[11px] text-muted-fade-60 select-none ${
+                    className={`block truncate pl-3.5 pr-2 pb-0.5 text-xs text-muted-fade-60 select-none ${
                       gi === 0 ? '' : 'pt-2'
                     }`}
                   >
@@ -172,7 +172,7 @@ export function RotationSection({
                       <div
                         draggable
                         {...getRotDragHandlers(task.id, groupTasks, task.projectId)}
-                        className={`group/swap relative flex items-start gap-2 min-w-0 pl-3.5 pr-2 py-[6px] rounded-md text-[13px] cursor-pointer transition-[transform,color] duration-150 ${
+                        className={`group/swap relative flex items-start gap-2 min-w-0 pl-3.5 pr-2 py-[6px] rounded-md text-base cursor-pointer transition-[transform,color] duration-150 ${
                           isActiveTask
                             ? 'text-foreground font-medium scale-[1.035]'
                             : 'sidebar-row-hover text-muted-foreground hover:text-foreground'
@@ -212,7 +212,7 @@ export function RotationSection({
                                   )}
                                   {anyPercent && (
                                     <span
-                                      className="w-6 text-right text-[11px] tabular-nums text-muted-foreground"
+                                      className="w-6 text-right text-xs tabular-nums text-muted-foreground"
                                       title={
                                         ctx
                                           ? `Context: ${ctx.used.toLocaleString()} / ${ctx.total.toLocaleString()} tokens (${Math.round(ctx.percentage)}%)`

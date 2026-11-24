@@ -37,24 +37,24 @@ export function ClaudeCliGate({ info }: { info: ClaudeCliInfo }) {
             />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold text-foreground">
+            <p className="text-base font-semibold text-foreground">
               {info.installed ? 'Claude Code needs an update' : 'Claude Code CLI not found'}
             </p>
-            <p className="text-[11.5px] text-muted-foreground leading-relaxed mt-1">
+            <p className="text-sm text-muted-foreground leading-relaxed mt-1">
               {info.installed
                 ? `Dash runs task sessions on Claude Code ${info.minVersion} or newer. This machine has ${info.version ?? 'an unknown version'}.`
                 : `Dash runs task sessions through the Claude Code CLI (${info.minVersion} or newer).`}
             </p>
-            <pre className="mt-3 px-3 py-2 rounded-lg bg-accent/80 text-[11px] font-mono text-fg-fade-80 overflow-x-auto">
+            <pre className="mt-3 px-3 py-2 rounded-lg bg-accent/80 text-xs font-mono text-fg-fade-80 overflow-x-auto">
               {command}
             </pre>
             {info.path && (
-              <p className="text-[10.5px] text-fg-fade-40 font-mono truncate mt-2">{info.path}</p>
+              <p className="text-xs text-fg-fade-40 font-mono truncate mt-2">{info.path}</p>
             )}
             <button
               onClick={() => void recheck()}
               disabled={checking}
-              className="mt-3 inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md text-[11.5px] font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+              className="mt-3 inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md text-sm font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
             >
               <RefreshCw size={12} strokeWidth={1.8} className={checking ? 'animate-spin' : ''} />
               Check again

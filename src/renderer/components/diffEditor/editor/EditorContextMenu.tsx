@@ -95,7 +95,7 @@ export function EditorContextMenu({ cwd, filePath, editor, children }: Props) {
           <ContextMenuItem onSelect={() => copy(ref, 'reference')}>
             <Hash size={13} strokeWidth={1.8} className="text-muted-foreground" />
             <span className="flex-1">Copy path:line{base}</span>
-            <span className="font-mono text-[11px] text-muted-fade-60 truncate max-w-48">
+            <span className="font-mono text-xs text-muted-fade-60 truncate max-w-48">
               :{ref.slice(filePath.length + 1)}
             </span>
           </ContextMenuItem>

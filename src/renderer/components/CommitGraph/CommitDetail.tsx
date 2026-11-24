@@ -53,12 +53,12 @@ export function CommitDetailPanel({
       <div className="flex flex-col flex-1 min-w-[340px] min-h-0">
         {/* Header */}
         <div className="flex items-center justify-between px-4 h-10 border-b border-border/60 shrink-0">
-          <span className="text-[11px] font-semibold uppercase text-fg-fade-80 tracking-[0.08em]">
+          <span className="text-xs font-semibold uppercase text-fg-fade-80 tracking-[0.08em]">
             Details
           </span>
           <button
             onClick={onClose}
-            className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+            className="p-1 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
           >
             <X size={12} strokeWidth={2} />
           </button>
@@ -75,20 +75,20 @@ export function CommitDetailPanel({
           {detail && !loading && (
             <div className="flex flex-col gap-4">
               {/* Subject */}
-              <p className="text-[13px] font-medium text-foreground leading-snug">
+              <p className="text-base font-medium text-foreground leading-snug">
                 {detail.commit.subject}
               </p>
 
               {/* Body */}
               {detail.body && (
-                <p className="text-[12px] text-fg-fade-80 leading-relaxed whitespace-pre-wrap">
+                <p className="text-sm text-fg-fade-80 leading-relaxed whitespace-pre-wrap">
                   {detail.body}
                 </p>
               )}
 
               {/* Meta */}
               <div className="flex flex-col gap-2 pt-2 border-t border-border/40">
-                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <GitCommit size={12} strokeWidth={1.8} className="shrink-0" />
                   {githubSlug ? (
                     <a
@@ -109,7 +109,7 @@ export function CommitDetailPanel({
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <User size={12} strokeWidth={1.8} className="shrink-0" />
                   {githubSlug ? (
                     <a
@@ -128,7 +128,7 @@ export function CommitDetailPanel({
                     <span>{detail.commit.authorName}</span>
                   )}
                 </div>
-                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Clock size={12} strokeWidth={1.8} />
                   <span>{formatFullDate(detail.commit.authorDate)}</span>
                 </div>
@@ -139,14 +139,14 @@ export function CommitDetailPanel({
                 detail.stats.additions > 0 ||
                 detail.stats.deletions > 0) && (
                 <div className="flex flex-col gap-1.5 pt-2 border-t border-border/40">
-                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <FileText size={12} strokeWidth={1.8} />
                     <span>
                       {detail.stats.filesChanged} file{detail.stats.filesChanged !== 1 ? 's' : ''}{' '}
                       changed
                     </span>
                   </div>
-                  <div className="flex gap-3 text-[11px] font-mono pl-5 tabular-nums">
+                  <div className="flex gap-3 text-xs font-mono pl-5 tabular-nums">
                     {detail.stats.additions > 0 && (
                       <span className="text-[hsl(var(--git-added))]">
                         +{detail.stats.additions}
@@ -167,7 +167,7 @@ export function CommitDetailPanel({
                   {detail.commit.refs.map((ref) => (
                     <span
                       key={ref.name}
-                      className="inline-flex items-center px-1.5 py-px rounded text-[9px] font-semibold bg-accent text-fg-fade-90"
+                      className="inline-flex items-center px-1.5 py-px rounded-md text-xs font-semibold bg-accent text-fg-fade-90"
                     >
                       {ref.name}
                     </span>

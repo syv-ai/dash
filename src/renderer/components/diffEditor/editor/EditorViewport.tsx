@@ -65,28 +65,28 @@ export function EditorViewport({
         <div className="flex items-center justify-center h-full">
           <div className="flex items-center gap-3">
             <Loader2 size={16} className="animate-spin text-primary" />
-            <span className="text-[13px] text-muted-fade-50">Loading…</span>
+            <span className="text-base text-muted-fade-50">Loading…</span>
           </div>
         </div>
       )}
       {currentState.kind === 'empty' && (
         <div className="flex items-center justify-center h-full">
-          <span className="text-[13px] text-muted-fade-50">Select a file from the sidebar</span>
+          <span className="text-base text-muted-fade-50">Select a file from the sidebar</span>
         </div>
       )}
       {currentState.kind === 'error' && (
         <div className="flex items-center justify-center h-full">
-          <span className="text-[13px] text-destructive">{currentState.message}</span>
+          <span className="text-base text-destructive">{currentState.message}</span>
         </div>
       )}
       {displayed.kind === 'loaded' && displayed.isBinary && (
         <div className="flex items-center justify-center h-full">
-          <span className="text-[13px] text-muted-fade-40">Binary file — cannot display diff</span>
+          <span className="text-base text-muted-fade-40">Binary file — cannot display diff</span>
         </div>
       )}
       {displayed.kind === 'loaded' && displayed.isLargeFile && (
         <div className="flex items-center justify-center h-full">
-          <span className="text-[13px] text-muted-fade-40">
+          <span className="text-base text-muted-fade-40">
             File too large to preview here (&gt;5 MB).
           </span>
         </div>

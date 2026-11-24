@@ -16,12 +16,12 @@ export function notifyContextInjected(linkedItems: LinkedItem[]) {
           href={item.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium hover:bg-primary/20 transition-colors"
+          className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
         >
           #{item.id}
         </a>
       ))}
-      {overflow > 0 && <span className="text-[10px] text-muted-foreground">+{overflow} more</span>}
+      {overflow > 0 && <span className="text-xs text-muted-foreground">+{overflow} more</span>}
     </div>,
   );
 }

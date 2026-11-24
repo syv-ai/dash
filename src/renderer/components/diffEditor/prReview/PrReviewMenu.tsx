@@ -56,7 +56,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function Tag({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-[3px] rounded-[3px] bg-foreground/10 px-[5px] py-[1px] font-sans text-[9px] font-medium uppercase tracking-[0.04em] text-muted-fade-75">
+    <span className="inline-flex items-center gap-[3px] rounded-sm bg-foreground/10 px-[5px] py-[1px] font-sans text-xs font-medium uppercase tracking-[0.04em] text-muted-fade-75">
       {children}
     </span>
   );
@@ -71,8 +71,8 @@ function ConversationEntry({
 }) {
   const ago = formatRelativeTime(Date.parse(c.createdAt) / 1000, Date.now() / 1000);
   return (
-    <div className="min-w-0 rounded-md px-2 py-1.5 text-[12px]">
-      <div className="flex items-center gap-1.5 text-[11px] text-muted-fade-70">
+    <div className="min-w-0 rounded-md px-2 py-1.5 text-sm">
+      <div className="flex items-center gap-1.5 text-xs text-muted-fade-70">
         <span className="min-w-0 truncate font-medium text-fg-fade-80">@{c.author}</span>
         {ago && <span className="shrink-0">{ago} ago</span>}
         <span className="flex-1" />
@@ -185,7 +185,7 @@ export function PrReviewMenu({
         className="glass-popover w-[460px] max-w-[calc(100vw-32px)] max-h-[70vh] flex flex-col p-0 overflow-hidden"
       >
         <div className="flex items-baseline gap-2 px-4 pt-3 pb-2.5 border-b border-foreground/6 shrink-0">
-          <h3 className="min-w-0 flex-1 text-[12px] font-semibold tracking-tight text-fg-fade-90 wrap-break-word">
+          <h3 className="min-w-0 flex-1 text-sm font-semibold tracking-tight text-fg-fade-90 wrap-break-word">
             PR #{review.number}
             {review.title ? `: ${review.title}` : ''}
           </h3>
@@ -193,7 +193,7 @@ export function PrReviewMenu({
 
         <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
           {review.partial && (
-            <div className="px-4 py-2 text-[11px] text-muted-fade-70">
+            <div className="px-4 py-2 text-xs text-muted-fade-70">
               This PR has more threads than Dash loads; see the rest on{' '}
               {providerName(review.provider)}.
             </div>
@@ -305,10 +305,10 @@ export function PrReviewMenu({
                   }}
                   className="w-full min-w-0 flex flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left hover:bg-foreground/4 transition-colors"
                 >
-                  <span className="max-w-full font-mono text-[10.5px] text-muted-fade-70 break-all">
+                  <span className="max-w-full font-mono text-xs text-muted-fade-70 break-all">
                     {threadLocation(t)}
                   </span>
-                  <span className="max-w-full text-[12px] leading-snug text-foreground line-clamp-2 wrap-break-word">
+                  <span className="max-w-full text-sm leading-snug text-foreground line-clamp-2 wrap-break-word">
                     @{t.comments[0]?.author}: {t.comments[0]?.body.trim()}
                   </span>
                 </button>
@@ -353,7 +353,7 @@ export function PrReviewMenu({
             notes.length === 0 &&
             unresolved.length === 0 &&
             offCode.length === 0 && (
-              <div className="px-4 py-6 text-center text-[11px] italic text-muted-fade-55">
+              <div className="px-4 py-6 text-center text-xs italic text-muted-fade-55">
                 No comments, notes or unresolved threads.
               </div>
             )}

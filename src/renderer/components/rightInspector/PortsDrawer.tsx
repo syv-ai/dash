@@ -38,8 +38,8 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
           onClick={onExpand}
           className="h-full w-full flex items-center gap-2 px-4 text-fg-fade-80 hover:text-foreground transition-colors border-t border-edge/8 hover:bg-edge/4"
         >
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em]">{LABEL}</span>
-          <span className="text-[10.5px] tabular-nums text-muted-fade-80">{status}</span>
+          <span className="text-xs font-semibold uppercase tracking-[0.08em]">{LABEL}</span>
+          <span className="text-xs tabular-nums text-muted-fade-80">{status}</span>
           {state.anyRunning && (
             // A running service is a steady state — solid green, no pulse.
             <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--git-added))] shadow-[0_0_6px_hsl(var(--git-added)/0.55)]" />
@@ -48,10 +48,10 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
         </button>
       ) : (
         <div className="ports-header flex items-center h-10 shrink-0 border-t border-edge/8">
-          <span className="ports-label ml-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground">
+          <span className="ports-label ml-3 text-xs font-semibold uppercase tracking-[0.08em] text-foreground">
             {LABEL}
           </span>
-          <span className="ports-status ml-2 text-[10.5px] tabular-nums text-muted-fade-80">
+          <span className="ports-status ml-2 text-xs tabular-nums text-muted-fade-80">
             {status}
           </span>
           <div className="flex-1" />
@@ -61,7 +61,7 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
                 type="button"
                 onClick={runAll}
                 disabled={state.allRunnableUp || startingAll}
-                className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0 disabled:opacity-40"
+                className="p-1 mr-1 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0 disabled:opacity-40"
               >
                 {startingAll ? (
                   <Loader2 size={11} strokeWidth={2} className="animate-spin" />
@@ -77,7 +77,7 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
                 type="button"
                 onClick={stopAll}
                 disabled={!state.anyRunning || stoppingAll}
-                className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-destructive transition-colors shrink-0 disabled:opacity-40"
+                className="p-1 mr-1 rounded-md hover:bg-accent text-muted-foreground hover:text-destructive transition-colors shrink-0 disabled:opacity-40"
               >
                 {stoppingAll ? (
                   <Loader2 size={11} strokeWidth={2} className="animate-spin" />
@@ -94,7 +94,7 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
                 void state.refresh();
               }}
               disabled={state.refreshing}
-              className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0 disabled:opacity-40"
+              className="p-1 mr-1 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0 disabled:opacity-40"
             >
               <RefreshCw
                 size={11}
@@ -105,7 +105,7 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
           </Tooltip>
           <button
             onClick={onCollapse}
-            className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            className="p-1 mr-1 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
           >
             <ChevronDown size={12} strokeWidth={2} />
           </button>

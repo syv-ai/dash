@@ -34,7 +34,7 @@ export function SetupStatus({
           e.stopPropagation();
           showSetup(worktreePath);
         }}
-        className={`inline-flex items-center gap-1 shrink-0 text-[11px] transition-colors ${tone} ${shape}`}
+        className={`inline-flex items-center gap-1 shrink-0 text-xs transition-colors ${tone} ${shape}`}
       >
         {running ? (
           <Loader2 size={11} strokeWidth={2} className="animate-spin" />

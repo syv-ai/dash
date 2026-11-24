@@ -9,7 +9,7 @@ import React from 'react';
 export function CountBadge({ count, className = '' }: { count: number; className?: string }) {
   return (
     <span
-      className={`inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-primary ${className}`}
+      className={`inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary/15 px-1.5 py-0.5 font-mono text-xs font-semibold text-primary ${className}`}
     >
       {count}
     </span>

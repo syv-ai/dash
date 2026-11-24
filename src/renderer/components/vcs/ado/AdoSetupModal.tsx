@@ -47,7 +47,7 @@ function AdoSetupBody({ projectId, organizationUrl, project, onClose }: AdoSetup
     <>
       {/* Header */}
       <div className="flex items-center justify-between px-5 h-12 border-b border-border/40">
-        <h2 className="text-[14px] font-semibold text-foreground">Azure DevOps Detected</h2>
+        <h2 className="text-base font-semibold text-foreground">Azure DevOps Detected</h2>
         <button
           onClick={close}
           className="p-1.5 rounded-lg hover:bg-accent text-fg-fade-50 hover:text-foreground transition-all duration-150"
@@ -57,7 +57,7 @@ function AdoSetupBody({ projectId, organizationUrl, project, onClose }: AdoSetup
       </div>
 
       <div className="p-5 space-y-3">
-        <p className="text-[12px] text-muted-fade-70">
+        <p className="text-sm text-muted-fade-70">
           This project uses an Azure DevOps remote. Add a Personal Access Token to enable work item
           linking.
         </p>
@@ -72,7 +72,7 @@ function AdoSetupBody({ projectId, organizationUrl, project, onClose }: AdoSetup
             onClick={() => {
               void conn.handleTest();
             }}
-            className="px-3 py-1.5 rounded-lg text-[11px] font-medium border border-border/60 text-fg-fade-70 hover:bg-accent/40 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
+            className="px-3 py-1.5 rounded-lg text-xs font-medium border border-border/60 text-fg-fade-70 hover:bg-accent/40 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
           >
             {conn.testing ? 'Testing...' : 'Test Connection'}
           </button>
@@ -80,7 +80,7 @@ function AdoSetupBody({ projectId, organizationUrl, project, onClose }: AdoSetup
             <button
               type="button"
               onClick={close}
-              className="px-4 py-2 rounded-lg text-[13px] text-muted-fade-60 hover:text-foreground hover:bg-accent/60 transition-all duration-150"
+              className="px-4 py-2 rounded-lg text-base text-muted-fade-60 hover:text-foreground hover:bg-accent/60 transition-all duration-150"
             >
               Skip
             </button>
@@ -90,7 +90,7 @@ function AdoSetupBody({ projectId, organizationUrl, project, onClose }: AdoSetup
               onClick={() => {
                 void conn.handleSave();
               }}
-              className="px-5 py-2 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
+              className="px-5 py-2 rounded-lg text-base font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
             >
               {conn.saving ? 'Saving...' : 'Save'}
             </button>

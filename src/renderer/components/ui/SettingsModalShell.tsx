@@ -34,7 +34,7 @@ function SettingsModalShellBody({ title, children }: { title: string; children: 
   return (
     <>
       <div className="flex items-center justify-between px-5 h-12 border-b border-border/40 shrink-0">
-        <h2 className="text-[14px] font-semibold text-foreground">{title}</h2>
+        <h2 className="text-base font-semibold text-foreground">{title}</h2>
         <button
           onClick={close}
           className="p-1.5 rounded-lg hover:bg-accent text-fg-fade-50 hover:text-foreground transition-all duration-150"

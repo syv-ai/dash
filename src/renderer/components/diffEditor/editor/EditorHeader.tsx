@@ -162,7 +162,7 @@ export function EditorHeader({
                 : viewMeta.tooltip
             }
           >
-            <span className="inline-flex items-center gap-1.5 h-6 text-[11px] font-medium shrink-0 text-primary">
+            <span className="inline-flex items-center gap-1.5 h-6 text-xs font-medium shrink-0 text-primary">
               <viewMeta.Icon size={12} strokeWidth={1.8} className="shrink-0" />
               <span className="font-mono whitespace-nowrap max-w-[260px] truncate">
                 {viewMeta.label}
@@ -178,7 +178,7 @@ export function EditorHeader({
           </Tooltip>
         )}
         <span className="flex items-center gap-1 min-w-0">
-          <span className="text-[13px] font-medium text-foreground truncate">{filePath}</span>
+          <span className="text-base font-medium text-foreground truncate">{filePath}</span>
           <Tooltip content={copied ? 'Copied' : 'Copy path'}>
             <button
               type="button"
@@ -220,7 +220,7 @@ export function EditorHeader({
                   <button
                     type="button"
                     onClick={handleChipClick}
-                    className={`inline-flex items-center gap-1.5 px-2 h-6 rounded-md text-[11px] font-mono transition-colors hover:bg-accent/60 ${
+                    className={`inline-flex items-center gap-1.5 px-2 h-6 rounded-md text-xs font-mono transition-colors hover:bg-accent/60 ${
                       isBranch || isPr ? 'text-primary' : 'text-muted-fade-60 hover:text-foreground'
                     }`}
                   >

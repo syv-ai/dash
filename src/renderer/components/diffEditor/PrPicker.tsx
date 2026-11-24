@@ -93,14 +93,14 @@ export function PrPicker({ projectId, cwd, selected, onSelect, onExit }: PrPicke
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Filter by number, title or author"
-          className="flex-1 bg-transparent outline-hidden text-[12px] placeholder:text-muted-fade-40"
+          className="flex-1 bg-transparent outline-hidden text-sm placeholder:text-muted-fade-40"
         />
       </div>
       {onExit && (
         <button
           type="button"
           onClick={onExit}
-          className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12px] border-b border-border/40 text-muted-fade-80 hover:text-foreground hover:bg-[hsl(var(--surface-2)/0.6)] transition-colors"
+          className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm border-b border-border/40 text-muted-fade-80 hover:text-foreground hover:bg-[hsl(var(--surface-2)/0.6)] transition-colors"
         >
           <X size={12} strokeWidth={1.8} className="shrink-0" />
           <span className="flex-1">Exit PR</span>
@@ -108,14 +108,14 @@ export function PrPicker({ projectId, cwd, selected, onSelect, onExit }: PrPicke
         </button>
       )}
       <div className="flex-1 min-h-0 overflow-y-auto py-1">
-        {loading && <div className="px-3 py-2 text-[11px] text-muted-fade-40">Loading…</div>}
-        {error && <div className="px-3 py-2 text-[11px] text-destructive">{error}</div>}
+        {loading && <div className="px-3 py-2 text-xs text-muted-fade-40">Loading…</div>}
+        {error && <div className="px-3 py-2 text-xs text-destructive">{error}</div>}
         {offerTyped && (
           <button
             type="button"
             disabled={opening !== null}
             onClick={() => void open(typedNumber)}
-            className="w-full flex items-center gap-1.5 px-3 py-1.5 text-left text-[12px] text-fg-fade-85 hover:bg-[hsl(var(--surface-2)/0.6)] transition-colors disabled:cursor-wait"
+            className="w-full flex items-center gap-1.5 px-3 py-1.5 text-left text-sm text-fg-fade-85 hover:bg-[hsl(var(--surface-2)/0.6)] transition-colors disabled:cursor-wait"
           >
             <GitPullRequestArrow size={12} strokeWidth={1.8} className="shrink-0 opacity-60" />
             <span className="flex-1">Open PR #{typedNumber}</span>
@@ -125,7 +125,7 @@ export function PrPicker({ projectId, cwd, selected, onSelect, onExit }: PrPicke
           </button>
         )}
         {!loading && !error && filtered.length === 0 && !offerTyped && (
-          <div className="px-3 py-2 text-[11px] text-muted-fade-40">
+          <div className="px-3 py-2 text-xs text-muted-fade-40">
             {hidden > 0 && !search.trim()
               ? `No open pull requests from or into ${branch}`
               : 'No open pull requests'}
@@ -145,7 +145,7 @@ export function PrPicker({ projectId, cwd, selected, onSelect, onExit }: PrPicke
                   : 'text-fg-fade-85 hover:bg-[hsl(var(--surface-2)/0.6)]'
               }`}
             >
-              <span className="flex items-center gap-1.5 min-w-0 text-[12px]">
+              <span className="flex items-center gap-1.5 min-w-0 text-sm">
                 <span className="font-mono tabular-nums text-muted-fade-70 shrink-0">
                   #{p.number}
                 </span>
@@ -154,7 +154,7 @@ export function PrPicker({ projectId, cwd, selected, onSelect, onExit }: PrPicke
                   <Loader2 size={12} strokeWidth={1.8} className="animate-spin shrink-0" />
                 )}
               </span>
-              <span className="flex items-center gap-1.5 min-w-0 text-[11px] text-muted-fade-60">
+              <span className="flex items-center gap-1.5 min-w-0 text-xs text-muted-fade-60">
                 {p.author && <span className="shrink-0">@{p.author}</span>}
                 <span className="font-mono truncate">{p.headRefName}</span>
               </span>
@@ -165,7 +165,7 @@ export function PrPicker({ projectId, cwd, selected, onSelect, onExit }: PrPicke
           <button
             type="button"
             onClick={() => setShowAll((v) => !v)}
-            className="w-full px-3 py-1.5 text-left text-[11px] text-muted-fade-70 hover:text-foreground transition-colors"
+            className="w-full px-3 py-1.5 text-left text-xs text-muted-fade-70 hover:text-foreground transition-colors"
           >
             {showAll
               ? `Only ${branch}'s pull requests`

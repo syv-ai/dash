@@ -98,7 +98,7 @@ function PrList({ prs, taskId }: { prs: PullRequestInfo[]; taskId?: string }) {
       // Don't land focus (and its ring) on the first row's Fix CI button.
       onOpenAutoFocus={(e) => e.preventDefault()}
     >
-      <div className="px-2 pt-1 pb-1.5 text-[10px] uppercase tracking-wider font-mono text-muted-fade-70">
+      <div className="px-2 pt-1 pb-1.5 text-xs uppercase tracking-wider font-mono text-muted-fade-70">
         PRs from this branch
       </div>
       {prs.map((pr) => (
@@ -107,7 +107,7 @@ function PrList({ prs, taskId }: { prs: PullRequestInfo[]; taskId?: string }) {
             href={pr.url}
             target="_blank"
             rel="noopener noreferrer"
-            className={`flex flex-1 min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-[12px] hover:bg-accent transition-colors ${
+            className={`flex flex-1 min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors ${
               pr.current ? '' : 'text-fg-fade-70'
             }`}
           >
@@ -118,7 +118,7 @@ function PrList({ prs, taskId }: { prs: PullRequestInfo[]; taskId?: string }) {
             </span>
             <span className="font-mono text-muted-fade-70 shrink-0">#{pr.number}</span>
             <span className="truncate flex-1 min-w-0">{pr.title}</span>
-            <span className={`shrink-0 text-[11px] ${stateTextColor(pr)}`}>{stateText(pr)}</span>
+            <span className={`shrink-0 text-xs ${stateTextColor(pr)}`}>{stateText(pr)}</span>
           </a>
           <FixCiButton pr={pr} taskId={taskId} />
         </div>
@@ -168,7 +168,7 @@ export function PrBadge({ prs, allPrs, size = 'md', variant = 'pill', taskId }: 
 
   if (isCurrent && pr.state === 'closed') return null;
   const iconSize = size === 'sm' ? 10 : 11;
-  const sizeCls = size === 'sm' ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-[3px] text-[11px]';
+  const sizeCls = size === 'sm' ? 'px-1.5 py-0.5 text-xs' : 'px-2 py-[3px] text-xs';
   return (
     <span className="inline-flex items-center gap-0.5">
       <Popover>

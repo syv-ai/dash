@@ -152,7 +152,7 @@ export function ProjectOverview({
               </div>
 
               {/* Project metadata */}
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 ml-12 text-[11px] text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 ml-12 text-xs text-muted-foreground">
                 {project.path && (
                   <Tooltip content={project.path}>
                     <span className="font-mono truncate max-w-[300px]">{project.path}</span>
@@ -198,7 +198,7 @@ export function ProjectOverview({
               <div className="w-px h-5 bg-border/40 mx-1.5" />
               <button
                 onClick={onNewTask}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-[12px] text-primary font-medium transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-sm text-primary font-medium transition-colors"
               >
                 <Plus size={14} strokeWidth={2} />
                 <span>New task</span>
@@ -208,7 +208,7 @@ export function ProjectOverview({
 
           {/* Stats row */}
           {tasks.length > 0 && (
-            <div className="flex items-center gap-4 mt-3 ml-12 text-[11px] text-muted-foreground">
+            <div className="flex items-center gap-4 mt-3 ml-12 text-xs text-muted-foreground">
               <span>
                 {tasks.length} task{tasks.length === 1 ? '' : 's'}
               </span>
@@ -253,15 +253,15 @@ export function ProjectOverview({
         <div className="w-full">
           {tasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
-              <p className="text-[13px] text-muted-foreground mb-4">
+              <p className="text-base text-muted-foreground mb-4">
                 No tasks yet — create one to start a Claude session.
               </p>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/40 text-[11px] text-muted-foreground">
-                <kbd className="px-1.5 py-0.5 rounded bg-accent text-[10px] font-mono font-medium">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/40 text-xs text-muted-foreground">
+                <kbd className="px-1.5 py-0.5 rounded-md bg-accent text-xs font-mono font-medium">
                   Cmd
                 </kbd>
                 <span>+</span>
-                <kbd className="px-1.5 py-0.5 rounded bg-accent text-[10px] font-mono font-medium">
+                <kbd className="px-1.5 py-0.5 rounded-md bg-accent text-xs font-mono font-medium">
                   N
                 </kbd>
               </div>
@@ -294,7 +294,7 @@ export function ProjectOverview({
                       <div className="mt-1.5 shrink-0">
                         <ActivityDot info={activity} />
                       </div>
-                      <span className="text-[13px] font-medium text-foreground flex-1 min-w-0 wrap-break-word">
+                      <span className="text-base font-medium text-foreground flex-1 min-w-0 wrap-break-word">
                         {task.name}
                       </span>
                       {!task.useWorktree && (
@@ -305,7 +305,7 @@ export function ProjectOverview({
                     </div>
 
                     {/* Details */}
-                    <div className="flex flex-col gap-1.5 flex-1 text-[11px] w-full overflow-hidden">
+                    <div className="flex flex-col gap-1.5 flex-1 text-xs w-full overflow-hidden">
                       {(branchByTask[task.id] ?? task.branch) && (
                         <div className="text-muted-foreground truncate">
                           <span className="text-muted-fade-70">Branch: </span>
@@ -316,7 +316,7 @@ export function ProjectOverview({
                       {task.useWorktree && task.path && (
                         <div className="text-muted-foreground truncate">
                           <span className="text-muted-fade-70">Worktree: </span>
-                          <span className="font-mono text-[10px]">
+                          <span className="font-mono text-xs">
                             {task.path.split(/[\\/]/).slice(-2).join('/')}
                           </span>
                         </div>
@@ -339,7 +339,7 @@ export function ProjectOverview({
                                 {linkedItems.slice(0, 3).map((item) => {
                                   const url = linkedItemUrl(item, project.gitRemote);
                                   const badge = (
-                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-[10px] text-primary font-medium">
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-xs text-primary font-medium">
                                       #{item.id}
                                     </span>
                                   );
@@ -371,7 +371,7 @@ export function ProjectOverview({
                                   );
                                 })}
                                 {linkedItems.length > 3 && (
-                                  <span className="text-[10px] text-muted-foreground self-center">
+                                  <span className="text-xs text-muted-foreground self-center">
                                     +{linkedItems.length - 3} more
                                   </span>
                                 )}
@@ -397,7 +397,7 @@ export function ProjectOverview({
                         fades in on hover, right-aligned on the same row.
                         opacity-0 still reserves layout, so nothing shifts. */}
                     <div className="mt-3 pt-2.5 border-t border-border/50 flex items-center justify-between gap-2 min-w-0">
-                      <div className="flex items-center gap-2 min-w-0 text-[10px] text-muted-foreground">
+                      <div className="flex items-center gap-2 min-w-0 text-xs text-muted-foreground">
                         <span className="shrink-0">Updated {timeAgo(task.updatedAt)}</span>
                         {task.totalTokens > 0 && (
                           <TokenBadge
@@ -437,7 +437,7 @@ export function ProjectOverview({
             <div className="mt-6">
               <button
                 onClick={() => setShowArchived((prev) => !prev)}
-                className="flex items-center gap-1.5 text-[12px] text-muted-foreground hover:text-foreground transition-colors mb-3"
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-3"
               >
                 {showArchived ? (
                   <ChevronDown size={14} strokeWidth={2} />
@@ -455,20 +455,20 @@ export function ProjectOverview({
                       className="flex flex-col p-4 rounded-xl border border-border/50 bg-[hsl(var(--surface-1))] text-left group"
                     >
                       <div className="flex items-center gap-2.5 mb-2">
-                        <span className="text-[13px] text-muted-foreground truncate flex-1">
+                        <span className="text-base text-muted-foreground truncate flex-1">
                           {task.name}
                         </span>
                       </div>
 
                       {task.branch && (
-                        <div className="flex items-center gap-1.5 text-[11px] text-muted-fade-70 mb-1.5">
+                        <div className="flex items-center gap-1.5 text-xs text-muted-fade-70 mb-1.5">
                           <span className="shrink-0 text-muted-fade-50">Branch:</span>
                           <span className="truncate">{task.branch}</span>
                         </div>
                       )}
 
                       <div className="flex items-center justify-between mt-2 pt-2.5 border-t border-border/30">
-                        <span className="text-[10px] text-muted-fade-70">
+                        <span className="text-xs text-muted-fade-70">
                           Archived {timeAgo(task.archivedAt!)}
                         </span>
                         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">

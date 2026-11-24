@@ -25,9 +25,9 @@ export function SwitchField({
   return (
     <div className="flex items-start gap-3">
       <div className="flex-1 min-w-0">
-        <span className="block text-[12px] font-medium text-fg-fade-70">{label}</span>
-        {hint && <p className="mt-1 text-[11px] leading-relaxed text-muted-fade-50">{hint}</p>}
-        {helperText && <p className="mt-0.5 text-[11px] text-muted-fade-40">{helperText}</p>}
+        <span className="block text-sm font-medium text-fg-fade-70">{label}</span>
+        {hint && <p className="mt-1 text-xs leading-relaxed text-muted-fade-50">{hint}</p>}
+        {helperText && <p className="mt-0.5 text-xs text-muted-fade-40">{helperText}</p>}
       </div>
       <div className="shrink-0 pt-0.5">
         <Switch enabled={enabled} onToggle={onToggle} disabled={disabled} aria-label={label} />

@@ -70,7 +70,7 @@ function RemoteControlBody({ ptyId, state }: RemoteControlBodyProps) {
       <div className="flex items-center justify-between px-5 h-12 border-b border-border/40">
         <div className="flex items-center gap-2">
           <Globe size={14} strokeWidth={1.8} className="text-primary" />
-          <h2 className="text-[14px] font-semibold text-foreground">Remote Control</h2>
+          <h2 className="text-base font-semibold text-foreground">Remote Control</h2>
         </div>
         <button
           onClick={close}
@@ -86,7 +86,7 @@ function RemoteControlBody({ ptyId, state }: RemoteControlBodyProps) {
             <div className="w-[200px] h-[200px] rounded-lg bg-accent/30 flex items-center justify-center">
               <Loader2 size={24} className="text-muted-foreground animate-spin" />
             </div>
-            <p className="text-[13px] text-muted-foreground">Enabling remote access...</p>
+            <p className="text-base text-muted-foreground">Enabling remote access...</p>
           </>
         ) : state?.url ? (
           <>
@@ -97,12 +97,12 @@ function RemoteControlBody({ ptyId, state }: RemoteControlBodyProps) {
                 className="w-[200px] h-[200px] rounded-lg"
               />
             )}
-            <p className="text-[12px] text-muted-foreground text-center max-w-[280px]">
+            <p className="text-sm text-muted-foreground text-center max-w-[280px]">
               Scan with your phone or open the link to continue this session remotely
             </p>
             <button
               onClick={handleCopy}
-              className="flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors w-full justify-center"
+              className="flex items-center gap-2 px-4 py-2 rounded-full text-base font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors w-full justify-center"
             >
               {copied ? (
                 <>
@@ -122,7 +122,7 @@ function RemoteControlBody({ ptyId, state }: RemoteControlBodyProps) {
             <div className="w-[200px] h-[200px] rounded-lg bg-accent/30 flex items-center justify-center">
               <X size={24} className="text-muted-fade-40" />
             </div>
-            <p className="text-[13px] text-muted-foreground text-center max-w-[280px]">
+            <p className="text-base text-muted-foreground text-center max-w-[280px]">
               Could not enable remote access. Make sure you have a Claude Pro plan and are signed
               in.
             </p>

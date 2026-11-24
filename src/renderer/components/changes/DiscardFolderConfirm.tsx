@@ -43,8 +43,8 @@ export function DiscardFolderConfirm({
   return (
     <div className="w-[320px] p-3 flex flex-col gap-2.5">
       <div>
-        <h4 className="text-[12px] font-semibold text-foreground tracking-tight">Discard folder</h4>
-        <p className="text-[11px] font-mono text-muted-fade-80 truncate mt-0.5">
+        <h4 className="text-sm font-semibold text-foreground tracking-tight">Discard folder</h4>
+        <p className="text-xs font-mono text-muted-fade-80 truncate mt-0.5">
           {folderName}/{' '}
           <span className="text-muted-fade-60">
             · {totalCount} {totalCount === 1 ? 'file' : 'files'}
@@ -55,7 +55,7 @@ export function DiscardFolderConfirm({
         {items.map((item) => (
           <div
             key={item.rel}
-            className="font-mono text-[11px] truncate py-0.5 px-1.5 rounded hover:bg-[hsl(var(--surface-2)/0.4)]"
+            className="font-mono text-xs truncate py-0.5 px-1.5 rounded-md hover:bg-[hsl(var(--surface-2)/0.4)]"
             title={item.rel}
           >
             {item.dir && <span className="text-muted-fade-60">{item.dir}</span>}
@@ -68,7 +68,7 @@ export function DiscardFolderConfirm({
           type="button"
           onClick={onClose}
           disabled={busy}
-          className="px-3 h-8 rounded-md text-[11.5px] text-muted-fade-80 hover:text-foreground hover:bg-accent/60 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+          className="px-3 h-8 rounded-md text-sm text-muted-fade-80 hover:text-foreground hover:bg-accent/60 transition-colors disabled:opacity-40 disabled:pointer-events-none"
         >
           Cancel
         </button>
@@ -78,7 +78,7 @@ export function DiscardFolderConfirm({
             void handleConfirm();
           }}
           disabled={busy}
-          className="flex items-center gap-1.5 px-3 h-8 rounded-md text-[11.5px] font-medium bg-destructive text-destructive-foreground hover:brightness-110 transition-colors disabled:opacity-70 disabled:pointer-events-none"
+          className="flex items-center gap-1.5 px-3 h-8 rounded-md text-sm font-medium bg-destructive text-destructive-foreground hover:brightness-110 transition-colors disabled:opacity-70 disabled:pointer-events-none"
         >
           {busy ? (
             <>

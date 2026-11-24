@@ -100,15 +100,15 @@ function GithubIssueRow({ issue }: { issue: GithubIssue }) {
   return (
     <>
       <div className="flex items-center gap-1.5">
-        <span className="text-[11px] text-muted-fade-50 font-mono shrink-0">#{issue.number}</span>
-        <span className="text-[12px] text-fg-fade-80 truncate">{issue.title}</span>
+        <span className="text-xs text-muted-fade-50 font-mono shrink-0">#{issue.number}</span>
+        <span className="text-sm text-fg-fade-80 truncate">{issue.title}</span>
       </div>
       {issue.labels.length > 0 && (
         <div className="flex gap-1 mt-0.5 flex-wrap">
           {issue.labels.slice(0, 3).map((label) => (
             <span
               key={label}
-              className="px-1.5 py-0.5 rounded text-[9px] bg-accent/60 text-muted-fade-60"
+              className="px-1.5 py-0.5 rounded-md text-xs bg-accent/60 text-muted-fade-60"
             >
               {label}
             </span>
@@ -123,20 +123,20 @@ function AdoWorkItemRow({ item }: { item: AzureDevOpsWorkItem }) {
   return (
     <>
       <div className="flex items-center gap-1.5">
-        <span className="text-[11px] text-muted-fade-50 font-mono shrink-0">#{item.id}</span>
-        <span className="text-[12px] text-fg-fade-80 truncate">{item.title}</span>
+        <span className="text-xs text-muted-fade-50 font-mono shrink-0">#{item.id}</span>
+        <span className="text-sm text-fg-fade-80 truncate">{item.title}</span>
       </div>
       <div className="flex gap-1 mt-0.5 flex-wrap">
-        <span className="px-1.5 py-0.5 rounded text-[9px] bg-accent/60 text-muted-fade-60">
+        <span className="px-1.5 py-0.5 rounded-md text-xs bg-accent/60 text-muted-fade-60">
           {item.type}
         </span>
-        <span className="px-1.5 py-0.5 rounded text-[9px] bg-accent/60 text-muted-fade-60">
+        <span className="px-1.5 py-0.5 rounded-md text-xs bg-accent/60 text-muted-fade-60">
           {item.state}
         </span>
         {item.tags?.slice(0, 2).map((tag) => (
           <span
             key={tag}
-            className="px-1.5 py-0.5 rounded text-[9px] bg-accent/60 text-muted-fade-60"
+            className="px-1.5 py-0.5 rounded-md text-xs bg-accent/60 text-muted-fade-60"
           >
             {tag}
           </span>
@@ -380,7 +380,7 @@ function TaskModalBody({
     <>
       {/* Header */}
       <div className="flex items-center justify-between px-5 h-12 border-b border-border/40 rounded-t-xl">
-        <h2 className="text-[14px] font-semibold text-foreground">New Task</h2>
+        <h2 className="text-base font-semibold text-foreground">New Task</h2>
         <button
           onClick={close}
           disabled={isCreating}
@@ -401,16 +401,14 @@ function TaskModalBody({
           <div className="min-w-0">
             {/* Task name */}
             <div className="mb-5">
-              <label className="block text-[12px] font-medium text-fg-fade-70 mb-2">
-                Task name
-              </label>
+              <label className="block text-sm font-medium text-fg-fade-70 mb-2">Task name</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Fix auth bug, Add dark mode..."
                 maxLength={60}
-                className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[13px] placeholder:text-muted-fade-30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150"
+                className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-base placeholder:text-muted-fade-30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150"
                 autoFocus
               />
             </div>
@@ -423,7 +421,7 @@ function TaskModalBody({
                   className="text-muted-fade-25 mt-0.5 shrink-0"
                   strokeWidth={1.8}
                 />
-                <span className="text-[12px] text-muted-fade-45">
+                <span className="text-sm text-muted-fade-45">
                   No commits yet — this task runs in the project folder. Make an initial commit to
                   enable worktrees and branches.
                 </span>
@@ -448,12 +446,12 @@ function TaskModalBody({
                   </div>
                   <div className="flex items-center gap-2">
                     <GitBranch size={13} className="text-muted-fade-40" strokeWidth={1.8} />
-                    <span className="text-[13px] text-fg-fade-80">Git worktree</span>
-                    <span className="text-[11px] text-muted-fade-40">isolated branch</span>
+                    <span className="text-base text-fg-fade-80">Git worktree</span>
+                    <span className="text-xs text-muted-fade-40">isolated branch</span>
                   </div>
                 </label>
                 {worktreeForced && (
-                  <p className="ml-[44px] mt-1 text-[11px] text-muted-fade-50">
+                  <p className="ml-[44px] mt-1 text-xs text-muted-fade-50">
                     A non-worktree task already exists:{' '}
                     <span className="font-medium text-fg-fade-60">
                       {existingNonWorktreeTask.name}
@@ -464,14 +462,14 @@ function TaskModalBody({
             ) : (
               <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[hsl(var(--surface-1))] border border-border/40">
                 <FolderGit2 size={13} className="text-muted-fade-40" strokeWidth={1.8} />
-                <span className="text-[12px] text-muted-fade-60 flex-1">Not a git repository</span>
+                <span className="text-sm text-muted-fade-60 flex-1">Not a git repository</span>
                 <button
                   type="button"
                   onClick={() => {
                     void handleGitInit();
                   }}
                   disabled={gitInitLoading}
-                  className="text-[11px] font-medium text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
+                  className="text-xs font-medium text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
                 >
                   {gitInitLoading ? 'Initializing...' : 'Initialize Git'}
                 </button>
@@ -499,8 +497,8 @@ function TaskModalBody({
                   </div>
                   <div className="flex items-center gap-2">
                     <GitBranch size={13} className="text-muted-fade-40" strokeWidth={1.8} />
-                    <span className="text-[13px] text-fg-fade-80">Create new branch</span>
-                    <span className="text-[11px] text-muted-fade-40">
+                    <span className="text-base text-fg-fade-80">Create new branch</span>
+                    <span className="text-xs text-muted-fade-40">
                       {showGithub || showAdo ? 'from a base branch or PR' : 'from a base branch'}
                     </span>
                   </div>
@@ -525,11 +523,11 @@ function TaskModalBody({
                   </div>
                   <div className="flex items-center gap-2">
                     <Upload size={13} className="text-muted-fade-40" strokeWidth={1.8} />
-                    <span className="text-[13px] text-fg-fade-80">Push remote branch</span>
+                    <span className="text-base text-fg-fade-80">Push remote branch</span>
                   </div>
                 </label>
                 {pushRemote && name.trim() && (
-                  <p className="ml-[44px] mt-1 text-[11px] text-muted-fade-40 font-mono truncate">
+                  <p className="ml-[44px] mt-1 text-xs text-muted-fade-40 font-mono truncate">
                     origin/{branchSlug(name.trim())}
                   </p>
                 )}
@@ -539,7 +537,7 @@ function TaskModalBody({
             {/* Branch + PR picker */}
             {gitReady && !repoHasNoCommits && (
               <div className="mb-4">
-                <label className="block text-[12px] font-medium text-fg-fade-70 mb-2">
+                <label className="block text-sm font-medium text-fg-fade-70 mb-2">
                   {useWorktree && createNewBranch
                     ? showGithub || showAdo
                       ? 'Base branch or PR'
@@ -572,7 +570,7 @@ function TaskModalBody({
                 {/* Selected branch is checked out elsewhere, so a worktree on it
                     would fail. Block it and point at "Create new branch". */}
                 {branchInUse && (
-                  <div className="mt-2 flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/5 text-[11px] leading-relaxed">
+                  <div className="mt-2 flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/5 text-xs leading-relaxed">
                     <GitBranch
                       size={12}
                       strokeWidth={2}
@@ -598,7 +596,7 @@ function TaskModalBody({
 
                     if (behind > 0 && directCheckout) {
                       return (
-                        <div className="mt-2 px-3 py-2.5 rounded-lg bg-amber-500/10 text-[11px]">
+                        <div className="mt-2 px-3 py-2.5 rounded-lg bg-amber-500/10 text-xs">
                           <div className="flex items-start gap-2">
                             <ArrowDown
                               size={12}
@@ -636,7 +634,7 @@ function TaskModalBody({
                       // state isn't used. The picker hides its badges to match.
                       if (!selectedBranch.upstream) return null;
                       return (
-                        <p className="mt-1.5 text-[11px] text-muted-fade-50">
+                        <p className="mt-1.5 text-xs text-muted-fade-50">
                           New branch will be based on the latest{' '}
                           <span className="text-fg-fade-70 font-medium">
                             origin/{selectedBranch.name}
@@ -646,7 +644,7 @@ function TaskModalBody({
                     }
                     if (ahead > 0) {
                       return (
-                        <p className="mt-1.5 text-[11px] text-muted-fade-50">
+                        <p className="mt-1.5 text-xs text-muted-fade-50">
                           <span className="text-emerald-500 font-medium">
                             {ahead} commit{ahead !== 1 ? 's' : ''} ahead
                           </span>{' '}
@@ -708,7 +706,7 @@ function TaskModalBody({
                   onChange={(e) => setContextPrompt(e.target.value)}
                   rows={8}
                   placeholder="Prepended to the task's context — e.g. coding conventions, links."
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[13px] placeholder:text-muted-fade-30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-base placeholder:text-muted-fade-30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
                 />
               </Expandable>
             </div>
@@ -716,7 +714,7 @@ function TaskModalBody({
             {/* Issue/Work Item pickers */}
             {(showGithub || showAdo) && (
               <div className="mb-4">
-                <label className="block text-[12px] font-medium text-fg-fade-70 mb-2">
+                <label className="block text-sm font-medium text-fg-fade-70 mb-2">
                   <span className="flex items-center gap-1.5">
                     {showGithub && showAdo
                       ? 'Link issues / work items'
@@ -764,7 +762,7 @@ function TaskModalBody({
                 >
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-[11px] font-medium text-muted-fade-60 mb-1.5">
+                      <label className="block text-xs font-medium text-muted-fade-60 mb-1.5">
                         Setup — runs in this new worktree
                       </label>
                       <textarea
@@ -772,11 +770,11 @@ function TaskModalBody({
                         onChange={(e) => setSetupScript(e.target.value)}
                         rows={3}
                         placeholder={'pnpm install\ncp ../.env .env'}
-                        className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-fade-30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
+                        className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-sm font-mono placeholder:text-muted-fade-30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-medium text-muted-fade-60 mb-1.5">
+                      <label className="block text-xs font-medium text-muted-fade-60 mb-1.5">
                         Teardown — runs before this worktree is removed
                       </label>
                       <textarea
@@ -784,10 +782,10 @@ function TaskModalBody({
                         onChange={(e) => setTeardownScript(e.target.value)}
                         rows={2}
                         placeholder={'docker compose down'}
-                        className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-fade-30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
+                        className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-sm font-mono placeholder:text-muted-fade-30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
                       />
                     </div>
-                    <p className="text-[10px] text-muted-fade-40 leading-relaxed">
+                    <p className="text-xs text-muted-fade-40 leading-relaxed">
                       Prefilled from the project default. Edits apply to this worktree only.
                     </p>
                   </div>
@@ -803,7 +801,7 @@ function TaskModalBody({
             type="button"
             onClick={close}
             disabled={isCreating}
-            className="px-4 py-2 rounded-lg text-[13px] text-muted-fade-60 hover:text-foreground hover:bg-accent/60 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
+            className="px-4 py-2 rounded-lg text-base text-muted-fade-60 hover:text-foreground hover:bg-accent/60 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
           >
             Cancel
           </button>
@@ -820,7 +818,7 @@ function TaskModalBody({
               // Worktree on an already-checked-out branch would fail at create.
               branchInUse
             }
-            className="px-5 py-2 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 flex items-center gap-2"
+            className="px-5 py-2 rounded-lg text-base font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 flex items-center gap-2"
           >
             {isCreating && <Loader2 size={14} className="animate-spin" />}
             {isCreating ? 'Creating…' : 'Create Task'}

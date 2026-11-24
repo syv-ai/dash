@@ -322,7 +322,7 @@ function TreeRow({
         }
       }}
       style={style}
-      className={`group/swap w-full flex items-center gap-1 py-0.5 rounded-md text-[12px] cursor-pointer outline-hidden focus-visible:ring-1 focus-visible:ring-primary/40 transition-colors ${className}`}
+      className={`group/swap w-full flex items-center gap-1 py-0.5 rounded-md text-sm cursor-pointer outline-hidden focus-visible:ring-1 focus-visible:ring-primary/40 transition-colors ${className}`}
     >
       {children}
     </div>
@@ -445,7 +445,7 @@ function FileTreePanel({
   const cols = useMemo(() => treeColumns(tree, badgeCounts), [tree, badgeCounts]);
   return (
     <div className="h-full min-h-0 flex flex-col">
-      <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-muted-fade-70 font-mono flex items-center justify-between shrink-0">
+      <div className="px-3 py-2 text-xs uppercase tracking-wider text-muted-fade-70 font-mono flex items-center justify-between shrink-0">
         <span className="flex items-center gap-2">
           <span>
             Files{' '}
@@ -471,7 +471,7 @@ function FileTreePanel({
                 type="button"
                 onClick={toggleChangedOnly}
                 aria-pressed={changedOnly}
-                className={`shrink-0 p-1 -mr-1 rounded transition-colors ${
+                className={`shrink-0 p-1 -mr-1 rounded-md transition-colors ${
                   changedOnly
                     ? 'text-primary'
                     : 'text-muted-fade-50 hover:text-foreground hover:bg-[hsl(var(--surface-2)/0.6)]'
@@ -485,9 +485,9 @@ function FileTreePanel({
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1">
         {loading && paths.length === 0 ? (
-          <div className="px-3 py-2 text-[11px] text-muted-fade-40">Loading…</div>
+          <div className="px-3 py-2 text-xs text-muted-fade-40">Loading…</div>
         ) : changedOnly && tree.changedCount === 0 ? (
-          <div className="px-3 py-2 text-[11px] text-muted-fade-40">No changed files</div>
+          <div className="px-3 py-2 text-xs text-muted-fade-40">No changed files</div>
         ) : (
           <FolderContents
             node={tree}
@@ -608,7 +608,7 @@ function FolderEntry({
             <ChevronRight size={11} strokeWidth={1.8} className="text-muted-fade-55" />
           )}
         </span>
-        <span className={`flex-1 min-w-0 font-mono text-[11.5px] truncate text-left ${tint}`}>
+        <span className={`flex-1 min-w-0 font-mono text-sm truncate text-left ${tint}`}>
           {folder.name}
           <span className="text-muted-fade-40">/</span>
         </span>
@@ -616,7 +616,7 @@ function FolderEntry({
           rest={
             cols.status > 0 && (
               <span
-                className={`font-mono text-[10px] font-semibold tabular-nums text-center ${
+                className={`font-mono text-xs font-semibold tabular-nums text-center ${
                   folder.dominantStatus ? STATUS_TEXT[folder.dominantStatus] : 'text-muted-fade-70'
                 }`}
                 style={{ width: `${cols.status}ch` }}
@@ -650,7 +650,7 @@ function ThreadBadge({ count }: { count: number }) {
     <Tooltip content={label}>
       <span
         aria-label={label}
-        className="shrink-0 inline-flex items-center justify-center min-w-[14px] h-[14px] px-1 rounded-full font-mono text-[9.5px] font-semibold tabular-nums border border-edge/25 text-fg-fade-70"
+        className="shrink-0 inline-flex items-center justify-center min-w-[14px] h-[14px] px-1 rounded-full font-mono text-xs font-semibold tabular-nums border border-edge/25 text-fg-fade-70"
       >
         {count}
       </span>
@@ -664,7 +664,7 @@ function CommentBadge({ count }: { count: number }) {
     <Tooltip content={label}>
       <span
         aria-label={label}
-        className="shrink-0 inline-flex items-center justify-center min-w-[14px] h-[14px] px-1 rounded-full font-mono text-[9.5px] font-semibold tabular-nums bg-primary/20 text-primary"
+        className="shrink-0 inline-flex items-center justify-center min-w-[14px] h-[14px] px-1 rounded-full font-mono text-xs font-semibold tabular-nums bg-primary/20 text-primary"
       >
         {count}
       </span>
@@ -699,14 +699,14 @@ function FileEntry({
       {/* Empty icon slot keeps file names aligned with folder names at the
           same indent (the chevron column for folders). */}
       <span className="shrink-0" style={{ width: ICON_SLOT }} />
-      <span className={`flex-1 min-w-0 font-mono text-[11.5px] truncate text-left ${tint}`}>
+      <span className={`flex-1 min-w-0 font-mono text-sm truncate text-left ${tint}`}>
         {file.name}
       </span>
       {/* Stat columns at rest (each as wide as the tree's widest value, so
           they line up down the list); "Copy path" slides in on hover. */}
       <HoverSwapSlot
         rest={
-          <span className="flex items-center gap-1.5 font-mono text-[10.5px] tabular-nums">
+          <span className="flex items-center gap-1.5 font-mono text-xs tabular-nums">
             {cols.threads && (
               <span className="flex w-[18px] justify-end">
                 {!!badges?.threads && <ThreadBadge count={badges.threads} />}
@@ -739,7 +739,7 @@ function FileEntry({
             )}
             {cols.status > 0 && (
               <span
-                className={`text-[10px] font-semibold text-center ${
+                className={`text-xs font-semibold text-center ${
                   change ? (selected ? 'text-primary' : STATUS_TEXT[change.status]) : ''
                 }`}
                 style={{ width: `${cols.status}ch` }}
@@ -787,7 +787,7 @@ function CommitsDrawer({
 
   return (
     <div className="h-full min-h-0 flex flex-col">
-      <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-muted-fade-70 font-mono flex items-center gap-1.5 shrink-0">
+      <div className="px-3 py-2 text-xs uppercase tracking-wider text-muted-fade-70 font-mono flex items-center gap-1.5 shrink-0">
         <History size={11} strokeWidth={1.8} />
         <span>Commits</span>
         {commits.length > 0 && <span className="ml-auto tabular-nums">{commits.length}</span>}
@@ -802,21 +802,21 @@ function CommitsDrawer({
           type="button"
           data-active={workingActive}
           onClick={() => onSelectView({ kind: 'working', ref: 'HEAD' })}
-          className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-[12px] text-left transition-colors ${
+          className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-sm text-left transition-colors ${
             workingActive
               ? 'bg-primary/15 text-primary'
               : 'text-fg-fade-85 hover:bg-[hsl(var(--surface-2)/0.6)]'
           }`}
         >
           <GitCommit size={11} strokeWidth={1.8} className="opacity-60 shrink-0" />
-          <span className="truncate flex-1 font-mono text-[11.5px]">Working tree</span>
+          <span className="truncate flex-1 font-mono text-sm">Working tree</span>
           {(commentCountByScope.get('live') ?? 0) > 0 && (
             <CommentBadge count={commentCountByScope.get('live')!} />
           )}
         </button>
         {pr && <PrRow pr={pr} active={view.kind === 'pr'} />}
         {loading && commits.length === 0 && (
-          <div className="px-3 py-2 text-[11px] text-muted-fade-40">Loading…</div>
+          <div className="px-3 py-2 text-xs text-muted-fade-40">Loading…</div>
         )}
         {commits.map((c) => {
           const active = activeCommitHash === c.hash;
@@ -898,21 +898,21 @@ function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
           onMouseLeave={scheduleClose}
           onFocus={scheduleOpen}
           onBlur={scheduleClose}
-          className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-[12px] text-left transition-colors ${
+          className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-sm text-left transition-colors ${
             active
               ? 'bg-primary/15 text-primary'
               : 'text-fg-fade-85 hover:bg-[hsl(var(--surface-2)/0.6)]'
           }`}
         >
-          <span className="text-[10px] font-mono text-muted-fade-60 tabular-nums shrink-0">
+          <span className="text-xs font-mono text-muted-fade-60 tabular-nums shrink-0">
             {commit.shortHash}
           </span>
-          <span className="truncate flex-1 font-mono text-[11.5px]">
+          <span className="truncate flex-1 font-mono text-sm">
             {commit.subject || '(no subject)'}
           </span>
           {commentCount > 0 && <CommentBadge count={commentCount} />}
           {(commit.additions > 0 || commit.deletions > 0) && (
-            <span className="font-mono text-[10px] flex gap-1 shrink-0 tabular-nums">
+            <span className="font-mono text-xs flex gap-1 shrink-0 tabular-nums">
               {commit.additions > 0 && (
                 <span className="text-[hsl(var(--git-added))]">+{commit.additions}</span>
               )}
@@ -921,7 +921,7 @@ function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
               )}
             </span>
           )}
-          <span className="text-[10px] text-muted-fade-40 shrink-0 tabular-nums">
+          <span className="text-xs text-muted-fade-40 shrink-0 tabular-nums">
             {formatRelativeTime(commit.authorDate, Date.now() / 1000)}
           </span>
         </button>
@@ -940,15 +940,15 @@ function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
         onCloseAutoFocus={(e) => e.preventDefault()}
         className="w-[420px] max-h-[440px] overflow-y-auto p-3.5 flex flex-col gap-2.5"
       >
-        <div className="text-[12.5px] font-medium text-foreground leading-snug">
+        <div className="text-base font-medium text-foreground leading-snug">
           {commit.subject || '(no subject)'}
         </div>
         {commit.body && (
-          <div className="text-[11.5px] text-fg-fade-75 leading-relaxed whitespace-pre-wrap font-mono">
+          <div className="text-sm text-fg-fade-75 leading-relaxed whitespace-pre-wrap font-mono">
             {commit.body}
           </div>
         )}
-        <div className="flex items-center gap-2 pt-1.5 border-t border-border/40 text-[10.5px] text-muted-fade-75">
+        <div className="flex items-center gap-2 pt-1.5 border-t border-border/40 text-xs text-muted-fade-75">
           <span className="font-mono tabular-nums">{commit.shortHash}</span>
           <span className="opacity-50">·</span>
           <span className="truncate">{commit.authorName}</span>
@@ -984,13 +984,11 @@ function PrRow({ pr, active }: { pr: PrEntry; active: boolean }) {
             onClick={pr.onOpen}
             onFocus={scheduleOpen}
             onBlur={scheduleClose}
-            className="flex min-w-0 flex-1 items-center gap-2 py-0.5 text-left text-[12px] text-[hsl(var(--git-added))]"
+            className="flex min-w-0 flex-1 items-center gap-2 py-0.5 text-left text-sm text-[hsl(var(--git-added))]"
           >
             <GitPullRequestArrow size={11} strokeWidth={1.8} className="shrink-0" />
-            <span className="shrink-0 font-mono text-[11.5px] tabular-nums">#{pr.number}</span>
-            <span className="min-w-0 flex-1 truncate text-[11.5px] text-fg-fade-85">
-              {pr.title}
-            </span>
+            <span className="shrink-0 font-mono text-sm tabular-nums">#{pr.number}</span>
+            <span className="min-w-0 flex-1 truncate text-sm text-fg-fade-85">{pr.title}</span>
             {(pr.threads ?? 0) > 0 && <CommentBadge count={pr.threads!} />}
           </button>
           {pr.inReview ? (
@@ -998,7 +996,7 @@ function PrRow({ pr, active }: { pr: PrEntry; active: boolean }) {
               type="button"
               onClick={pr.onOpen}
               title="Your review is in progress"
-              className="shrink-0 rounded-full border border-primary/40 px-2 py-0.5 text-[10.5px] font-medium text-primary hover:bg-primary/10 transition-colors"
+              className="shrink-0 rounded-full border border-primary/40 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
             >
               In review
             </button>
@@ -1007,7 +1005,7 @@ function PrRow({ pr, active }: { pr: PrEntry; active: boolean }) {
               type="button"
               onClick={pr.onReview}
               title="Review: what you write becomes a PR comment, sent on Submit"
-              className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10.5px] font-medium text-primary-foreground hover:brightness-110 transition"
+              className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground hover:brightness-110 transition"
             >
               Review
             </button>
@@ -1024,15 +1022,15 @@ function PrRow({ pr, active }: { pr: PrEntry; active: boolean }) {
         onCloseAutoFocus={(e) => e.preventDefault()}
         className="w-[420px] max-h-[440px] overflow-y-auto overflow-x-hidden p-3.5 flex flex-col gap-2.5"
       >
-        <div className="text-[12.5px] font-medium text-foreground leading-snug wrap-break-word">
+        <div className="text-base font-medium text-foreground leading-snug wrap-break-word">
           #{pr.number} {pr.title}
         </div>
         {pr.body === null ? (
-          <div className="text-[11.5px] text-muted-fade-60">Loading…</div>
+          <div className="text-sm text-muted-fade-60">Loading…</div>
         ) : pr.body.trim() ? (
-          <Markdown text={pr.body} className="text-[11.5px] leading-relaxed text-fg-fade-85" />
+          <Markdown text={pr.body} className="text-sm leading-relaxed text-fg-fade-85" />
         ) : (
-          <div className="text-[11.5px] italic text-muted-fade-60">No description.</div>
+          <div className="text-sm italic text-muted-fade-60">No description.</div>
         )}
       </PopoverContent>
     </Popover>

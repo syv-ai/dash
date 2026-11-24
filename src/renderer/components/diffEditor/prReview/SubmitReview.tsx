@@ -52,20 +52,20 @@ function WriteError({
   }, [copied]);
   if (error.kind === 'pending-review') {
     return (
-      <div className="text-[11px] text-destructive">
+      <div className="text-xs text-destructive">
         You have a pending review on GitHub; submit or discard it there, then try again. {kept}
       </div>
     );
   }
   if (error.kind === 'other') {
     return (
-      <div className="text-[11px] text-destructive break-words">
+      <div className="text-xs text-destructive break-words">
         {error.message} {posted > 0 ? kept : ''}
       </div>
     );
   }
   return (
-    <div className="flex flex-col gap-1 text-[11px]">
+    <div className="flex flex-col gap-1 text-xs">
       <span className="text-destructive">
         {providerName(provider)} refused the write: the token can&apos;t write to this PR. {kept}
       </span>
@@ -128,7 +128,7 @@ export function SubmitReview({
         />
       )}
       {summary?.author === 'agent' && (
-        <span className="inline-flex items-center gap-1 text-[11px] text-muted-fade-70">
+        <span className="inline-flex items-center gap-1 text-xs text-muted-fade-70">
           <Bot size={14} strokeWidth={1.8} />
           Summary drafted by the agent
         </span>
@@ -140,12 +140,12 @@ export function SubmitReview({
         onKeyDown={(e) => e.stopPropagation()}
         placeholder="Summary: a comment on the whole PR (optional)"
         rows={3}
-        className="w-full max-h-[40vh] resize-y rounded-md border border-edge/10 bg-[hsl(var(--surface-1))] px-2 py-1.5 text-[12px] leading-relaxed placeholder:text-muted-fade-40 focus:outline-hidden"
+        className="w-full max-h-[40vh] resize-y rounded-md border border-edge/10 bg-[hsl(var(--surface-1))] px-2 py-1.5 text-sm leading-relaxed placeholder:text-muted-fade-40 focus:outline-hidden"
       />
       {error && <WriteError {...error} provider={review.provider} />}
       <div className="flex items-center justify-end gap-2">
         {noteCount > 0 && (
-          <span className="min-w-0 flex-1 text-[11px] text-muted-fade-70">
+          <span className="min-w-0 flex-1 text-xs text-muted-fade-70">
             {noteCount} {noteCount === 1 ? 'note stays' : 'notes stay'} local ·{' '}
             <button
               type="button"

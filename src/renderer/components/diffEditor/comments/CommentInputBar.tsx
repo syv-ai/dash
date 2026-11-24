@@ -39,7 +39,7 @@ export function CommentInputBar({
     : '';
   return (
     <>
-      <div className="shrink-0 font-mono text-[10px] text-muted-fade-60 tabular-nums tracking-tight">
+      <div className="shrink-0 font-mono text-xs text-muted-fade-60 tabular-nums tracking-tight">
         {rangeLabel}
       </div>
       <textarea
@@ -65,14 +65,14 @@ export function CommentInputBar({
           }
         }}
         placeholder={placeholder}
-        className="min-h-[72px] max-h-[60vh] overflow-y-auto w-full text-[12.5px] leading-relaxed tracking-[-0.005em] bg-transparent px-0 py-0 resize-none placeholder:text-muted-fade-35 focus:outline-hidden"
+        className="min-h-[72px] max-h-[60vh] overflow-y-auto w-full text-base leading-relaxed tracking-[-0.005em] bg-transparent px-0 py-0 resize-none placeholder:text-muted-fade-35 focus:outline-hidden"
       />
       <div className="flex items-center gap-2 shrink-0">
-        <span className="text-[10.5px] text-muted-fade-65 font-mono">
-          <kbd className="px-1.5 py-0.5 rounded-[5px] border border-foreground/10 bg-foreground/4 text-fg-fade-70">
+        <span className="text-xs text-muted-fade-65 font-mono">
+          <kbd className="px-1.5 py-0.5 rounded-sm border border-foreground/10 bg-foreground/4 text-fg-fade-70">
             ⌘
           </kbd>
-          <kbd className="px-1.5 py-0.5 rounded-[5px] border border-foreground/10 bg-foreground/4 text-fg-fade-70 ml-1">
+          <kbd className="px-1.5 py-0.5 rounded-sm border border-foreground/10 bg-foreground/4 text-fg-fade-70 ml-1">
             ↵
           </kbd>
           <span className="ml-1.5">to {submitLabel.toLowerCase()}</span>
@@ -81,7 +81,7 @@ export function CommentInputBar({
           type="button"
           onClick={submit}
           disabled={!text.trim()}
-          className="ml-auto flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-md text-[11.5px] font-medium tracking-tight bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition disabled:opacity-30 disabled:cursor-not-allowed disabled:active:scale-100"
+          className="ml-auto flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-md text-sm font-medium tracking-tight bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition disabled:opacity-30 disabled:cursor-not-allowed disabled:active:scale-100"
         >
           {submitLabel}
         </button>

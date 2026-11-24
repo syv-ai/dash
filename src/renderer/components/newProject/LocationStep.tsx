@@ -11,8 +11,8 @@ interface LocationStepProps {
 }
 
 const inputClass =
-  'w-full px-3.5 py-2.5 rounded-lg bg-transparent border border-input/60 text-foreground text-[13px] placeholder:text-muted-fade-30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150';
-const labelClass = 'block text-[12px] font-medium text-muted-fade-70 mb-2';
+  'w-full px-3.5 py-2.5 rounded-lg bg-transparent border border-input/60 text-foreground text-base placeholder:text-muted-fade-30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150';
+const labelClass = 'block text-sm font-medium text-muted-fade-70 mb-2';
 
 async function detectAndResolve(
   path: string,
@@ -45,7 +45,7 @@ export function LocationStep({ source, onResolved }: LocationStepProps) {
   if (source === 'local') {
     return (
       <div className="flex flex-col gap-3">
-        <p className="text-[12px] text-muted-fade-70">Choose an existing project folder.</p>
+        <p className="text-sm text-muted-fade-70">Choose an existing project folder.</p>
         <button
           onClick={() =>
             void (async () => {
@@ -60,7 +60,7 @@ export function LocationStep({ source, onResolved }: LocationStepProps) {
               }
             })()
           }
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border/60 hover:bg-accent/40 text-[13px] text-foreground self-start"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border/60 hover:bg-accent/40 text-base text-foreground self-start"
         >
           <FolderOpen size={15} strokeWidth={1.8} /> Choose folder…
         </button>
@@ -93,13 +93,13 @@ export function LocationStep({ source, onResolved }: LocationStepProps) {
             />
             <button
               onClick={() => void pickFolder(setParentDir)}
-              className="px-3 rounded-lg border border-border/60 text-[12px] text-fg-fade-80 hover:bg-accent/40"
+              className="px-3 rounded-lg border border-border/60 text-sm text-fg-fade-80 hover:bg-accent/40"
             >
               Change…
             </button>
           </div>
         </div>
-        <label className="flex items-center gap-2 text-[13px] text-fg-fade-90 cursor-pointer">
+        <label className="flex items-center gap-2 text-base text-fg-fade-90 cursor-pointer">
           <input
             type="checkbox"
             checked={initGit}
@@ -108,7 +108,7 @@ export function LocationStep({ source, onResolved }: LocationStepProps) {
           />
           Initialize git repo
         </label>
-        {error && <p className="text-[12px] text-destructive">{error}</p>}
+        {error && <p className="text-sm text-destructive">{error}</p>}
         <button
           disabled={!canCreate || busy}
           onClick={() =>
@@ -128,7 +128,7 @@ export function LocationStep({ source, onResolved }: LocationStepProps) {
               await detectAndResolve(resp.data.path, resp.data.name, onResolved);
             })()
           }
-          className="self-start flex items-center gap-2 px-5 py-2 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 transition-all"
+          className="self-start flex items-center gap-2 px-5 py-2 rounded-lg text-base font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 transition-all"
         >
           {busy && <Loader2 size={13} className="animate-spin" strokeWidth={2} />}
           Create directory
@@ -147,7 +147,7 @@ export function LocationStep({ source, onResolved }: LocationStepProps) {
           <select
             value={methodId}
             onChange={(e) => setMethodId(e.target.value)}
-            className="px-2 rounded-lg bg-transparent border border-input/60 text-foreground text-[13px]"
+            className="px-2 rounded-lg bg-transparent border border-input/60 text-foreground text-base"
           >
             {CLONE_METHODS.map((m) => (
               <option key={m.id} value={m.id}>
@@ -174,13 +174,13 @@ export function LocationStep({ source, onResolved }: LocationStepProps) {
           />
           <button
             onClick={() => void pickFolder(setParentDir)}
-            className="px-3 rounded-lg border border-border/60 text-[12px] text-fg-fade-80 hover:bg-accent/40"
+            className="px-3 rounded-lg border border-border/60 text-sm text-fg-fade-80 hover:bg-accent/40"
           >
             Change…
           </button>
         </div>
       </div>
-      {error && <p className="text-[12px] text-destructive">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       {scaffoldSessionId && (
         <ScaffoldTerminal
@@ -227,7 +227,7 @@ export function LocationStep({ source, onResolved }: LocationStepProps) {
               await detectAndResolve(resp.data.path, resp.data.name, onResolved);
             })()
           }
-          className="self-start flex items-center gap-2 px-5 py-2 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 transition-all"
+          className="self-start flex items-center gap-2 px-5 py-2 rounded-lg text-base font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 transition-all"
         >
           {busy && <Loader2 size={13} className="animate-spin" strokeWidth={2} />}
           {method.interactive ? 'Run generator' : 'Clone'}

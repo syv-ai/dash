@@ -67,7 +67,7 @@ function DeleteTaskBody({ task, onConfirm }: DeleteTaskBodyProps) {
     <>
       {/* Header */}
       <div className="flex items-center justify-between px-5 h-12 border-b border-border/40">
-        <h2 className="text-[14px] font-semibold text-foreground">Delete Task</h2>
+        <h2 className="text-base font-semibold text-foreground">Delete Task</h2>
         <button
           onClick={close}
           disabled={isDeleting}
@@ -78,10 +78,10 @@ function DeleteTaskBody({ task, onConfirm }: DeleteTaskBodyProps) {
       </div>
 
       <div className="p-5">
-        <p className="text-[13px] text-muted-foreground mb-1">
+        <p className="text-base text-muted-foreground mb-1">
           Are you sure you want to delete this task?
         </p>
-        <p className="text-[13px] font-medium text-foreground mb-4 truncate">{task.name}</p>
+        <p className="text-base font-medium text-foreground mb-4 truncate">{task.name}</p>
 
         {task.useWorktree && (
           <div className="flex flex-col gap-2.5 mb-4">
@@ -127,7 +127,7 @@ function DeleteTaskBody({ task, onConfirm }: DeleteTaskBodyProps) {
             type="button"
             onClick={close}
             disabled={isDeleting}
-            className="px-4 py-2 rounded-full text-[13px] text-muted-fade-60 hover:text-foreground hover:bg-accent/60 transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none"
+            className="px-4 py-2 rounded-full text-base text-muted-fade-60 hover:text-foreground hover:bg-accent/60 transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none"
           >
             Cancel
           </button>
@@ -137,7 +137,7 @@ function DeleteTaskBody({ task, onConfirm }: DeleteTaskBodyProps) {
               void handleConfirm();
             }}
             disabled={isDeleting}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-medium bg-destructive text-destructive-foreground hover:brightness-110 transition-all duration-150 disabled:opacity-70 disabled:pointer-events-none"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-base font-medium bg-destructive text-destructive-foreground hover:brightness-110 transition-all duration-150 disabled:opacity-70 disabled:pointer-events-none"
           >
             {isDeleting ? (
               <>

@@ -75,12 +75,12 @@ export function RightInspector({
       {/* Control row */}
       <div className="inspector-controls flex items-center gap-2 px-3 pt-3 pb-1.5">
         {fileCount > 0 && (
-          <span className="min-w-[18px] h-[16px] flex items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary tabular-nums px-1 shrink-0">
+          <span className="min-w-[18px] h-[16px] flex items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary tabular-nums px-1 shrink-0">
             {fileCount}
           </span>
         )}
         {fileCount > 0 && (
-          <span className="inspector-gitstats inline-flex items-center font-mono text-[10.5px] tabular-nums shrink-0">
+          <span className="inspector-gitstats inline-flex items-center font-mono text-xs tabular-nums shrink-0">
             <span className="text-[hsl(var(--git-added))]">+{adds}</span>
             <span className="mx-1.5 text-fg-fade-30">·</span>
             <span className="text-[hsl(var(--git-deleted))]">−{dels}</span>
@@ -90,13 +90,13 @@ export function RightInspector({
         {(showAhead || showBehind) && (
           <div className="inspector-aheadbehind flex items-center gap-1 shrink-0">
             {showAhead && (
-              <span className="flex items-center gap-0.5 text-[9px] text-[hsl(var(--git-added))]">
+              <span className="flex items-center gap-0.5 text-xs text-[hsl(var(--git-added))]">
                 <ArrowUp size={8} strokeWidth={2.5} />
                 {gitStatus!.ahead}
               </span>
             )}
             {showBehind && (
-              <span className="flex items-center gap-0.5 text-[9px] text-[hsl(var(--git-deleted))]">
+              <span className="flex items-center gap-0.5 text-xs text-[hsl(var(--git-deleted))]">
                 <ArrowDown size={8} strokeWidth={2.5} />
                 {gitStatus!.behind}
               </span>
@@ -106,7 +106,7 @@ export function RightInspector({
         <Tooltip content="Commit graph">
           <button
             onClick={onShowCommitGraph}
-            className="p-[3px] rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            className="p-[3px] rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
           >
             <GitBranch size={11} strokeWidth={2} />
           </button>
@@ -117,7 +117,7 @@ export function RightInspector({
               onClick={() => {
                 void onStageAll();
               }}
-              className="p-[3px] rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              className="p-[3px] rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
             >
               <Plus size={11} strokeWidth={2} />
             </button>
@@ -129,7 +129,7 @@ export function RightInspector({
               onClick={() => {
                 void onUnstageAll();
               }}
-              className="p-[3px] rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              className="p-[3px] rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
             >
               <Minus size={11} strokeWidth={2} />
             </button>
@@ -144,11 +144,11 @@ export function RightInspector({
         >
           <button
             onClick={onOpenEditor}
-            className="flex items-center gap-1 p-[3px] rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            className="flex items-center gap-1 p-[3px] rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
           >
             <MessageSquareCode size={11} strokeWidth={2} />
             {commentCount > 0 && (
-              <span className="min-w-[14px] h-[14px] flex items-center justify-center rounded-full bg-primary/15 px-1 text-[9.5px] font-bold text-primary tabular-nums">
+              <span className="min-w-[14px] h-[14px] flex items-center justify-center rounded-full bg-primary/15 px-1 text-xs font-bold text-primary tabular-nums">
                 {commentCount}
               </span>
             )}

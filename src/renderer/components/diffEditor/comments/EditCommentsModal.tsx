@@ -54,8 +54,8 @@ function EditCommentsBody({
     <>
       <div className="flex items-center justify-between px-5 h-12 border-b border-border/40">
         <div className="flex items-baseline gap-2.5">
-          <h2 className="text-[14px] font-semibold text-foreground">Edit before sending</h2>
-          <span className="text-[11.5px] text-muted-fade-65">
+          <h2 className="text-base font-semibold text-foreground">Edit before sending</h2>
+          <span className="text-sm text-muted-fade-65">
             based on <span className="font-medium text-fg-fade-80 tabular-nums">{count}</span>{' '}
             {count === 1 ? 'comment' : 'comments'}
           </span>
@@ -81,16 +81,16 @@ function EditCommentsBody({
             }
           }}
           spellCheck={false}
-          className="min-h-[520px] max-h-[70vh] w-full text-[12px] leading-relaxed font-mono bg-foreground/4 rounded-md px-3 py-2 resize-y placeholder:text-muted-fade-40 focus:outline-hidden"
+          className="min-h-[520px] max-h-[70vh] w-full text-sm leading-relaxed font-mono bg-foreground/4 rounded-md px-3 py-2 resize-y placeholder:text-muted-fade-40 focus:outline-hidden"
         />
 
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[10.5px] text-muted-fade-55">
-            <kbd className="font-mono px-1 py-0.5 rounded bg-foreground/6 border border-edge/6">
+          <span className="text-xs text-muted-fade-55">
+            <kbd className="font-mono px-1 py-0.5 rounded-md bg-foreground/6 border border-edge/6">
               ⌘
             </kbd>
             <span className="mx-0.5">+</span>
-            <kbd className="font-mono px-1 py-0.5 rounded bg-foreground/6 border border-edge/6">
+            <kbd className="font-mono px-1 py-0.5 rounded-md bg-foreground/6 border border-edge/6">
               ↵
             </kbd>
             <span className="ml-1.5">to send</span>
@@ -99,7 +99,7 @@ function EditCommentsBody({
             <button
               type="button"
               onClick={close}
-              className="px-4 py-2 rounded-full text-[13px] text-muted-fade-70 hover:text-foreground hover:bg-accent/60 transition-all duration-150"
+              className="px-4 py-2 rounded-full text-base text-muted-fade-70 hover:text-foreground hover:bg-accent/60 transition-all duration-150"
             >
               Cancel
             </button>
@@ -107,7 +107,7 @@ function EditCommentsBody({
               type="button"
               onClick={handleSend}
               disabled={!canSend}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-medium bg-primary text-primary-foreground hover:brightness-110 transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full text-base font-medium bg-primary text-primary-foreground hover:brightness-110 transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none"
             >
               <Send size={13} strokeWidth={2} />
               Send

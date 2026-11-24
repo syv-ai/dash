@@ -67,7 +67,7 @@ export function FileRow({
     },
     title: 'Click to open diff',
     className:
-      'group relative flex items-center gap-2 px-2 py-1 rounded-md text-[12.5px] cursor-pointer hover:bg-[hsl(var(--surface-2)/0.6)] min-h-[24px] transition-colors duration-150',
+      'group relative flex items-center gap-2 px-2 py-1 rounded-md text-base cursor-pointer hover:bg-[hsl(var(--surface-2)/0.6)] min-h-[24px] transition-colors duration-150',
   };
   const body = (
     <>
@@ -80,12 +80,10 @@ export function FileRow({
       {/* Slot where the folder's chevron sits — kept empty so file names
           align with folder names at the same indent. */}
       <span className="w-[14px] shrink-0" />
-      <span
-        className={`flex-1 min-w-0 font-mono text-[11.5px] truncate ${STATUS_CLASS[file.status]}`}
-      >
+      <span className={`flex-1 min-w-0 font-mono text-sm truncate ${STATUS_CLASS[file.status]}`}>
         {basename(file.path)}
       </span>
-      <span className="font-mono text-[10.5px] flex gap-1.5 shrink-0 group-hover:invisible">
+      <span className="font-mono text-xs flex gap-1.5 shrink-0 group-hover:invisible">
         {file.additions ? (
           <span
             className={
@@ -100,7 +98,7 @@ export function FileRow({
         ) : null}
       </span>
       <span
-        className={`font-mono text-[10px] font-semibold w-3 text-center shrink-0 group-hover:invisible ${STATUS_CLASS[file.status]}`}
+        className={`font-mono text-xs font-semibold w-3 text-center shrink-0 group-hover:invisible ${STATUS_CLASS[file.status]}`}
       >
         {STATUS_LABEL[file.status]}
       </span>
@@ -170,7 +168,7 @@ export function Checkbox({ checked, onChange }: CheckboxProps) {
       aria-checked={isMixed ? 'mixed' : isChecked}
       role="checkbox"
       className={[
-        'shrink-0 w-[14px] h-[14px] rounded border-[1.4px] inline-flex items-center justify-center transition-colors',
+        'shrink-0 w-[14px] h-[14px] rounded-md border-[1.4px] inline-flex items-center justify-center transition-colors',
         isChecked
           ? 'bg-primary border-primary text-primary-foreground'
           : isMixed

@@ -106,7 +106,7 @@ export function SetupLogPane({ taskId, worktreePath }: { taskId: string; worktre
     <div className="h-full flex flex-col">
       <div className="flex items-center gap-2 h-7 shrink-0">
         <span
-          className={`text-[11px] truncate min-w-0 ${run?.status === 'failed' ? 'text-destructive' : 'text-muted-fade-60'}`}
+          className={`text-xs truncate min-w-0 ${run?.status === 'failed' ? 'text-destructive' : 'text-muted-fade-60'}`}
         >
           {status}
         </span>

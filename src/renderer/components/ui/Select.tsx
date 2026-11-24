@@ -34,7 +34,7 @@ export function Select<T extends string>({
       <DropdownMenuPrimitive.Trigger asChild>
         <button
           type="button"
-          className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md text-[12px] border border-border/60 bg-transparent text-foreground hover:border-border focus:outline-hidden focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors data-[state=open]:border-primary/40 data-[state=open]:ring-1 data-[state=open]:ring-primary/40 ${className}`}
+          className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md text-sm border border-border/60 bg-transparent text-foreground hover:border-border focus:outline-hidden focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors data-[state=open]:border-primary/40 data-[state=open]:ring-1 data-[state=open]:ring-primary/40 ${className}`}
         >
           <span className="truncate text-left">
             {selected ? render(selected) : (placeholder ?? ' ')}
@@ -64,7 +64,7 @@ export function Select<T extends string>({
               <DropdownMenuPrimitive.RadioItem
                 key={opt.value}
                 value={opt.value}
-                className="relative w-full flex items-center justify-between gap-2 pl-2.5 pr-2 py-1.5 rounded text-[12px] cursor-default outline-hidden transition-colors data-highlighted:bg-accent text-fg-fade-85 data-[state=checked]:text-foreground"
+                className="relative w-full flex items-center justify-between gap-2 pl-2.5 pr-2 py-1.5 rounded-md text-sm cursor-default outline-hidden transition-colors data-highlighted:bg-accent text-fg-fade-85 data-[state=checked]:text-foreground"
               >
                 <span className="truncate text-left">{render(opt)}</span>
                 <DropdownMenuPrimitive.ItemIndicator>

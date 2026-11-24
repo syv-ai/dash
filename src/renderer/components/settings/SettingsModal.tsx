@@ -207,11 +207,11 @@ function SettingsCard({
       {(title || hint) && (
         <header className="mb-2 px-1 flex items-baseline justify-between gap-3">
           {title && (
-            <h4 className="text-[10px] font-semibold tracking-widest uppercase text-fg-fade-55">
+            <h4 className="text-xs font-semibold tracking-widest uppercase text-fg-fade-55">
               {title}
             </h4>
           )}
-          {hint && <span className="text-[10.5px] text-fg-fade-40 leading-none">{hint}</span>}
+          {hint && <span className="text-xs text-fg-fade-40 leading-none">{hint}</span>}
         </header>
       )}
       <div
@@ -241,7 +241,7 @@ function SettingsRow({
     <div className={`flex gap-4 px-4 py-3 ${align === 'start' ? 'items-start' : 'items-center'}`}>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <span className="text-[12.5px] text-foreground leading-snug">{label}</span>
+          <span className="text-base text-foreground leading-snug">{label}</span>
           {tooltip && (
             <Tooltip content={tooltip}>
               <span className="inline-flex cursor-help text-fg-fade-40 hover:text-fg-fade-70">
@@ -251,7 +251,7 @@ function SettingsRow({
           )}
         </div>
         {description && (
-          <div className="text-[11px] text-fg-fade-45 mt-1 leading-relaxed">{description}</div>
+          <div className="text-xs text-fg-fade-45 mt-1 leading-relaxed">{description}</div>
         )}
       </div>
       {control !== undefined && <div className="shrink-0">{control}</div>}
@@ -270,11 +270,9 @@ function SettingsBlock({
 }) {
   return (
     <div className="px-4 py-3 space-y-2">
-      {label && <span className="block text-[12.5px] text-foreground leading-snug">{label}</span>}
+      {label && <span className="block text-base text-foreground leading-snug">{label}</span>}
       <div>{children}</div>
-      {description && (
-        <div className="text-[11px] text-fg-fade-45 leading-relaxed">{description}</div>
-      )}
+      {description && <div className="text-xs text-fg-fade-45 leading-relaxed">{description}</div>}
     </div>
   );
 }
@@ -282,7 +280,7 @@ function SettingsBlock({
 function KeyCap({ label, highlighted = false }: { label: string; highlighted?: boolean }) {
   return (
     <kbd
-      className={`inline-flex items-center justify-center min-w-[24px] h-[24px] px-1.5 rounded-[5px] text-[11px] font-medium leading-none font-mono transition-colors duration-150 ${
+      className={`inline-flex items-center justify-center min-w-[24px] h-[24px] px-1.5 rounded-sm text-xs font-medium leading-none font-mono transition-colors duration-150 ${
         highlighted
           ? 'border border-primary/45 bg-primary/12 text-foreground shadow-[0_1px_0_1px_hsl(var(--primary)/0.18),inset_0_1px_0_hsl(var(--primary)/0.12)]'
           : 'border border-border/80 bg-linear-to-b from-white/6 to-transparent text-fg-fade-80 shadow-[0_1px_0_1px_hsl(var(--border)/0.4),inset_0_1px_0_hsl(var(--foreground)/0.04)]'
@@ -353,9 +351,7 @@ function KeyRecorder({
       }`}
     >
       {recording ? (
-        <span className="text-[11px] text-primary font-medium animate-pulse px-1">
-          Press keys...
-        </span>
+        <span className="text-xs text-primary font-medium animate-pulse px-1">Press keys...</span>
       ) : (
         <KeyCombo keys={keys} highlighted={modified} />
       )}
@@ -386,15 +382,15 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
       <SettingsCard title="Token usage">
         <div className="px-4 py-3">
           <div className="flex items-baseline gap-2">
-            <span className="font-mono text-[18px] tabular-nums text-foreground">
+            <span className="font-mono text-lg tabular-nums text-foreground">
               {formatTokens(globalTokenStats.totalTokens)}
             </span>
             <span className="text-fg-fade-40">·</span>
-            <span className="font-mono text-[18px] tabular-nums text-foreground">
+            <span className="font-mono text-lg tabular-nums text-foreground">
               {formatCost(globalTokenStats.totalCostUsd)}
             </span>
           </div>
-          <p className="mt-1 text-[11.5px] text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground">
             Total across {globalTokenStats.taskCount} task
             {globalTokenStats.taskCount === 1 ? '' : 's'} (cost computed from token counts).
           </p>
@@ -428,7 +424,7 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
             )}
           </div>
         ) : (
-          <p className="text-[11.5px] text-fg-fade-40 py-6 text-center">
+          <p className="text-sm text-fg-fade-40 py-6 text-center">
             Rate-limit data appears after the first API response.
           </p>
         )}
@@ -547,9 +543,9 @@ function ThresholdInputInline({
           onChange(raw === '' || !Number.isFinite(n) || n < 0 ? null : Math.min(100, n));
         }}
         placeholder={placeholder ?? 'Off'}
-        className="w-[80px] px-3 py-1.5 rounded-md text-[12px] text-right tabular-nums border border-border/60 bg-transparent text-foreground placeholder:text-fg-fade-30 focus:outline-hidden focus:ring-1 focus:ring-primary/40 focus:border-primary/40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        className="w-[80px] px-3 py-1.5 rounded-md text-sm text-right tabular-nums border border-border/60 bg-transparent text-foreground placeholder:text-fg-fade-30 focus:outline-hidden focus:ring-1 focus:ring-primary/40 focus:border-primary/40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />
-      <span className="text-[11px] text-fg-fade-40">%</span>
+      <span className="text-xs text-fg-fade-40">%</span>
     </div>
   );
 }
@@ -579,11 +575,11 @@ function OrchestratorAccessRow() {
       description={
         <>
           Lets a Claude Code session outside Dash create and drive tasks with{' '}
-          <code className="font-mono text-[11px]">dashctl</code>. Holi&rsquo;s Dash plugin finds it
-          by itself; elsewhere, run it by this path.
+          <code className="font-mono text-xs">dashctl</code>. Holi&rsquo;s Dash plugin finds it by
+          itself; elsewhere, run it by this path.
           {enabled && (
             <div className="mt-2 flex items-center gap-1 rounded-md border border-border/60 bg-background pl-2.5 pr-1 py-1">
-              <code className="flex-1 min-w-0 truncate font-mono text-[11px] text-fg-fade-80 select-all">
+              <code className="flex-1 min-w-0 truncate font-mono text-xs text-fg-fade-80 select-all">
                 {command}
               </code>
               <IconButton
@@ -663,26 +659,26 @@ function ClaudeCodeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) {
         <div className="min-w-0 flex-1">
           {claudeInfo?.installed ? (
             <>
-              <p className="text-[12.5px] font-medium text-foreground">
+              <p className="text-base font-medium text-foreground">
                 {claudeInfo.supported ? 'Claude Code detected' : 'Claude Code needs an update'}
               </p>
-              <p className="text-[11px] text-fg-fade-55 font-mono mt-1">{claudeInfo.version}</p>
+              <p className="text-xs text-fg-fade-55 font-mono mt-1">{claudeInfo.version}</p>
               {!claudeInfo.supported && (
-                <p className="text-[11px] text-fg-fade-55 leading-relaxed mt-1">
+                <p className="text-xs text-fg-fade-55 leading-relaxed mt-1">
                   Dash requires {claudeInfo.minVersion} or newer. Run{' '}
-                  <code className="px-1.5 py-0.5 rounded bg-accent/80 text-[10px] font-mono text-fg-fade-75">
+                  <code className="px-1.5 py-0.5 rounded-md bg-accent/80 text-xs font-mono text-fg-fade-75">
                     claude update
                   </code>
                 </p>
               )}
-              <p className="text-[10.5px] text-fg-fade-40 font-mono truncate">{claudeInfo.path}</p>
+              <p className="text-xs text-fg-fade-40 font-mono truncate">{claudeInfo.path}</p>
             </>
           ) : (
             <>
-              <p className="text-[12.5px] font-medium text-foreground">CLI not found</p>
-              <p className="text-[11px] text-fg-fade-55 leading-relaxed mt-1">
+              <p className="text-base font-medium text-foreground">CLI not found</p>
+              <p className="text-xs text-fg-fade-55 leading-relaxed mt-1">
                 Install with{' '}
-                <code className="px-1.5 py-0.5 rounded bg-accent/80 text-[10px] font-mono text-fg-fade-75">
+                <code className="px-1.5 py-0.5 rounded-md bg-accent/80 text-xs font-mono text-fg-fade-75">
                   npm install -g @anthropic-ai/claude-code
                 </code>
               </p>
@@ -746,7 +742,7 @@ function ClaudeCodeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) {
             href="https://code.claude.com/docs/en/env-vars"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-0.5 text-primary hover:underline normal-case tracking-normal text-[10.5px]"
+            className="inline-flex items-center gap-0.5 text-primary hover:underline normal-case tracking-normal text-xs"
           >
             Reference
             <ExternalLink size={9} strokeWidth={1.8} />
@@ -757,11 +753,11 @@ function ClaudeCodeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) {
           <div className="space-y-1.5">
             {entries.map(([key, value]) => (
               <div key={key} className="flex items-center gap-1.5">
-                <span className="flex-1 min-w-0 px-2.5 py-1.5 rounded-md text-[11.5px] font-mono border border-border/40 bg-[hsl(var(--surface-1))] text-fg-fade-85 truncate">
+                <span className="flex-1 min-w-0 px-2.5 py-1.5 rounded-md text-sm font-mono border border-border/40 bg-[hsl(var(--surface-1))] text-fg-fade-85 truncate">
                   {key}
                 </span>
-                <span className="text-fg-fade-30 text-[12px]">=</span>
-                <span className="flex-1 min-w-0 px-2.5 py-1.5 rounded-md text-[11.5px] font-mono border border-border/40 bg-[hsl(var(--surface-1))] text-fg-fade-85 truncate">
+                <span className="text-fg-fade-30 text-sm">=</span>
+                <span className="flex-1 min-w-0 px-2.5 py-1.5 rounded-md text-sm font-mono border border-border/40 bg-[hsl(var(--surface-1))] text-fg-fade-85 truncate">
                   {value}
                 </span>
                 <button
@@ -781,9 +777,9 @@ function ClaudeCodeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) {
                   if (e.key === 'Enter') addEntry();
                 }}
                 placeholder="VARIABLE_NAME"
-                className="flex-1 min-w-0 px-2.5 py-1.5 rounded-md text-[11.5px] font-mono border border-border/60 bg-transparent text-foreground placeholder:text-fg-fade-30 focus:outline-hidden focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
+                className="flex-1 min-w-0 px-2.5 py-1.5 rounded-md text-sm font-mono border border-border/60 bg-transparent text-foreground placeholder:text-fg-fade-30 focus:outline-hidden focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
               />
-              <span className="text-fg-fade-30 text-[12px]">=</span>
+              <span className="text-fg-fade-30 text-sm">=</span>
               <input
                 type="text"
                 value={newValue}
@@ -792,7 +788,7 @@ function ClaudeCodeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) {
                   if (e.key === 'Enter') addEntry();
                 }}
                 placeholder="value"
-                className="flex-1 min-w-0 px-2.5 py-1.5 rounded-md text-[11.5px] font-mono border border-border/60 bg-transparent text-foreground placeholder:text-fg-fade-30 focus:outline-hidden focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
+                className="flex-1 min-w-0 px-2.5 py-1.5 rounded-md text-sm font-mono border border-border/60 bg-transparent text-foreground placeholder:text-fg-fade-30 focus:outline-hidden focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
               />
               <button
                 onClick={addEntry}
@@ -951,7 +947,7 @@ export function SettingsModal({
           aria-label="Settings sections"
         >
           <div className="px-5 pt-5 pb-3 flex items-center justify-between">
-            <h2 className="text-[13px] font-semibold text-foreground tracking-tight">Settings</h2>
+            <h2 className="text-base font-semibold text-foreground tracking-tight">Settings</h2>
             <SettingsCloseButton />
           </div>
 
@@ -974,7 +970,7 @@ export function SettingsModal({
               {NAV_GROUPS.map((group) => (
                 <div key={group.label}>
                   <div className="px-3 pt-2 pb-1.5">
-                    <span className="text-[9.5px] font-semibold tracking-[0.14em] uppercase text-muted-fade-70 select-none">
+                    <span className="text-xs font-semibold tracking-[0.14em] uppercase text-muted-fade-70 select-none">
                       {group.label}
                     </span>
                   </div>
@@ -992,7 +988,7 @@ export function SettingsModal({
                               else navItemRefs.current.delete(item.id);
                             }}
                             onClick={() => setTab(item.id)}
-                            className={`group relative w-full flex items-center gap-2.5 pl-3 pr-2.5 py-[7px] rounded-lg text-[12.5px] transition-colors duration-150 ${
+                            className={`group relative w-full flex items-center gap-2.5 pl-3 pr-2.5 py-[7px] rounded-lg text-base transition-colors duration-150 ${
                               active
                                 ? 'text-foreground font-medium'
                                 : 'text-muted-foreground hover:text-foreground sidebar-row-hover'
@@ -1021,10 +1017,10 @@ export function SettingsModal({
             </div>
           </div>
           <div className="px-5 py-3 border-t border-border/30 flex items-center justify-between">
-            <span className="text-[10px] font-medium tracking-widest uppercase text-muted-fade-45">
+            <span className="text-xs font-medium tracking-widest uppercase text-muted-fade-45">
               Dash
             </span>
-            <span className="text-[10px] font-mono text-muted-fade-55">
+            <span className="text-xs font-mono text-muted-fade-55">
               {appVersion ? `v${appVersion}` : '…'}
             </span>
           </div>
@@ -1036,10 +1032,10 @@ export function SettingsModal({
             <div className="px-8 py-7">
               {/* Section header */}
               <div className="mb-6 animate-fade-in" key={`hdr-${tab}`}>
-                <h3 className="text-[19px] font-semibold text-foreground tracking-tight leading-tight">
+                <h3 className="text-xl font-semibold text-foreground tracking-tight leading-tight">
                   {activeNav.label}
                 </h3>
-                <p className="text-[12.5px] text-fg-fade-50 mt-1.5 leading-relaxed">
+                <p className="text-base text-fg-fade-50 mt-1.5 leading-relaxed">
                   {activeNav.description}
                 </p>
               </div>
@@ -1099,7 +1095,7 @@ export function SettingsModal({
                         onChange={(e) => onCommitAttributionChange(e.target.value)}
                         readOnly={commitAttribution === undefined}
                         rows={3}
-                        className={`w-full px-3 py-2.5 rounded-lg text-[12px] font-mono border bg-transparent resize-none ${
+                        className={`w-full px-3 py-2.5 rounded-lg text-sm font-mono border bg-transparent resize-none ${
                           commitAttribution === undefined
                             ? 'border-border/40 text-fg-fade-40 cursor-default'
                             : 'border-border/60 text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary/40 focus:border-primary/40'
@@ -1155,7 +1151,7 @@ export function SettingsModal({
                       <SettingsBlock label="Custom IDE command">
                         <div className="space-y-3">
                           <div>
-                            <label className="block text-[10.5px] text-fg-fade-55 mb-1.5">
+                            <label className="block text-xs text-fg-fade-55 mb-1.5">
                               Executable path
                             </label>
                             <div className="flex gap-2">
@@ -1166,7 +1162,7 @@ export function SettingsModal({
                                   onCustomIDEChange({ ...customIDE, path: e.target.value })
                                 }
                                 placeholder="/Applications/MyIDE.app/Contents/MacOS/myide"
-                                className="flex-1 px-3 py-2 text-[11.5px] rounded-md border border-border/60 bg-background text-foreground placeholder:text-fg-fade-40 focus:outline-hidden focus:ring-1 focus:ring-primary/40 font-mono"
+                                className="flex-1 px-3 py-2 text-sm rounded-md border border-border/60 bg-background text-foreground placeholder:text-fg-fade-40 focus:outline-hidden focus:ring-1 focus:ring-primary/40 font-mono"
                               />
                               <button
                                 onClick={() => {
@@ -1181,7 +1177,7 @@ export function SettingsModal({
                                     }
                                   })();
                                 }}
-                                className="px-3 py-2 text-[11.5px] rounded-md border border-border/60 text-fg-fade-80 hover:bg-accent/40 hover:text-foreground flex items-center gap-1.5"
+                                className="px-3 py-2 text-sm rounded-md border border-border/60 text-fg-fade-80 hover:bg-accent/40 hover:text-foreground flex items-center gap-1.5"
                               >
                                 <FolderOpen size={12} strokeWidth={1.8} />
                                 Browse
@@ -1189,7 +1185,7 @@ export function SettingsModal({
                             </div>
                           </div>
                           <div>
-                            <label className="block text-[10.5px] text-fg-fade-55 mb-1.5">
+                            <label className="block text-xs text-fg-fade-55 mb-1.5">
                               Arguments (one per line)
                             </label>
                             <textarea
@@ -1204,9 +1200,9 @@ export function SettingsModal({
                               }
                               rows={3}
                               placeholder={'--new-window\n{path}'}
-                              className="w-full px-3 py-2 text-[11.5px] rounded-md border border-border/60 bg-background text-foreground placeholder:text-fg-fade-40 focus:outline-hidden focus:ring-1 focus:ring-primary/40 font-mono resize-y"
+                              className="w-full px-3 py-2 text-sm rounded-md border border-border/60 bg-background text-foreground placeholder:text-fg-fade-40 focus:outline-hidden focus:ring-1 focus:ring-primary/40 font-mono resize-y"
                             />
-                            <p className="text-[10.5px] text-fg-fade-45 mt-1.5 leading-relaxed">
+                            <p className="text-xs text-fg-fade-45 mt-1.5 leading-relaxed">
                               Use <code className="text-fg-fade-65">{'{path}'}</code> to place the
                               folder anywhere; otherwise it&apos;s appended.
                             </p>
@@ -1239,7 +1235,7 @@ export function SettingsModal({
                             <button
                               key={sound}
                               onClick={() => onNotificationSoundChange(sound)}
-                              className={`px-3 py-1.5 rounded-md text-[11.5px] border transition-all duration-150 ${
+                              className={`px-3 py-1.5 rounded-md text-sm border transition-all duration-150 ${
                                 isActive
                                   ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20 font-medium'
                                   : 'border-border/60 text-fg-fade-60 hover:bg-accent/40 hover:text-foreground'
@@ -1274,16 +1270,16 @@ export function SettingsModal({
                         <Sparkles size={20} strokeWidth={1.5} className="text-primary" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-[14px] font-semibold text-foreground tracking-tight">
+                        <p className="text-base font-semibold text-foreground tracking-tight">
                           Dash
                         </p>
-                        <p className="text-[11.5px] text-muted-foreground font-mono mt-0.5">
+                        <p className="text-sm text-muted-foreground font-mono mt-0.5">
                           {appVersion ? `v${appVersion}` : 'version loading…'}
                         </p>
                       </div>
                     </div>
                   </div>
-                  <p className="text-[11.5px] text-muted-foreground leading-relaxed px-1">
+                  <p className="text-sm text-muted-foreground leading-relaxed px-1">
                     A multi-task desktop for Claude Code, built by{' '}
                     <a
                       href="https://syv.ai"
@@ -1320,10 +1316,10 @@ export function SettingsModal({
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-[12.5px] font-medium text-foreground">
+                        <p className="text-base font-medium text-foreground">
                           {updateHeadline(updateStatus)}
                         </p>
-                        <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                        <p className="text-xs text-muted-foreground font-mono mt-0.5">
                           {appVersion ? `Current v${appVersion}` : 'Loading…'}
                           {updateStatus?.lastCheckAt
                             ? ` · checked ${formatCheckedAt(updateStatus.lastCheckAt)}`
@@ -1362,10 +1358,10 @@ export function SettingsModal({
 
                     {updateStatus?.lastError && (
                       <div className="px-4 pb-3.5 -mt-1">
-                        <p className="text-[11px] text-[hsl(var(--destructive))] leading-snug">
+                        <p className="text-xs text-[hsl(var(--destructive))] leading-snug">
                           {updateStatus.lastError}
                         </p>
-                        <p className="text-[10.5px] text-muted-foreground mt-0.5">
+                        <p className="text-xs text-muted-foreground mt-0.5">
                           Details are in logs/updater.log in your Dash data folder.
                         </p>
                       </div>
@@ -1379,7 +1375,7 @@ export function SettingsModal({
                               `https://github.com/syv-ai/dash/releases/tag/v${updateStatus.availableVersion}`,
                             );
                           }}
-                          className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors duration-150"
+                          className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors duration-150"
                         >
                           Release notes for v{updateStatus.availableVersion}
                         </button>
@@ -1388,7 +1384,7 @@ export function SettingsModal({
 
                     {updateStatus && !updateStatus.initialized && (
                       <div className="px-4 pb-3.5 -mt-1">
-                        <p className="text-[11px] text-muted-foreground leading-snug">
+                        <p className="text-xs text-muted-foreground leading-snug">
                           Updates are disabled in development builds.
                         </p>
                       </div>
@@ -1436,7 +1432,7 @@ export function SettingsModal({
                       }
                     />
                     <SettingsBlock>
-                      <div className="text-[11px] text-muted-foreground leading-relaxed space-y-1.5">
+                      <div className="text-xs text-muted-foreground leading-relaxed space-y-1.5">
                         <p>
                           <span className="font-medium text-fg-fade-80">What we collect:</span> app
                           start/close, session duration, daily active usage, project and task
@@ -1526,7 +1522,7 @@ export function SettingsModal({
                                 ))}
                               </div>
                               <div className="flex items-center justify-between gap-2">
-                                <span className="text-[10.5px] font-medium truncate text-fg-fade-85">
+                                <span className="text-xs font-medium truncate text-fg-fade-85">
                                   {t.name}
                                 </span>
                                 {t.id === 'default' && (
@@ -1568,7 +1564,7 @@ export function SettingsModal({
                           max={WEBGL_HELD_MAX}
                           aria-label="Terminals kept ready"
                         />
-                        <span className="w-5 text-right text-[12.5px] tabular-nums text-foreground">
+                        <span className="w-5 text-right text-base tabular-nums text-foreground">
                           {webglHeldDraft}
                         </span>
                       </div>
@@ -1625,7 +1621,7 @@ export function SettingsModal({
                     const modifiedCount = Object.values(keybindings).filter(isModified).length;
                     return (
                       <div className="flex items-center justify-between -mt-1">
-                        <p className="text-[11.5px] text-muted-foreground">
+                        <p className="text-sm text-muted-foreground">
                           Click a shortcut to record a new binding.
                           {modifiedCount > 0 && (
                             <span className="ml-2 text-primary/85 font-medium">
@@ -1636,7 +1632,7 @@ export function SettingsModal({
                         <button
                           onClick={handleResetAll}
                           disabled={modifiedCount === 0}
-                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] transition-all duration-150 ${
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-all duration-150 ${
                             modifiedCount === 0
                               ? 'text-fg-fade-25 cursor-default'
                               : 'text-fg-fade-65 hover:text-foreground hover:bg-accent/50'
@@ -1669,11 +1665,11 @@ export function SettingsModal({
                               />
                             )}
                             <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <span className="text-[12.5px] text-fg-fade-85 truncate">
+                              <span className="text-base text-fg-fade-85 truncate">
                                 {binding.label}
                               </span>
                               {modified && (
-                                <span className="text-[9.5px] font-medium tracking-[0.08em] uppercase text-primary/90 px-1.5 py-0.5 rounded-md bg-primary/10 border border-primary/20 shrink-0">
+                                <span className="text-xs font-medium tracking-[0.08em] uppercase text-primary/90 px-1.5 py-0.5 rounded-md bg-primary/10 border border-primary/20 shrink-0">
                                   Modified
                                 </span>
                               )}
@@ -1710,12 +1706,12 @@ export function SettingsModal({
                       { label: 'Previous active task', keys: ['Ctrl', '⇧', '⇥'] },
                     ].map(({ label, keys }) => (
                       <div key={label} className="flex items-center justify-between px-4 py-2.5">
-                        <span className="text-[12.5px] text-fg-fade-80">{label}</span>
+                        <span className="text-base text-fg-fade-80">{label}</span>
                         <div className="flex items-center gap-[3px]">
                           {keys.map((k) => (
                             <kbd
                               key={k}
-                              className="min-w-[22px] h-[22px] flex items-center justify-center rounded-md bg-accent/60 text-[11px] text-fg-fade-70 font-mono px-1.5"
+                              className="min-w-[22px] h-[22px] flex items-center justify-center rounded-md bg-accent/60 text-xs text-fg-fade-70 font-mono px-1.5"
                             >
                               {k}
                             </kbd>
@@ -1749,31 +1745,31 @@ function SettingsCloseButton() {
 
 function RtkStatusCardBody({ status }: { status: RtkStatus | null }) {
   if (!status) {
-    return <p className="text-[11px] text-fg-fade-60">Checking…</p>;
+    return <p className="text-xs text-fg-fade-60">Checking…</p>;
   }
   if (status.installed) {
     return (
       <div className="space-y-0.5">
-        <p className="text-[11px] text-fg-fade-60 font-mono">
+        <p className="text-xs text-fg-fade-60 font-mono">
           {status.version}
           <span className="ml-2 text-fg-fade-40">
             ({status.source === 'managed' ? 'managed by Dash' : 'on $PATH'})
           </span>
         </p>
-        <p className="text-[11px] text-fg-fade-40 font-mono truncate">{status.path}</p>
+        <p className="text-xs text-fg-fade-40 font-mono truncate">{status.path}</p>
       </div>
     );
   }
   if (status.downloadable) {
     return (
-      <p className="text-[11px] text-fg-fade-60 leading-relaxed">
+      <p className="text-xs text-fg-fade-60 leading-relaxed">
         Not installed. Dash can fetch the latest release directly — no sudo, no global $PATH
         changes, binary stays scoped to this app.
       </p>
     );
   }
   return (
-    <p className="text-[11px] text-fg-fade-60 leading-relaxed">
+    <p className="text-xs text-fg-fade-60 leading-relaxed">
       Not installed, and no prebuilt release is available for this platform. Install manually from{' '}
       <a
         href="https://github.com/rtk-ai/rtk"
@@ -1860,14 +1856,10 @@ function AddOnAccordion({
         <StatusOrb state={status} />
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-2">
-            <span className="text-[13px] font-medium text-foreground">{title}</span>
-            <span className="text-[10.5px] text-fg-fade-45 uppercase tracking-wide">
-              {statusLabel}
-            </span>
+            <span className="text-base font-medium text-foreground">{title}</span>
+            <span className="text-xs text-fg-fade-45 uppercase tracking-wide">{statusLabel}</span>
           </div>
-          {subtitle && (
-            <p className="text-[11px] text-fg-fade-50 mt-0.5 leading-relaxed">{subtitle}</p>
-          )}
+          {subtitle && <p className="text-xs text-fg-fade-50 mt-0.5 leading-relaxed">{subtitle}</p>}
         </div>
         <ChevronDown
           size={14}
@@ -1916,7 +1908,7 @@ function RtkSection({
 
   return (
     <div className="space-y-5">
-      <p className="text-[11.5px] text-fg-fade-65 leading-relaxed">
+      <p className="text-sm text-fg-fade-65 leading-relaxed">
         Typically cuts <b>60–90% of tokens</b> per command. When enabled, Dash injects RTK&rsquo;s
         PreToolUse hook into every task automatically.{' '}
         <a
@@ -1959,16 +1951,16 @@ function RtkSection({
           <button
             onClick={onDownload}
             disabled={installing}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] border border-primary/40 bg-primary/8 text-foreground hover:bg-primary/12 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm border border-primary/40 bg-primary/8 text-foreground hover:bg-primary/12 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download size={12} strokeWidth={1.8} />
             {installLabel}
           </button>
           {progress?.phase === 'error' && (
-            <p className="text-[11px] text-destructive mt-2">{progress.error}</p>
+            <p className="text-xs text-destructive mt-2">{progress.error}</p>
           )}
           {progress?.phase === 'done' && (
-            <p className="text-[11px] text-[hsl(var(--git-added))] mt-2">
+            <p className="text-xs text-[hsl(var(--git-added))] mt-2">
               Installed {progress.version ?? ''} — you can enable it below.
             </p>
           )}
@@ -1977,7 +1969,7 @@ function RtkSection({
 
       {/* Enable toggle (requires install) */}
       <div>
-        <label className="block text-[12px] font-medium text-foreground mb-3">
+        <label className="block text-sm font-medium text-foreground mb-3">
           Inject RTK hook in tasks
         </label>
         <ToggleSwitch
@@ -1986,14 +1978,14 @@ function RtkSection({
           disabled={!status?.installed}
           label="Compress Bash output via rtk before Claude reads it"
         />
-        <p className="text-[10px] text-fg-fade-80 mt-2">
+        <p className="text-xs text-fg-fade-80 mt-2">
           Takes effect on the next command in every running task — no restart needed. Dash writes
           the hook into each task&rsquo;s local settings; your global{' '}
-          <code className="px-1 py-0.5 rounded bg-accent/60 text-[9px] font-mono">
+          <code className="px-1 py-0.5 rounded-md bg-accent/60 text-xs font-mono">
             ~/.claude/settings.json
           </code>{' '}
           is not modified. Do not also run{' '}
-          <code className="px-1 py-0.5 rounded bg-accent/60 text-[9px] font-mono">rtk init -g</code>{' '}
+          <code className="px-1 py-0.5 rounded-md bg-accent/60 text-xs font-mono">rtk init -g</code>{' '}
           or the hook will run twice.
         </p>
       </div>
@@ -2002,19 +1994,19 @@ function RtkSection({
           `ls -la /tmp` payload and renders the rewrite it would emit. */}
       {status?.installed && (
         <div>
-          <label className="block text-[12px] font-medium text-foreground mb-3">Verify</label>
+          <label className="block text-sm font-medium text-foreground mb-3">Verify</label>
           <button
             onClick={() => {
               void runTest();
             }}
             disabled={testing}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] border border-border/60 text-fg-fade-80 hover:bg-accent/40 hover:text-foreground transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm border border-border/60 text-fg-fade-80 hover:bg-accent/40 hover:text-foreground transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {testing ? 'Testing…' : 'Test RTK'}
           </button>
-          <p className="text-[10px] text-fg-fade-80 mt-2">
+          <p className="text-xs text-fg-fade-80 mt-2">
             Pipes a synthetic{' '}
-            <code className="px-1 py-0.5 rounded bg-accent/60 text-[9px] font-mono">
+            <code className="px-1 py-0.5 rounded-md bg-accent/60 text-xs font-mono">
               git status
             </code>{' '}
             through the same rtk binary Dash hands to Claude. Green means rtk rewrote the command —
@@ -2037,8 +2029,8 @@ function RtkTestResultCard({ result }: { result: RtkTestResult }) {
       >
         <AlertCircle size={14} className="text-destructive mt-0.5" strokeWidth={1.8} />
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-medium text-destructive">Test failed</p>
-          <p className="text-[11px] text-fg-fade-70 font-mono mt-1 break-all">{result.error}</p>
+          <p className="text-xs font-medium text-destructive">Test failed</p>
+          <p className="text-xs text-fg-fade-70 font-mono mt-1 break-all">{result.error}</p>
         </div>
       </div>
     );
@@ -2057,13 +2049,11 @@ function RtkTestResultCard({ result }: { result: RtkTestResult }) {
             strokeWidth={1.8}
           />
           <div className="min-w-0 flex-1 space-y-1">
-            <p className="text-[11px] font-medium text-foreground">
+            <p className="text-xs font-medium text-foreground">
               rtk blocked this command (exit 2).
             </p>
             {result.outcome.stderr && (
-              <p className="text-[11px] text-fg-fade-70 font-mono break-all">
-                {result.outcome.stderr}
-              </p>
+              <p className="text-xs text-fg-fade-70 font-mono break-all">{result.outcome.stderr}</p>
             )}
           </div>
         </div>
@@ -2085,10 +2075,10 @@ function RtkTestResultCard({ result }: { result: RtkTestResult }) {
           <div className="flex items-start gap-3">
             <Check size={14} className="text-[hsl(var(--git-added))] mt-0.5" strokeWidth={1.8} />
             <div className="min-w-0 flex-1 space-y-1">
-              <p className="text-[11px] font-medium text-foreground">
+              <p className="text-xs font-medium text-foreground">
                 Compression active — rtk would rewrite this command.
               </p>
-              <div className="text-[11px] text-fg-fade-70 font-mono space-y-0.5">
+              <div className="text-xs text-fg-fade-70 font-mono space-y-0.5">
                 <div>
                   <span className="text-fg-fade-40">in: </span>
                   {result.testedCommand}
@@ -2103,11 +2093,11 @@ function RtkTestResultCard({ result }: { result: RtkTestResult }) {
           {okDiff && (
             <div className="space-y-2 pt-2 border-t border-border/40">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-medium uppercase tracking-wide text-fg-fade-60">
+                <span className="text-xs font-medium uppercase tracking-wide text-fg-fade-60">
                   Actual output diff
                 </span>
                 {okDiff.rawBytes > 0 && (
-                  <span className="text-[10px] font-mono text-[hsl(var(--git-added))]">
+                  <span className="text-xs font-mono text-[hsl(var(--git-added))]">
                     {okDiff.rawBytes} → {okDiff.compressedBytes} bytes
                     {savedBytes > 0 && ` (−${savedPct}%)`}
                     {okDiff.truncated && ' · truncated'}
@@ -2126,12 +2116,12 @@ function RtkTestResultCard({ result }: { result: RtkTestResult }) {
               className="space-y-1 pt-2 border-t border-border/40"
               style={{ borderColor: 'hsl(var(--git-modified) / 0.3)' }}
             >
-              <span className="text-[10px] font-medium uppercase tracking-wide text-[hsl(var(--git-modified))]">
+              <span className="text-xs font-medium uppercase tracking-wide text-[hsl(var(--git-modified))]">
                 Couldn&rsquo;t capture diff
               </span>
-              <p className="text-[11px] text-fg-fade-70">{failedDiff.reason}</p>
+              <p className="text-xs text-fg-fade-70">{failedDiff.reason}</p>
               {failedDiff.stderr && (
-                <pre className="text-[10px] text-fg-fade-50 font-mono whitespace-pre-wrap wrap-break-word">
+                <pre className="text-xs text-fg-fade-50 font-mono whitespace-pre-wrap wrap-break-word">
                   {failedDiff.stderr}
                 </pre>
               )}
@@ -2153,10 +2143,10 @@ function RtkTestResultCard({ result }: { result: RtkTestResult }) {
             strokeWidth={1.8}
           />
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-medium text-foreground">
+            <p className="text-xs font-medium text-foreground">
               rtk ran without crashing, but chose not to rewrite this command.
             </p>
-            <p className="text-[10px] text-fg-fade-60 mt-1">
+            <p className="text-xs text-fg-fade-60 mt-1">
               That&rsquo;s valid — rtk only compresses commands in its rewrite list. The hook
               plumbing is working; it would compress commands like{' '}
               <code className="text-fg-fade-80">git status</code> or{' '}
@@ -2186,13 +2176,13 @@ function OutputPanel({
   const displayBody = body.trim().length > 0 ? body : '(empty)';
   return (
     <div
-      className={`rounded-md border text-[10px] font-mono leading-[1.35] overflow-hidden ${
+      className={`rounded-md border text-xs font-mono leading-[1.35] overflow-hidden ${
         accented ? 'border-[hsl(var(--git-added))]/40' : 'border-border/50'
       }`}
       style={{ background: 'hsl(var(--surface-1))' }}
     >
       <div
-        className={`px-2 py-1 text-[9px] font-sans uppercase tracking-wide ${
+        className={`px-2 py-1 text-xs font-sans uppercase tracking-wide ${
           accented
             ? 'text-[hsl(var(--git-added))] bg-[hsl(var(--git-added))]/5'
             : 'text-fg-fade-50 bg-[hsl(var(--surface-2))]'

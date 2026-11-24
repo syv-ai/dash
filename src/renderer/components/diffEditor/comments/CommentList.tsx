@@ -114,15 +114,15 @@ export function MenuSection({
               <ChevronRight size={12} strokeWidth={2} className="text-muted-fade-70 shrink-0" />
             )}
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`} aria-hidden />
-            <span className="text-[11px] font-semibold tracking-tight text-fg-fade-90 truncate">
+            <span className="text-xs font-semibold tracking-tight text-fg-fade-90 truncate">
               {title}
             </span>
             {badge && (
-              <span className="shrink-0 text-[9px] uppercase tracking-wider font-medium text-primary/75">
+              <span className="shrink-0 text-xs uppercase tracking-wider font-medium text-primary/75">
                 {badge}
               </span>
             )}
-            <span className="text-[10.5px] text-muted-fade-60 tabular-nums shrink-0">{count}</span>
+            <span className="text-xs text-muted-fade-60 tabular-nums shrink-0">{count}</span>
           </button>
           {actions}
         </div>
@@ -155,7 +155,7 @@ export function SectionAction({
       type="button"
       onClick={onClick}
       title={title}
-      className={`shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-medium active:scale-[0.98] transition ${toneClass}`}
+      className={`shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium active:scale-[0.98] transition ${toneClass}`}
     >
       {icon}
       {label}
@@ -210,12 +210,12 @@ function FileGroup({
   return (
     <div className={marginTop ? 'mt-2' : ''}>
       <div className="flex items-baseline gap-2 px-2 py-1">
-        <span className="min-w-0 font-mono text-[10.5px] break-all">
+        <span className="min-w-0 font-mono text-xs break-all">
           {dir && <span className="text-muted-fade-45">{dir}</span>}
           <span className="text-fg-fade-80">{base}</span>
         </span>
         {isCurrent && (
-          <span className="shrink-0 text-[9px] uppercase tracking-wider font-medium text-primary/75">
+          <span className="shrink-0 text-xs uppercase tracking-wider font-medium text-primary/75">
             current
           </span>
         )}
@@ -252,12 +252,12 @@ function FileGroup({
                   title="Jump to this comment"
                   className={`flex-1 min-w-0 flex flex-col gap-1 px-2.5 py-1.5 text-left rounded-md ${renderActions ? 'pr-20' : 'pr-14'}`}
                 >
-                  <span className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums text-muted-fade-70 shrink-0">
+                  <span className="flex items-center gap-1.5 font-mono text-xs tabular-nums text-muted-fade-70 shrink-0">
                     {lineLabel}
                     {renderTag?.(c)}
                   </span>
                   <span
-                    className={`text-[12.5px] leading-snug whitespace-pre-wrap wrap-break-word ${
+                    className={`text-base leading-snug whitespace-pre-wrap wrap-break-word ${
                       c.sent ? 'text-fg-fade-55' : 'text-fg-fade-90'
                     }`}
                   >
@@ -325,7 +325,7 @@ export function ActionButton({
       }}
       aria-label={label}
       title={label}
-      className={`p-1 rounded transition ${toneClass}`}
+      className={`p-1 rounded-md transition ${toneClass}`}
     >
       {children}
     </button>

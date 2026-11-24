@@ -90,7 +90,7 @@ function PortRow({
   } · ${statusText}`;
 
   return (
-    <li className="group/row flex items-center gap-1.5 pl-1.5 pr-0.5 py-1.5 rounded hover:bg-accent">
+    <li className="group/row flex items-center gap-1.5 pl-1.5 pr-0.5 py-1.5 rounded-md hover:bg-accent">
       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`} aria-hidden />
       <Tooltip content={tooltip}>
         <button
@@ -104,10 +104,8 @@ function PortRow({
           }}
           className="flex-1 min-w-0 flex items-center gap-2 text-left"
         >
-          <span className="text-[11.5px] text-foreground truncate min-w-0 flex-1">
-            {port.label}
-          </span>
-          <span className="font-mono text-[10.5px] text-muted-foreground tabular-nums shrink-0">
+          <span className="text-sm text-foreground truncate min-w-0 flex-1">{port.label}</span>
+          <span className="font-mono text-xs text-muted-foreground tabular-nums shrink-0">
             :{port.hostPort}
           </span>
         </button>
@@ -120,7 +118,7 @@ function PortRow({
             onClick={() => {
               void runStop();
             }}
-            className={`p-[2px] rounded text-muted-fade-40 hover:bg-accent/60 transition-colors disabled:opacity-40 ${
+            className={`p-[2px] rounded-md text-muted-fade-40 hover:bg-accent/60 transition-colors disabled:opacity-40 ${
               showStop ? 'hover:text-destructive' : 'hover:text-foreground'
             }`}
           >
@@ -141,7 +139,7 @@ function PortRow({
             onClick={() => {
               void window.electronAPI.portsServiceLogs(taskId, port);
             }}
-            className="p-[2px] rounded text-muted-fade-40 hover:text-foreground hover:bg-accent/60 transition-colors"
+            className="p-[2px] rounded-md text-muted-fade-40 hover:text-foreground hover:bg-accent/60 transition-colors"
           >
             <ScrollText size={10} strokeWidth={2} />
           </button>
@@ -153,7 +151,7 @@ function PortRow({
           onClick={() => {
             void window.electronAPI.portsOpenUrl(port.hostPort);
           }}
-          className="p-[2px] rounded text-muted-fade-40 hover:text-foreground hover:bg-accent/60 transition-colors"
+          className="p-[2px] rounded-md text-muted-fade-40 hover:text-foreground hover:bg-accent/60 transition-colors"
         >
           <ExternalLink size={10} strokeWidth={2} />
         </button>

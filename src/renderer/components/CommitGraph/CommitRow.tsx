@@ -61,7 +61,7 @@ function RefBadge({
     </>
   );
 
-  const badgeClass = `inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold mr-1.5 leading-none ${clickable ? 'cursor-pointer hover:brightness-125' : ''}`;
+  const badgeClass = `inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold mr-1.5 leading-none ${clickable ? 'cursor-pointer hover:brightness-125' : ''}`;
 
   if (color) {
     return (
@@ -199,19 +199,19 @@ export function CommitRow({
           })()}
 
         {/* Subject */}
-        <span className="truncate text-[12px] text-foreground">{commit.subject}</span>
+        <span className="truncate text-sm text-foreground">{commit.subject}</span>
       </div>
 
       {/* Author */}
       {authorUrl ? (
         <GithubLink
           href={authorUrl}
-          className="text-[10px] text-muted-fade-70 shrink-0 truncate max-w-[120px]"
+          className="text-xs text-muted-fade-70 shrink-0 truncate max-w-[120px]"
         >
           {commit.authorName}
         </GithubLink>
       ) : (
-        <span className="text-[10px] text-muted-fade-70 shrink-0 truncate max-w-[120px]">
+        <span className="text-xs text-muted-fade-70 shrink-0 truncate max-w-[120px]">
           {commit.authorName}
         </span>
       )}
@@ -220,18 +220,18 @@ export function CommitRow({
       {commitUrl ? (
         <GithubLink
           href={commitUrl}
-          className="text-[10px] font-mono text-muted-foreground shrink-0 tabular-nums"
+          className="text-xs font-mono text-muted-foreground shrink-0 tabular-nums"
         >
           {commit.shortHash}
         </GithubLink>
       ) : (
-        <span className="text-[10px] font-mono text-muted-foreground shrink-0 tabular-nums">
+        <span className="text-xs font-mono text-muted-foreground shrink-0 tabular-nums">
           {commit.shortHash}
         </span>
       )}
 
       {/* Relative date */}
-      <span className="text-[10px] text-muted-fade-70 shrink-0 w-14 text-right tabular-nums">
+      <span className="text-xs text-muted-fade-70 shrink-0 w-14 text-right tabular-nums">
         {formatRelativeDate(commit.authorDate)}
       </span>
     </div>

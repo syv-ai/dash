@@ -145,15 +145,12 @@ function FileSection({
           {...rowEnterExit}
           transition={ROW_TRANSITION}
           style={{ overflow: 'hidden' }}
-          className="flex items-center gap-2 px-2 py-1.5 text-[11px] text-muted-foreground italic"
+          className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground italic"
         >
           <span className="flex-1">
             +{files.length - FOLDER_TRUNCATION_CAP} more in this folder
           </span>
-          <button
-            onClick={() => setShowAll(true)}
-            className="text-primary text-[11px] hover:underline"
-          >
+          <button onClick={() => setShowAll(true)} className="text-primary text-xs hover:underline">
             Show all
           </button>
         </motion.div>

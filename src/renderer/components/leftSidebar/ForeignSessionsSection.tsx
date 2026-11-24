@@ -76,7 +76,7 @@ export function ForeignSessionsSection({ project, onSelectTask }: ForeignSession
     <>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 w-full pl-3.5 pr-2 py-[5px] rounded-md text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center gap-1 w-full pl-3.5 pr-2 py-[5px] rounded-md text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         {open ? (
           <ChevronDown size={12} strokeWidth={2} />
@@ -100,7 +100,7 @@ export function ForeignSessionsSection({ project, onSelectTask }: ForeignSession
               return (
                 <div
                   key={key}
-                  className="group/foreign grid grid-cols-[14px_minmax(0,1fr)] -ml-2 pl-2 pr-2 py-[3px] rounded-md text-[13px] text-muted-fade-70 sidebar-row-hover"
+                  className="group/foreign grid grid-cols-[14px_minmax(0,1fr)] -ml-2 pl-2 pr-2 py-[3px] rounded-md text-base text-muted-fade-70 sidebar-row-hover"
                 >
                   <div className="row-start-1 col-start-1 self-center pt-[3px]">
                     <Tooltip content={dot.label}>
@@ -111,7 +111,7 @@ export function ForeignSessionsSection({ project, onSelectTask }: ForeignSession
                     <Tooltip content={row.cwd}>
                       <span className="truncate flex-1 min-w-0">{label}</span>
                     </Tooltip>
-                    <span className="text-[10.5px] text-muted-fade-50 shrink-0 group-hover/foreign:hidden">
+                    <span className="text-xs text-muted-fade-50 shrink-0 group-hover/foreign:hidden">
                       {row.id ? row.id : 'interactive'}
                       {row.startedAt
                         ? ` · ${formatRelativeTime(Math.floor(row.startedAt / 1000), Math.floor(Date.now() / 1000))}`

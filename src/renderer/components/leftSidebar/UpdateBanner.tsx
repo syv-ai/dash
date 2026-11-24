@@ -39,9 +39,9 @@ export function UpdateBanner() {
       <Shell>
         <div className="flex items-center gap-2">
           <Download size={14} strokeWidth={1.8} className="text-muted-foreground shrink-0" />
-          <span className="text-[11px] text-muted-foreground truncate">Downloading {version}…</span>
+          <span className="text-xs text-muted-foreground truncate">Downloading {version}…</span>
           {status.percent !== null && (
-            <span className="text-[11px] text-muted-fade-70 tabular-nums ml-auto">
+            <span className="text-xs text-muted-fade-70 tabular-nums ml-auto">
               {status.percent}%
             </span>
           )}
@@ -58,10 +58,10 @@ export function UpdateBanner() {
   if (status.state === 'ready' && !dismissed) {
     return (
       <Shell onClose={onClose}>
-        <p className="text-[11px] text-fg-fade-90 leading-snug pr-4">
+        <p className="text-xs text-fg-fade-90 leading-snug pr-4">
           {status.availableVersion ? `v${status.availableVersion}` : 'An update'} is ready.
         </p>
-        <p className="text-[10.5px] text-muted-foreground mt-0.5 leading-snug">
+        <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
           Your sessions re-attach after restarting.
         </p>
         <Button
@@ -90,14 +90,11 @@ export function UpdateBanner() {
             className="text-[hsl(var(--destructive))] shrink-0 mt-px"
           />
           <div className="min-w-0">
-            <p className="text-[11px] text-fg-fade-90 leading-snug">
+            <p className="text-xs text-fg-fade-90 leading-snug">
               {status.availableVersion ? `v${status.availableVersion}` : 'An update'} could not be
               downloaded.
             </p>
-            <p
-              className="text-[10.5px] text-muted-foreground mt-0.5 truncate"
-              title={strandedError}
-            >
+            <p className="text-xs text-muted-foreground mt-0.5 truncate" title={strandedError}>
               {strandedError}
             </p>
           </div>

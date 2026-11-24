@@ -85,7 +85,7 @@ export function VirtualFileList({ sections, filesVersion, scrollRef }: VirtualFi
     switch (row.kind) {
       case 'header':
         return (
-          <div className="px-3 pt-2 pb-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="px-3 pt-2 pb-1 font-mono text-xs uppercase tracking-wider text-muted-foreground">
             {row.label}
           </div>
         );
@@ -133,11 +133,11 @@ export function VirtualFileList({ sections, filesVersion, scrollRef }: VirtualFi
       case 'more':
         return (
           <div className="px-1 pb-0.5">
-            <div className="flex items-center gap-2 px-2 py-1.5 text-[11px] text-muted-foreground italic">
+            <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground italic">
               <span className="flex-1">+{row.hidden} more in this folder</span>
               <button
                 onClick={() => setShowAll((s) => new Set(s).add(`${section.id}:${row.folderPath}`))}
-                className="text-primary text-[11px] hover:underline"
+                className="text-primary text-xs hover:underline"
               >
                 Show all
               </button>

@@ -142,8 +142,8 @@ export function CommentsMenu({
         className="glass-popover w-[460px] max-h-[520px] flex flex-col p-0 overflow-hidden"
       >
         <div className="flex items-baseline justify-between px-4 pt-3 pb-2.5 border-b border-foreground/6 shrink-0">
-          <h3 className="text-[12px] font-semibold tracking-tight text-fg-fade-90">Comments</h3>
-          <span className="text-[10.5px] text-muted-fade-60 tabular-nums tracking-tight">
+          <h3 className="text-sm font-semibold tracking-tight text-fg-fade-90">Comments</h3>
+          <span className="text-xs text-muted-fade-60 tabular-nums tracking-tight">
             {totalUnsent + totalSent} total
           </span>
         </div>
@@ -168,14 +168,14 @@ export function CommentsMenu({
             />
           )}
           {noUnsent && totalSent === 0 && (
-            <div className="px-4 py-6 text-center text-[11px] italic text-muted-fade-55">
+            <div className="px-4 py-6 text-center text-xs italic text-muted-fade-55">
               No comments yet.
             </div>
           )}
         </div>
 
         <div className="flex items-center justify-between gap-3 px-3 py-2.5 border-t border-foreground/6 bg-foreground/2 shrink-0">
-          <span className="text-[10.5px] text-muted-fade-65 leading-tight">
+          <span className="text-xs text-muted-fade-65 leading-tight">
             {noUnsent ? (
               <>All caught up</>
             ) : (
@@ -194,7 +194,7 @@ export function CommentsMenu({
                 onEditAndSend();
               }}
               title="Edit the assembled prompt before sending"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-muted-fade-80 hover:text-foreground hover:bg-foreground/6 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-muted-fade-80 hover:text-foreground hover:bg-foreground/6 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
             >
               <Pencil size={11} strokeWidth={2.2} />
               <span>Edit</span>
@@ -206,7 +206,7 @@ export function CommentsMenu({
                 setOpen(false);
                 onSendAll();
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
             >
               <Send size={11} strokeWidth={2.2} />
               <span>Send all</span>
@@ -298,16 +298,16 @@ function SentSection({
       {views.map((v) => (
         <div key={v.scope} className="mt-1 first:mt-0">
           <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-0.5">
-            <span className="text-[9px] uppercase tracking-wider font-medium text-muted-fade-50">
+            <span className="text-xs uppercase tracking-wider font-medium text-muted-fade-50">
               {v.label}
             </span>
-            <span className="text-[9px] text-muted-fade-40 tabular-nums">{v.count}</span>
+            <span className="text-xs text-muted-fade-40 tabular-nums">{v.count}</span>
             {views.length > 1 && (
               <button
                 type="button"
                 onClick={() => onClearSent(v.scope)}
                 title={`Clear ${v.count} sent comment${v.count !== 1 ? 's' : ''} in ${v.label}`}
-                className="ml-auto shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-medium text-muted-fade-55 hover:text-destructive hover:bg-destructive/10 transition"
+                className="ml-auto shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded-md text-xs font-medium text-muted-fade-55 hover:text-destructive hover:bg-destructive/10 transition"
               >
                 <Trash2 size={9} strokeWidth={2.2} />
                 Clear

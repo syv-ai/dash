@@ -461,7 +461,7 @@ export function TerminalTabs({
             Only the transient close button floats absolutely in the right
             gutter so it never shifts the centered content off-center. */}
         <span className="flex items-center gap-1">
-          <span className="text-[11px] font-medium">{tab.label}</span>
+          <span className="text-xs font-medium">{tab.label}</span>
           {showDot && (
             // A running service is a steady state — solid green, not a pulsing
             // attention-grab. Shells keep the pulse. On hover the close button
@@ -477,7 +477,7 @@ export function TerminalTabs({
         </span>
         {closeable && (
           <button
-            className="absolute right-1 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded hidden group-hover/tab:flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            className="absolute right-1 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-md hidden group-hover/tab:flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             onClick={(e) => {
               e.stopPropagation();
               handleCloseTab(tab.id);
@@ -516,7 +516,7 @@ export function TerminalTabs({
           }`}
         >
           <Terminal size={12} strokeWidth={1.8} />
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em]">{label}</span>
+          <span className="text-xs font-semibold uppercase tracking-[0.08em]">{label}</span>
           {setupRun?.status === 'running' && (
             <Loader2 size={11} strokeWidth={1.8} className="animate-spin" />
           )}
@@ -557,7 +557,7 @@ export function TerminalTabs({
                 >
                   <DropdownMenuTrigger asChild>
                     <button
-                      className="flex items-center h-full px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
+                      className="flex items-center h-full px-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
                       aria-label={`${overflowTabs.length} more terminals`}
                     >
                       <ChevronsRight size={12} strokeWidth={2} />
@@ -568,7 +568,7 @@ export function TerminalTabs({
                 <DropdownMenuContent align="end" sideOffset={6}>
                   {overflowTabs.map((t) => (
                     <DropdownMenuItem key={t.id} onSelect={() => handleSelectTab(t.id)}>
-                      <span className="flex-1 text-[13px]">{t.label}</span>
+                      <span className="flex-1 text-base">{t.label}</span>
                       {livePtyIds.has(t.id) && (
                         <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--git-added))]" />
                       )}
@@ -589,7 +589,7 @@ export function TerminalTabs({
               }`}
               onClick={() => setSetupSelected(true)}
             >
-              <span className="text-[11px] font-medium">Setup</span>
+              <span className="text-xs font-medium">Setup</span>
               {setupRun.status === 'running' && (
                 <Loader2 size={10} strokeWidth={1.8} className="animate-spin" />
               )}
@@ -607,7 +607,7 @@ export function TerminalTabs({
             <Tooltip content="New terminal or wizard">
               <DropdownMenuTrigger asChild>
                 <button
-                  className="w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
+                  className="w-5 h-5 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
                   aria-label="New terminal or wizard"
                 >
                   <Plus size={11} strokeWidth={2} />
@@ -617,14 +617,14 @@ export function TerminalTabs({
             <DropdownMenuContent align="end" sideOffset={6}>
               <DropdownMenuItem onSelect={() => void handleAddTab()}>
                 <Terminal size={13} strokeWidth={1.8} />
-                <span className="text-[13px]">Terminal</span>
+                <span className="text-base">Terminal</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuLabel>Wizards</DropdownMenuLabel>
                 {WIZARDS.map((w) => (
                   <DropdownMenuItem key={w.id} onSelect={() => void handleLaunchWizard(w.id)}>
-                    <span className="flex-1 text-[13px]">{w.label}</span>
+                    <span className="flex-1 text-base">{w.label}</span>
                     {wizardDone[w.id] && (
                       <Check size={13} strokeWidth={2} className="text-[hsl(var(--git-added))]" />
                     )}
@@ -635,7 +635,7 @@ export function TerminalTabs({
           </DropdownMenu>
           <button
             onClick={onCollapse}
-            className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            className="p-1 mr-1 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
           >
             <ChevronDown size={12} strokeWidth={2} />
           </button>

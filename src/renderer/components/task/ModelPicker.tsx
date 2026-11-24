@@ -33,7 +33,7 @@ export function ModelPicker({
 }) {
   return (
     <div>
-      <label className="block text-[12px] font-medium text-fg-fade-70 mb-2">Model</label>
+      <label className="block text-sm font-medium text-fg-fade-70 mb-2">Model</label>
       <Select<TaskModel>
         value={value}
         onValueChange={onChange}
@@ -45,8 +45,8 @@ export function ModelPicker({
           </span>
         )}
       />
-      <p className="mt-1.5 text-[11px] text-muted-fade-50">{DESCRIPTIONS[value]}</p>
-      {helperText && <p className="mt-0.5 text-[11px] text-muted-fade-40">{helperText}</p>}
+      <p className="mt-1.5 text-xs text-muted-fade-50">{DESCRIPTIONS[value]}</p>
+      {helperText && <p className="mt-0.5 text-xs text-muted-fade-40">{helperText}</p>}
     </div>
   );
 }

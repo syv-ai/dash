@@ -90,7 +90,7 @@ function WizardBody({ onCreated }: { onCreated: (id: string) => void }) {
   return (
     <>
       <div className="flex items-center justify-between px-5 h-12 border-b border-border/40">
-        <h2 className="text-[14px] font-semibold text-foreground">New Project</h2>
+        <h2 className="text-base font-semibold text-foreground">New Project</h2>
         <button
           onClick={close}
           className="p-1.5 rounded-lg hover:bg-accent text-muted-fade-50 hover:text-foreground transition-all"
@@ -100,7 +100,7 @@ function WizardBody({ onCreated }: { onCreated: (id: string) => void }) {
       </div>
 
       {/* Stepper */}
-      <div className="flex items-center gap-2 px-5 py-3 text-[11px] border-b border-border/30">
+      <div className="flex items-center gap-2 px-5 py-3 text-xs border-b border-border/30">
         {STEP_ORDER.map((s, i) => (
           <React.Fragment key={s}>
             {i > 0 && <span className="text-muted-fade-30">—</span>}
@@ -146,14 +146,14 @@ function WizardBody({ onCreated }: { onCreated: (id: string) => void }) {
             if (idx > 0) setStep(STEP_ORDER[idx - 1]!);
           }}
           disabled={step === 'source'}
-          className="text-[13px] text-muted-fade-60 hover:text-foreground disabled:opacity-30"
+          className="text-base text-muted-fade-60 hover:text-foreground disabled:opacity-30"
         >
           ← Back
         </button>
         <button
           onClick={() => void handleCreate()}
           disabled={resolved === null || saving}
-          className="px-5 py-2 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 transition-all"
+          className="px-5 py-2 rounded-lg text-base font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 transition-all"
         >
           {saving ? 'Creating…' : 'Create project'}
         </button>

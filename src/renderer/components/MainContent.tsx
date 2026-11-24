@@ -64,15 +64,12 @@ function LinkedItemBadges({
             href={url}
             target="_blank"
             rel="noopener noreferrer"
-            className={`px-1.5 py-[2px] rounded-full text-[10px] font-medium transition-colors ${tone}`}
+            className={`px-1.5 py-[2px] rounded-full text-xs font-medium transition-colors ${tone}`}
           >
             #{item.id}
           </a>
         ) : (
-          <span
-            key={key}
-            className={`px-1.5 py-[2px] rounded-full text-[10px] font-medium ${tone}`}
-          >
+          <span key={key} className={`px-1.5 py-[2px] rounded-full text-xs font-medium ${tone}`}>
             #{item.id}
           </span>
         );
@@ -85,9 +82,7 @@ function LinkedItemBadges({
         );
       })}
       {overflow > 0 && (
-        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-          +{overflow} more
-        </span>
+        <span className="text-xs text-muted-foreground whitespace-nowrap">+{overflow} more</span>
       )}
     </div>
   );
@@ -162,8 +157,8 @@ export function MainContent({
             <div className="w-14 h-14 rounded-2xl bg-accent/60 flex items-center justify-center mx-auto mb-4">
               <FolderOpen size={22} className="text-muted-fade-40" strokeWidth={1.5} />
             </div>
-            <h2 className="text-[15px] font-semibold text-fg-fade-80 mb-1.5">Dash</h2>
-            <p className="text-[13px] text-muted-fade-60">Open a folder to get started</p>
+            <h2 className="text-lg font-semibold text-fg-fade-80 mb-1.5">Dash</h2>
+            <p className="text-base text-muted-fade-60">Open a folder to get started</p>
           </div>
         </div>
       </div>
@@ -209,7 +204,7 @@ export function MainContent({
           </button>
         </Tooltip>
         {activeTask && (
-          <div className="inline-flex items-center gap-2 font-mono text-[11px] text-muted-foreground min-w-0">
+          <div className="inline-flex items-center gap-2 font-mono text-xs text-muted-foreground min-w-0">
             <span className="truncate max-w-[200px]">{activeProject.name}</span>
             <span className="text-fg-fade-30">›</span>
             <span className="text-foreground font-medium truncate max-w-[260px]">
@@ -238,13 +233,13 @@ export function MainContent({
                 href={currentBranchUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-2 py-[3px] rounded-full bg-foreground/5 hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors font-mono text-[11px]"
+                className="inline-flex items-center gap-1.5 px-2 py-[3px] rounded-full bg-foreground/5 hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors font-mono text-xs"
               >
                 <BranchIcon size={11} strokeWidth={2} />
                 <span className="truncate max-w-[160px]">{currentBranch}</span>
               </a>
             ) : (
-              <span className="inline-flex items-center gap-1.5 px-2 py-[3px] rounded-full bg-foreground/5 text-muted-foreground font-mono text-[11px]">
+              <span className="inline-flex items-center gap-1.5 px-2 py-[3px] rounded-full bg-foreground/5 text-muted-foreground font-mono text-xs">
                 <BranchIcon size={11} strokeWidth={2} />
                 <span className="truncate max-w-[160px]">{currentBranch}</span>
               </span>
@@ -258,7 +253,7 @@ export function MainContent({
 
         {activeTask && modelName && (
           <Tooltip content="Model">
-            <span className="inline-flex items-center px-2 py-[3px] rounded-full bg-foreground/5 text-muted-foreground font-mono text-[11px]">
+            <span className="inline-flex items-center px-2 py-[3px] rounded-full bg-foreground/5 text-muted-foreground font-mono text-xs">
               <span className="truncate max-w-[180px]">{modelName}</span>
             </span>
           </Tooltip>
@@ -268,7 +263,7 @@ export function MainContent({
           <Tooltip content={openLabel}>
             <button
               onClick={onOpenIde}
-              className="w-6 h-6 rounded inline-flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors"
+              className="w-6 h-6 rounded-md inline-flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors"
             >
               <IdeIcon ideId={ideId} />
             </button>
@@ -300,7 +295,7 @@ export function MainContent({
                 />
                 Remote control
                 {remoteControlState && (
-                  <span className="ml-auto text-[10px] font-medium text-primary">On</span>
+                  <span className="ml-auto text-xs font-medium text-primary">On</span>
                 )}
               </DropdownMenuItem>
               <DropdownMenuSeparator />

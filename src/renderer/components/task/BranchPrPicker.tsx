@@ -135,13 +135,13 @@ export function BranchPrPicker({
   // the prior behavior — a worktree can't be created without a branch.
   if (branchError) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-[12px] text-destructive">
+      <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
         <AlertCircle size={13} strokeWidth={2} />
         <span className="flex-1 truncate">{branchError}</span>
         <button
           type="button"
           onClick={onRetry}
-          className="text-[11px] font-medium underline underline-offset-2 hover:no-underline shrink-0"
+          className="text-xs font-medium underline underline-offset-2 hover:no-underline shrink-0"
         >
           Retry
         </button>
@@ -165,28 +165,28 @@ export function BranchPrPicker({
             <GitBranch size={12} className="text-muted-fade-40 shrink-0" strokeWidth={1.8} />
           )}
           {selectedBranch ? (
-            <span className="flex-1 truncate text-[13px] text-foreground font-mono">
+            <span className="flex-1 truncate text-base text-foreground font-mono">
               {selectedBranch.name}
             </span>
           ) : (
-            <span className="flex-1 truncate text-[13px] text-muted-fade-40">
+            <span className="flex-1 truncate text-base text-muted-fade-40">
               {branchLoading ? 'Fetching branches…' : 'Select a branch or PR…'}
             </span>
           )}
           {markInUse && !badgePr && selectedBranch?.checkedOut && (
-            <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 shrink-0">
+            <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 shrink-0">
               in use
             </span>
           )}
           {badgePr && (
             <span
-              className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${prStatusPill(badgePr.state)}`}
+              className={`text-xs font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${prStatusPill(badgePr.state)}`}
             >
               PR #{badgePr.number}
             </span>
           )}
           {selectedBranch?.shortHash && (
-            <span className="text-[11px] text-muted-fade-40 font-mono shrink-0">
+            <span className="text-xs text-muted-fade-40 font-mono shrink-0">
               {selectedBranch.shortHash}
             </span>
           )}
@@ -243,23 +243,23 @@ export function BranchPrPicker({
                     />
                     <span className="flex-1 truncate font-mono text-fg-fade-80">{b.name}</span>
                     {markInUse && b.checkedOut && (
-                      <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 shrink-0">
+                      <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 shrink-0">
                         in use
                       </span>
                     )}
                     {showUpstream && b.upstream && b.upstream.ahead > 0 && (
-                      <span className="flex items-center gap-0.5 text-[10px] text-emerald-500 font-mono shrink-0">
+                      <span className="flex items-center gap-0.5 text-xs text-emerald-500 font-mono shrink-0">
                         <ArrowUp size={9} strokeWidth={2.5} />
                         {b.upstream.ahead}
                       </span>
                     )}
                     {showUpstream && b.upstream && b.upstream.behind > 0 && (
-                      <span className="flex items-center gap-0.5 text-[10px] text-amber-500 font-mono shrink-0">
+                      <span className="flex items-center gap-0.5 text-xs text-amber-500 font-mono shrink-0">
                         <ArrowDown size={9} strokeWidth={2.5} />
                         {b.upstream.behind}
                       </span>
                     )}
-                    <span className="text-[10px] text-muted-fade-40 font-mono shrink-0">
+                    <span className="text-xs text-muted-fade-40 font-mono shrink-0">
                       {b.shortHash}
                     </span>
                   </CommandItem>
@@ -270,13 +270,13 @@ export function BranchPrPicker({
             {tab === 'pr' && (
               <>
                 {prLoading && (
-                  <div className="flex items-center justify-center gap-2 py-4 text-[12px] text-muted-fade-50">
+                  <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-fade-50">
                     <Loader2 size={12} className="animate-spin" />
                     Loading pull requests…
                   </div>
                 )}
                 {prError && !prLoading && (
-                  <div className="flex items-center gap-2 px-2 py-3 text-[12px] text-destructive">
+                  <div className="flex items-center gap-2 px-2 py-3 text-sm text-destructive">
                     <AlertCircle size={13} strokeWidth={2} />
                     <span className="flex-1">{prError}</span>
                     <button
@@ -285,7 +285,7 @@ export function BranchPrPicker({
                         setPrs(null);
                         void fetchPrs();
                       }}
-                      className="text-[11px] font-medium underline underline-offset-2 hover:no-underline shrink-0"
+                      className="text-xs font-medium underline underline-offset-2 hover:no-underline shrink-0"
                     >
                       Retry
                     </button>
@@ -307,7 +307,7 @@ export function BranchPrPicker({
                           strokeWidth={1.8}
                         />
                         <span className="flex-1 truncate text-fg-fade-80">{pr.title}</span>
-                        <span className="flex items-center gap-1 text-[10px] text-muted-fade-40 font-mono shrink-0 min-w-0 max-w-[160px]">
+                        <span className="flex items-center gap-1 text-xs text-muted-fade-40 font-mono shrink-0 min-w-0 max-w-[160px]">
                           <span className="truncate">{pr.headRefName}</span>
                           {pr.baseRefName && (
                             <>
@@ -323,7 +323,7 @@ export function BranchPrPicker({
                         {preparingId === pr.number ? (
                           <Loader2 size={11} className="animate-spin text-muted-fade-50 shrink-0" />
                         ) : (
-                          <span className="text-[10px] text-muted-fade-40 font-mono shrink-0">
+                          <span className="text-xs text-muted-fade-40 font-mono shrink-0">
                             #{pr.number}
                           </span>
                         )}

@@ -129,7 +129,7 @@ export function SearchableMultiSelect<T>({
               key={getKey(item)}
               type="button"
               onClick={() => remove(getKey(item))}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-medium hover:bg-destructive/10 hover:text-destructive transition-colors"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium hover:bg-destructive/10 hover:text-destructive transition-colors"
             >
               {getLabel(item)}
               <X size={9} strokeWidth={2.5} />
@@ -160,7 +160,7 @@ export function SearchableMultiSelect<T>({
               void fetchRecent();
             }}
             placeholder={placeholder}
-            className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-fade-30 outline-hidden"
+            className="flex-1 bg-transparent text-base text-foreground placeholder:text-muted-fade-30 outline-hidden"
           />
         </div>
 
@@ -168,16 +168,16 @@ export function SearchableMultiSelect<T>({
           <div className="absolute z-50 mt-1 w-full bg-card border border-border/60 rounded-lg shadow-xl shadow-shade/30 overflow-hidden">
             <div className="max-h-[200px] overflow-y-auto">
               {loading && results.length === 0 ? (
-                <div className="px-3 py-3 text-[12px] text-muted-fade-40 text-center flex items-center justify-center gap-2">
+                <div className="px-3 py-3 text-sm text-muted-fade-40 text-center flex items-center justify-center gap-2">
                   <Loader2 size={12} className="animate-spin" />
                   Searching...
                 </div>
               ) : error && results.length === 0 ? (
-                <div className="px-3 py-3 text-[12px] text-destructive/80 text-center break-words">
+                <div className="px-3 py-3 text-sm text-destructive/80 text-center break-words">
                   {error}
                 </div>
               ) : results.length === 0 ? (
-                <div className="px-3 py-3 text-[12px] text-muted-fade-40 text-center">
+                <div className="px-3 py-3 text-sm text-muted-fade-40 text-center">
                   No results found
                 </div>
               ) : (

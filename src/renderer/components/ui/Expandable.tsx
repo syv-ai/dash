@@ -29,7 +29,7 @@ export function Expandable({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className={`flex items-center gap-1 text-[12px] font-medium ${labelClassName} hover:text-foreground transition-colors`}
+        className={`flex items-center gap-1 text-sm font-medium ${labelClassName} hover:text-foreground transition-colors`}
       >
         <ChevronRight
           size={13}

@@ -153,7 +153,7 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
     <div className="flex h-full flex-col">
       <div className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border/40 px-5">
         <div className="flex min-w-0 items-center gap-2.5">
-          <h2 className="text-[14px] font-semibold tracking-tight text-foreground">Memory</h2>
+          <h2 className="text-base font-semibold tracking-tight text-foreground">Memory</h2>
           <Select
             value={project.id}
             onValueChange={switchProject}
@@ -192,7 +192,7 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
       </div>
 
       {error && (
-        <div className="shrink-0 border-b border-border/40 bg-destructive/10 px-5 py-2 text-[11px] text-destructive">
+        <div className="shrink-0 border-b border-border/40 bg-destructive/10 px-5 py-2 text-xs text-destructive">
           {error}
         </div>
       )}
@@ -201,7 +201,7 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
         memoryNotices(memory).map((notice) => (
           <div
             key={notice}
-            className="shrink-0 border-b border-border/40 bg-surface-2 px-5 py-2 text-[11px] text-muted-foreground"
+            className="shrink-0 border-b border-border/40 bg-surface-2 px-5 py-2 text-xs text-muted-foreground"
           >
             {notice}
           </div>
@@ -236,7 +236,7 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search memories"
-                  className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground outline-hidden placeholder:text-muted-foreground"
+                  className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-hidden placeholder:text-muted-foreground"
                 />
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto pb-1">
@@ -287,7 +287,7 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
                   );
                 })}
                 {memory && sections.length === 0 && (
-                  <div className="px-3 py-4 text-[12px] text-muted-foreground">
+                  <div className="px-3 py-4 text-sm text-muted-foreground">
                     {query.trim()
                       ? 'No matches'
                       : filter === 'all'
@@ -304,15 +304,15 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
                   <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border/40 px-5 py-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="truncate text-[13px] font-semibold text-foreground">
+                        <span className="truncate text-base font-semibold text-foreground">
                           {currentEntry.name}
                         </span>
-                        <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                        <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-xs text-muted-foreground">
                           {MEMORY_TYPE_LABELS[currentEntry.type]}
                         </span>
                       </div>
                       {currentEntry.description && (
-                        <p className="mt-0.5 text-[12px] text-muted-foreground">
+                        <p className="mt-0.5 text-sm text-muted-foreground">
                           {currentEntry.description}
                         </p>
                       )}
@@ -341,7 +341,7 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
                     </div>
                   </div>
                   {current.issues.length > 0 && (
-                    <div className="shrink-0 border-b border-border/40 bg-surface-2 px-5 py-1.5 text-[11px] text-muted-foreground">
+                    <div className="shrink-0 border-b border-border/40 bg-surface-2 px-5 py-1.5 text-xs text-muted-foreground">
                       {memoryIssueTexts(current).map((text) => (
                         <div key={text} className="py-0.5">
                           {text}
@@ -349,7 +349,7 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
                       ))}
                     </div>
                   )}
-                  <pre className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words px-5 py-4 font-mono text-[12px] leading-relaxed text-foreground">
+                  <pre className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words px-5 py-4 font-mono text-sm leading-relaxed text-foreground">
                     {currentEntry.body.trim()}
                   </pre>
                 </>
@@ -378,12 +378,12 @@ function ListRow(props: {
       }`}
     >
       <div className="flex items-baseline gap-2">
-        <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">{props.title}</span>
-        {props.flag && <span className="shrink-0 text-[10px] text-fg-fade-40">{props.flag}</span>}
-        {props.meta && <span className="shrink-0 text-[10px] text-fg-fade-40">{props.meta}</span>}
+        <span className="min-w-0 flex-1 truncate text-sm text-foreground">{props.title}</span>
+        {props.flag && <span className="shrink-0 text-xs text-fg-fade-40">{props.flag}</span>}
+        {props.meta && <span className="shrink-0 text-xs text-fg-fade-40">{props.meta}</span>}
       </div>
       {props.subtitle && (
-        <div className="truncate text-[11px] text-muted-foreground">{props.subtitle}</div>
+        <div className="truncate text-xs text-muted-foreground">{props.subtitle}</div>
       )}
     </button>
   );
@@ -393,15 +393,15 @@ function EmptyState({ dir, projectName }: { dir: string; projectName: string }) 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 px-10 text-center">
       <Brain size={28} strokeWidth={1.5} className="text-muted-foreground" />
-      <p className="text-[13px] text-foreground">No memories yet for {projectName}</p>
+      <p className="text-base text-foreground">No memories yet for {projectName}</p>
       <button
         onClick={() => copy(dir)}
         title="Copy path"
-        className="max-w-full truncate rounded bg-surface-2 px-2 py-1 font-mono text-[11px] text-muted-foreground hover:text-foreground"
+        className="max-w-full truncate rounded-md bg-surface-2 px-2 py-1 font-mono text-xs text-muted-foreground hover:text-foreground"
       >
         {dir}
       </button>
-      <p className="max-w-md text-[12px] text-muted-foreground">
+      <p className="max-w-md text-sm text-muted-foreground">
         Claude writes memories here as it learns about the project.
       </p>
     </div>

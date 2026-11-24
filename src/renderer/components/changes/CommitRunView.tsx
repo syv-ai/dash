@@ -36,7 +36,7 @@ export function CommitRunView({
     <div className="flex flex-col h-full bg-[hsl(var(--surface-1))]">
       <Header state={state} onCancel={onCancel} />
       {passed || failed || skipped ? (
-        <div className="px-3 pt-2 flex gap-3 font-mono text-[11px]">
+        <div className="px-3 pt-2 flex gap-3 font-mono text-xs">
           {passed ? <span className="text-[hsl(var(--git-added))]">{passed} passed</span> : null}
           {failed ? <span className="text-[hsl(var(--destructive))]">{failed} failed</span> : null}
           {skipped ? <span className="text-muted-foreground">{skipped} skipped</span> : null}
@@ -47,7 +47,7 @@ export function CommitRunView({
           <HookItem key={`${h.name}-${i}`} hook={h} />
         ))}
         {state.raw && (
-          <pre className="mt-2 mx-2 p-2 rounded bg-[hsl(var(--surface-0))] text-[11px] font-mono text-fg-fade-80 whitespace-pre-wrap wrap-break-word">
+          <pre className="mt-2 mx-2 p-2 rounded-md bg-[hsl(var(--surface-0))] text-xs font-mono text-fg-fade-80 whitespace-pre-wrap wrap-break-word">
             {state.raw}
           </pre>
         )}
@@ -112,15 +112,15 @@ function Header({ state, onCancel }: { state: CommitRunViewProps['state']; onCan
         {isRunning ? <Spinner /> : <X size={14} strokeWidth={2.5} />}
       </span>
       <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-        <span className="text-[12.5px] font-medium text-foreground">
+        <span className="text-base font-medium text-foreground">
           {isRunning ? 'Running pre-commit' : isFailed ? titleForFailed(state) : 'Cancelled'}
         </span>
-        <span className="text-[10.5px] font-mono text-muted-foreground">{subtitle}</span>
+        <span className="text-xs font-mono text-muted-foreground">{subtitle}</span>
       </div>
       {isRunning && (
         <button
           onClick={onCancel}
-          className="px-2.5 py-1 text-[11px] rounded border border-border/40 bg-[hsl(var(--surface-2))] text-fg-fade-80 hover:bg-[hsl(var(--destructive)/0.16)] hover:border-[hsl(var(--destructive)/0.4)] hover:text-destructive inline-flex items-center gap-1"
+          className="px-2.5 py-1 text-xs rounded-md border border-border/40 bg-[hsl(var(--surface-2))] text-fg-fade-80 hover:bg-[hsl(var(--destructive)/0.16)] hover:border-[hsl(var(--destructive)/0.4)] hover:text-destructive inline-flex items-center gap-1"
         >
           <X size={11} strokeWidth={2.5} />
           Cancel
@@ -152,14 +152,14 @@ function HookItem({ hook }: { hook: HookRecord }) {
           {STATUS_ICON[hook.status]}
         </span>
         <span
-          className={`flex-1 min-w-0 font-mono text-[12px] truncate ${
+          className={`flex-1 min-w-0 font-mono text-sm truncate ${
             hook.status === 'Failed' ? 'text-destructive' : 'text-foreground'
           }`}
         >
           {hook.name}
         </span>
         {hook.duration != null && (
-          <span className="font-mono text-[10px] text-muted-foreground">
+          <span className="font-mono text-xs text-muted-foreground">
             {hook.duration.toFixed(1)}s
           </span>
         )}
@@ -172,7 +172,7 @@ function HookItem({ hook }: { hook: HookRecord }) {
         )}
       </button>
       {open && expandable && (
-        <div className="bg-[hsl(var(--surface-0))] border-t border-border/40 px-3.5 py-2.5 max-h-60 overflow-y-auto text-[11px] font-mono leading-relaxed whitespace-pre-wrap text-fg-fade-85">
+        <div className="bg-[hsl(var(--surface-0))] border-t border-border/40 px-3.5 py-2.5 max-h-60 overflow-y-auto text-xs font-mono leading-relaxed whitespace-pre-wrap text-fg-fade-85">
           {hook.modifiedFiles && (
             <div className="text-[hsl(var(--warn))] mb-1">files were modified by this hook</div>
           )}
@@ -194,12 +194,12 @@ function Footer({
 }) {
   return (
     <div className="shrink-0 border-t border-border/40 p-2.5 flex flex-col gap-2">
-      {hint && <span className="text-[10.5px] text-muted-foreground px-1">{hint}</span>}
+      {hint && <span className="text-xs text-muted-foreground px-1">{hint}</span>}
       <div className="flex gap-1.5">
         {primary && (
           <button
             onClick={primary.onClick}
-            className="flex-1 h-8 inline-flex items-center justify-center gap-1.5 bg-primary text-primary-foreground rounded-md text-[12px] font-medium hover:bg-primary/90"
+            className="flex-1 h-8 inline-flex items-center justify-center gap-1.5 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90"
           >
             {primary.icon}
             {primary.label}
@@ -208,7 +208,7 @@ function Footer({
         {secondary && (
           <button
             onClick={secondary.onClick}
-            className={`${primary ? 'px-3.5' : 'flex-1'} h-8 inline-flex items-center justify-center gap-1.5 bg-[hsl(var(--surface-2))] border border-border/40 text-fg-fade-80 rounded-md text-[12px] hover:bg-[hsl(var(--surface-3))]`}
+            className={`${primary ? 'px-3.5' : 'flex-1'} h-8 inline-flex items-center justify-center gap-1.5 bg-[hsl(var(--surface-2))] border border-border/40 text-fg-fade-80 rounded-md text-sm hover:bg-[hsl(var(--surface-3))]`}
           >
             {secondary.icon}
             {secondary.label}

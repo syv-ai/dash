@@ -18,8 +18,8 @@ const buttonVariants = cva(
         ghost: 'text-fg-fade-70 hover:bg-accent hover:text-foreground',
       },
       size: {
-        sm: 'gap-1 rounded-lg px-2.5 py-1 text-[11px]',
-        md: 'gap-2 rounded-lg px-4 py-2 text-[13px]',
+        sm: 'gap-1 rounded-lg px-2.5 py-1 text-xs',
+        md: 'gap-2 rounded-lg px-4 py-2 text-base',
       },
     },
     defaultVariants: { variant: 'primary', size: 'md' },

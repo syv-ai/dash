@@ -29,7 +29,7 @@ export const CommandInput = React.forwardRef<
     <Search size={13} strokeWidth={1.8} className="text-muted-fade-40 shrink-0" />
     <CommandPrimitive.Input
       ref={ref}
-      className={`flex h-9 w-full bg-transparent py-2.5 text-[13px] text-foreground outline-hidden placeholder:text-muted-fade-40 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      className={`flex h-9 w-full bg-transparent py-2.5 text-base text-foreground outline-hidden placeholder:text-muted-fade-40 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       {...props}
     />
   </div>
@@ -54,7 +54,7 @@ export const CommandEmpty = React.forwardRef<
 >((props, ref) => (
   <CommandPrimitive.Empty
     ref={ref}
-    className="py-6 text-center text-[12px] text-muted-fade-50"
+    className="py-6 text-center text-sm text-muted-fade-50"
     {...props}
   />
 ));
@@ -66,7 +66,7 @@ export const CommandGroup = React.forwardRef<
 >(({ className = '', ...props }, ref) => (
   <CommandPrimitive.Group
     ref={ref}
-    className={`overflow-hidden text-foreground **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1.5 **:[[cmdk-group-heading]]:text-[10px] **:[[cmdk-group-heading]]:font-semibold **:[[cmdk-group-heading]]:uppercase **:[[cmdk-group-heading]]:tracking-wide **:[[cmdk-group-heading]]:text-muted-fade-55 ${className}`}
+    className={`overflow-hidden text-foreground **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1.5 **:[[cmdk-group-heading]]:text-xs **:[[cmdk-group-heading]]:font-semibold **:[[cmdk-group-heading]]:uppercase **:[[cmdk-group-heading]]:tracking-wide **:[[cmdk-group-heading]]:text-muted-fade-55 ${className}`}
     {...props}
   />
 ));
@@ -90,7 +90,7 @@ export const CommandItem = React.forwardRef<
 >(({ className = '', ...props }, ref) => (
   <CommandPrimitive.Item
     ref={ref}
-    className={`relative flex items-center gap-2 rounded-md px-2 py-1.5 text-[12.5px] cursor-pointer select-none outline-hidden data-[selected=true]:bg-accent/70 data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 ${className}`}
+    className={`relative flex items-center gap-2 rounded-md px-2 py-1.5 text-base cursor-pointer select-none outline-hidden data-[selected=true]:bg-accent/70 data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 ${className}`}
     {...props}
   />
 ));

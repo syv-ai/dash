@@ -113,7 +113,7 @@ export function TaskCard({
       ref={rowRef}
       draggable
       {...dragHandlers}
-      className={`group/task grid grid-cols-[14px_minmax(0,1fr)] -ml-2 pl-2 pr-2 py-[3px] rounded-md text-[13px] cursor-pointer transition-[transform,color] duration-200 ease-out ${
+      className={`group/task grid grid-cols-[14px_minmax(0,1fr)] -ml-2 pl-2 pr-2 py-[3px] rounded-md text-base cursor-pointer transition-[transform,color] duration-200 ease-out ${
         isActive
           ? 'text-foreground font-medium scale-[1.035]'
           : 'sidebar-row-hover text-muted-foreground hover:text-foreground'
@@ -164,7 +164,7 @@ export function TaskCard({
           >
             <div className="overflow-hidden min-w-0 -mr-0.5 flex items-center">
               {percentVisible && (
-                <span className="text-[11px] tabular-nums shrink-0 text-muted-foreground">
+                <span className="text-xs tabular-nums shrink-0 text-muted-foreground">
                   {Math.round(ctx!.percentage)}%
                 </span>
               )}

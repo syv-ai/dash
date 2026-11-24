@@ -41,8 +41,8 @@ export function SourceStep({ onPick }: SourceStepProps) {
             {card.icon}
           </div>
           <div>
-            <div className="text-[13px] font-medium text-foreground">{card.title}</div>
-            <div className="text-[11px] text-muted-fade-50">{card.subtitle}</div>
+            <div className="text-base font-medium text-foreground">{card.title}</div>
+            <div className="text-xs text-muted-fade-50">{card.subtitle}</div>
           </div>
         </button>
       ))}

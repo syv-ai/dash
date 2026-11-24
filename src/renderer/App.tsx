@@ -1266,7 +1266,7 @@ export function App() {
                 className={
                   changesPanelCollapsed
                     ? 'h-full flex flex-col overflow-hidden'
-                    : 'right-inspector-shell h-full flex flex-col overflow-hidden rounded-[14px]'
+                    : 'right-inspector-shell h-full flex flex-col overflow-hidden rounded-xl'
                 }
               >
                 <ShellDrawerWrapper

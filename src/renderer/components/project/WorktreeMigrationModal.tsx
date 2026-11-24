@@ -113,7 +113,7 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
   return (
     <>
       <div className="flex items-center justify-between px-5 h-12 border-b border-border/40 shrink-0">
-        <h2 className="text-[14px] font-semibold text-foreground">Move task worktrees</h2>
+        <h2 className="text-base font-semibold text-foreground">Move task worktrees</h2>
         <button
           onClick={close}
           disabled={busy}
@@ -126,9 +126,9 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
       <div className="px-5 py-4 overflow-y-auto min-h-0 flex-1 space-y-4">
         {phase.kind !== 'done' ? (
           <>
-            <p className="text-[12.5px] text-muted-foreground leading-relaxed">
+            <p className="text-base text-muted-foreground leading-relaxed">
               Dash now keeps each task&apos;s worktree inside its project at{' '}
-              <code className="px-1 py-0.5 rounded bg-accent/80 text-[10.5px] font-mono text-fg-fade-75">
+              <code className="px-1 py-0.5 rounded-md bg-accent/80 text-xs font-mono text-fg-fade-75">
                 .claude/worktrees/
               </code>
               , where Claude Code expects it. {taskCount} worktree{taskCount === 1 ? '' : 's'} in{' '}
@@ -156,14 +156,14 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
                       className="accent-primary"
                     />
                     <FolderGit2 size={13} strokeWidth={1.8} className="text-muted-foreground" />
-                    <span className="text-[12.5px] font-medium text-foreground truncate">
+                    <span className="text-base font-medium text-foreground truncate">
                       {project.projectName}
                     </span>
-                    <span className="text-[11px] text-muted-fade-70 ml-auto shrink-0">
+                    <span className="text-xs text-muted-fade-70 ml-auto shrink-0">
                       {project.tasks.length} task{project.tasks.length === 1 ? '' : 's'}
                     </span>
                   </label>
-                  <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1 text-[10.5px] font-mono text-fg-fade-50">
+                  <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs font-mono text-fg-fade-50">
                     <dt className="text-muted-fade-60 select-none">from</dt>
                     <dd className="break-all">{project.legacyDir}</dd>
                     <dt className="text-muted-fade-60 select-none">to</dt>
@@ -173,20 +173,20 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
                     {project.tasks.map((t) => (
                       <li
                         key={t.taskId}
-                        className="flex items-center gap-2 text-[11.5px] text-fg-fade-80 min-w-0"
+                        className="flex items-center gap-2 text-sm text-fg-fade-80 min-w-0"
                       >
                         <span className="truncate">{t.taskName}</span>
-                        <span className="font-mono text-[10px] text-muted-fade-60 truncate">
+                        <span className="font-mono text-xs text-muted-fade-60 truncate">
                           {t.branch}
                         </span>
                         {t.archived && (
-                          <span className="px-1.5 py-[1px] rounded-full bg-accent/80 text-[9.5px] text-muted-foreground shrink-0">
+                          <span className="px-1.5 py-[1px] rounded-full bg-accent/80 text-xs text-muted-foreground shrink-0">
                             archived
                           </span>
                         )}
                         {t.stale && (
                           <span
-                            className="px-1.5 py-[1px] rounded-full bg-[hsl(var(--git-modified))]/15 text-[hsl(var(--git-modified))] text-[9.5px] shrink-0"
+                            className="px-1.5 py-[1px] rounded-full bg-[hsl(var(--git-modified))]/15 text-[hsl(var(--git-modified))] text-xs shrink-0"
                             title="The folder is no longer a git worktree; only leftover files remain"
                           >
                             not a worktree
@@ -216,7 +216,7 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
                 )}
               </div>
               <div className="min-w-0">
-                <p className="text-[12.5px] font-medium text-foreground">
+                <p className="text-base font-medium text-foreground">
                   Moved {movedCount} of {movableCount} worktree
                   {movableCount === 1 ? '' : 's'}
                   {removedCount > 0
@@ -229,7 +229,7 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
                     : ''}
                 </p>
                 {failures.length > 0 && (
-                  <p className="text-[11.5px] text-muted-foreground mt-0.5">
+                  <p className="text-sm text-muted-foreground mt-0.5">
                     The tasks below stay at their old location and keep working. Fix the cause and
                     Dash will offer the move again next launch.
                   </p>
@@ -241,10 +241,10 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
                 {failures.map((f) => (
                   <li
                     key={f.taskId}
-                    className="rounded-lg border border-border/40 px-3 py-2 text-[11.5px]"
+                    className="rounded-lg border border-border/40 px-3 py-2 text-sm"
                   >
                     <span className="font-medium text-foreground">{f.taskName}</span>
-                    <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-[10.5px] text-fg-fade-60">
+                    <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs text-fg-fade-60">
                       {f.error}
                     </pre>
                   </li>
@@ -259,7 +259,7 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
         {phase.kind === 'confirm' && (
           <div className="flex flex-col gap-1.5">
             {staleCount > 0 && (
-              <label className="flex items-center gap-2 text-[11.5px] text-muted-foreground select-none cursor-pointer">
+              <label className="flex items-center gap-2 text-sm text-muted-foreground select-none cursor-pointer">
                 <input
                   type="checkbox"
                   checked={removeStale}
@@ -270,7 +270,7 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
                 a worktree
               </label>
             )}
-            <label className="flex items-center gap-2 text-[11.5px] text-muted-foreground select-none cursor-pointer">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground select-none cursor-pointer">
               <input
                 type="checkbox"
                 checked={dontAsk}
@@ -286,7 +286,7 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
             <button
               type="button"
               onClick={close}
-              className="px-4 py-2 rounded-full text-[13px] font-medium bg-primary text-primary-foreground hover:brightness-110 transition-all duration-150"
+              className="px-4 py-2 rounded-full text-base font-medium bg-primary text-primary-foreground hover:brightness-110 transition-all duration-150"
             >
               Done
             </button>
@@ -296,7 +296,7 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
                 type="button"
                 onClick={handleLater}
                 disabled={busy}
-                className="px-4 py-2 rounded-full text-[13px] text-muted-fade-60 hover:text-foreground hover:bg-accent/60 transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none"
+                className="px-4 py-2 rounded-full text-base text-muted-fade-60 hover:text-foreground hover:bg-accent/60 transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none"
               >
                 Later
               </button>
@@ -304,7 +304,7 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
                 type="button"
                 onClick={() => void handleMove()}
                 disabled={busy || chosen.length === 0}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-medium bg-primary text-primary-foreground hover:brightness-110 transition-all duration-150 disabled:opacity-70 disabled:pointer-events-none"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-base font-medium bg-primary text-primary-foreground hover:brightness-110 transition-all duration-150 disabled:opacity-70 disabled:pointer-events-none"
               >
                 {busy ? (
                   <>

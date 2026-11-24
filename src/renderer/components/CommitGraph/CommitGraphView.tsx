@@ -147,7 +147,7 @@ export function CommitGraphView({
       <div className="flex items-center justify-center h-full">
         <div className="flex items-center gap-3">
           <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-          <span className="text-[13px] text-muted-foreground">Loading commit history...</span>
+          <span className="text-base text-muted-foreground">Loading commit history...</span>
         </div>
       </div>
     );
@@ -156,7 +156,7 @@ export function CommitGraphView({
   if (!graphData || graphData.commits.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
-        <span className="text-[13px] text-muted-foreground">No commits found</span>
+        <span className="text-base text-muted-foreground">No commits found</span>
       </div>
     );
   }
@@ -203,7 +203,7 @@ export function CommitGraphView({
                     void handleLoadMore();
                   }}
                   disabled={loadingMore}
-                  className="px-4 py-1.5 rounded-md text-[11px] font-medium bg-accent hover:bg-accent/80 text-fg-fade-80 hover:text-foreground transition-colors disabled:opacity-40"
+                  className="px-4 py-1.5 rounded-md text-xs font-medium bg-accent hover:bg-accent/80 text-fg-fade-80 hover:text-foreground transition-colors disabled:opacity-40"
                 >
                   {loadingMore
                     ? 'Loading...'

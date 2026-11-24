@@ -63,14 +63,14 @@ export function BranchPicker({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Filter branches"
-          className="flex-1 bg-transparent outline-hidden text-[12px] placeholder:text-muted-fade-40"
+          className="flex-1 bg-transparent outline-hidden text-sm placeholder:text-muted-fade-40"
         />
       </div>
       {onExit && (
         <button
           type="button"
           onClick={onExit}
-          className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12px] border-b border-border/40 text-muted-fade-80 hover:text-foreground hover:bg-[hsl(var(--surface-2)/0.6)] transition-colors"
+          className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm border-b border-border/40 text-muted-fade-80 hover:text-foreground hover:bg-[hsl(var(--surface-2)/0.6)] transition-colors"
         >
           <X size={12} strokeWidth={1.8} className="shrink-0" />
           <span className="flex-1">Exit comparison</span>
@@ -78,10 +78,10 @@ export function BranchPicker({
         </button>
       )}
       <div className="flex-1 min-h-0 overflow-y-auto py-1">
-        {loading && <div className="px-3 py-2 text-[11px] text-muted-fade-40">Loading…</div>}
-        {error && <div className="px-3 py-2 text-[11px] text-destructive">{error}</div>}
+        {loading && <div className="px-3 py-2 text-xs text-muted-fade-40">Loading…</div>}
+        {error && <div className="px-3 py-2 text-xs text-destructive">{error}</div>}
         {!loading && !error && filtered.length === 0 && (
-          <div className="px-3 py-2 text-[11px] text-muted-fade-40">No branches</div>
+          <div className="px-3 py-2 text-xs text-muted-fade-40">No branches</div>
         )}
         {filtered.map((b) => {
           const active = b.ref === selectedRef;
@@ -90,7 +90,7 @@ export function BranchPicker({
               key={b.ref}
               type="button"
               onClick={() => onSelect(b.ref)}
-              className={`w-full flex items-center gap-2 px-3 py-1 text-left text-[12px] font-mono transition-colors ${
+              className={`w-full flex items-center gap-2 px-3 py-1 text-left text-sm font-mono transition-colors ${
                 active
                   ? 'bg-primary/15 text-primary'
                   : 'text-fg-fade-85 hover:bg-[hsl(var(--surface-2)/0.6)]'
@@ -98,9 +98,9 @@ export function BranchPicker({
             >
               <span className="truncate flex-1">{b.name}</span>
               {b.ref === defaultRef && (
-                <span className="text-[10px] font-sans text-muted-fade-60">default</span>
+                <span className="text-xs font-sans text-muted-fade-60">default</span>
               )}
-              <span className="text-[10px] tabular-nums text-muted-fade-50">{b.shortHash}</span>
+              <span className="text-xs tabular-nums text-muted-fade-50">{b.shortHash}</span>
             </button>
           );
         })}

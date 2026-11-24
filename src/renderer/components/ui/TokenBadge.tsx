@@ -12,8 +12,7 @@ interface TokenBadgeProps {
 export function TokenBadge({ totalTokens, totalCostUsd, size = 'md' }: TokenBadgeProps) {
   const showCost = useSettings((s) => s.showTaskCost);
   if (totalTokens === 0) return null;
-  const sizeCls =
-    size === 'sm' ? 'gap-1 px-1.5 py-0.5 text-[10px]' : 'gap-1.5 px-2 py-[3px] text-[11px]';
+  const sizeCls = size === 'sm' ? 'gap-1 px-1.5 py-0.5 text-xs' : 'gap-1.5 px-2 py-[3px] text-xs';
   return (
     // Claude Code's supervisor writes per-session summaries and auto names with
     // a separate model call outside the transcript; Dash counts transcripts

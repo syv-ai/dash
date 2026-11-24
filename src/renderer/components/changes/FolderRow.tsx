@@ -66,7 +66,7 @@ export function FolderRow({
           onToggleOpen();
         }
       }}
-      className="group relative flex items-center gap-2 px-2 py-1 rounded-md text-[12.5px] cursor-pointer hover:bg-[hsl(var(--surface-2)/0.6)] min-h-[24px] transition-colors duration-150"
+      className="group relative flex items-center gap-2 px-2 py-1 rounded-md text-base cursor-pointer hover:bg-[hsl(var(--surface-2)/0.6)] min-h-[24px] transition-colors duration-150"
     >
       <Checkbox checked={agg.stageState} onChange={onToggleStage} />
       {Array.from({ length: indent }, (_, i) => (
@@ -81,14 +81,14 @@ export function FolderRow({
           <ChevronRight size={12} strokeWidth={1.8} />
         )}
       </span>
-      <span className={`flex-1 min-w-0 font-mono text-[11.5px] truncate font-medium ${nameTint}`}>
+      <span className={`flex-1 min-w-0 font-mono text-sm truncate font-medium ${nameTint}`}>
         {displayName}/
       </span>
-      <span className="font-mono text-[10px] font-semibold tabular-nums shrink-0 text-muted-fade-70">
+      <span className="font-mono text-xs font-semibold tabular-nums shrink-0 text-muted-fade-70">
         {agg.count}
       </span>
       {!open && (
-        <span className="font-mono text-[10px] flex gap-1.5 shrink-0 group-hover:invisible">
+        <span className="font-mono text-xs flex gap-1.5 shrink-0 group-hover:invisible">
           {agg.add || agg.del ? (
             <>
               {/* New files count too, so the folders sum to the inspector's headline. */}

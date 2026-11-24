@@ -67,7 +67,7 @@ function ReplyDraft({ draft }: { draft: DiffComment }) {
   }
   return (
     <div className="min-w-0 rounded-lg border border-dashed border-primary/40 px-2.5 py-2">
-      <div className="flex items-center gap-1.5 text-[11px] text-muted-fade-70">
+      <div className="flex items-center gap-1.5 text-xs text-muted-fade-70">
         <span className="font-medium text-primary">Draft reply</span>
         {draft.author === 'agent' && (
           <span className="inline-flex items-center gap-1">
@@ -126,7 +126,7 @@ export function PrThreadCard({
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-edge/10 bg-[hsl(var(--surface-2))] px-2.5 py-1 text-[11px] text-muted-fade-70 shadow-sm shadow-shade/10 hover:text-foreground transition-colors"
+        className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-edge/10 bg-[hsl(var(--surface-2))] px-2.5 py-1 text-xs text-muted-fade-70 shadow-sm shadow-shade/10 hover:text-foreground transition-colors"
       >
         <CircleCheck size={14} strokeWidth={1.8} className="shrink-0" />
         <span className="truncate">
@@ -154,9 +154,9 @@ export function PrThreadCard({
   };
 
   return (
-    <div className="rounded-xl border border-edge/10 bg-[hsl(var(--surface-2))] shadow-lg shadow-shade/20 px-3.5 py-3 text-[12px] leading-normal">
+    <div className="rounded-xl border border-edge/10 bg-[hsl(var(--surface-2))] shadow-lg shadow-shade/20 px-3.5 py-3 text-sm leading-normal">
       {(showLocation || thread.resolved) && (
-        <div className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-fade-70">
+        <div className="mb-2 flex items-center gap-1.5 text-xs text-muted-fade-70">
           {thread.resolved && (
             <button
               type="button"
@@ -174,7 +174,7 @@ export function PrThreadCard({
       <div className="flex flex-col gap-2.5">
         {thread.comments.map((c) => (
           <div key={c.id} className="min-w-0">
-            <div className="text-[11px] font-medium text-fg-fade-80">@{c.author}</div>
+            <div className="text-xs font-medium text-fg-fade-80">@{c.author}</div>
             <Markdown text={c.body.trim()} className="text-foreground" />
           </div>
         ))}

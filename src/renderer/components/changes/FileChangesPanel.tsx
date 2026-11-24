@@ -91,7 +91,7 @@ export function FileChangesPanel({
             <FileDiff size={14} className="text-muted-foreground" strokeWidth={1.5} />
           </div>
           {totalChanges > 0 && (
-            <span className="min-w-[18px] h-[16px] flex items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary tabular-nums px-1">
+            <span className="min-w-[18px] h-[16px] flex items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary tabular-nums px-1">
               {totalChanges}
             </span>
           )}
@@ -103,9 +103,7 @@ export function FileChangesPanel({
   if (!gitStatus) {
     return (
       <div className="h-full flex items-center justify-center">
-        <p className="text-[11px] text-muted-fade-40">
-          {loading ? 'Loading...' : 'No task selected'}
-        </p>
+        <p className="text-xs text-muted-fade-40">{loading ? 'Loading...' : 'No task selected'}</p>
       </div>
     );
   }
@@ -239,19 +237,19 @@ export function FileChangesPanel({
                 <div className="w-8 h-8 rounded-xl bg-foreground/5 flex items-center justify-center">
                   <FileDiff size={14} className="text-fg-fade-50" strokeWidth={1.5} />
                 </div>
-                <p className="text-[11px] text-fg-fade-60">No changes</p>
+                <p className="text-xs text-fg-fade-60">No changes</p>
                 {gitStatus &&
                   gitStatus.ahead > 0 &&
                   (onShowCommitGraph ? (
                     <button
                       type="button"
                       onClick={onShowCommitGraph}
-                      className="text-[10px] text-muted-fade-30 hover:text-muted-fade-70 hover:underline underline-offset-2 transition-colors"
+                      className="text-xs text-muted-fade-30 hover:text-muted-fade-70 hover:underline underline-offset-2 transition-colors"
                     >
                       {gitStatus.ahead} commit{gitStatus.ahead !== 1 ? 's' : ''} ahead
                     </button>
                   ) : (
-                    <p className="text-[10px] text-muted-fade-30">
+                    <p className="text-xs text-muted-fade-30">
                       {gitStatus.ahead} commit{gitStatus.ahead !== 1 ? 's' : ''} ahead
                     </p>
                   ))}
@@ -270,7 +268,7 @@ export function FileChangesPanel({
               <div className="py-1">
                 {stagedFiles.length > 0 && (
                   <div className="flex flex-col">
-                    <div className="px-3 pt-2 pb-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <div className="px-3 pt-2 pb-1 font-mono text-xs uppercase tracking-wider text-muted-foreground">
                       Staged · {stagedFiles.length}
                     </div>
                     <FileTreeView
@@ -296,7 +294,7 @@ export function FileChangesPanel({
                 )}
                 {unstagedFiles.length > 0 && (
                   <div className="flex flex-col">
-                    <div className="px-3 pt-2 pb-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <div className="px-3 pt-2 pb-1 font-mono text-xs uppercase tracking-wider text-muted-foreground">
                       Unstaged · {unstagedFiles.length}
                     </div>
                     <FileTreeView
@@ -336,7 +334,7 @@ export function FileChangesPanel({
               >
                 <Tooltip content="Commit staged changes">
                   <PopoverTrigger asChild>
-                    <button className="w-full flex items-center justify-center gap-1.5 h-8 rounded-md text-[12px] font-medium transition-colors bg-primary/15 text-primary hover:bg-primary/25">
+                    <button className="w-full flex items-center justify-center gap-1.5 h-8 rounded-md text-sm font-medium transition-colors bg-primary/15 text-primary hover:bg-primary/25">
                       <Check size={12} strokeWidth={2.5} />
                       Commit
                       <span className="text-primary/70 font-normal tabular-nums">
@@ -354,25 +352,25 @@ export function FileChangesPanel({
                   className="w-[400px] h-[440px] p-3.5 flex flex-col gap-2.5"
                 >
                   <div className="flex items-baseline justify-between shrink-0">
-                    <h4 className="text-[12px] font-semibold text-foreground tracking-tight">
+                    <h4 className="text-sm font-semibold text-foreground tracking-tight">
                       Commit{' '}
                       <span className="text-primary tabular-nums">
                         {stagedFiles.length} {stagedFiles.length === 1 ? 'file' : 'files'}
                       </span>
                     </h4>
-                    <span className="font-mono text-[10px] text-muted-foreground tabular-nums">
+                    <span className="font-mono text-xs text-muted-foreground tabular-nums">
                       <span className="text-[hsl(var(--git-added))]">+{totalAdds}</span>
                       <span className="mx-1 text-fg-fade-20">·</span>
                       <span className="text-[hsl(var(--git-deleted))]">−{totalDels}</span>
                     </span>
                   </div>
                   {error && (
-                    <div className="text-[11px] text-destructive bg-destructive/10 rounded px-2 py-1.5 flex items-start gap-1.5 shrink-0">
+                    <div className="text-xs text-destructive bg-destructive/10 rounded-md px-2 py-1.5 flex items-start gap-1.5 shrink-0">
                       <span className="wrap-break-word flex-1 min-w-0">{error}</span>
                       <button
                         onClick={() => setError(null)}
                         aria-label="Dismiss error"
-                        className="shrink-0 -mr-0.5 -mt-0.5 p-0.5 rounded hover:bg-destructive/20 transition-colors"
+                        className="shrink-0 -mr-0.5 -mt-0.5 p-0.5 rounded-md hover:bg-destructive/20 transition-colors"
                       >
                         <X size={11} strokeWidth={2.5} />
                       </button>
@@ -393,7 +391,7 @@ export function FileChangesPanel({
                       }
                     }}
                     placeholder="Describe the change…"
-                    className="flex-1 min-h-0 w-full text-[12.5px] leading-relaxed bg-foreground/4 border border-edge/8 rounded-md px-3 py-2 resize-none placeholder:text-muted-fade-40 focus:outline-hidden focus:border-primary/40"
+                    className="flex-1 min-h-0 w-full text-base leading-relaxed bg-foreground/4 border border-edge/8 rounded-md px-3 py-2 resize-none placeholder:text-muted-fade-40 focus:outline-hidden focus:border-primary/40"
                   />
                   <CircleCheck
                     checked={allowEmpty}
@@ -402,18 +400,18 @@ export function FileChangesPanel({
                       <span className="flex items-center gap-1.5">
                         Allow empty commit
                         <Tooltip content="Pass --allow-empty to git. Useful for marker / sync commits.">
-                          <span className="text-[10px] text-muted-fade-40 cursor-help">ⓘ</span>
+                          <span className="text-xs text-muted-fade-40 cursor-help">ⓘ</span>
                         </Tooltip>
                       </span>
                     }
                     className="shrink-0"
                   />
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[10.5px] text-muted-fade-70 font-mono">
-                      <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-foreground/5 text-fg-fade-70">
+                    <span className="text-xs text-muted-fade-70 font-mono">
+                      <kbd className="px-1.5 py-0.5 rounded-md border border-border/60 bg-foreground/5 text-fg-fade-70">
                         ⌘
                       </kbd>
-                      <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-foreground/5 text-fg-fade-70 ml-1">
+                      <kbd className="px-1.5 py-0.5 rounded-md border border-border/60 bg-foreground/5 text-fg-fade-70 ml-1">
                         ↵
                       </kbd>
                       <span className="ml-1.5">to commit</span>
@@ -425,7 +423,7 @@ export function FileChangesPanel({
                             void handlePush();
                           }}
                           disabled={pushing}
-                          className="flex items-center justify-center gap-1.5 h-8 px-3 rounded-md text-[11.5px] font-medium transition-colors bg-accent hover:bg-accent/80 text-fg-fade-80 disabled:opacity-30 disabled:cursor-not-allowed"
+                          className="flex items-center justify-center gap-1.5 h-8 px-3 rounded-md text-sm font-medium transition-colors bg-accent hover:bg-accent/80 text-fg-fade-80 disabled:opacity-30 disabled:cursor-not-allowed"
                         >
                           <Upload size={11} strokeWidth={2.5} />
                           {pushing ? 'Pushing…' : `Push ${gitStatus.ahead}`}
@@ -436,7 +434,7 @@ export function FileChangesPanel({
                           void handleCommit();
                         }}
                         disabled={!commitMsg.trim() || committing}
-                        className="flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-md text-[11.5px] font-medium transition-colors bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-30 disabled:cursor-not-allowed"
+                        className="flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-md text-sm font-medium transition-colors bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-30 disabled:cursor-not-allowed"
                       >
                         <Check size={11} strokeWidth={2.5} />
                         {committing ? 'Committing…' : 'Commit'}

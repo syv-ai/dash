@@ -31,7 +31,7 @@ function Button({
   children: React.ReactNode;
 }) {
   const base =
-    'px-2.5 py-1 rounded-md text-[12px] font-medium transition-colors duration-150 disabled:opacity-50';
+    'px-2.5 py-1 rounded-md text-sm font-medium transition-colors duration-150 disabled:opacity-50';
   const styles =
     variant === 'primary'
       ? 'bg-primary text-primary-foreground hover:brightness-110'
@@ -49,7 +49,7 @@ function Status({ icon, children }: { icon: React.ReactNode; children: React.Rea
   return (
     <div className="flex items-start gap-2.5">
       <span className="mt-0.5 shrink-0">{icon}</span>
-      <div className="text-[13px] text-fg-fade-90 leading-snug">{children}</div>
+      <div className="text-base text-fg-fade-90 leading-snug">{children}</div>
     </div>
   );
 }
@@ -73,9 +73,7 @@ function CancelFooter({ send, onCancelTask }: { send: Send; onCancelTask: () => 
   if (confirming) {
     return (
       <div className="mt-2.5 flex items-center justify-end gap-1.5">
-        <span className="mr-auto text-[12px] text-muted-foreground">
-          Remove the port-setup task?
-        </span>
+        <span className="mr-auto text-sm text-muted-foreground">Remove the port-setup task?</span>
         <Button onClick={() => setConfirming(false)}>Keep</Button>
         <Button variant="destructive" onClick={onCancelTask}>
           Remove task
@@ -132,7 +130,7 @@ function renderScreen(
             <button
               type="button"
               onClick={() => send({ type: 'choice', screen: 'onboarding', value: 'not-relevant' })}
-              className="mr-auto whitespace-nowrap text-[11px] text-muted-fade-70 hover:text-foreground transition-colors"
+              className="mr-auto whitespace-nowrap text-xs text-muted-fade-70 hover:text-foreground transition-colors"
             >
               Never for this project
             </button>
