@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Tooltip } from '../ui/Tooltip';
-import { ToggleSwitch } from '../ui/ToggleSwitch';
+import { SwitchField } from '../ui/SwitchField';
 import { Switch } from '../ui/Switch';
 import { Modal, useModalClose } from '../ui/Modal';
 import type { KeyBinding } from '../../keybindings';
@@ -57,12 +57,11 @@ import type {
   RtkDownloadProgress,
   RtkTestResult,
 } from '../../../shared/types';
-import { UsageBar } from '../ui/UsageBar';
+import { Meter, usageTone } from '../ui/Meter';
 import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
 import { useControlInfo } from '../../hooks/useControlInfo';
 import { shellQuote } from '../../../shared/shellQuote';
-import { ProgressBar } from '../ui/ProgressBar';
 import { updateHeadline, formatCheckedAt } from '../../utils/updateStatus';
 import { formatTokens, formatCost, formatResetTime } from '../../utils/format';
 import { useSettings } from '../../stores/settingsStore';
@@ -401,9 +400,10 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
         {latestRateLimits && (latestRateLimits.fiveHour || latestRateLimits.sevenDay) ? (
           <div className="p-4 space-y-3">
             {latestRateLimits.fiveHour && (
-              <UsageBar
+              <Meter
                 label="5-hour rate limit"
-                percentage={latestRateLimits.fiveHour.usedPercentage}
+                value={latestRateLimits.fiveHour.usedPercentage}
+                tone={usageTone(latestRateLimits.fiveHour.usedPercentage)}
                 detail={
                   latestRateLimits.fiveHour.resetsAt
                     ? `resets ${formatResetTime(latestRateLimits.fiveHour.resetsAt)}`
@@ -412,9 +412,10 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
               />
             )}
             {latestRateLimits.sevenDay && (
-              <UsageBar
+              <Meter
                 label="7-day rate limit"
-                percentage={latestRateLimits.sevenDay.usedPercentage}
+                value={latestRateLimits.sevenDay.usedPercentage}
+                tone={usageTone(latestRateLimits.sevenDay.usedPercentage)}
                 detail={
                   latestRateLimits.sevenDay.resetsAt
                     ? `resets ${formatResetTime(latestRateLimits.sevenDay.resetsAt)}`
@@ -434,20 +435,20 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
         <SettingsRow
           label="Show rate limits"
           description="5-hour and 7-day account bars in the right sidebar."
-          control={<Switch enabled={showRateLimits} onToggle={onShowRateLimitsChange} />}
+          control={<Switch checked={showRateLimits} onCheckedChange={onShowRateLimitsChange} />}
         />
         <SettingsRow
           label="Show context usage"
           description="Current session's context-window bar in the right sidebar."
-          control={<Switch enabled={showUsageInline} onToggle={onShowUsageInlineChange} />}
+          control={<Switch checked={showUsageInline} onCheckedChange={onShowUsageInlineChange} />}
         />
         <SettingsRow
           label="Context percentage on task cards"
           description="Context-window usage as a percentage next to each task in the left sidebar."
           control={
             <Switch
-              enabled={showContextUsageOnTaskCards}
-              onToggle={onShowContextUsageOnTaskCardsChange}
+              checked={showContextUsageOnTaskCards}
+              onCheckedChange={onShowContextUsageOnTaskCardsChange}
             />
           }
         />
@@ -456,23 +457,23 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
           description="Thin progress bar beneath each task in the left sidebar."
           control={
             <Switch
-              enabled={showContextBarOnTaskCards}
-              onToggle={onShowContextBarOnTaskCardsChange}
+              checked={showContextBarOnTaskCards}
+              onCheckedChange={onShowContextBarOnTaskCardsChange}
             />
           }
         />
         <SettingsRow
           label="Show task token badge"
           description="Display the token count in the task header (right side)."
-          control={<Switch enabled={showTaskTokens} onToggle={onShowTaskTokensChange} />}
+          control={<Switch checked={showTaskTokens} onCheckedChange={onShowTaskTokensChange} />}
         />
         <SettingsRow
           label="Show cost on token badge"
           description="Include the USD cost alongside the token count."
           control={
             <Switch
-              enabled={showTaskCost}
-              onToggle={onShowTaskCostChange}
+              checked={showTaskCost}
+              onCheckedChange={onShowTaskCostChange}
               disabled={!showTaskTokens}
             />
           }
@@ -480,7 +481,9 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
         <SettingsRow
           label="Show project token total on hover"
           description="Show a project's token rollup when hovering its row in the sidebar."
-          control={<Switch enabled={showProjectTokens} onToggle={onShowProjectTokensChange} />}
+          control={
+            <Switch checked={showProjectTokens} onCheckedChange={onShowProjectTokensChange} />
+          }
         />
       </SettingsCard>
 
@@ -601,7 +604,7 @@ function OrchestratorAccessRow() {
           )}
         </>
       }
-      control={<Switch enabled={enabled} onToggle={onChange} />}
+      control={<Switch checked={enabled} onCheckedChange={onChange} />}
     />
   );
 }
@@ -716,12 +719,12 @@ function ClaudeCodeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) {
               ? 'Claude inherits all env vars from Dash. Variables below override.'
               : 'Minimal isolated env. Only variables below are passed to Claude.'
           }
-          control={<Switch enabled={syncShellEnv} onToggle={onSyncShellEnvChange} />}
+          control={<Switch checked={syncShellEnv} onCheckedChange={onSyncShellEnvChange} />}
         />
         <SettingsRow
           label="Ultracode"
           description="Launch new sessions with X-High reasoning and multi-agent workflow orchestration (via --settings). Uses more tokens and runs slower; not a saved effort level, so the buttons above don't control it. Takes effect when a task session is next started or restarted."
-          control={<Switch enabled={ultracode} onToggle={onUltracodeChange} />}
+          control={<Switch checked={ultracode} onCheckedChange={onUltracodeChange} />}
         />
         <SettingsRow
           label="Stop sessions on quit"
@@ -730,7 +733,9 @@ function ClaudeCodeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) {
               ? 'Quitting Dash stops every task session (claude stop). Opening a task starts it again from its transcript.'
               : 'Task sessions keep running under Claude Code after Dash quits and are picked up again on the next launch. Idle sessions are parked by Claude Code after about an hour.'
           }
-          control={<Switch enabled={stopSessionsOnQuit} onToggle={onStopSessionsOnQuitChange} />}
+          control={
+            <Switch checked={stopSessionsOnQuit} onCheckedChange={onStopSessionsOnQuitChange} />
+          }
         />
         <OrchestratorAccessRow />
       </SettingsCard>
@@ -1048,8 +1053,8 @@ export function SettingsModal({
                       description="Quick-switch between running tasks with Ctrl+Tab."
                       control={
                         <Switch
-                          enabled={showActiveTasksSection}
-                          onToggle={onShowActiveTasksSectionChange}
+                          checked={showActiveTasksSection}
+                          onCheckedChange={onShowActiveTasksSectionChange}
                         />
                       }
                     />
@@ -1222,8 +1227,8 @@ export function SettingsModal({
                       description="Includes the task name."
                       control={
                         <Switch
-                          enabled={desktopNotification}
-                          onToggle={onDesktopNotificationChange}
+                          checked={desktopNotification}
+                          onCheckedChange={onDesktopNotificationChange}
                         />
                       }
                     />
@@ -1349,9 +1354,10 @@ export function SettingsModal({
 
                     {updateStatus?.state === 'downloading' && (
                       <div className="px-4 pb-3.5 -mt-1">
-                        <ProgressBar
-                          percent={updateStatus.percent ?? 0}
-                          label="Downloading update"
+                        <Meter
+                          role="progressbar"
+                          value={updateStatus.percent ?? 0}
+                          aria-label="Downloading update"
                         />
                       </div>
                     )}
@@ -1396,7 +1402,10 @@ export function SettingsModal({
                       label="Check automatically"
                       description="Updates download in the background and install when you quit Dash."
                       control={
-                        <Switch enabled={autoUpdateEnabled} onToggle={onAutoUpdateEnabledChange} />
+                        <Switch
+                          checked={autoUpdateEnabled}
+                          onCheckedChange={onAutoUpdateEnabledChange}
+                        />
                       }
                     />
                     <SettingsRow
@@ -1404,8 +1413,8 @@ export function SettingsModal({
                       description="After updating, show a toast linking to what changed."
                       control={
                         <Switch
-                          enabled={updateNotificationsEnabled}
-                          onToggle={onUpdateNotificationsEnabledChange}
+                          checked={updateNotificationsEnabled}
+                          onCheckedChange={onUpdateNotificationsEnabledChange}
                         />
                       }
                     />
@@ -1422,9 +1431,9 @@ export function SettingsModal({
                       align="start"
                       control={
                         <Switch
-                          enabled={telemetryEnabled && !telemetryEnvDisabled}
+                          checked={telemetryEnabled && !telemetryEnvDisabled}
                           disabled={telemetryEnvDisabled}
-                          onToggle={(next) => {
+                          onCheckedChange={(next) => {
                             setTelemetryEnabled(next);
                             void window.electronAPI.telemetrySetEnabled(next);
                           }}
@@ -1969,14 +1978,12 @@ function RtkSection({
 
       {/* Enable toggle (requires install) */}
       <div>
-        <label className="block text-sm font-medium text-foreground mb-3">
-          Inject RTK hook in tasks
-        </label>
-        <ToggleSwitch
-          enabled={status?.installed ? status.enabled : false}
-          onToggle={onEnabledChange}
+        <SwitchField
+          label="Inject RTK hook in tasks"
+          hint="Compress Bash output via rtk before Claude reads it"
+          checked={status?.installed ? status.enabled : false}
+          onCheckedChange={onEnabledChange}
           disabled={!status?.installed}
-          label="Compress Bash output via rtk before Claude reads it"
         />
         <p className="text-xs text-fg-fade-80 mt-2">
           Takes effect on the next command in every running task — no restart needed. Dash writes

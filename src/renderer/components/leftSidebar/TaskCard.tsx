@@ -3,7 +3,7 @@ import { Globe } from 'lucide-react';
 import type { Task, ActivityInfo, ContextUsage, PullRequestInfo } from '../../../shared/types';
 import { TaskActions } from '../task/TaskActions';
 import { Tooltip } from '../ui/Tooltip';
-import { UsageBarInline } from '../ui/UsageBar';
+import { Meter, usageTone } from '../ui/Meter';
 import { MainRepoBadge } from '../ui/MainRepoBadge';
 import { PrBadge } from '../ui/PrBadge';
 import { SetupStatus } from '../task/SetupStatus';
@@ -202,10 +202,10 @@ export function TaskCard({
       >
         <div className="overflow-hidden">
           {barVisible && (
-            <UsageBarInline
-              percentage={ctx.percentage}
-              height={2}
-              width="auto"
+            <Meter
+              value={ctx.percentage}
+              tone={usageTone(ctx.percentage)}
+              size="sm"
               className="mt-1.5 mb-[3px]"
               title={`Context: ${ctx.used.toLocaleString()} / ${ctx.total.toLocaleString()} tokens (${Math.round(ctx.percentage)}%)`}
             />

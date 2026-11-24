@@ -102,8 +102,8 @@ export function TaskSettingsModal({
           label="Dash access"
           hint="Let this task's agent use Dash: its ports and services, creating tasks of its own, and drafting PR review notes and comments. Adds a dash skill to the task's checkout (.claude/skills/dash, kept out of git) that explains dashctl, the command it uses."
           helperText={hasSession ? 'Changing it restarts the session' : undefined}
-          enabled={task.dashAccess}
-          onToggle={handleDashAccessToggle}
+          checked={task.dashAccess}
+          onCheckedChange={handleDashAccessToggle}
         />
       )}
 

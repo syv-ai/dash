@@ -4,7 +4,7 @@ import { useRuntime } from '../../stores/runtimeStore';
 import { useUi } from '../../stores/uiStore';
 import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
-import { ProgressBar } from '../ui/ProgressBar';
+import { Meter } from '../ui/Meter';
 
 /**
  * Persistent update surface at the foot of the sidebar. It stays put until the
@@ -46,10 +46,11 @@ export function UpdateBanner() {
             </span>
           )}
         </div>
-        <ProgressBar
-          percent={status.percent ?? 0}
+        <Meter
+          role="progressbar"
+          value={status.percent ?? 0}
           className="mt-2"
-          label={`Downloading ${version}`}
+          aria-label={`Downloading ${version}`}
         />
       </Shell>
     );

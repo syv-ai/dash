@@ -1,0 +1,31 @@
+/**
+ * Class fragments shared across the primitives, so the families that must look
+ * alike (every menu, every focusable control) are styled in one place.
+ */
+
+/** Keyboard focus: a 2px state-work outline, offset 1. */
+export const focusRing =
+  'outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-state-work';
+
+/** A floating surface: menus, popovers, the command list, select content. */
+export const menuSurface =
+  'z-50 rounded-lg bg-raised p-1.5 text-ink shadow-raised outline-none animate-popover-in';
+
+/** A row in a floating menu. */
+export const menuItem =
+  'relative flex h-7.5 cursor-default select-none items-center gap-2 rounded-md px-2.5 text-sm text-ink outline-none transition-colors [&_svg]:shrink-0 [&_svg]:text-ink-3';
+
+/** Radix menu row states: present-or-absent `data-highlighted` / `data-disabled`.
+ *  (cmdk writes `data-disabled="false"`, so Command spells its own.) */
+export const radixMenuItemStates =
+  'data-highlighted:bg-hover data-disabled:pointer-events-none data-disabled:opacity-40';
+
+/** A section label inside a menu. */
+export const menuLabel = 'px-2.5 pt-1.5 pb-1 text-xs font-medium text-ink-3';
+
+/** A hairline between menu groups. */
+export const menuSeparator = '-mx-1.5 my-1.5 h-px bg-line';
+
+/** Text fields: hover-tint fill, no border; focus = a subtle line ring on the well. */
+export const fieldBase =
+  'w-full min-w-0 rounded-md bg-hover px-2.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-3 hover:bg-select focus-visible:bg-well focus-visible:ring-1 focus-visible:ring-line disabled:pointer-events-none disabled:opacity-40';

@@ -1,58 +1,70 @@
-import React from 'react';
+import * as React from 'react';
+import { cva, type VariantProps } from 'class-variance-authority';
+import { cn } from '../../lib/cn';
+import { focusRing } from './styles';
+
+const switchVariants = cva(
+  cn(
+    'group/switch relative inline-flex shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-colors duration-200 bg-select aria-checked:bg-btn disabled:cursor-not-allowed disabled:opacity-40',
+    focusRing,
+  ),
+  {
+    variants: {
+      size: { sm: 'h-4 w-7', md: 'h-4.5 w-8' },
+    },
+    defaultVariants: { size: 'md' },
+  },
+);
+
+const thumbVariants = cva(
+  'pointer-events-none block rounded-full bg-ink-2 transition-[translate,background-color] duration-200 ease-out group-aria-checked/switch:bg-ground',
+  {
+    variants: {
+      size: {
+        sm: 'size-3 group-aria-checked/switch:translate-x-3',
+        md: 'size-3.5 group-aria-checked/switch:translate-x-3.5',
+      },
+    },
+    defaultVariants: { size: 'md' },
+  },
+);
+
+export type SwitchProps = Omit<React.ComponentProps<'button'>, 'onChange' | 'value'> &
+  VariantProps<typeof switchVariants> & {
+    checked: boolean;
+    onCheckedChange: (checked: boolean) => void;
+  };
 
 /**
- * Canonical switch primitive. Use this anywhere a binary on/off control is needed
- * inline (settings rows, inline toggles, modal options). For full-row button-style
- * toggles, wrap in `ToggleSwitch`.
+ * The on/off switch (shadcn Switch API: `checked` / `onCheckedChange`). On is
+ * the neutral button tone, off a select tint. For a labelled row use
+ * `SwitchField`.
  */
 export function Switch({
-  enabled,
-  onToggle,
+  checked,
+  onCheckedChange,
+  size,
   disabled,
-  size = 'md',
-  'aria-label': ariaLabel,
-}: {
-  enabled: boolean;
-  onToggle: (value: boolean) => void;
-  disabled?: boolean;
-  size?: 'sm' | 'md';
-  'aria-label'?: string;
-}) {
-  const dims =
-    size === 'sm' ? { w: 28, h: 16, puck: 12, travel: 12 } : { w: 32, h: 18, puck: 14, travel: 14 };
+  className,
+  onClick,
+  ...props
+}: SwitchProps) {
   return (
     <button
       type="button"
       role="switch"
-      aria-checked={enabled}
-      aria-label={ariaLabel}
+      aria-checked={checked}
       disabled={disabled}
+      className={cn(switchVariants({ size }), className)}
       onClick={(e) => {
+        onClick?.(e);
+        // Rows often answer clicks themselves; the switch's click is its own.
         e.stopPropagation();
-        if (!disabled) onToggle(!enabled);
+        if (!disabled) onCheckedChange(!checked);
       }}
-      className={`relative inline-flex items-center rounded-full shrink-0 transition-colors duration-200 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[hsl(var(--surface-2))] ${
-        enabled ? 'bg-primary' : 'bg-border'
-      } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-      style={{
-        width: dims.w,
-        height: dims.h,
-        boxShadow: enabled
-          ? 'inset 0 1px 1px hsl(0 0% 0% / 0.18)'
-          : 'inset 0 1px 1px hsl(0 0% 0% / 0.12)',
-      }}
+      {...props}
     >
-      <span
-        aria-hidden
-        className="absolute rounded-full bg-white shadow-[0_1px_2px_hsl(0_0%_0%/0.3),0_0_0_0.5px_hsl(0_0%_0%/0.05)] transition-transform duration-200 ease-in-out"
-        style={{
-          width: dims.puck,
-          height: dims.puck,
-          top: (dims.h - dims.puck) / 2,
-          left: (dims.h - dims.puck) / 2,
-          transform: enabled ? `translateX(${dims.travel}px)` : 'translateX(0)',
-        }}
-      />
+      <span aria-hidden className={thumbVariants({ size })} />
     </button>
   );
 }
