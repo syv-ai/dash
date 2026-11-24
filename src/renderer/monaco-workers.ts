@@ -76,3 +76,7 @@ if (!w.__dashMonacoWorkerInstalled) {
   loader.config({ monaco: monaco as unknown as Parameters<typeof loader.config>[0]['monaco'] });
   w.__dashMonacoWorkerInstalled = true;
 }
+
+/** The one Monaco instance, configured above: import it from here so its
+ *  workers and grammars are in place before any model or editor exists. */
+export { monaco };

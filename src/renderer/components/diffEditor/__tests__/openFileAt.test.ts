@@ -1,0 +1,63 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  installWindow,
+  makeElectronApiMock,
+  resetWindow,
+} from '../../../stores/__tests__/helpers/electronApiMock';
+import type { Task } from '../../../../shared/types';
+
+// The stores pull in renderer-only modules; stub them like the store tests do.
+vi.mock('../../../terminal/SessionRegistry', () => ({
+  sessionRegistry: { dispose: vi.fn(), disposeByPrefix: vi.fn(), restartAllForTask: vi.fn() },
+}));
+vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
+vi.mock('../../../sounds', () => ({ playPeonSound: vi.fn(), playNotificationSound: vi.fn() }));
+
+const task = { id: 't1', projectId: 'p1', path: '/wt/t1', archivedAt: null } as Task;
+const range = { startLineNumber: 4, startColumn: 2, endLineNumber: 4, endColumn: 8 };
+
+async function load() {
+  vi.resetModules();
+  const { useProjects } = await import('../../../stores/projectsStore');
+  const { useGit } = await import('../../../stores/gitStore');
+  const { useEditorTabs } = await import('../../../stores/editorTabsStore');
+  const { openFileAt } = await import('../openFileAt');
+  useProjects.setState({
+    tasksByProject: { p1: [task] },
+    activeProjectId: 'p1',
+    activeTaskId: 't1',
+  });
+  return { useGit, useEditorTabs, openFileAt };
+}
+
+beforeEach(() => installWindow(makeElectronApiMock()));
+afterEach(() => resetWindow());
+
+describe('openFileAt', () => {
+  it('opens an absolute path in the worktree as a tab, reveals it, and opens the editor', async () => {
+    const { useGit, useEditorTabs, openFileAt } = await load();
+    expect(openFileAt('/wt/t1/src/a.ts', range)).toBe(true);
+
+    const tabs = useEditorTabs.getState();
+    expect(tabs.layouts.t1!.groups[0]).toEqual({ tabs: ['src/a.ts'], active: 'src/a.ts' });
+    expect(tabs.reveal).toMatchObject({ key: 't1', path: 'src/a.ts', range });
+    expect(useGit.getState().diffFile).toEqual({ cwd: '/wt/t1', filePath: '' });
+  });
+
+  it('takes a worktree-relative path and leaves an open editor be', async () => {
+    const { useGit, useEditorTabs, openFileAt } = await load();
+    const open = { cwd: '/wt/t1', filePath: 'x.ts' };
+    useGit.getState().setDiffFile(open);
+    expect(openFileAt('b.ts')).toBe(true);
+    expect(useEditorTabs.getState().layouts.t1!.groups[0]!.active).toBe('b.ts');
+    expect(useEditorTabs.getState().reveal).toBeNull();
+    expect(useGit.getState().diffFile).toBe(open);
+  });
+
+  it('refuses a file outside the worktree', async () => {
+    const { useGit, openFileAt } = await load();
+    expect(openFileAt('/wt/t10/a.ts')).toBe(false);
+    expect(openFileAt('/usr/lib/x.d.ts', range)).toBe(false);
+    expect(useGit.getState().diffFile).toBeNull();
+  });
+});

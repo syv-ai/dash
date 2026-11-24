@@ -13,7 +13,6 @@ import { openInIde } from './lib/openInIde';
 import { loadInspectorWidths, saveInspectorWidth } from './lib/inspectorWidths';
 import { headerModelName } from './lib/modelName';
 import { RightInspector } from './components/rightInspector/RightInspector';
-import { editorOpening } from './components/diffEditor/data/viewPersistence';
 const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
 import { useSetup } from './stores/setupStore';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
@@ -344,7 +343,6 @@ export function App() {
   }, [tasksByProject]);
 
   // ── Git state (gitStore) ─────────────────────────────────
-  const gitStatus = useGit((s) => s.gitStatus);
   const diffFile = useGit((s) => s.diffFile);
   const setDiffFile = useGit((s) => s.setDiffFile);
   const showCommitGraph = useGit((s) => s.showCommitGraph);
@@ -1159,7 +1157,6 @@ export function App() {
     setDiffFile({
       cwd: activeTask.path,
       filePath,
-      staged,
       initialView: { kind: 'working', ref: staged ? 'index' : 'HEAD' },
     });
   }
@@ -1317,6 +1314,7 @@ export function App() {
             >
               {!changesPanelCollapsed && (
                 <RightInspector
+                  key={activeTask.id}
                   task={activeTask}
                   rateLimits={latestRateLimits ?? {}}
                   burns={burns}
@@ -1326,10 +1324,7 @@ export function App() {
                   isDark={theme === 'dark'}
                   onViewDiff={handleViewDiff}
                   onOpenEditor={() => {
-                    setDiffFile({
-                      cwd: activeTask.path,
-                      ...editorOpening(activeTask.path, gitStatus?.files ?? []),
-                    });
+                    setDiffFile({ cwd: activeTask.path, filePath: '' });
                   }}
                   onCloseDiff={closeDiff}
                   onCommitFinished={refreshActiveGitStatus}
@@ -1546,7 +1541,6 @@ export function App() {
           <DiffEditorModal
             cwd={modalDiff.cwd}
             initialFilePath={modalDiff.filePath}
-            initialStaged={modalDiff.staged}
             initialView={modalDiff.initialView}
             activeTaskId={activeTaskId}
             projectId={activeTask?.projectId ?? activeProjectId}

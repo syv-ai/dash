@@ -130,7 +130,6 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
     setDiffFile({
       cwd: memory.dir,
       filePath: file,
-      staged: false,
       initialView: { kind: 'working', ref: 'HEAD' },
     });
   };

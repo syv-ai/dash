@@ -1,21 +1,20 @@
-import React, { useEffect, useRef } from 'react';
-import { DiffEditor as MonacoDiffEditor } from '@monaco-editor/react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import { Loader2 } from 'lucide-react';
 import type { LoadState } from './useFileLoad';
+import { DiffEditorHost } from './DiffEditorHost';
 
 interface Props {
   displayed: LoadState;
   currentState: LoadState;
-  isCommitView: boolean;
-  draft: string;
   editable: boolean;
-  themeName: string;
   wordWrap: boolean;
-  /** Two columns (base | working) instead of the inline diff. */
+  /** Two columns (base | working) instead of the inline diff. An unchanged
+   *  file is never split: inline, with nothing to mark, it is a plain editor. */
   sideBySide: boolean;
   beforeMount(monaco: typeof import('monaco-editor')): void;
   onMount(editor: monacoEditor.IStandaloneDiffEditor, monaco: typeof import('monaco-editor')): void;
+  onUnmount(): void;
   /** Caller passes a ref-callback so it can render comment widgets and the
    *  inline-input popover into the editor area. */
   areaRef: (el: HTMLDivElement | null) => void;
@@ -31,14 +30,12 @@ interface Props {
 export function EditorViewport({
   displayed,
   currentState,
-  isCommitView,
-  draft,
   editable,
-  themeName,
   wordWrap,
   sideBySide,
   beforeMount,
   onMount,
+  onUnmount,
   areaRef,
   fileFadeNonce,
   children,
@@ -58,6 +55,38 @@ export function EditorViewport({
     el.style.transition = 'opacity 200ms cubic-bezier(0.16, 1, 0.3, 1)';
     el.style.opacity = '1';
   }, [fileFadeNonce]);
+
+  const options = useMemo<monacoEditor.IDiffEditorConstructionOptions>(
+    () => ({
+      originalEditable: false,
+      readOnly: !editable,
+      renderSideBySide: sideBySide,
+      // Monaco falls back to inline below this width.
+      renderSideBySideInlineBreakpoint: 600,
+      compactMode: !sideBySide,
+      renderGutterMenu: false,
+      contextmenu: false,
+      minimap: {
+        enabled: true,
+        renderCharacters: false,
+        maxColumn: 60,
+        showSlider: 'mouseover',
+        size: 'fit',
+      },
+      fontSize: 12,
+      lineNumbers: 'on',
+      glyphMargin: false,
+      lineNumbersMinChars: 1,
+      lineDecorationsWidth: 48,
+      scrollBeyondLastLine: false,
+      wordWrap: wordWrap ? 'on' : 'off',
+      overviewRulerBorder: false,
+      overviewRulerLanes: 0,
+      scrollbar: { vertical: 'hidden', verticalScrollbarSize: 0 },
+      guides: { highlightActiveIndentation: 'always' },
+    }),
+    [editable, sideBySide, wordWrap],
+  );
 
   return (
     <div ref={areaRef} className="flex-1 relative overflow-hidden">
@@ -93,49 +122,11 @@ export function EditorViewport({
       )}
       {displayed.kind === 'loaded' && !displayed.isBinary && !displayed.isLargeFile && (
         <div ref={monacoWrapRef} className="absolute inset-0">
-          <MonacoDiffEditor
+          <DiffEditorHost
+            options={options}
             beforeMount={beforeMount}
-            // We own model disposal (see useMonacoEditor): @monaco-editor/react
-            // 4.7 disposes the diff TextModels before the widget on unmount,
-            // throwing "TextModel got disposed before DiffEditorWidget model got
-            // reset". keepCurrent*Model makes the lib leave the models to us.
-            keepCurrentOriginalModel
-            keepCurrentModifiedModel
-            original={displayed.originalContent}
-            modified={isCommitView ? displayed.modifiedContent : draft}
-            language={displayed.language || undefined}
-            theme={themeName}
-            options={{
-              originalEditable: false,
-              readOnly: !editable,
-              renderSideBySide: sideBySide,
-              // Monaco falls back to inline below this width; the modal is
-              // wide enough that side by side should hold on any normal window.
-              renderSideBySideInlineBreakpoint: 600,
-              compactMode: !sideBySide,
-              renderGutterMenu: false,
-              contextmenu: false,
-              minimap: {
-                enabled: true,
-                renderCharacters: false,
-                maxColumn: 60,
-                showSlider: 'mouseover',
-                size: 'fit',
-              },
-              automaticLayout: true,
-              fontSize: 12,
-              lineNumbers: 'on',
-              glyphMargin: false,
-              lineNumbersMinChars: 1,
-              lineDecorationsWidth: 48,
-              scrollBeyondLastLine: false,
-              wordWrap: wordWrap ? 'on' : 'off',
-              overviewRulerBorder: false,
-              overviewRulerLanes: 0,
-              scrollbar: { vertical: 'hidden', verticalScrollbarSize: 0 },
-              guides: { highlightActiveIndentation: 'always' },
-            }}
             onMount={onMount}
+            onUnmount={onUnmount}
           />
         </div>
       )}

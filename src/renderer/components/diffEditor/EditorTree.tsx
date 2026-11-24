@@ -1,29 +1,26 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../ui/Resizable';
-import {
-  ChevronDown,
-  ChevronRight,
-  Copy,
-  GitCommit,
-  GitPullRequestArrow,
-  History,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight, Columns2, Copy, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { HoverSwapSlot } from '../ui/HoverSwapSlot';
 import { IconButton } from '../ui/IconButton';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '../ui/ContextMenu';
 import type { FileChange, FileChangeStatus } from '../../../shared/types';
-import { formatRelativeTime } from '@shared/relativeTime';
-import type { CommitSummary, EditorView } from './types';
-import { Popover, PopoverAnchor, PopoverContent } from '../ui/Popover';
+import type { EditorView } from './types';
 import { Tooltip } from '../ui/Tooltip';
-import { Markdown } from '../ui/Markdown';
 
-interface EditorSidebarProps {
+interface EditorTreeProps {
   /** Repo root — needed to lazily list gitignored files under "show all files". */
   cwd: string;
-  /** `cwd` is a task's worktree. Otherwise it is plain files: no commits, no
-   *  changes to filter on, no ignored files. */
+  /** `cwd` is a task's worktree. Otherwise it is plain files: no changes to
+   *  filter on, no ignored files. */
   git: boolean;
+  view: EditorView;
   /** All file paths in the current view's source (whole repo, sorted). */
   allPaths: string[];
   /** Subset of paths that have a diff for this view, with status + line stats. */
@@ -31,20 +28,13 @@ interface EditorSidebarProps {
   /** List only the changed files (and their folders), not the whole repo. */
   changedOnly: boolean;
   filesLoading: boolean;
+  /** The file showing in the focused editor group. */
   selectedPath: string;
-  onSelectFile: (path: string) => void;
+  /** Open a file in the focused group, or `toSide` in the other one. */
+  onOpenFile: (path: string, opts?: { toSide?: boolean }) => void;
   /** Per-file badge counts: your notes and comments, and (in a PR view) the
    *  PR's unresolved threads. */
   badgeCounts: Map<string, FileBadges>;
-
-  commits: CommitSummary[];
-  commitsLoading: boolean;
-  /** Comment count per scope ('live' / 'commit:<hash>') → badge on each row. */
-  commentCountByScope: Map<string, number>;
-  view: EditorView;
-  onSelectView: (view: EditorView) => void;
-  /** The task's open GitHub PR, shown as a row that opens the PR view. */
-  pr?: PrEntry | null;
 }
 
 /** A file's badges in the tree. */
@@ -55,83 +45,24 @@ export interface FileBadges {
   threads: number;
 }
 
-/** The task's open PR in the commits drawer. `threads` and `body` are null
- *  until its review is fetched. */
-export interface PrEntry {
-  number: number;
-  title: string;
-  body: string | null;
-  threads: number | null;
-  /** The task is reviewing it (Review clicked, not yet submitted). */
-  inReview: boolean;
-  onOpen: () => void;
-  /** Start reviewing it, and open it. */
-  onReview: () => void;
-  /** The hover card opened: fetch the review if it isn't yet. */
-  onPeek: () => void;
-}
-
-const COMMITS_DRAWER_KEY = 'diffEditor.commitsDrawerSize';
-const COMMITS_PANEL_ID = 'commits';
-
-export function EditorSidebar(props: EditorSidebarProps) {
-  const initialDrawerSize = parseInitial(localStorage.getItem(COMMITS_DRAWER_KEY), 35);
-  const fileTree = (
-    <FileTreePanel
-      cwd={props.cwd}
-      git={props.git}
-      view={props.view}
-      paths={props.allPaths}
-      changedFiles={props.changedFiles}
-      changedOnly={props.changedOnly}
-      loading={props.filesLoading}
-      selectedPath={props.selectedPath}
-      onSelectFile={props.onSelectFile}
-      badgeCounts={props.badgeCounts}
-    />
-  );
-
-  if (!props.git) {
-    return <div className="h-full min-h-0 flex flex-col overflow-hidden">{fileTree}</div>;
-  }
+/** The editor's file tree: the view's changed files, or the whole repo. */
+export function EditorTree(props: EditorTreeProps) {
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden">
-      <ResizablePanelGroup
-        orientation="vertical"
-        autoSaveId="diff-editor-sidebar"
-        onLayoutChanged={(layout) => {
-          const drawer = layout[COMMITS_PANEL_ID];
-          if (drawer != null) localStorage.setItem(COMMITS_DRAWER_KEY, String(drawer));
-        }}
-      >
-        <ResizablePanel id="files" minSize="20%">
-          {fileTree}
-        </ResizablePanel>
-        <ResizableHandle />
-        <ResizablePanel
-          id={COMMITS_PANEL_ID}
-          defaultSize={`${initialDrawerSize}%`}
-          minSize="10%"
-          maxSize="70%"
-        >
-          <CommitsDrawer
-            commits={props.commits}
-            loading={props.commitsLoading}
-            commentCountByScope={props.commentCountByScope}
-            view={props.view}
-            onSelectView={props.onSelectView}
-            pr={props.pr}
-          />
-        </ResizablePanel>
-      </ResizablePanelGroup>
+      <FileTreePanel
+        cwd={props.cwd}
+        git={props.git}
+        view={props.view}
+        paths={props.allPaths}
+        changedFiles={props.changedFiles}
+        changedOnly={props.changedOnly}
+        loading={props.filesLoading}
+        selectedPath={props.selectedPath}
+        onOpenFile={props.onOpenFile}
+        badgeCounts={props.badgeCounts}
+      />
     </div>
   );
-}
-
-function parseInitial(stored: string | null, fallback: number): number {
-  if (!stored) return fallback;
-  const n = parseFloat(stored);
-  return Number.isFinite(n) && n > 0 && n < 100 ? n : fallback;
 }
 
 // ── File tree ────────────────────────────────────────────────
@@ -296,30 +227,30 @@ function CopyPathAction({ path }: { path: string }) {
 }
 
 /** A tree row: a div (it holds the copy button, which a <button> can't) that
- *  still activates on click, Enter and Space. `group/swap` drives HoverSwapSlot. */
-function TreeRow({
-  onActivate,
-  className,
-  style,
-  title,
-  children,
-}: {
-  onActivate: () => void;
-  className: string;
-  style: React.CSSProperties;
-  title?: string;
-  children: React.ReactNode;
-}) {
+ *  still activates on click, Enter and Space (with ⌥: `alt`). `group/swap`
+ *  drives HoverSwapSlot. */
+const TreeRow = React.forwardRef<
+  HTMLDivElement,
+  {
+    onActivate: (alt: boolean) => void;
+    className: string;
+    style: React.CSSProperties;
+    title?: string;
+    children: React.ReactNode;
+  } & Omit<React.HTMLAttributes<HTMLDivElement>, 'onClick' | 'onKeyDown'>
+>(function TreeRow({ onActivate, className, style, title, children, ...rest }, ref) {
   return (
     <div
+      {...rest}
+      ref={ref}
       role="button"
       tabIndex={0}
       title={title}
-      onClick={onActivate}
+      onClick={(e) => onActivate(e.altKey)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          onActivate();
+          onActivate(e.altKey);
         }
       }}
       style={style}
@@ -328,7 +259,7 @@ function TreeRow({
       {children}
     </div>
   );
-}
+});
 
 function pickDominant(statuses: Set<FileChangeStatus>): FileChangeStatus | null {
   if (statuses.size === 0) return null;
@@ -378,7 +309,7 @@ interface FileTreePanelProps {
   changedOnly: boolean;
   loading: boolean;
   selectedPath: string;
-  onSelectFile: (path: string) => void;
+  onOpenFile: (path: string, opts?: { toSide?: boolean }) => void;
   badgeCounts: Map<string, FileBadges>;
 }
 
@@ -391,7 +322,7 @@ function FileTreePanel({
   changedOnly: changedOnlyProp,
   loading,
   selectedPath,
-  onSelectFile,
+  onOpenFile,
   badgeCounts,
 }: FileTreePanelProps) {
   // Plain files have no changes to filter on, and nothing git ignores.
@@ -469,7 +400,7 @@ function FileTreePanel({
             node={tree}
             indent={0}
             selectedPath={selectedPath}
-            onSelectFile={onSelectFile}
+            onOpenFile={onOpenFile}
             badgeCounts={badgeCounts}
             cols={cols}
           />
@@ -483,7 +414,7 @@ interface FolderContentsProps {
   node: TreeFolder;
   indent: number;
   selectedPath: string;
-  onSelectFile: (path: string) => void;
+  onOpenFile: (path: string, opts?: { toSide?: boolean }) => void;
   badgeCounts: Map<string, FileBadges>;
   cols: TreeColumns;
 }
@@ -492,7 +423,7 @@ function FolderContents({
   node,
   indent,
   selectedPath,
-  onSelectFile,
+  onOpenFile,
   badgeCounts,
   cols,
 }: FolderContentsProps) {
@@ -508,7 +439,7 @@ function FolderContents({
           folder={child}
           indent={indent}
           selectedPath={selectedPath}
-          onSelectFile={onSelectFile}
+          onOpenFile={onOpenFile}
           badgeCounts={badgeCounts}
           cols={cols}
         />
@@ -520,7 +451,7 @@ function FolderContents({
           indent={indent}
           selected={file.fullPath === selectedPath}
           badges={badgeCounts.get(file.fullPath)}
-          onClick={() => onSelectFile(file.fullPath)}
+          onOpen={(opts) => onOpenFile(file.fullPath, opts)}
           cols={cols}
         />
       ))}
@@ -538,14 +469,14 @@ function FolderEntry({
   folder,
   indent,
   selectedPath,
-  onSelectFile,
+  onOpenFile,
   badgeCounts,
   cols,
 }: {
   folder: TreeFolder;
   indent: number;
   selectedPath: string;
-  onSelectFile: (path: string) => void;
+  onOpenFile: (path: string, opts?: { toSide?: boolean }) => void;
   badgeCounts: Map<string, FileBadges>;
   cols: TreeColumns;
 }) {
@@ -610,7 +541,7 @@ function FolderEntry({
           node={folder}
           indent={indent + 1}
           selectedPath={selectedPath}
-          onSelectFile={onSelectFile}
+          onOpenFile={onOpenFile}
           badgeCounts={badgeCounts}
           cols={cols}
         />
@@ -653,362 +584,100 @@ function FileEntry({
   indent,
   selected,
   badges,
-  onClick,
+  onOpen,
   cols,
 }: {
   file: TreeFile;
   indent: number;
   selected: boolean;
   badges: FileBadges | undefined;
-  onClick: () => void;
+  /** Open in the focused group; ⌥-click or the menu: to the side. */
+  onOpen: (opts?: { toSide?: boolean }) => void;
   cols: TreeColumns;
 }) {
   const change = file.change;
   const tint = selected ? 'text-primary' : change ? STATUS_TEXT[change.status] : 'text-fg-fade-80';
   return (
-    <TreeRow
-      onActivate={onClick}
-      title={file.fullPath}
-      style={{ paddingLeft: 4 + indent * INDENT_STEP, paddingRight: 8 }}
-      className={selected ? 'bg-primary/15' : 'hover:bg-[hsl(var(--surface-2)/0.6)]'}
-    >
-      {/* Empty icon slot keeps file names aligned with folder names at the
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <TreeRow
+          onActivate={(alt) => onOpen({ toSide: alt })}
+          title={file.fullPath}
+          style={{ paddingLeft: 4 + indent * INDENT_STEP, paddingRight: 8 }}
+          className={selected ? 'bg-primary/15' : 'hover:bg-[hsl(var(--surface-2)/0.6)]'}
+        >
+          {/* Empty icon slot keeps file names aligned with folder names at the
           same indent (the chevron column for folders). */}
-      <span className="shrink-0" style={{ width: ICON_SLOT }} />
-      <span className={`flex-1 min-w-0 font-mono text-sm truncate text-left ${tint}`}>
-        {file.name}
-      </span>
-      {/* Stat columns at rest (each as wide as the tree's widest value, so
+          <span className="shrink-0" style={{ width: ICON_SLOT }} />
+          <span className={`flex-1 min-w-0 font-mono text-sm truncate text-left ${tint}`}>
+            {file.name}
+          </span>
+          {/* Stat columns at rest (each as wide as the tree's widest value, so
           they line up down the list); "Copy path" slides in on hover. */}
-      <HoverSwapSlot
-        rest={
-          <span className="flex items-center gap-1.5 font-mono text-xs tabular-nums">
-            {cols.threads && (
-              <span className="flex w-[18px] justify-end">
-                {!!badges?.threads && <ThreadBadge count={badges.threads} />}
+          <HoverSwapSlot
+            rest={
+              <span className="flex items-center gap-1.5 font-mono text-xs tabular-nums">
+                {cols.threads && (
+                  <span className="flex w-[18px] justify-end">
+                    {!!badges?.threads && <ThreadBadge count={badges.threads} />}
+                  </span>
+                )}
+                {cols.comments && (
+                  <span className="flex w-[18px] justify-end">
+                    {!!badges?.comments && <CommentBadge count={badges.comments} />}
+                  </span>
+                )}
+                {cols.add > 0 && (
+                  <span
+                    className={`text-right ${
+                      change?.status === 'untracked'
+                        ? 'text-muted-foreground'
+                        : 'text-[hsl(var(--git-added))]'
+                    }`}
+                    style={{ width: `${cols.add}ch` }}
+                  >
+                    {change && change.additions > 0 ? `+${change.additions}` : ''}
+                  </span>
+                )}
+                {cols.del > 0 && (
+                  <span
+                    className="text-right text-[hsl(var(--git-deleted))]"
+                    style={{ width: `${cols.del}ch` }}
+                  >
+                    {change && change.deletions > 0 ? `−${change.deletions}` : ''}
+                  </span>
+                )}
+                {cols.status > 0 && (
+                  <span
+                    className={`text-xs font-semibold text-center ${
+                      change ? (selected ? 'text-primary' : STATUS_TEXT[change.status]) : ''
+                    }`}
+                    style={{ width: `${cols.status}ch` }}
+                  >
+                    {change ? STATUS_LABEL[change.status] : ''}
+                  </span>
+                )}
               </span>
-            )}
-            {cols.comments && (
-              <span className="flex w-[18px] justify-end">
-                {!!badges?.comments && <CommentBadge count={badges.comments} />}
-              </span>
-            )}
-            {cols.add > 0 && (
-              <span
-                className={`text-right ${
-                  change?.status === 'untracked'
-                    ? 'text-muted-foreground'
-                    : 'text-[hsl(var(--git-added))]'
-                }`}
-                style={{ width: `${cols.add}ch` }}
-              >
-                {change && change.additions > 0 ? `+${change.additions}` : ''}
-              </span>
-            )}
-            {cols.del > 0 && (
-              <span
-                className="text-right text-[hsl(var(--git-deleted))]"
-                style={{ width: `${cols.del}ch` }}
-              >
-                {change && change.deletions > 0 ? `−${change.deletions}` : ''}
-              </span>
-            )}
-            {cols.status > 0 && (
-              <span
-                className={`text-xs font-semibold text-center ${
-                  change ? (selected ? 'text-primary' : STATUS_TEXT[change.status]) : ''
-                }`}
-                style={{ width: `${cols.status}ch` }}
-              >
-                {change ? STATUS_LABEL[change.status] : ''}
-              </span>
-            )}
-          </span>
-        }
-        actions={<CopyPathAction path={file.fullPath} />}
-      />
-    </TreeRow>
-  );
-}
-
-// ── Commits drawer ───────────────────────────────────────────
-
-interface CommitsDrawerProps {
-  commits: CommitSummary[];
-  loading: boolean;
-  commentCountByScope: Map<string, number>;
-  view: EditorView;
-  onSelectView: (view: EditorView) => void;
-  pr?: PrEntry | null;
-}
-
-function CommitsDrawer({
-  commits,
-  loading,
-  commentCountByScope,
-  view,
-  onSelectView,
-  pr,
-}: CommitsDrawerProps) {
-  const workingActive = view.kind === 'working';
-  const activeCommitHash = view.kind === 'commit' ? view.hash : null;
-
-  // Auto-scroll active commit into view when the view changes.
-  const listRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!listRef.current) return;
-    const el = listRef.current.querySelector('[data-active="true"]') as HTMLElement | null;
-    if (el) el.scrollIntoView({ block: 'nearest' });
-  }, [view]);
-
-  return (
-    <div className="h-full min-h-0 flex flex-col">
-      <div className="px-3 py-2 text-xs uppercase tracking-wider text-muted-fade-70 font-mono flex items-center gap-1.5 shrink-0">
-        <History size={11} strokeWidth={1.8} />
-        <span>Commits</span>
-        {commits.length > 0 && <span className="ml-auto tabular-nums">{commits.length}</span>}
-      </div>
-      <div
-        ref={listRef}
-        className="flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1"
-      >
-        {/* Always pinned, even on a clean tree: it is the only editable view
-            and the way back from a commit. */}
-        <button
-          type="button"
-          data-active={workingActive}
-          onClick={() => onSelectView({ kind: 'working', ref: 'HEAD' })}
-          className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-sm text-left transition-colors ${
-            workingActive
-              ? 'bg-primary/15 text-primary'
-              : 'text-fg-fade-85 hover:bg-[hsl(var(--surface-2)/0.6)]'
-          }`}
-        >
-          <GitCommit size={11} strokeWidth={1.8} className="opacity-60 shrink-0" />
-          <span className="truncate flex-1 font-mono text-sm">Working tree</span>
-          {(commentCountByScope.get('live') ?? 0) > 0 && (
-            <CommentBadge count={commentCountByScope.get('live')!} />
-          )}
-        </button>
-        {pr && <PrRow pr={pr} active={view.kind === 'pr'} />}
-        {loading && commits.length === 0 && (
-          <div className="px-3 py-2 text-xs text-muted-fade-40">Loading…</div>
-        )}
-        {commits.map((c) => {
-          const active = activeCommitHash === c.hash;
-          return (
-            <CommitRow
-              key={c.hash}
-              commit={c}
-              active={active}
-              commentCount={commentCountByScope.get(`commit:${c.hash}`) ?? 0}
-              onSelect={() => onSelectView({ kind: 'commit', hash: c.hash })}
-            />
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-interface CommitRowProps {
-  commit: CommitSummary;
-  active: boolean;
-  commentCount: number;
-  onSelect: () => void;
-}
-
-/** A hover card's open state: opens after a short rest, and stays open while
- *  the pointer is on the card (`holdOpen` on its mouseenter). */
-function useHoverCard(onOpen?: () => void) {
-  const [hovered, setHovered] = useState(false);
-  const openTimer = useRef<number | null>(null);
-  const closeTimer = useRef<number | null>(null);
-
-  const cancelTimers = () => {
-    if (openTimer.current != null) {
-      window.clearTimeout(openTimer.current);
-      openTimer.current = null;
-    }
-    if (closeTimer.current != null) {
-      window.clearTimeout(closeTimer.current);
-      closeTimer.current = null;
-    }
-  };
-
-  const scheduleOpen = () => {
-    cancelTimers();
-    openTimer.current = window.setTimeout(() => {
-      setHovered(true);
-      onOpen?.();
-    }, 220);
-  };
-
-  const scheduleClose = () => {
-    cancelTimers();
-    closeTimer.current = window.setTimeout(() => setHovered(false), 80);
-  };
-
-  const holdOpen = () => {
-    if (closeTimer.current != null) {
-      window.clearTimeout(closeTimer.current);
-      closeTimer.current = null;
-    }
-  };
-
-  useEffect(() => cancelTimers, []);
-  return { hovered, scheduleOpen, scheduleClose, holdOpen };
-}
-
-function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
-  const { hovered, scheduleOpen, scheduleClose, holdOpen } = useHoverCard();
-
-  return (
-    <Popover open={hovered}>
-      <PopoverAnchor asChild>
-        <button
-          type="button"
-          data-active={active}
-          onClick={onSelect}
-          onMouseEnter={scheduleOpen}
-          onMouseLeave={scheduleClose}
-          onFocus={scheduleOpen}
-          onBlur={scheduleClose}
-          className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-sm text-left transition-colors ${
-            active
-              ? 'bg-primary/15 text-primary'
-              : 'text-fg-fade-85 hover:bg-[hsl(var(--surface-2)/0.6)]'
-          }`}
-        >
-          <span className="text-xs font-mono text-muted-fade-60 tabular-nums shrink-0">
-            {commit.shortHash}
-          </span>
-          <span className="truncate flex-1 font-mono text-sm">
-            {commit.subject || '(no subject)'}
-          </span>
-          {commentCount > 0 && <CommentBadge count={commentCount} />}
-          {(commit.additions > 0 || commit.deletions > 0) && (
-            <span className="font-mono text-xs flex gap-1 shrink-0 tabular-nums">
-              {commit.additions > 0 && (
-                <span className="text-[hsl(var(--git-added))]">+{commit.additions}</span>
-              )}
-              {commit.deletions > 0 && (
-                <span className="text-[hsl(var(--git-deleted))]">−{commit.deletions}</span>
-              )}
-            </span>
-          )}
-          <span className="text-xs text-muted-fade-40 shrink-0 tabular-nums">
-            {formatRelativeTime(commit.authorDate, Date.now() / 1000)}
-          </span>
-        </button>
-      </PopoverAnchor>
-      <PopoverContent
-        side="right"
-        align="start"
-        sideOffset={10}
-        // Pointer events live so the popover stays open while the cursor is on
-        // it; mouseenter/leave on the content cancels the close timer.
-        onMouseEnter={holdOpen}
-        onMouseLeave={scheduleClose}
-        // Block Radix's auto-focus so the popover doesn't steal focus from the
-        // commit list on hover.
-        onOpenAutoFocus={(e) => e.preventDefault()}
-        onCloseAutoFocus={(e) => e.preventDefault()}
-        className="w-[420px] max-h-[440px] overflow-y-auto p-3.5 flex flex-col gap-2.5"
-      >
-        <div className="text-base font-medium text-foreground leading-snug">
-          {commit.subject || '(no subject)'}
-        </div>
-        {commit.body && (
-          <div className="text-sm text-fg-fade-75 leading-relaxed whitespace-pre-wrap font-mono">
-            {commit.body}
-          </div>
-        )}
-        <div className="flex items-center gap-2 pt-1.5 border-t border-border/40 text-xs text-muted-fade-75">
-          <span className="font-mono tabular-nums">{commit.shortHash}</span>
-          <span className="opacity-50">·</span>
-          <span className="truncate">{commit.authorName}</span>
-          <span className="opacity-50">·</span>
-          <span className="tabular-nums">
-            {formatRelativeTime(commit.authorDate, Date.now() / 1000)}
-          </span>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-/** The task's PR in the commits drawer: tinted apart from the commits, with
- *  Review (or "In review") and a hover card holding its description. */
-function PrRow({ pr, active }: { pr: PrEntry; active: boolean }) {
-  const { hovered, scheduleOpen, scheduleClose, holdOpen } = useHoverCard(pr.onPeek);
-  return (
-    <Popover open={hovered}>
-      <PopoverAnchor asChild>
-        <div
-          data-active={active}
-          onMouseEnter={scheduleOpen}
-          onMouseLeave={scheduleClose}
-          className={`my-0.5 flex items-center gap-1 rounded-md border pl-2 pr-1 py-0.5 transition-colors ${
-            active
-              ? 'border-[hsl(var(--git-added)/0.45)] bg-[hsl(var(--git-added)/0.16)]'
-              : 'border-[hsl(var(--git-added)/0.25)] bg-[hsl(var(--git-added)/0.07)] hover:bg-[hsl(var(--git-added)/0.12)]'
-          }`}
-        >
-          <button
-            type="button"
-            onClick={pr.onOpen}
-            onFocus={scheduleOpen}
-            onBlur={scheduleClose}
-            className="flex min-w-0 flex-1 items-center gap-2 py-0.5 text-left text-sm text-[hsl(var(--git-added))]"
-          >
-            <GitPullRequestArrow size={11} strokeWidth={1.8} className="shrink-0" />
-            <span className="shrink-0 font-mono text-sm tabular-nums">#{pr.number}</span>
-            <span className="min-w-0 flex-1 truncate text-sm text-fg-fade-85">{pr.title}</span>
-            {(pr.threads ?? 0) > 0 && <CommentBadge count={pr.threads!} />}
-          </button>
-          {pr.inReview ? (
-            <button
-              type="button"
-              onClick={pr.onOpen}
-              title="Your review is in progress"
-              className="shrink-0 rounded-full border border-primary/40 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
-            >
-              In review
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={pr.onReview}
-              title="Review: what you write becomes a PR comment, sent on Submit"
-              className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground hover:brightness-110 transition"
-            >
-              Review
-            </button>
-          )}
-        </div>
-      </PopoverAnchor>
-      <PopoverContent
-        side="right"
-        align="start"
-        sideOffset={10}
-        onMouseEnter={holdOpen}
-        onMouseLeave={scheduleClose}
-        onOpenAutoFocus={(e) => e.preventDefault()}
-        onCloseAutoFocus={(e) => e.preventDefault()}
-        className="w-[420px] max-h-[440px] overflow-y-auto overflow-x-hidden p-3.5 flex flex-col gap-2.5"
-      >
-        <div className="text-base font-medium text-foreground leading-snug wrap-break-word">
-          #{pr.number} {pr.title}
-        </div>
-        {pr.body === null ? (
-          <div className="text-sm text-muted-fade-60">Loading…</div>
-        ) : pr.body.trim() ? (
-          <Markdown text={pr.body} className="text-sm leading-relaxed text-fg-fade-85" />
-        ) : (
-          <div className="text-sm italic text-muted-fade-60">No description.</div>
-        )}
-      </PopoverContent>
-    </Popover>
+            }
+            actions={<CopyPathAction path={file.fullPath} />}
+          />
+        </TreeRow>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={() => onOpen()}>
+          <FileText size={14} strokeWidth={1.8} />
+          Open
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => onOpen({ toSide: true })}>
+          <Columns2 size={14} strokeWidth={1.8} />
+          Open to the side
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={() => copyPath(file.fullPath)}>
+          <Copy size={14} strokeWidth={1.8} />
+          Copy path
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }

@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import type { editor as monacoEditor } from 'monaco-editor';
@@ -24,7 +32,10 @@ import { CommentOverlay } from './comments/overlay/CommentOverlay';
 import { CommentsMenu } from './comments/CommentsMenu';
 import { EditCommentsModal } from './comments/EditCommentsModal';
 import { useGitBlame } from './blame/useGitBlame';
-import { useFileLoad, type LoadState } from './editor/useFileLoad';
+import { useFileLoad } from './editor/useFileLoad';
+import { usePaneModels } from './editor/usePaneModels';
+import { dirtyVersion, isDirty, subscribeDirty } from './models';
+import type { TextRange } from '../../stores/editorTabsStore';
 import { useEditorSave } from './editor/useEditorSave';
 import { useMonacoEditor } from './editor/useMonacoEditor';
 import { EditorHeader } from './editor/EditorHeader';
@@ -51,6 +62,8 @@ function previewKind(filePath: string): 'html' | 'markdown' | null {
 }
 
 interface EditorPaneProps {
+  /** This pane's id, unique on the page: it holds the models it shows. */
+  paneId: string;
   cwd: string;
   /** `cwd` is a task's worktree: git (blame) applies. */
   git: boolean;
@@ -75,13 +88,15 @@ interface EditorPaneProps {
   projectId: string | null;
   /** Open PR `number`'s view; resolves false when it couldn't be loaded. */
   onSelectPr: (number: number) => Promise<boolean>;
-  /** Confirm-before-close (e.g. if the host has unsaved changes elsewhere). */
-  guardClose?: () => boolean;
   /** Open another file (the PR review menu's thread list). */
   onSelectFile: (path: string) => void;
+  /** Show this range once the file is on screen (go-to-definition, openFileAt). */
+  revealRange: { range: TextRange; nonce: number } | null;
+  onRevealed: (nonce: number) => void;
 }
 
 export function EditorPane({
+  paneId,
   cwd,
   git,
   filePath,
@@ -99,6 +114,8 @@ export function EditorPane({
   projectId,
   onSelectPr,
   onSelectFile,
+  revealRange,
+  onRevealed,
 }: EditorPaneProps) {
   // The store holds the active task's comments: they belong here only while
   // this is that task's folder (activeTaskId is null otherwise).
@@ -106,9 +123,9 @@ export function EditorPane({
   const storedByFile = useCommentsStore((s) => s.byFile);
   const commentsByFile = commentsOn ? storedByFile : NO_COMMENTS;
   const commentsDisabled = !commentsOn;
-  const { state, setState } = useFileLoad(cwd, filePath, view);
+  const { state, reload } = useFileLoad(cwd, filePath, view);
+  // The buffer's text, mirrored for the rendered preview.
   const [draft, setDraft] = useState<string>('');
-  const [loadedBuffer, setLoadedBuffer] = useState<string>('');
   const [wordWrap, setWordWrap] = useState<boolean>(
     () => localStorage.getItem(WORDWRAP_KEY) === 'on',
   );
@@ -159,36 +176,37 @@ export function EditorPane({
     return n;
   }, [commentsByFile, scope]);
 
-  const { editor, monaco, themeName, displayed, handleBeforeMount, handleMount } = useMonacoEditor({
-    isDark,
-    terminalTheme,
-    state,
-    onSave: () => saveCmdRef.current?.(),
-    onDraftChange: setDraft,
-    isCommitView,
-  });
+  const { editor, monaco, displayed, handleBeforeMount, handleMount, handleUnmount } =
+    useMonacoEditor({
+      isDark,
+      terminalTheme,
+      state,
+      onSave: () => saveCmdRef.current?.(),
+      onDraftChange: setDraft,
+      isCommitView,
+    });
   const modifiedEditor = editor?.getModifiedEditor() ?? null;
 
-  // Mutate the load state in-place for save mtime/size updates and reload.
-  // useFileLoad owns the state; this just exposes a targeted patch.
-  const patchLoadedState = useCallback(
-    (next: Partial<Extract<LoadState, { kind: 'loaded' }>>) => {
-      setState((prev) => (prev.kind === 'loaded' ? { ...prev, ...next } : prev));
-    },
-    [setState],
-  );
+  // The widget's models: the working file's shared one in the live views.
+  const forceReloadRef = useRef(false);
+  const { attachedLoadId, working } = usePaneModels({
+    holder: paneId,
+    cwd,
+    filePath,
+    view,
+    state,
+    editor,
+    forceRef: forceReloadRef,
+  });
 
   const saveApi = useEditorSave({
     cwd,
     filePath,
-    workingRef: view.kind === 'working' ? view.ref : 'HEAD',
-    state,
-    draft,
-    loadedBuffer,
-    setLoadedBuffer,
-    setDraft,
-    patchLoadedState,
-    isCommitView,
+    model: working,
+    reload: () => {
+      forceReloadRef.current = true;
+      reload();
+    },
   });
   const {
     saving,
@@ -207,13 +225,13 @@ export function EditorPane({
     monaco,
     !commentsDisabled,
   );
-  const dirty = !isCommitView && draft !== loadedBuffer;
-  const editable =
-    !isCommitView &&
-    state.kind === 'loaded' &&
-    !state.isBinary &&
-    !state.isLargeFile &&
-    state.modifiedPresent;
+  const editable = !isCommitView && working !== null;
+  // Shared with every other view of the file: one buffer, one dirty flag.
+  useSyncExternalStore(subscribeDirty, dirtyVersion);
+  const dirty = editable && isDirty(working.uri.toString());
+  // Unchanged files open as a plain editor: never split into two columns.
+  const changed =
+    displayed.kind === 'loaded' && displayed.originalContent !== displayed.modifiedContent;
 
   // Document fed to the preview iframe — the live editor buffer (so unsaved
   // edits show immediately). Markdown is converted; HTML renders verbatim.
@@ -223,28 +241,15 @@ export function EditorPane({
     return kind === 'markdown' ? markdownToDocument(draft, isDark) : draft;
   }, [previewing, kind, draft, isDark]);
 
-  // Initialize the editable buffer + saved buffer whenever a new file's
-  // content loads. Comment lifecycle / pending range / stale flag are
-  // owned by their respective hooks; only the draft/loadedBuffer mirror
-  // lives here because the save hook owns them by reference.
-  //
-  // Keyed on loadId, NOT the state object: a save patches mtime/size in place,
-  // which makes a new state object while `modifiedContent` still holds the
-  // pre-edit text. Depending on `state` re-ran this after every save and reset
-  // the draft back to that stale text — the edit visibly reverted on ⌘S.
-  const loadId = state.kind === 'loaded' ? state.loadId : 0;
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  // A fresh load is on screen: mirror its buffer (which may hold edits made
+  // in another group) and drop the previous file's transient state.
   useEffect(() => {
-    const loaded = stateRef.current;
-    if (loaded.kind !== 'loaded') return;
-    const initial = loaded.modifiedContent;
-    setLoadedBuffer(initial);
-    setDraft(initial);
+    if (attachedLoadId === 0) return;
+    setDraft(editor?.getModifiedEditor().getValue() ?? '');
     setPendingRange(null);
     setStale(null);
     setSaveError(null);
-  }, [loadId, setPendingRange, setStale, setSaveError]);
+  }, [attachedLoadId, editor, setPendingRange, setStale, setSaveError]);
 
   // Fade-on-file-change: bumps only after the new file's content has actually
   // loaded (not on the click), so the fade-in coincides with the visual swap.
@@ -254,7 +259,8 @@ export function EditorPane({
   // Owns Monaco decoration lifecycle for the current filePath. Hydration
   // and snapshot are both scoped via closure inside the hook, which kills
   // the previous file-ref-races (the source of the phantom-comment bug).
-  const isFileLoaded = state.kind === 'loaded';
+  // Loaded and on screen: decorations go on the models the widget shows.
+  const isFileLoaded = state.kind === 'loaded' && attachedLoadId === state.loadId;
   // The PR view's review, threads and policy; inert in any other view.
   const pr = usePrView({
     view,
@@ -306,6 +312,15 @@ export function EditorPane({
     if (!target) return;
     if (revealLive(target)) onClearReveal();
   }, [revealCommentId, liveComments, revealLive, onClearReveal]);
+
+  // A range asked for from outside (openFileAt): reveal it once on screen.
+  useEffect(() => {
+    if (!revealRange || !isFileLoaded || !modifiedEditor || !monaco) return;
+    modifiedEditor.revealRangeInCenter(revealRange.range, monaco.editor.ScrollType.Smooth);
+    modifiedEditor.setSelection(revealRange.range);
+    modifiedEditor.focus();
+    onRevealed(revealRange.nonce);
+  }, [revealRange, isFileLoaded, modifiedEditor, monaco, onRevealed]);
 
   useEffect(() => {
     localStorage.setItem(WORDWRAP_KEY, wordWrap ? 'on' : 'off');
@@ -372,7 +387,7 @@ export function EditorPane({
     modifiedEditor,
     monaco,
     enabled: git && blameEnabled,
-    canBlame: state.kind === 'loaded' && !state.isBinary && !state.isLargeFile,
+    canBlame: isFileLoaded && state.kind === 'loaded' && !state.isBinary && !state.isLargeFile,
   });
 
   // Keep the blame card fully visible: clamp its top so it never spills past the
@@ -430,11 +445,6 @@ export function EditorPane({
     return r ? { start: r.startLineNumber, end: r.endLineNumber } : null;
   };
 
-  function handleClose() {
-    if (dirty && !window.confirm('Discard unsaved changes?')) return;
-    onClose();
-  }
-
   const showCommentsMenu = !commentsDisabled && hasAnyComments && !isPrView;
 
   return (
@@ -448,12 +458,12 @@ export function EditorPane({
         onToggleWordWrap={() => setWordWrap((w) => !w)}
         sideBySide={sideBySide}
         onToggleSideBySide={() => setSideBySide((v) => !v)}
+        canSideBySide={changed}
         blameEnabled={blameEnabled}
         onToggleBlame={() => setBlameEnabled((b) => !b)}
         canPreview={canPreview}
         previewing={previewing}
         onTogglePreview={setPreviewing}
-        onClose={handleClose}
         onSelectBase={onSelectBase}
         onExitBranchView={onExitBranchView}
         defaultBase={defaultBase}
@@ -467,7 +477,7 @@ export function EditorPane({
       {stale && (
         <StaleBanner
           onOverwrite={() => void overwrite()}
-          onReload={() => void reloadFromDisk()}
+          onReload={reloadFromDisk}
           onCancel={() => setStale(null)}
         />
       )}
@@ -485,14 +495,12 @@ export function EditorPane({
           <EditorViewport
             displayed={displayed}
             currentState={state}
-            isCommitView={isCommitView}
-            draft={draft}
             editable={editable}
-            themeName={themeName}
             wordWrap={wordWrap}
-            sideBySide={sideBySide}
+            sideBySide={sideBySide && changed}
             beforeMount={handleBeforeMount}
             onMount={handleMount}
+            onUnmount={handleUnmount}
             areaRef={setEditorAreaEl}
             fileFadeNonce={fileFadeNonce}
           >

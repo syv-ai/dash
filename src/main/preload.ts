@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // App
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
   getPlatform: () => process.platform,
+  getHomeDir: () => process.env.HOME ?? process.env.USERPROFILE ?? '',
 
   // Dialogs
   showOpenDialog: () => ipcRenderer.invoke('app:showOpenDialog'),

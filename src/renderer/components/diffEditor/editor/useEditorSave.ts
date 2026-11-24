@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
-import type { WorkingRef } from '@shared/types';
-import type { LoadState } from './useFileLoad';
+import type { editor as monacoEditor } from 'monaco-editor';
+import { diskStamp, isDirty, markSaved, type DiskStamp } from '../models';
 
 export interface StaleInfo {
   currentMtimeMs: number;
@@ -16,60 +16,48 @@ export interface SaveApi {
    *  distinct from a stale conflict, which is a successful response. */
   saveError: string | null;
   setSaveError(msg: string | null): void;
-  /** `expected` overrides the mtime/size sent as the optimistic-lock guard.
-   *  Callers that just learned the on-disk values (overwrite) pass them in
-   *  directly rather than relying on a re-render to refresh the closure. */
-  save(expected?: { mtimeMs: number; sizeBytes: number }): Promise<void>;
+  /** `expected` overrides the disk stamp sent as the optimistic-lock guard
+   *  (overwrite passes the on-disk values it just learned). */
+  save(expected?: DiskStamp): Promise<void>;
   overwrite(): Promise<void>;
-  reloadFromDisk(): Promise<void>;
+  reloadFromDisk(): void;
 }
 
 interface Args {
   cwd: string;
   filePath: string;
-  /** 'HEAD' or 'index' for working view; ignored in commit view. */
-  workingRef: WorkingRef;
-  state: LoadState;
-  draft: string;
-  loadedBuffer: string;
-  setLoadedBuffer(s: string): void;
-  setDraft(s: string): void;
-  /** Caller mutates its own load state when we finish saving (mtime + size
-   *  change) and when we reload from disk. */
-  patchLoadedState(next: Partial<Extract<LoadState, { kind: 'loaded' }>>): void;
-  isCommitView: boolean;
+  /** The working file's shared model; null when the pane shows a frozen view. */
+  model: monacoEditor.ITextModel | null;
+  /** Read the file again, taking the disk's text over the buffer. */
+  reload(): void;
 }
 
-export function useEditorSave({
-  cwd,
-  filePath,
-  workingRef,
-  state,
-  draft,
-  loadedBuffer,
-  setLoadedBuffer,
-  setDraft,
-  patchLoadedState,
-  isCommitView,
-}: Args): SaveApi {
+/** Saves the working file's model to disk, guarded by the stamp of its last
+ *  load or save. The dirty flag and stamp live with the model (models.ts), so
+ *  a save from one group is seen by the other. */
+export function useEditorSave({ cwd, filePath, model, reload }: Args): SaveApi {
   const [saving, setSaving] = useState(false);
   const [savedPill, setSavedPill] = useState(false);
   const [stale, setStale] = useState<StaleInfo | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const save = useCallback(
-    async (expected?: { mtimeMs: number; sizeBytes: number }) => {
-      if (isCommitView || state.kind !== 'loaded') return;
-      if (draft === loadedBuffer) return;
+    async (expected?: DiskStamp) => {
+      if (!model || !isDirty(model.uri.toString())) return;
+      const stamp = expected ?? diskStamp(model);
+      if (!stamp) return;
+      // What is written is this version: edits typed during the write stay dirty.
+      const versionId = model.getAlternativeVersionId();
+      const content = model.getValue();
       setSaving(true);
       setSaveError(null);
       try {
         const resp = await window.electronAPI.editorWriteWorking({
           cwd,
           filePath,
-          content: draft,
-          expectedMtimeMs: expected?.mtimeMs ?? state.mtimeMs,
-          expectedSizeBytes: expected?.sizeBytes ?? state.sizeBytes,
+          content,
+          expectedMtimeMs: stamp.mtimeMs,
+          expectedSizeBytes: stamp.sizeBytes,
         });
         // A genuine failure (path rejected, fs error) comes back as
         // success:false — surface it instead of faking a stale conflict, which
@@ -85,15 +73,13 @@ export function useEditorSave({
           });
           return;
         }
-        setLoadedBuffer(draft);
-        // `modifiedContent` mirrors what's on disk — after a successful write
-        // that's the draft. Leaving it at the pre-edit text makes any later
-        // consumer (reload guard, commit-view render) work from stale content.
-        patchLoadedState({
-          modifiedContent: draft,
-          mtimeMs: resp.data.mtimeMs,
-          sizeBytes: resp.data.sizeBytes,
-        });
+        if (!model.isDisposed()) {
+          markSaved(
+            model,
+            { mtimeMs: resp.data.mtimeMs, sizeBytes: resp.data.sizeBytes },
+            versionId,
+          );
+        }
         setStale(null);
         setSavedPill(true);
         window.setTimeout(() => setSavedPill(false), 1000);
@@ -101,55 +87,24 @@ export function useEditorSave({
         setSaving(false);
       }
     },
-    [cwd, filePath, isCommitView, state, draft, loadedBuffer, setLoadedBuffer, patchLoadedState],
+    [cwd, filePath, model],
   );
 
-  const reloadFromDisk = useCallback(async () => {
-    if (isCommitView) return;
-    if (draft !== loadedBuffer) {
+  const reloadFromDisk = useCallback(() => {
+    if (model && isDirty(model.uri.toString())) {
       if (!window.confirm('Discard unsaved changes and reload from disk?')) return;
     }
     setStale(null);
     setSaveError(null);
-    const resp = await window.electronAPI.editorReadWorking({ cwd, filePath, ref: workingRef });
-    if (!resp.success || !resp.data) return;
-    const modifiedPresent = resp.data.workingContent !== null;
-    const initial = resp.data.workingContent ?? '';
-    patchLoadedState({
-      originalContent: resp.data.originalContent,
-      modifiedContent: initial,
-      mtimeMs: resp.data.mtimeMs,
-      sizeBytes: resp.data.sizeBytes,
-      isBinary: resp.data.isBinary,
-      isLargeFile: resp.data.isLargeFile,
-      language: resp.data.language,
-      modifiedPresent,
-    });
-    setLoadedBuffer(initial);
-    setDraft(initial);
-  }, [
-    cwd,
-    filePath,
-    workingRef,
-    isCommitView,
-    draft,
-    loadedBuffer,
-    setLoadedBuffer,
-    setDraft,
-    patchLoadedState,
-  ]);
+    reload();
+  }, [model, reload]);
 
   const overwrite = useCallback(async () => {
-    if (!stale || state.kind !== 'loaded') return;
-    // Hand the just-learned on-disk mtime/size straight to save() as the lock
-    // guard. Relying on patchLoadedState → re-render to refresh save()'s closure
-    // raced: the save fired with the old expected mtime and no-op'd, needing a
-    // second click.
+    if (!stale) return;
     const expected = { mtimeMs: stale.currentMtimeMs, sizeBytes: stale.currentSizeBytes };
-    patchLoadedState(expected);
     setStale(null);
     await save(expected);
-  }, [stale, save, state, patchLoadedState]);
+  }, [stale, save]);
 
   return {
     saving,

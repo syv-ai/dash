@@ -1,4 +1,14 @@
-import { lazy, Suspense, useCallback, useEffect, useState, type RefObject } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import type { ITheme as XtermTheme } from '@xterm/xterm';
 import { MessageSquareCode, Minus, Plus } from 'lucide-react';
 import { FileChangesPanel } from '../changes/FileChangesPanel';
@@ -10,7 +20,18 @@ import { UsageBlock } from './UsageBlock';
 import { IconButton } from '../ui/IconButton';
 import { Segmented } from '../ui/Segmented';
 import { CountBadge } from '../ui/CountBadge';
-import { panelEaseMs, type PanelImperativeHandle } from '../ui/Resizable';
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+  panelEaseMs,
+  type PanelImperativeHandle,
+} from '../ui/Resizable';
+import { EditorTree } from '../diffEditor/EditorTree';
+import { HistoryList, type PrEntry } from '../diffEditor/HistoryList';
+import { useEditorWorkspace, type EditorTarget } from '../diffEditor/useEditorWorkspace';
+import { activePath } from '../diffEditor/tabs/editorLayout';
+import { WorktreePath } from './WorktreePath';
 import { useGit, type DiffFileTarget } from '../../stores/gitStore';
 import { useSettings } from '../../stores/settingsStore';
 import { useUi } from '../../stores/uiStore';
@@ -20,23 +41,25 @@ import { needsAttention } from '../../../shared/diffComments';
 import type { ContextUsage, RateLimits, Task } from '../../../shared/types';
 import type { LimitBurns } from '../../lib/burnRate';
 
-const DiffEditor = lazy(() =>
-  import('../diffEditor/DiffEditor').then((m) => ({ default: m.DiffEditor })),
+const EditorGroups = lazy(() =>
+  import('../diffEditor/EditorGroups').then((m) => ({ default: m.EditorGroups })),
 );
 
-type FileScope = 'changes' | 'all';
+/** What the sidebar's list shows: the changes, the whole repo, or the commits. */
+type Segment = 'changes' | 'files' | 'history';
 
 interface RightInspectorProps {
   task: Task;
   rateLimits: RateLimits;
   burns: LimitBurns;
   contextUsage?: ContextUsage;
-  /** The diff open in the sidebar, or null for the changes list. */
+  /** What the editor opened on, or null while it is closed (the sidebar is
+   *  narrow then). Each new target opens its file. */
   diff: DiffFileTarget | null;
   terminalTheme: XtermTheme;
   isDark: boolean;
   onViewDiff: (filePath: string, staged: boolean) => void;
-  /** Open the diff editor where "Open in editor" lands (see editorOpening). */
+  /** Open the editor on its open tabs. */
   onOpenEditor: () => void;
   onCloseDiff: () => void;
   onCommitFinished: () => void;
@@ -51,8 +74,11 @@ function withShortcut(label: string, binding: KeyBinding | undefined): string {
 }
 
 /**
- * The task sidebar: the changes (or, with a file open, the diff editor) with
- * their header, the task's terminals below, and its usage at the foot.
+ * The task sidebar. Narrow: a list (changes, or the commits) over the task's
+ * terminals, its usage at the foot. Wide, with the editor open: the list (the
+ * changes, the repo's files, or the commits) runs full height on the left
+ * over the usage; the editor sits over the terminals on the right. The
+ * terminals stay mounted across both, so the shell is never re-attached.
  */
 export function RightInspector({
   task,
@@ -96,21 +122,58 @@ export function RightInspector({
     }
   }, [task.id]);
 
-  // Which files the tree lists. The list view always shows the changes;
-  // "Files" opens the editor, whose tree can list the whole repo.
-  const [scope, setScope] = useState<FileScope>('changes');
-  const shownScope: FileScope = diff ? scope : 'changes';
-  const selectScope = (next: FileScope) => {
-    setScope(next);
-    if (next === 'all' && !diff) onOpenEditor();
+  // ── The editor's state: one workspace per task, open or not ──
+  const wide = diff !== null;
+  const [segment, setSegment] = useState<Segment>('changes');
+  const target = useMemo<EditorTarget | null>(
+    () => (diff ? { filePath: diff.filePath, initialView: diff.initialView } : null),
+    [diff],
+  );
+  const ws = useEditorWorkspace({
+    tabsKey: task.id,
+    persistTabs: true,
+    cwd: task.path,
+    openTaskId: task.id,
+    projectId: task.projectId,
+    editorOpen: wide,
+    historyShown: segment === 'history',
+    target,
+  });
+  const { view, selectView } = ws;
+  const openEditor = () => {
+    if (!wide) onOpenEditor();
+  };
+
+  // Changes and Files list the working tree (or the branch or PR compared
+  // with): leaving History for them leaves the commit it showed.
+  const selectSegment = (next: Segment) => {
+    setSegment(next);
+    if (next !== 'history' && view.kind === 'commit') selectView({ kind: 'working', ref: 'HEAD' });
+    if (next === 'files') openEditor();
   };
   const viewDiff = useCallback(
     (filePath: string, staged: boolean) => {
-      setScope('changes');
+      setSegment('changes');
       onViewDiff(filePath, staged);
     },
     [onViewDiff],
   );
+  // History's rows open what they pick in the editor.
+  const pickView = (next: typeof view) => {
+    selectView(next);
+    openEditor();
+  };
+  const pr: PrEntry | null = ws.prEntry && {
+    ...ws.prEntry,
+    onOpen: () => {
+      ws.prEntry?.onOpen();
+      openEditor();
+    },
+    onReview: () => {
+      ws.prEntry?.onReview();
+      openEditor();
+    },
+  };
 
   const files = gitStatus?.files ?? [];
   const stagedCount = files.filter((f) => f.staged).length;
@@ -121,140 +184,209 @@ export function RightInspector({
     setTimeout(() => setShellDrawerAnimating(false), panelEaseMs());
   };
 
+  const header = (
+    <div className="flex h-11 shrink-0 items-center gap-0.5 pl-0.5">
+      {/* Narrow, it takes the slack and gives it up first: the labels
+          truncate before the actions are pushed out. Wide, the path does. */}
+      <div className={wide ? 'shrink-0' : 'min-w-0 flex-1'}>
+        <Segmented
+          aria-label="Files"
+          size="sm"
+          fullWidth={false}
+          value={segment}
+          onChange={selectSegment}
+          options={[
+            { value: 'changes', label: 'Changes', count: files.length || undefined },
+            { value: 'files', label: 'Files' },
+            { value: 'history', label: 'History' },
+          ]}
+        />
+      </div>
+      {unstagedCount > 0 && (
+        <IconButton
+          size="sm"
+          title={withShortcut('Stage all', keybindings.stageAll)}
+          onClick={() => void stageAll()}
+        >
+          <Plus size={14} strokeWidth={1.8} />
+        </IconButton>
+      )}
+      {stagedCount > 0 && (
+        <IconButton
+          size="sm"
+          title={withShortcut('Unstage all', keybindings.unstageAll)}
+          onClick={() => void unstageAll()}
+        >
+          <Minus size={14} strokeWidth={1.8} />
+        </IconButton>
+      )}
+      {/* The editor holds the comments; this opens it. */}
+      {commentCount > 0 && (
+        <>
+          <IconButton size="sm" title={`Comments: ${commentCount} to send`} onClick={onOpenEditor}>
+            <MessageSquareCode size={14} strokeWidth={1.8} />
+          </IconButton>
+          <CountBadge count={commentCount} className="-ml-1" />
+        </>
+      )}
+      {stagedCount > 0 && (
+        <div className="ml-1">
+          <CommitPopover run={run} />
+        </div>
+      )}
+      {wide && <WorktreePath path={task.path} className="ml-auto" />}
+    </div>
+  );
+
+  const history = (
+    <HistoryList
+      commits={ws.data.commits}
+      loading={ws.data.commitsLoading}
+      view={view}
+      onSelectView={pickView}
+      commentCountByScope={ws.commentCountByScope}
+      pr={pr}
+      commitFiles={view.kind === 'commit' ? ws.data.changedFiles : []}
+      activePath={activePath(ws.layout)}
+      onOpenFile={ws.openFile}
+    />
+  );
+
+  // Wide: the editor's tree (the changes or the whole repo), or the commits.
+  const tree =
+    segment === 'history' ? (
+      history
+    ) : (
+      <EditorTree
+        cwd={task.path}
+        git={ws.git}
+        view={view}
+        allPaths={ws.data.repoPaths}
+        changedFiles={ws.data.changedFiles}
+        changedOnly={segment === 'changes'}
+        filesLoading={ws.data.repoPathsLoading || ws.data.changedFilesLoading}
+        selectedPath={activePath(ws.layout) ?? ''}
+        onOpenFile={ws.openFile}
+        badgeCounts={ws.badgeCounts}
+      />
+    );
+
+  // Narrow: the changes list, or the commits (Files opens the editor).
+  const list =
+    segment === 'history' ? (
+      history
+    ) : (
+      <FileChangesPanel
+        key={task.id}
+        loading={gitLoading}
+        run={run}
+        onViewDiff={viewDiff}
+        onShowCommitGraph={onShowCommitGraph}
+      />
+    );
+
+  const withPorts = (content: ReactNode) => (
+    <PortsDrawerWrapper
+      taskId={task.id}
+      collapsed={portsDrawerCollapsed}
+      onCollapse={() => setPortsDrawerCollapsed(true)}
+      onExpand={() => setPortsDrawerCollapsed(false)}
+    >
+      <div className="flex h-full min-h-0 flex-col">{content}</div>
+    </PortsDrawerWrapper>
+  );
+
+  const usage = <UsageBlock contextUsage={contextUsage} rateLimits={rateLimits} burns={burns} />;
+
   return (
     <div className="flex h-full min-w-0 flex-col bg-ground pt-2 pr-2">
+      {header}
       <div className="min-h-0 flex-1">
-        <ShellDrawerWrapper
-          taskId={task.id}
-          cwd={task.path}
-          collapsed={shellDrawerCollapsed}
-          label={task.useWorktree ? 'Worktree' : 'Terminal'}
-          terminalBg={terminalTheme.background}
-          panelRef={shellDrawerRef}
-          animating={shellDrawerAnimating}
-          onAnimate={() => setShellDrawerAnimating(true)}
-          onCollapse={() => settleShellDrawer(true)}
-          onExpand={() => settleShellDrawer(false)}
-          onTuiActiveChange={onTuiActiveChange}
+        <ResizablePanelGroup
+          orientation="horizontal"
+          autoSaveId="task-sidebar-columns"
+          panelIds={wide ? ['list', 'main'] : ['main']}
         >
-          <div className="flex h-full min-h-0 flex-col">
-            <div className="flex h-11 shrink-0 items-center gap-0.5 pl-0.5">
-              {/* Takes the slack, and gives it up first: the labels truncate
-                  before the actions are pushed out of a narrow sidebar. */}
-              <div className="min-w-0 flex-1">
-                <Segmented
-                  aria-label="Files"
-                  size="sm"
-                  fullWidth={false}
-                  value={shownScope}
-                  onChange={selectScope}
-                  options={[
-                    { value: 'changes', label: 'Changes', count: files.length || undefined },
-                    { value: 'all', label: 'Files' },
-                  ]}
-                />
-              </div>
-              {unstagedCount > 0 && (
-                <IconButton
-                  size="sm"
-                  title={withShortcut('Stage all', keybindings.stageAll)}
-                  onClick={() => void stageAll()}
-                >
-                  <Plus size={14} strokeWidth={1.8} />
-                </IconButton>
-              )}
-              {stagedCount > 0 && (
-                <IconButton
-                  size="sm"
-                  title={withShortcut('Unstage all', keybindings.unstageAll)}
-                  onClick={() => void unstageAll()}
-                >
-                  <Minus size={14} strokeWidth={1.8} />
-                </IconButton>
-              )}
-              {/* The editor holds the comments; "Files" opens it otherwise. */}
-              {commentCount > 0 && (
-                <>
-                  <IconButton
-                    size="sm"
-                    title={`Comments: ${commentCount} to send`}
-                    onClick={onOpenEditor}
-                  >
-                    <MessageSquareCode size={14} strokeWidth={1.8} />
-                  </IconButton>
-                  <CountBadge count={commentCount} className="-ml-1" />
-                </>
-              )}
-              {stagedCount > 0 && (
-                <div className="ml-1">
-                  <CommitPopover run={run} />
+          {/* Mounted only while wide, ahead of "main", which keeps its place
+              in the tree either way: the terminals below never remount. */}
+          {wide && (
+            <>
+              <ResizablePanel id="list" defaultSize="30%" minSize="15%" maxSize="50%">
+                <div className="flex h-full min-h-0 flex-col pr-2">
+                  <div className="min-h-0 flex-1">{withPorts(tree)}</div>
+                  {usage}
                 </div>
-              )}
+              </ResizablePanel>
+              <ResizableHandle />
+            </>
+          )}
+          <ResizablePanel id="main" minSize="40%">
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="min-h-0 flex-1">
+                <ShellDrawerWrapper
+                  taskId={task.id}
+                  cwd={task.path}
+                  collapsed={shellDrawerCollapsed}
+                  label={task.useWorktree ? 'Worktree' : 'Terminal'}
+                  terminalBg={terminalTheme.background}
+                  panelRef={shellDrawerRef}
+                  animating={shellDrawerAnimating}
+                  onAnimate={() => setShellDrawerAnimating(true)}
+                  onCollapse={() => settleShellDrawer(true)}
+                  onExpand={() => settleShellDrawer(false)}
+                  onTuiActiveChange={onTuiActiveChange}
+                >
+                  {wide ? (
+                    <EditorSheet
+                      terminalBg={terminalTheme.background}
+                      closeBinding={keybindings.closeDiff}
+                      onClose={onCloseDiff}
+                    >
+                      <Suspense fallback={null}>
+                        <EditorGroups
+                          ws={ws}
+                          terminalTheme={terminalTheme}
+                          isDark={isDark}
+                          onClose={onCloseDiff}
+                        />
+                      </Suspense>
+                    </EditorSheet>
+                  ) : (
+                    withPorts(list)
+                  )}
+                </ShellDrawerWrapper>
+              </div>
+              {!wide && usage}
             </div>
-            <div className="min-h-0 flex-1">
-              <PortsDrawerWrapper
-                taskId={task.id}
-                collapsed={portsDrawerCollapsed}
-                onCollapse={() => setPortsDrawerCollapsed(true)}
-                onExpand={() => setPortsDrawerCollapsed(false)}
-              >
-                {diff ? (
-                  <InlineDiff
-                    diff={diff}
-                    task={task}
-                    changedOnly={shownScope === 'changes'}
-                    terminalTheme={terminalTheme}
-                    isDark={isDark}
-                    closeBinding={keybindings.closeDiff}
-                    onClose={onCloseDiff}
-                  />
-                ) : (
-                  <div className="flex h-full min-h-0 flex-col">
-                    <FileChangesPanel
-                      key={task.id}
-                      loading={gitLoading}
-                      run={run}
-                      onViewDiff={viewDiff}
-                      onShowCommitGraph={onShowCommitGraph}
-                    />
-                  </div>
-                )}
-              </PortsDrawerWrapper>
-            </div>
-          </div>
-        </ShellDrawerWrapper>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
-      <UsageBlock contextUsage={contextUsage} rateLimits={rateLimits} burns={burns} />
     </div>
   );
 }
 
-/** The diff editor on its own sheet, closed by its × or Escape. Keyed on the
- *  target, since the editor reads its opening file and view only on mount. */
-function InlineDiff({
-  diff,
-  task,
-  changedOnly,
-  terminalTheme,
-  isDark,
+/** The editor's sheet, in the terminal's colours, closed by Escape from
+ *  inside it (Monaco's textarea skips the global shortcuts). */
+function EditorSheet({
+  terminalBg,
   closeBinding,
   onClose,
+  children,
 }: {
-  diff: DiffFileTarget;
-  task: Task;
-  changedOnly: boolean;
-  terminalTheme: XtermTheme;
-  isDark: boolean;
+  terminalBg: string | undefined;
   closeBinding: KeyBinding | undefined;
   onClose: () => void;
+  children: ReactNode;
 }) {
   return (
     <div
-      className="h-full overflow-hidden rounded-xl border border-line bg-well"
+      className={`h-full overflow-hidden rounded-xl border border-line ${
+        terminalBg ? 'bg-(--sheet-bg)' : 'bg-well'
+      }`}
+      style={{ '--sheet-bg': terminalBg } as CSSProperties}
       onKeyDown={(e) => {
-        // Escape from inside the editor (Monaco's textarea skips the global
-        // shortcuts). Monaco claims the keys it uses, e.g. to close its find
-        // widget, by preventing their default.
+        // Monaco claims the keys it uses (closing its find widget) by
+        // preventing their default.
         if (!closeBinding || e.defaultPrevented) return;
         if (!matchesBinding(e.nativeEvent, closeBinding)) return;
         e.preventDefault();
@@ -262,22 +394,7 @@ function InlineDiff({
         onClose();
       }}
     >
-      <Suspense fallback={null}>
-        <DiffEditor
-          key={`${diff.filePath}\0${diff.staged}\0${JSON.stringify(diff.initialView ?? null)}`}
-          cwd={diff.cwd}
-          initialFilePath={diff.filePath}
-          initialStaged={diff.staged}
-          initialView={diff.initialView}
-          activeTaskId={task.id}
-          projectId={task.projectId}
-          terminalTheme={terminalTheme}
-          isDark={isDark}
-          changedOnly={changedOnly}
-          inline
-          onClose={onClose}
-        />
-      </Suspense>
+      {children}
     </div>
   );
 }

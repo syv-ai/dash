@@ -8,8 +8,8 @@ const PR_POLL_INTERVAL = 30_000;
 
 export interface DiffFileTarget {
   cwd: string;
+  /** The file to open, or '' to show the editor's open tabs. */
   filePath: string;
-  staged: boolean;
   initialView?:
     | { kind: 'working'; ref: 'HEAD' | 'index' }
     | { kind: 'commit'; hash: string }

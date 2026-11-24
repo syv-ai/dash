@@ -162,6 +162,15 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
     alt: false,
     key: 's',
   },
+  closeEditorTab: {
+    id: 'closeEditorTab',
+    label: 'Close Editor Tab',
+    category: 'Editor',
+    mod: true,
+    shift: false,
+    alt: false,
+    key: 'w',
+  },
 };
 
 const STORAGE_KEY = 'keybindings';

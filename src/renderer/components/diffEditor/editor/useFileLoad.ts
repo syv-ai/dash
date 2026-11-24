@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { frozenCommit, type EditorView } from '../types';
 
 export type LoadState =
@@ -33,10 +33,13 @@ export function useFileLoad(
   view: EditorView,
 ): {
   state: LoadState;
-  setState: React.Dispatch<React.SetStateAction<LoadState>>;
+  /** Read the file again (reload from disk). */
+  reload(): void;
 } {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const loadSeq = useRef(0);
+  const [reloads, setReloads] = useState(0);
+  const reload = useCallback(() => setReloads((n) => n + 1), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,7 +131,7 @@ export function useFileLoad(
     return () => {
       cancelled = true;
     };
-  }, [cwd, filePath, view]);
+  }, [cwd, filePath, view, reloads]);
 
-  return { state, setState };
+  return { state, reload };
 }

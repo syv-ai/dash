@@ -10,7 +10,6 @@ import {
   History,
   MessageSquare,
   WrapText,
-  X,
 } from 'lucide-react';
 import type { EditorView } from '../types';
 import { Popover, PopoverAnchor, PopoverContent } from '../../ui/Popover';
@@ -30,6 +29,8 @@ interface Props {
   /** Side-by-side (two columns) instead of the inline diff. Persisted. */
   sideBySide: boolean;
   onToggleSideBySide(): void;
+  /** The file differs from its base: a split view has something to show. */
+  canSideBySide: boolean;
   /** Inline git-blame toggle (default on, persisted). */
   blameEnabled: boolean;
   onToggleBlame(): void;
@@ -38,7 +39,6 @@ interface Props {
   /** True when the rendered preview is showing instead of the editor. */
   previewing: boolean;
   onTogglePreview(next: boolean): void;
-  onClose(): void;
   /** Switch into branch view with the given base ref (e.g. "origin/main"). */
   onSelectBase(base: string): void;
   /** Leave branch or PR view; switch back to working tree. */
@@ -65,12 +65,12 @@ export function EditorHeader({
   onToggleWordWrap,
   sideBySide,
   onToggleSideBySide,
+  canSideBySide,
   blameEnabled,
   onToggleBlame,
   canPreview,
   previewing,
   onTogglePreview,
-  onClose,
   onSelectBase,
   onExitBranchView,
   defaultBase,
@@ -162,11 +162,9 @@ export function EditorHeader({
                 : viewMeta.tooltip
             }
           >
-            <span className="inline-flex items-center gap-1.5 h-6 text-xs font-medium shrink-0 text-primary">
+            <span className="inline-flex items-center gap-1.5 h-6 text-xs font-medium min-w-0 text-primary">
               <viewMeta.Icon size={12} strokeWidth={1.8} className="shrink-0" />
-              <span className="font-mono whitespace-nowrap max-w-[260px] truncate">
-                {viewMeta.label}
-              </span>
+              <span className="font-mono whitespace-nowrap min-w-0 truncate">{viewMeta.label}</span>
               {commentCount > 0 && (
                 <>
                   <span className="opacity-40">·</span>
@@ -192,7 +190,7 @@ export function EditorHeader({
           </Tooltip>
         </span>
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex shrink-0 items-center gap-1">
         {canPreview && (
           <Tooltip content={previewing ? 'Show source' : 'Show rendered preview'}>
             <button
@@ -286,22 +284,16 @@ export function EditorHeader({
             </button>
           </Tooltip>
         )}
-        <Tooltip content={sideBySide ? 'Show inline diff' : 'Show side by side'}>
-          <button onClick={onToggleSideBySide} className={iconBtn(sideBySide)}>
-            <Columns2 size={14} strokeWidth={1.8} />
-          </button>
-        </Tooltip>
+        {canSideBySide && (
+          <Tooltip content={sideBySide ? 'Show inline diff' : 'Show side by side'}>
+            <button onClick={onToggleSideBySide} className={iconBtn(sideBySide)}>
+              <Columns2 size={14} strokeWidth={1.8} />
+            </button>
+          </Tooltip>
+        )}
         <Tooltip content={wordWrap ? 'Disable word wrap' : 'Enable word wrap'}>
           <button onClick={onToggleWordWrap} className={iconBtn(wordWrap)}>
             <WrapText size={14} strokeWidth={1.8} />
-          </button>
-        </Tooltip>
-        <Tooltip content="Close">
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-md text-muted-fade-60 hover:text-foreground hover:bg-accent/60 transition-colors"
-          >
-            <X size={14} strokeWidth={2} />
           </button>
         </Tooltip>
       </div>

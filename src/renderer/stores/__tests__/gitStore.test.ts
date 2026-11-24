@@ -149,7 +149,7 @@ describe('gitStore setters', () => {
 
   it('setDiffFile stores the full target', async () => {
     const { useGit } = await freshStores();
-    const target = { cwd: '/wt/t1', filePath: 'a.ts', staged: false };
+    const target = { cwd: '/wt/t1', filePath: 'a.ts' };
     useGit.getState().setDiffFile(target);
     expect(useGit.getState().diffFile).toEqual(target);
     useGit.getState().setDiffFile(null);

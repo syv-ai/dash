@@ -6,6 +6,8 @@ export interface SystemApi {
   // App
   getAppVersion: () => Promise<string>;
   getPlatform: () => string;
+  /** The user's home folder ('' when unknown), for showing paths with `~`. */
+  getHomeDir: () => string;
 
   // Dialogs / external
   showOpenDialog: () => Promise<IpcResponse<string[]>>;

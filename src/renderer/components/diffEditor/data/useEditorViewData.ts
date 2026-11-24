@@ -17,6 +17,12 @@ export interface EditorViewData {
   defaultBase: string | null;
 }
 
+/** Which reads run: the editor's (files, base), and the commit list (History). */
+export interface ViewDataEnabled {
+  files: boolean;
+  commits: boolean;
+}
+
 /** Composes the view-dependent git reads (commit files, branch files, repo
  *  paths, commits, default base) behind one hook. Owns no view/selection
  *  state — those stay in the workspace; this just turns (cwd, view,
@@ -27,10 +33,11 @@ export function useEditorViewData(
   view: EditorView,
   workingFiles: FileChange[],
   git: boolean,
+  enabled: ViewDataEnabled = { files: true, commits: true },
 ): EditorViewData {
   const frozen = frozenCommit(view);
-  const isCommit = frozen !== null;
-  const isBranch = view.kind === 'branch';
+  const isCommit = frozen !== null && enabled.files;
+  const isBranch = view.kind === 'branch' && enabled.files;
   const commitHash = frozen?.hash ?? '';
   const commitBase = frozen?.base;
   const branchBase = isBranch ? view.base : '';
@@ -63,8 +70,9 @@ export function useEditorViewData(
       window.electronAPI
         .editorListRepoFiles({ cwd, source: repoSource })
         .then((r) => (r.success && r.data ? r.data : NO_PATHS)),
-    [cwd, isCommit ? commitHash : 'working'],
+    [cwd, isCommit ? commitHash : 'working', enabled.files],
     NO_PATHS,
+    enabled.files,
   );
 
   const commits = useAsyncResource<CommitSummary[]>(
@@ -83,9 +91,9 @@ export function useEditorViewData(
             }))
           : NO_COMMITS,
       ),
-    [cwd, git],
+    [cwd, git, enabled.commits],
     NO_COMMITS,
-    git,
+    git && enabled.commits,
   );
 
   const defaultBase = useAsyncResource<string | null>(
@@ -93,12 +101,19 @@ export function useEditorViewData(
       window.electronAPI
         .editorResolveDefaultBase({ cwd })
         .then((r) => (r.success ? (r.data ?? null) : null)),
-    [cwd, git],
+    [cwd, git, enabled.files],
     null,
-    git,
+    git && enabled.files,
   );
 
-  const changedFiles = isCommit ? commitFiles.data : isBranch ? branchFiles.data : workingFiles;
+  // A frozen or branch view's files load with the editor; until then, none.
+  const changedFiles = isCommit
+    ? commitFiles.data
+    : isBranch
+      ? branchFiles.data
+      : view.kind === 'working'
+        ? workingFiles
+        : NO_FILES;
   const changedFilesLoading = isCommit
     ? commitFiles.loading
     : isBranch
