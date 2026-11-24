@@ -85,7 +85,8 @@ function withShortcut(label: string, binding: KeyBinding | undefined): string {
  * Narrow: a list (changes, or the commits) over the task's terminals. Wide,
  * with the editor open: the list (the changes, the repo's files, or the
  * commits) runs full height on the left; the editor sits over the terminals
- * on the right. The terminals stay mounted across both, so the shell is
+ * on the right. Details, either width, spans the whole body over the
+ * terminals. The terminals stay mounted across both, so the shell is
  * never re-attached.
  */
 export function RightInspector({
@@ -134,6 +135,9 @@ export function RightInspector({
   // ── The editor's state: one workspace per task, open or not ──
   const wide = diff !== null;
   const [segment, setSegment] = useState<Segment>('changes');
+  // Wide, Details takes the whole body over the terminals, as narrow; the
+  // editor stays mounted out of sight, so leaving Details finds it as it was.
+  const split = wide && segment !== 'details';
   // Where the Details toggle returns to.
   const [lastCodeSegment, setLastCodeSegment] = useState<CodeSegment>('changes');
   const target = useMemo<EditorTarget | null>(
@@ -320,12 +324,9 @@ export function RightInspector({
     />
   );
 
-  // Wide: the editor's tree (the changes or the whole repo), the commits, or
-  // the details.
+  // Wide: the editor's tree (the changes or the whole repo), or the commits.
   const tree =
-    segment === 'details' ? (
-      details
-    ) : segment === 'history' ? (
+    segment === 'history' ? (
       history
     ) : (
       <EditorTree
@@ -375,11 +376,11 @@ export function RightInspector({
         <ResizablePanelGroup
           orientation="horizontal"
           autoSaveId="task-sidebar-columns"
-          panelIds={wide ? ['list', 'main'] : ['main']}
+          panelIds={split ? ['list', 'main'] : ['main']}
         >
-          {/* Mounted only while wide, ahead of "main", which keeps its place
+          {/* Mounted only while split, ahead of "main", which keeps its place
               in the tree either way: the terminals below never remount. */}
-          {wide && (
+          {split && (
             <>
               <ResizablePanel
                 id="list"
@@ -408,17 +409,20 @@ export function RightInspector({
                 onExpand={() => settleShellDrawer(false)}
                 onTuiActiveChange={onTuiActiveChange}
               >
+                {wide && segment === 'details' && withPorts(details)}
                 {wide ? (
-                  <EditorSheet closeBinding={keybindings.closeDiff} onClose={onCloseDiff}>
-                    <Suspense fallback={null}>
-                      <EditorGroups
-                        ws={ws}
-                        terminalTheme={terminalTheme}
-                        isDark={isDark}
-                        onClose={onCloseDiff}
-                      />
-                    </Suspense>
-                  </EditorSheet>
+                  <div className={split ? 'h-full' : 'hidden'}>
+                    <EditorSheet closeBinding={keybindings.closeDiff} onClose={onCloseDiff}>
+                      <Suspense fallback={null}>
+                        <EditorGroups
+                          ws={ws}
+                          terminalTheme={terminalTheme}
+                          isDark={isDark}
+                          onClose={onCloseDiff}
+                        />
+                      </Suspense>
+                    </EditorSheet>
+                  </div>
                 ) : (
                   withPorts(list)
                 )}
