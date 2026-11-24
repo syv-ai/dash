@@ -33,7 +33,7 @@ export function hslChannelsToHex(channels: string, alpha = 1): string | null {
 
 /** A role token (`--ink-3`, `--select`, …) as Monaco wants a colour, from the
  *  theme now on the page; `fallback` when it can't be read. */
-function roleColor(token: string, fallback: string, alpha = 1): string {
+export function roleColor(token: string, fallback: string, alpha = 1): string {
   if (typeof document === 'undefined') return fallback;
   const value = getComputedStyle(document.documentElement).getPropertyValue(token);
   return hslChannelsToHex(value, alpha) ?? fallback;

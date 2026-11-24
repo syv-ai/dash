@@ -3,6 +3,7 @@ import { cva } from 'class-variance-authority';
 import { cn } from '../../lib/cn';
 import { CountBadge } from './CountBadge';
 import { focusRing } from './styles';
+import { Tooltip } from './Tooltip';
 
 const segmentVariants = cva(
   cn(
@@ -32,7 +33,16 @@ export function Segmented<T extends string | number | null>({
   'aria-label': ariaLabel,
 }: {
   value: T;
-  options: Array<{ value: T; label: string; icon?: React.ReactNode; count?: number }>;
+  options: Array<{
+    value: T;
+    label: string;
+    icon?: React.ReactNode;
+    count?: number;
+    /** Greyed out and inert; `title` says why (its tooltip still shows). */
+    disabled?: boolean;
+    /** Tooltip text. */
+    title?: string;
+  }>;
   onChange: (v: T) => void;
   fullWidth?: boolean;
   size?: 'sm' | 'md';
@@ -47,20 +57,34 @@ export function Segmented<T extends string | number | null>({
       aria-label={ariaLabel}
       className={cn('gap-0.5', fullWidth ? 'flex w-full' : 'inline-flex max-w-full')}
     >
-      {options.map((opt) => (
-        <button
-          key={String(opt.value)}
-          type="button"
-          role="radio"
-          aria-checked={opt.value === value}
-          onClick={() => onChange(opt.value)}
-          className={cn(segmentVariants({ size, fullWidth }), segmentClassName)}
-        >
-          {opt.icon && <span className="flex">{opt.icon}</span>}
-          <span className="truncate">{opt.label}</span>
-          {opt.count != null && <CountBadge count={opt.count} />}
-        </button>
-      ))}
+      {options.map((opt) => {
+        const segment = (
+          <button
+            key={String(opt.value)}
+            type="button"
+            role="radio"
+            aria-checked={opt.value === value}
+            aria-disabled={opt.disabled || undefined}
+            onClick={opt.disabled ? undefined : () => onChange(opt.value)}
+            className={cn(
+              segmentVariants({ size, fullWidth }),
+              opt.disabled && 'opacity-40 hover:text-ink-2',
+              segmentClassName,
+            )}
+          >
+            {opt.icon && <span className="flex">{opt.icon}</span>}
+            <span className="truncate">{opt.label}</span>
+            {opt.count != null && <CountBadge count={opt.count} />}
+          </button>
+        );
+        return opt.title ? (
+          <Tooltip key={String(opt.value)} content={opt.title}>
+            {segment}
+          </Tooltip>
+        ) : (
+          segment
+        );
+      })}
     </div>
   );
 }

@@ -1,7 +1,7 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import { commentsPrompt, sendPrompt } from './sendComments';
-import type { DiffComment, LiveComment } from './types';
+import type { LiveComment } from './types';
 
 interface Args {
   activeTaskId: string | null;
@@ -13,31 +13,10 @@ interface Args {
   /** Scope of the open view — used for code enrichment (only current-scope,
    *  current-file comments can be enriched from the live model). */
   scope: string;
-  /** What the menu's bulk sends draw from (the comments it lists). */
-  sendable: Record<string, DiffComment[]>;
-  onClose: () => void;
 }
 
-export interface CommentPrompt {
-  /** Non-null while the edit-before-send modal is open. */
-  editTarget: { ids: string[]; text: string } | null;
-  /** Send every unsent comment across all views, then close the modal. */
-  sendAllUnsent: () => void;
-  /** Send the unsent comments of one view (scope). Keeps the menu open. */
-  sendScope: (scope: string) => void;
-  /** Send one comment; keeps the modal open (the user is triaging). */
-  sendOne: (id: string) => void;
-  /** Send these comments together; keeps the menu open. */
-  sendMany: (ids: ReadonlyArray<string>) => void;
-  /** Open the edit-before-send modal prefilled with every unsent comment. */
-  openEditAndSend: () => void;
-  /** Ship the (possibly edited) text and close. */
-  confirmEditAndSend: (editedText: string) => void;
-  cancelEditAndSend: () => void;
-}
-
-/** The editor's sends and edit-and-send over `sendComments`: the prompt is
- *  enriched with live ranges and code for the current file. */
+/** The editor's send of one comment over `sendComments`: the prompt is
+ *  enriched with the live range and code for the current file. */
 export function useCommentPrompt({
   activeTaskId,
   filePath,
@@ -46,16 +25,12 @@ export function useCommentPrompt({
   liveComments,
   language,
   scope,
-  sendable,
-  onClose,
-}: Args): CommentPrompt {
-  const [editTarget, setEditTarget] = useState<{ ids: string[]; text: string } | null>(null);
-
-  // Any comment can be sent on its own; the bulk sends take what the menu lists.
-  const build = useCallback(
-    (ids: ReadonlyArray<string>): string | null => {
+}: Args): (id: string) => void {
+  return useCallback(
+    (id: string) => {
+      if (!activeTaskId) return;
       const model = modifiedEditor?.getModel() ?? null;
-      return commentsPrompt(ids, {
+      const text = commentsPrompt([id], {
         currentFilePath: filePath,
         currentScope: scope,
         currentFile:
@@ -73,98 +48,8 @@ export function useCommentPrompt({
               }
             : undefined,
       });
+      if (text !== null) void sendPrompt(activeTaskId, text, [id]);
     },
-    [filePath, scope, modifiedEditor, monaco, liveComments, language],
+    [activeTaskId, filePath, scope, modifiedEditor, monaco, liveComments, language],
   );
-
-  // Unsent ids, optionally limited to one view (scope).
-  const collectUnsentIds = useCallback(
-    (onlyScope?: string): string[] => {
-      const ids: string[] = [];
-      for (const list of Object.values(sendable))
-        for (const c of list)
-          if (!c.sent && (onlyScope === undefined || c.viewScope === onlyScope)) ids.push(c.id);
-      return ids;
-    },
-    [sendable],
-  );
-
-  // Typed into the task's prompt, unsent; marked sent once it got there.
-  const writeToTui = useCallback(
-    (text: string, idsToMarkSent: ReadonlyArray<string>) => {
-      if (activeTaskId) void sendPrompt(activeTaskId, text, idsToMarkSent);
-    },
-    [activeTaskId],
-  );
-
-  const sendAllUnsent = useCallback(() => {
-    if (!activeTaskId) return;
-    const ids = collectUnsentIds();
-    const text = build(ids);
-    if (text === null) return;
-    writeToTui(text, ids);
-    onClose();
-  }, [activeTaskId, collectUnsentIds, build, writeToTui, onClose]);
-
-  const sendScope = useCallback(
-    (scopeToSend: string) => {
-      if (!activeTaskId) return;
-      const ids = collectUnsentIds(scopeToSend);
-      const text = build(ids);
-      if (text === null) return;
-      writeToTui(text, ids);
-    },
-    [activeTaskId, collectUnsentIds, build, writeToTui],
-  );
-
-  const sendOne = useCallback(
-    (id: string) => {
-      if (!activeTaskId) return;
-      const text = build([id]);
-      if (text === null) return;
-      writeToTui(text, [id]);
-    },
-    [activeTaskId, build, writeToTui],
-  );
-
-  const sendMany = useCallback(
-    (ids: ReadonlyArray<string>) => {
-      if (!activeTaskId) return;
-      const text = build(ids);
-      if (text === null) return;
-      writeToTui(text, ids);
-    },
-    [activeTaskId, build, writeToTui],
-  );
-
-  const openEditAndSend = useCallback(() => {
-    if (!activeTaskId) return;
-    const ids = collectUnsentIds();
-    const text = build(ids);
-    if (text === null) return;
-    setEditTarget({ ids, text });
-  }, [activeTaskId, collectUnsentIds, build]);
-
-  const confirmEditAndSend = useCallback(
-    (editedText: string) => {
-      if (!editTarget) return;
-      writeToTui(editedText, editTarget.ids);
-      setEditTarget(null);
-      onClose();
-    },
-    [editTarget, writeToTui, onClose],
-  );
-
-  const cancelEditAndSend = useCallback(() => setEditTarget(null), []);
-
-  return {
-    editTarget,
-    sendAllUnsent,
-    sendScope,
-    sendOne,
-    sendMany,
-    openEditAndSend,
-    confirmEditAndSend,
-    cancelEditAndSend,
-  };
 }

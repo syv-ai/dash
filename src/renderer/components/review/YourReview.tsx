@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Bot, MessageSquare, Pencil, Trash2 } from 'lucide-react';
+import { canDemote } from '../../../shared/diffComments';
 import type { DiffComment, PrReview } from '../../../shared/types';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { CommentInputBar } from '../diffEditor/comments/CommentInputBar';
@@ -134,8 +135,7 @@ function DraftRow({
           <IconButton size="sm" title="Edit" onClick={rowAction(() => setEditing(true))}>
             <Pencil size={14} strokeWidth={1.8} />
           </IconButton>
-          {/* A reply is always a comment; a note about a thread is "Ask agent". */}
-          {!c.replyTo && (
+          {canDemote(c) && (
             <IconButton
               size="sm"
               title="Make it a note to agent"

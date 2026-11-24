@@ -17,12 +17,14 @@ import type { DiffComment } from '../../../shared/types';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { useGit } from '../../stores/gitStore';
 import { PrThreadOverlay } from './prReview/PrThreadOverlay';
-import { PrViewCorner } from './prReview/PrViewCorner';
+import { useThreadMinimapMarks } from './prReview/useThreadMinimapMarks';
+import { useReviewNavigation } from './prReview/useReviewNavigation';
+import { navStops, trayNotes } from '../review/outline';
 import { usePrView } from './prReview/usePrView';
 import { draftSubmitLabel as prDraftSubmitLabel } from './prReview/prViewPolicy';
 import { useGutterSelection } from './comments/useGutterSelection';
 import { useFileComments } from './comments/useFileComments';
-import { commentScope, scopeLabel, withoutPrComments } from './comments/commentScope';
+import { commentScope, scopeLabel } from './comments/commentScope';
 import { useCommentShades } from './comments/useCommentShades';
 import { useCommentBands } from './comments/useCommentBands';
 import { useCommentDraft } from './comments/useCommentDraft';
@@ -30,7 +32,6 @@ import { useCommentPrompt } from './comments/useCommentPrompt';
 import { useFileFade } from './comments/useFileFade';
 import { CommentOverlay } from './comments/overlay/CommentOverlay';
 import { CommentsMenu } from './comments/CommentsMenu';
-import { EditCommentsModal } from './comments/EditCommentsModal';
 import { useGitBlame } from './blame/useGitBlame';
 import { useFileLoad } from './editor/useFileLoad';
 import { usePaneModels } from './editor/usePaneModels';
@@ -78,11 +79,10 @@ interface EditorPaneProps {
   /** Jump to a comment, switching to its view (scope) + file as needed. */
   onNavigateToComment: (scope: string, filePath: string, commentId: string) => void;
   onClearReveal: () => void;
-  onClose: () => void;
   /** The project `cwd` belongs to (PR review calls name it). */
   projectId: string | null;
-  /** Open another file (the PR review menu's thread list). */
-  onSelectFile: (path: string) => void;
+  /** Open another file and reveal `range` there (next/previous thread). */
+  onOpenFileAt: (path: string, range: TextRange) => void;
   /** Show this range once the file is on screen (go-to-definition, openFileAt). */
   revealRange: { range: TextRange; nonce: number } | null;
   onRevealed: (nonce: number) => void;
@@ -102,9 +102,8 @@ export function EditorPane({
   revealCommentId,
   onNavigateToComment,
   onClearReveal,
-  onClose,
   projectId,
-  onSelectFile,
+  onOpenFileAt,
   revealRange,
   onRevealed,
   onIsDirectory,
@@ -270,7 +269,6 @@ export function EditorPane({
     cwd,
     filePath,
     isFileLoaded,
-    onClose,
   });
   const binding = useFileComments({
     enabled: commentsOn,
@@ -416,16 +414,11 @@ export function EditorPane({
     return () => cancelAnimationFrame(raf);
   }, [pendingRange, dragging, draftApi.editingId, modifiedEditor, monaco]);
 
-  // The task's comments menu lists notes; PR comments belong to their PR's widget.
-  const menuCommentsByFile = useMemo(() => withoutPrComments(commentsByFile), [commentsByFile]);
-  // The menu shows only with something to send: it is the way to send.
-  const hasUnsent = useMemo(
-    () => Object.values(menuCommentsByFile).some((list) => list.some((c) => !c.sent)),
-    [menuCommentsByFile],
-  );
+  // The task's notes still to send: the menu below the code shows with any.
+  const unsentNotes = useMemo(() => trayNotes(commentsByFile).unsent.length, [commentsByFile]);
 
-  // Prompt assembly + send-to-TUI + edit-and-send modal.
-  const promptApi = useCommentPrompt({
+  // One comment to the agent, with its live range and code ("Send now").
+  const sendComment = useCommentPrompt({
     activeTaskId,
     filePath,
     modifiedEditor,
@@ -433,8 +426,30 @@ export function EditorPane({
     liveComments,
     language: state.kind === 'loaded' ? state.language : '',
     scope,
-    sendable: pr.sendable ?? menuCommentsByFile,
-    onClose,
+  });
+
+  // The PR view's threads in the minimap, and next/previous thread or draft.
+  useThreadMinimapMarks({ modifiedEditor, monaco, threads: pr.inlineThreads, isDark });
+  const navigable = useMemo(
+    () =>
+      pr.review
+        ? navStops(
+            pr.review.threads,
+            Object.values(commentsByFile)
+              .flat()
+              .filter((c) => c.viewScope === scope),
+          )
+        : [],
+    [pr.review, commentsByFile, scope],
+  );
+  useReviewNavigation({
+    paneId,
+    modifiedEditor,
+    monaco,
+    enabled: isPrView,
+    filePath,
+    stops: navigable,
+    onOpenAt: onOpenFileAt,
   });
 
   const editingKind = draftApi.editingId
@@ -442,14 +457,8 @@ export function EditorPane({
     : undefined;
   const draftSubmitLabel = prDraftSubmitLabel(isPrView, pr.newKind, editingKind);
 
-  const getLiveRangeForCurrent = (commentId: string) => {
-    const target = liveComments.find((c) => c.id === commentId);
-    if (!target) return null;
-    const r = modifiedEditor?.getModel()?.getDecorationRange(target.decorationId);
-    return r ? { start: r.startLineNumber, end: r.endLineNumber } : null;
-  };
-
-  const showCommentsMenu = !commentsDisabled && hasUnsent && !isPrView;
+  const showCommentsMenu = !commentsDisabled && unsentNotes > 0 && !isPrView;
+  const store = useCommentsStore.getState;
 
   return (
     <div className="h-full flex flex-col min-w-0 min-h-0">
@@ -511,18 +520,6 @@ export function EditorPane({
                 {saving ? 'Saving…' : 'Save'}
               </button>
             )}
-            <PrViewCorner
-              pr={pr}
-              activeTaskId={activeTaskId}
-              projectId={projectId}
-              cwd={cwd}
-              currentFilePath={filePath}
-              getLiveRangeForCurrent={getLiveRangeForCurrent}
-              onNavigate={onNavigateToComment}
-              onSendOne={promptApi.sendOne}
-              onSendMany={promptApi.sendMany}
-              onSelectFile={onSelectFile}
-            />
             {state.kind === 'loading' && displayed.kind === 'loaded' && <LoadingPill />}
             {rulerMark &&
               (() => {
@@ -594,7 +591,7 @@ export function EditorPane({
                 onSetResolved={pr.setThreadResolved}
                 modifiedEditor={modifiedEditor}
                 area={editorAreaEl}
-                onSend={(t) => pr.sendThreads([t], false)}
+                onSend={pr.sendThread}
               />
             )}
             <CommentOverlay
@@ -608,13 +605,19 @@ export function EditorPane({
               onHoveredIdChange={setHoveredCommentId}
               onEditComment={draftApi.beginEdit}
               onDeleteComment={binding.remove}
-              onReopenComment={(id) => useCommentsStore.getState().markUnsent(id)}
-              onPromoteComment={
-                pr.canPromote
-                  ? (id) => useCommentsStore.getState().setKind(id, 'comment')
+              onReopenComment={(id) => store().markUnsent(id)}
+              onPromoteComment={pr.canPromote ? (id) => store().setKind(id, 'comment') : undefined}
+              onDemoteComment={(id) => store().setKind(id, 'note')}
+              draftSubmitLabel={draftSubmitLabel}
+              draftKind={{ value: pr.newKind, onChange: pr.setNewKind }}
+              onSendNowDraft={
+                activeTaskId
+                  ? (text) => {
+                      const id = draftApi.submit(text, dragging ? null : pendingRange);
+                      if (id) sendComment(id);
+                    }
                   : undefined
               }
-              draftSubmitLabel={draftSubmitLabel}
               pendingRange={dragging ? null : pendingRange}
               pendingText={draftApi.pendingText}
               editingId={draftApi.editingId}
@@ -623,21 +626,12 @@ export function EditorPane({
             />
           </EditorViewport>
           {/* Below the code, not over it. */}
-          {showCommentsMenu && (
+          {showCommentsMenu && activeTaskId && (
             <div className="flex shrink-0 justify-end border-t border-edge/6 px-3 py-1">
               <CommentsMenu
-                commentsByFile={menuCommentsByFile}
-                currentFilePath={filePath}
-                currentScope={scope}
-                getLiveRangeForCurrent={getLiveRangeForCurrent}
+                taskId={activeTaskId}
+                unsent={unsentNotes}
                 onNavigate={onNavigateToComment}
-                onRemove={(_path, id) => useCommentsStore.getState().remove(id)}
-                onUnsend={(id) => useCommentsStore.getState().markUnsent(id)}
-                onClearSent={(scope) => useCommentsStore.getState().clearSent(scope)}
-                onSendScope={promptApi.sendScope}
-                onSendAll={promptApi.sendAllUnsent}
-                onEditAndSend={promptApi.openEditAndSend}
-                onSendOne={promptApi.sendOne}
               />
             </div>
           )}
@@ -650,14 +644,6 @@ export function EditorPane({
           )}
         </div>
       </EditorContextMenu>
-      {promptApi.editTarget && (
-        <EditCommentsModal
-          initialText={promptApi.editTarget.text}
-          count={promptApi.editTarget.ids.length}
-          onClose={promptApi.cancelEditAndSend}
-          onSend={promptApi.confirmEditAndSend}
-        />
-      )}
     </div>
   );
 }

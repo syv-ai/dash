@@ -45,6 +45,7 @@ import { WorktreePath } from './WorktreePath';
 import {
   onChangeCount,
   pickSegment,
+  prViewLags,
   segmentForTarget,
   segmentOnExpand,
   viewOnSegment,
@@ -223,8 +224,9 @@ export function RightInspector({
   // The PR's view in the editor: at once when its review is loaded (from
   // History's hover, an earlier visit), else once it is.
   const showPr = (pr: PrRef) => {
-    if (view.kind === 'pr' && view.provider === pr.provider && view.number === pr.number) return;
     const loaded = usePrReviews.getState().byPr[prKey(pr.provider, pr.number)];
+    const same = view.kind === 'pr' && view.provider === pr.provider && view.number === pr.number;
+    if (same && (!loaded || (loaded.base === view.base && loaded.head === view.head))) return;
     if (loaded) selectView({ kind: 'pr', ...pr, base: loaded.base, head: loaded.head });
     else void ws.openPrView(pr.number);
   };
@@ -238,6 +240,17 @@ export function RightInspector({
     if (nextView === 'working') selectView({ kind: 'working', ref: 'HEAD' });
     else if (nextView === 'pr' && pr) showPr(pr);
   };
+  // On Review the editor's PR view follows the target and its head: Stop
+  // reviewing falling back to the own PR, a refresh finding a new push (D38).
+  const targetReview = usePrReviews((s) =>
+    reviewTarget ? (s.byPr[prKey(reviewTarget.provider, reviewTarget.number)] ?? null) : null,
+  );
+  const lags = prViewLags({ segment, view, target: reviewTarget, review: targetReview });
+  const showPrRef = useRef(showPr);
+  showPrRef.current = showPr;
+  useEffect(() => {
+    if (lags && reviewTarget) showPrRef.current(reviewTarget);
+  }, [lags, reviewTarget]);
   // Review shows while the task has a target; it gives way to Changes once
   // the target is gone (Stop reviewing, the own PR merged), and the editor
   // to the working tree.
@@ -630,12 +643,7 @@ export function RightInspector({
                   <div className={split ? 'h-full' : 'hidden'}>
                     <EditorSheet closeBinding={keybindings.closeDiff} onClose={onCloseDiff}>
                       <Suspense fallback={null}>
-                        <EditorGroups
-                          ws={ws}
-                          terminalTheme={terminalTheme}
-                          isDark={isDark}
-                          onClose={onCloseDiff}
-                        />
+                        <EditorGroups ws={ws} terminalTheme={terminalTheme} isDark={isDark} />
                       </Suspense>
                     </EditorSheet>
                   </div>

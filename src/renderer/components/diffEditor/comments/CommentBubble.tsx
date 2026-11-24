@@ -1,8 +1,11 @@
-import { ArrowUpRight, Bot, Pencil, Undo2, X } from 'lucide-react';
+import type { MouseEvent, ReactNode } from 'react';
+import { Bot, MessageSquare, Pencil, Undo2, X } from 'lucide-react';
 import type { DiffCommentKind } from '../../../../shared/types';
 import type { Shade } from './types';
 import { BubbleShell } from './BubbleShell';
 import { Markdown } from '../../ui/Markdown';
+import { Badge } from '../../ui/Badge';
+import { IconButton } from '../../ui/IconButton';
 
 interface Props {
   shade: Shade;
@@ -37,14 +40,30 @@ interface Props {
    *  it, so the read-only → editable transition reads as a single morph
    *  instead of an unmount + remount pop. */
   isFadingOut: boolean;
-  /** In a PR view: whether it's a local note or a PR review comment. */
-  kindTag?: DiffCommentKind;
-  /** Make this note a PR review comment. */
+  /** A note to the agent or a comment for the PR's author. */
+  kind: DiffCommentKind;
+  /** Make this note a PR review comment (a PR's note only). */
   onPromote?(): void;
+  /** Make this comment a note to the agent (a PR's line comment only). */
+  onDemote?(): void;
 }
 
-/** One persisted speech-bubble card. Thin wrapper around BubbleShell that
- *  renders the meta line + body text + a hover-revealed delete button. */
+/** The kind's icon and name, the same in every list (D10). */
+function KindLabel({ kind }: { kind: DiffCommentKind }) {
+  return (
+    <span className="type-caption inline-flex items-center gap-1">
+      {kind === 'note' ? (
+        <Bot size={14} strokeWidth={1.8} />
+      ) : (
+        <MessageSquare size={14} strokeWidth={1.8} />
+      )}
+      {kind === 'note' ? 'Note to agent' : 'Comment'}
+    </span>
+  );
+}
+
+/** One persisted speech-bubble card: where it sits, what kind it is, its
+ *  text, and hover actions (edit, promote/demote, reopen, delete). */
 export function CommentBubble({
   shade,
   meta,
@@ -61,13 +80,30 @@ export function CommentBubble({
   onDelete,
   onReopen,
   isFadingOut,
-  kindTag,
+  kind,
   onPromote,
+  onDemote,
 }: Props) {
   // A sent comment fades back so it reads as "already pushed" without
   // disappearing (it stays editable/removable). A bubble mid-edit takes
   // precedence and fades fully out as the draft crossfades in.
   const opacity = isFadingOut ? 0 : sent ? 0.4 : 1;
+  // The bubble's double-click edits: an action's clicks stay with it.
+  const act = (fn: () => void) => (e: MouseEvent) => {
+    e.stopPropagation();
+    fn();
+  };
+  const action = (title: string, icon: ReactNode, fn: () => void, destructive = false) => (
+    <IconButton
+      size="sm"
+      title={title}
+      variant={destructive ? 'destructive' : 'default'}
+      onClick={act(fn)}
+      onDoubleClick={(e) => e.stopPropagation()}
+    >
+      {icon}
+    </IconButton>
+  );
   return (
     <div
       style={{
@@ -84,90 +120,33 @@ export function CommentBubble({
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
         onDoubleClick={onDoubleClick}
+        rule={kind === 'note' ? 'dashed' : 'solid'}
       >
         <div className="group/bubble">
-          <div className="absolute top-[6px] right-[6px] flex items-center gap-[2px] z-10">
-            <button
-              type="button"
-              aria-label="Edit comment"
-              title="Edit"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDoubleClick();
-              }}
-              className="flex h-[20px] w-[20px] items-center justify-center rounded-sm text-muted-fade-60 opacity-0 group-hover/bubble:opacity-40 hover:opacity-100! hover:text-foreground hover:bg-foreground/10 transition-opacity"
-            >
-              <Pencil size={12} strokeWidth={1.8} />
-            </button>
-            {onPromote && (
-              <button
-                type="button"
-                aria-label="Promote to comment"
-                title="Promote to a PR comment"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPromote();
-                }}
-                className="flex h-[20px] w-[20px] items-center justify-center rounded-sm text-muted-fade-60 opacity-40 hover:opacity-100 hover:text-primary hover:bg-primary/10 transition-opacity"
-              >
-                <ArrowUpRight size={12} strokeWidth={1.8} />
-              </button>
-            )}
-            {sent && (
-              <button
-                type="button"
-                aria-label="Reopen comment"
-                title="Reopen — include in next prompt"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onReopen();
-                }}
-                className="flex h-[20px] w-[20px] items-center justify-center rounded-sm text-muted-fade-60 opacity-40 hover:opacity-100 hover:text-primary hover:bg-primary/10 transition-opacity"
-              >
-                <Undo2 size={12} strokeWidth={1.8} />
-              </button>
-            )}
-            <button
-              type="button"
-              aria-label="Delete comment"
-              title="Delete comment"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-              className="flex h-[20px] w-[20px] items-center justify-center rounded-sm text-muted-fade-60 opacity-40 hover:opacity-100 hover:text-foreground hover:bg-foreground/10 transition-opacity"
-            >
-              <X size={13} strokeWidth={1.8} />
-            </button>
+          <div className="absolute top-1 right-1 z-10 flex items-center opacity-0 transition-opacity group-hover/bubble:opacity-100 focus-within:opacity-100">
+            {action('Edit', <Pencil size={14} strokeWidth={1.8} />, onDoubleClick)}
+            {onPromote &&
+              action(
+                'Make it a comment for the author',
+                <MessageSquare size={14} strokeWidth={1.8} />,
+                onPromote,
+              )}
+            {onDemote &&
+              action('Make it a note to agent', <Bot size={14} strokeWidth={1.8} />, onDemote)}
+            {sent &&
+              action(
+                'Reopen — include in the next send',
+                <Undo2 size={14} strokeWidth={1.8} />,
+                onReopen,
+              )}
+            {action('Delete', <X size={14} strokeWidth={1.8} />, onDelete, true)}
           </div>
-          <div className="flex items-center gap-[6px] mb-[2px]">
-            <span className="text-xs text-muted-fade-55 tracking-normal">{meta}</span>
-            {kindTag === 'comment' && (
-              <span className="rounded-sm bg-primary/12 px-[5px] py-[1px] text-xs font-medium uppercase tracking-[0.04em] text-primary/80">
-                Comment
-              </span>
-            )}
-            {kindTag === 'note' && (
-              <span className="rounded-sm bg-foreground/10 px-[5px] py-[1px] text-xs font-medium uppercase tracking-[0.04em] text-muted-fade-75">
-                Note
-              </span>
-            )}
-            {scopeLabel && (
-              <span className="rounded-sm bg-primary/12 px-[5px] py-[1px] text-xs font-medium text-primary/80">
-                {scopeLabel}
-              </span>
-            )}
-            {byAgent && (
-              <span className="inline-flex items-center gap-[3px] rounded-sm bg-foreground/10 px-[5px] py-[1px] text-xs font-medium uppercase tracking-[0.04em] text-muted-fade-75">
-                <Bot size={10} strokeWidth={1.8} />
-                Agent
-              </span>
-            )}
-            {sent && (
-              <span className="rounded-sm bg-foreground/10 px-[5px] py-[1px] text-xs font-medium uppercase tracking-[0.04em] text-muted-fade-75">
-                Sent
-              </span>
-            )}
+          <div className="mb-0.5 flex items-center gap-1.5">
+            <KindLabel kind={kind} />
+            <span className="type-caption tabular-nums">{meta}</span>
+            {scopeLabel && <Badge size="sm">{scopeLabel}</Badge>}
+            {byAgent && <Badge size="sm">Agent</Badge>}
+            {sent && <Badge size="sm">Sent</Badge>}
           </div>
           <Markdown text={text} />
         </div>

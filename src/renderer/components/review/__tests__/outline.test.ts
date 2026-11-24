@@ -7,6 +7,8 @@ import {
   fileRows,
   groupByPath,
   lineLabel,
+  navStops,
+  nextStop,
   nextUnviewed,
   replyDraftCounts,
   reviewComments,
@@ -192,5 +194,42 @@ describe('checkCounts', () => {
     expect(
       checkCounts([c('passing'), c('passing'), c('failing'), c('skipped'), c('pending')]),
     ).toEqual({ passing: 2, failing: 1, pending: 1 });
+  });
+});
+
+describe('next/previous thread or draft', () => {
+  const stops = navStops(
+    [
+      thread('t1', { path: 'b.ts', line: 10 }),
+      thread('t2', { path: 'a.ts', line: 3 }),
+      thread('off', { path: 'a.ts', line: null }),
+      thread('left', { path: 'a.ts', line: 5, side: 'LEFT' }),
+    ],
+    [
+      draft('d1', { filePath: 'a.ts', startLine: 8 }),
+      draft('r1', { filePath: 'a.ts', startLine: 1, replyTo: 't2' }),
+    ],
+  );
+
+  it('lists threads on lines and drafts (not replies) by file, then line', () => {
+    expect(stops.map((s) => s.id)).toEqual(['t2', 'd1', 't1']);
+  });
+
+  it('moves on in the file, then to the next file, wrapping round', () => {
+    expect(nextStop(stops, { path: 'a.ts', line: 1 }, 1)?.id).toBe('t2');
+    expect(nextStop(stops, { path: 'a.ts', line: 3 }, 1)?.id).toBe('d1');
+    expect(nextStop(stops, { path: 'a.ts', line: 9 }, 1)?.id).toBe('t1');
+    expect(nextStop(stops, { path: 'b.ts', line: 10 }, 1)?.id).toBe('t2');
+    expect(nextStop(stops, { path: 'c.ts', line: 1 }, 1)?.id).toBe('t2');
+  });
+
+  it('moves back the same way', () => {
+    expect(nextStop(stops, { path: 'b.ts', line: 10 }, -1)?.id).toBe('d1');
+    expect(nextStop(stops, { path: 'a.ts', line: 8 }, -1)?.id).toBe('t2');
+    expect(nextStop(stops, { path: 'a.ts', line: 3 }, -1)?.id).toBe('t1');
+  });
+
+  it('has nowhere to go without threads or drafts', () => {
+    expect(nextStop([], { path: 'a.ts', line: 1 }, 1)).toBeNull();
   });
 });

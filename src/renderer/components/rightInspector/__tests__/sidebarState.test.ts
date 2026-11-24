@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   onChangeCount,
   pickSegment,
+  prViewLags,
   segmentForTarget,
   segmentOnExpand,
   viewOnSegment,
@@ -122,5 +123,29 @@ describe('viewOnSegment', () => {
   it('drops a commit view leaving History', () => {
     expect(viewOnSegment({ from: 'history', to: 'files', viewKind: 'commit' })).toBe('working');
     expect(viewOnSegment({ from: 'history', to: 'history', viewKind: 'commit' })).toBeNull();
+  });
+});
+
+describe('prViewLags', () => {
+  const pr = (number: number, head = 'h1') =>
+    ({ kind: 'pr', provider: 'github', number, base: 'b', head }) as const;
+  const target = { provider: 'github', number: 4 };
+  const lags = (over: Partial<Parameters<typeof prViewLags>[0]> = {}) =>
+    prViewLags({ segment: 'review', view: pr(4), target, review: null, ...over });
+
+  it('follows a new target (Stop reviewing fell back to the own PR)', () => {
+    expect(lags({ view: pr(9) })).toBe(true);
+  });
+
+  it("follows the refreshed review's head", () => {
+    expect(lags({ review: { base: 'b', head: 'h2' } })).toBe(true);
+    expect(lags({ review: { base: 'b', head: 'h1' } })).toBe(false);
+    expect(lags()).toBe(false);
+  });
+
+  it('leaves other views and segments alone', () => {
+    expect(lags({ segment: 'changes', view: pr(9) })).toBe(false);
+    expect(lags({ view: { kind: 'working' } })).toBe(false);
+    expect(lags({ target: null, view: pr(9) })).toBe(false);
   });
 });

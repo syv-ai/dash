@@ -1,5 +1,18 @@
 import { useState } from 'react';
+import { Bot, MessageSquare, Send } from 'lucide-react';
+import type { DiffCommentKind } from '../../../../shared/types';
+import { Button } from '../../ui/Button';
+import { Kbd } from '../../ui/Kbd';
+import { Segmented } from '../../ui/Segmented';
 import { Textarea } from '../../ui/Textarea';
+import { otherKind } from '../prReview/prViewPolicy';
+
+/** A fresh draft's kind and the switch that picks it. */
+export interface ComposerKind {
+  value: DiffCommentKind;
+  /** Pick the kind; null where only notes can be written (no pull request). */
+  onChange: ((kind: DiffCommentKind) => void) | null;
+}
 
 interface Props {
   lineRange: { start: number; end: number } | null;
@@ -8,10 +21,14 @@ interface Props {
   onCancel: () => void;
   placeholder?: string;
   submitLabel?: string;
+  /** Show the Note to agent | Comment for author switch (fresh drafts only). */
+  kind?: ComposerKind;
+  /** Save a note and send it to the agent at once (button and ⌘⇧↵). */
+  onSendNow?: (text: string) => void;
 }
 
-/** Renders inside the WIP popover. Owns the textarea state and ⌘+Enter
- *  submit shortcut; the popover open/close is controlled by EditorPane. */
+/** The composer: a growing textarea, ⌘↵ to submit; with `kind`, the
+ *  note/comment switch (⌘⇧N flips it); with `onSendNow`, Send now for a note. */
 export function CommentInputBar({
   lineRange,
   initialText,
@@ -19,21 +36,51 @@ export function CommentInputBar({
   onCancel,
   placeholder = 'Describe the change…',
   submitLabel = 'Add',
+  kind,
+  onSendNow,
 }: Props) {
   const [text, setText] = useState(initialText);
+  const trimmed = text.trim();
   const submit = () => {
-    if (text.trim()) onSubmit(text.trim());
+    if (trimmed) onSubmit(trimmed);
   };
+  const sendNow = onSendNow && (kind?.value ?? 'note') === 'note' ? onSendNow : null;
   const rangeLabel = lineRange
     ? lineRange.start === lineRange.end
       ? `Line ${lineRange.start}`
       : `Lines ${lineRange.start}–${lineRange.end}`
     : '';
+  const pickKind = kind?.onChange ?? null;
   return (
     <>
-      <div className="shrink-0 text-xs text-muted-fade-60 tabular-nums tracking-tight">
-        {rangeLabel}
-      </div>
+      {(rangeLabel || kind) && (
+        <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1">
+          {kind && (
+            <Segmented
+              size="sm"
+              fullWidth={false}
+              aria-label="What this is"
+              value={kind.value}
+              onChange={(k) => pickKind?.(k)}
+              options={[
+                {
+                  value: 'note',
+                  label: 'Note to agent',
+                  icon: <Bot size={14} strokeWidth={1.8} />,
+                },
+                {
+                  value: 'comment',
+                  label: 'Comment for author',
+                  icon: <MessageSquare size={14} strokeWidth={1.8} />,
+                  disabled: !pickKind,
+                  title: pickKind ? undefined : 'Comments need a pull request',
+                },
+              ]}
+            />
+          )}
+          <span className="type-caption ml-auto truncate tabular-nums">{rangeLabel}</span>
+        </div>
+      )}
       <Textarea
         autoFocus
         // Grows with its text, so a long comment needn't scroll in a little box.
@@ -48,9 +95,17 @@ export function CommentInputBar({
           // Stop ALL keys (incl. Escape) from bubbling to the surrounding
           // Modal — the popover handles its own dismiss via onCancel.
           e.stopPropagation();
-          if (e.key === 'Enter' && e.metaKey) {
+          const mod = e.metaKey || e.ctrlKey;
+          if (mod && e.shiftKey && e.code === 'KeyN') {
             e.preventDefault();
-            submit();
+            if (kind && pickKind) pickKind(otherKind(kind.value));
+            return;
+          }
+          if (mod && e.key === 'Enter') {
+            e.preventDefault();
+            if (!e.shiftKey) submit();
+            else if (sendNow && trimmed) sendNow(trimmed);
+            return;
           }
           if (e.key === 'Escape') {
             e.preventDefault();
@@ -60,24 +115,28 @@ export function CommentInputBar({
         placeholder={placeholder}
         variant="bare"
       />
-      <div className="flex items-center gap-2 shrink-0">
-        <span className="text-xs text-muted-fade-65">
-          <kbd className="px-1.5 py-0.5 rounded-sm border border-foreground/10 bg-foreground/4 text-fg-fade-70">
-            ⌘
-          </kbd>
-          <kbd className="px-1.5 py-0.5 rounded-sm border border-foreground/10 bg-foreground/4 text-fg-fade-70 ml-1">
-            ↵
-          </kbd>
-          <span className="ml-1.5">to {submitLabel.toLowerCase()}</span>
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="type-caption flex items-center gap-1">
+          <Kbd>⌘</Kbd>
+          <Kbd>↵</Kbd>
+          <span className="ml-0.5">to {submitLabel.toLowerCase()}</span>
         </span>
-        <button
-          type="button"
-          onClick={submit}
-          disabled={!text.trim()}
-          className="ml-auto flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-md text-sm font-medium tracking-tight bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition disabled:opacity-30 disabled:cursor-not-allowed disabled:active:scale-100"
-        >
+        <span className="flex-1" />
+        {sendNow && (
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={!trimmed}
+            title="Save and send to the agent (⌘⇧↵)"
+            onClick={() => sendNow(trimmed)}
+          >
+            <Send size={14} strokeWidth={1.8} />
+            Send now
+          </Button>
+        )}
+        <Button size="sm" onClick={submit} disabled={!trimmed}>
           {submitLabel}
-        </button>
+        </Button>
       </div>
     </>
   );

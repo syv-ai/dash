@@ -165,6 +165,50 @@ export function trayNotes(byFile: Readonly<Record<string, DiffComment[]>>): {
 export const lineLabel = (c: Pick<DiffComment, 'startLine' | 'endLine'>): string =>
   c.startLine === c.endLine ? `L${c.startLine}` : `L${c.startLine}–${c.endLine}`;
 
+// ── Navigation (⌥F9 / ⇧⌥F9) ──
+
+/** A place next/previous thread lands on. */
+export interface NavStop {
+  path: string;
+  line: number;
+  /** The thread's or draft's id. */
+  id: string;
+}
+
+const comparePlace = (a: Omit<NavStop, 'id'>, b: Omit<NavStop, 'id'>) =>
+  a.path.localeCompare(b.path) || a.line - b.line;
+
+/**
+ * Every thread drawn on a line and every draft on lines (notes and comments;
+ * a reply sits with its thread), in outline order: files by path, then line.
+ */
+export function navStops(
+  threads: readonly PrReviewThread[],
+  drafts: readonly Pick<DiffComment, 'id' | 'filePath' | 'startLine' | 'replyTo'>[],
+): NavStop[] {
+  return [
+    ...threads.filter(isInlineThread).map((t) => ({ path: t.path, line: t.line!, id: t.id })),
+    ...drafts
+      .filter((c) => c.replyTo == null)
+      .map((c) => ({ path: c.filePath, line: c.startLine, id: c.id })),
+  ].sort(comparePlace);
+}
+
+/**
+ * The stop after (`dir` 1) or before (-1) the cursor at `at`: on in the same
+ * file, then across files in outline order, wrapping round. Null when there
+ * are none.
+ */
+export function nextStop(
+  stops: readonly NavStop[],
+  at: Omit<NavStop, 'id'>,
+  dir: 1 | -1,
+): NavStop | null {
+  if (stops.length === 0) return null;
+  if (dir === 1) return stops.find((s) => comparePlace(s, at) > 0) ?? stops[0]!;
+  return [...stops].reverse().find((s) => comparePlace(s, at) < 0) ?? stops[stops.length - 1]!;
+}
+
 // ── Header ──
 
 /** Checks by state, skipped ones left out. */

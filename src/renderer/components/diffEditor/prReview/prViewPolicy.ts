@@ -17,14 +17,33 @@ export function defaultKind({
   return isPrView && !viewerIsAuthor ? 'comment' : 'note';
 }
 
-/** The comment box's submit label. An edit keeps the kind it has; a new one in
- *  a PR view says which it will be. Undefined: the box's own default. */
+/** What the composer writes: in a PR view the person's last pick there this
+ *  session, else the default; outside a PR view always a note (comments need
+ *  a pull request). */
+export function composerKind({
+  isPrView,
+  viewerIsAuthor,
+  picked,
+}: {
+  isPrView: boolean;
+  viewerIsAuthor: boolean;
+  picked: DiffCommentKind | undefined;
+}): DiffCommentKind {
+  if (!isPrView) return 'note';
+  return picked ?? defaultKind({ isPrView, viewerIsAuthor });
+}
+
+/** The other kind: what ⌘⇧N flips the composer to. */
+export const otherKind = (k: DiffCommentKind): DiffCommentKind =>
+  k === 'note' ? 'comment' : 'note';
+
+/** The comment box's submit label. An edit keeps the kind it has; a new one
+ *  says which it will be. */
 export function draftSubmitLabel(
   isPrView: boolean,
   newKind: DiffCommentKind,
   editingKind: DiffCommentKind | undefined,
-): string | undefined {
+): string {
   if (editingKind) return isPrView ? `Save ${editingKind}` : 'Save';
-  if (!isPrView) return undefined;
   return newKind === 'comment' ? 'Add comment' : 'Add note';
 }

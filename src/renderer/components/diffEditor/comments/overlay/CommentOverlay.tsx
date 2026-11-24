@@ -5,6 +5,7 @@ import { commentIdsAtLine } from '../rowShades';
 import { BubbleStack } from '../BubbleStack';
 import { CommentIcon } from '../CommentIcon';
 import { DraftBubble } from '../DraftBubble';
+import type { ComposerKind } from '../CommentInputBar';
 import { useViewzones, VIEWZONE_TOP_PAD_PX, type ViewzoneGroup } from './useViewzones';
 
 interface Props {
@@ -41,11 +42,16 @@ interface Props {
   scopeLabel?: string;
   /** Bubble width as a fraction of the editor's content width. */
   bubbleWidthFraction?: number;
-  /** In a PR view: each bubble says whether it's a note or a comment, and a
-   *  note offers this to make it a comment. */
+  /** In a PR view: a note offers this to make it a comment. */
   onPromoteComment?(id: string): void;
+  /** A line comment offers this to make it a note. */
+  onDemoteComment?(id: string): void;
   /** The draft's submit button ('Add note', 'Add comment'). */
   draftSubmitLabel?: string;
+  /** A fresh draft's note/comment switch. */
+  draftKind?: ComposerKind;
+  /** Save a fresh note and send it to the agent at once. */
+  onSendNowDraft?(text: string): void;
 }
 
 const DEFAULT_BUBBLE_FRACTION = 0.4;
@@ -76,7 +82,10 @@ export function CommentOverlay({
   scopeLabel,
   bubbleWidthFraction = DEFAULT_BUBBLE_FRACTION,
   onPromoteComment,
+  onDemoteComment,
   draftSubmitLabel,
+  draftKind,
+  onSendNowDraft,
 }: Props) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -210,6 +219,7 @@ export function CommentOverlay({
             <CommentIcon
               shade={iconShade}
               state={isCollapsed ? 'collapsed' : 'expanded'}
+              kind={comments.every((c) => c.kind === 'note') ? 'note' : 'comment'}
               count={stacked ? comments.length : undefined}
               onClick={() => toggleGroup(key)}
               onMouseEnter={() => !stacked && onHoveredIdChange(comments[0]!.id)}
@@ -278,6 +288,7 @@ export function CommentOverlay({
                 editingId={editingId}
                 scopeLabel={scopeLabel}
                 onPromote={onPromoteComment}
+                onDemote={onDemoteComment}
               />
             </div>
             {editingComment && pendingRange && (
@@ -343,6 +354,8 @@ export function CommentOverlay({
                   initialText={pendingText}
                   tailLeftPx={tailLeftPx}
                   submitLabel={draftSubmitLabel}
+                  kind={draftKind}
+                  onSendNow={onSendNowDraft}
                   onSubmit={onSubmitDraft}
                   onCancel={onCancelDraft}
                 />

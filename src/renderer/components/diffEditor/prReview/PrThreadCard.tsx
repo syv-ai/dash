@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
-  Bot,
   Check,
   ChevronDown,
   CircleCheck,
@@ -64,14 +63,11 @@ function ReplyDraft({ draft }: { draft: DiffComment }) {
     );
   }
   return (
-    <div className="min-w-0 rounded-lg border border-dashed border-primary/40 px-2.5 py-2">
+    // A reply is a comment: a solid rule (D10), never a note's dashed one.
+    <div className="min-w-0 rounded-lg border border-line px-2.5 py-2">
       <div className="flex items-center gap-1.5 text-xs text-muted-fade-70">
         <span className="font-medium text-primary">Draft reply</span>
-        {draft.author === 'agent' && (
-          <span className="inline-flex items-center gap-1">
-            · <Bot size={12} strokeWidth={1.8} /> agent
-          </span>
-        )}
+        {draft.author === 'agent' && <span>· by the agent</span>}
         <span className="flex-1" />
         <IconButton title="Edit draft" size="sm" onClick={() => setEditing(true)}>
           <Pencil size={14} strokeWidth={1.8} />

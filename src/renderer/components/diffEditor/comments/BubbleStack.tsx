@@ -1,6 +1,6 @@
 import type { LiveComment, Shade } from './types';
 import { CommentBubble } from './CommentBubble';
-import { canPromote } from '../../../../shared/diffComments';
+import { canDemote, canPromote } from '../../../../shared/diffComments';
 
 interface Props {
   /** Comments anchored at this line. ≥1; >1 means stacked. */
@@ -26,8 +26,10 @@ interface Props {
    *  out as the DraftBubble crossfades in beside it. Null when nothing is
    *  being edited. */
   editingId: string | null;
-  /** In a PR view: tag each bubble note or comment, and let a note become a comment. */
+  /** In a PR view: let a note become a comment. */
   onPromote?(id: string): void;
+  /** Let a line comment become a note. */
+  onDemote?(id: string): void;
 }
 
 function metaLabel(c: LiveComment): string {
@@ -49,6 +51,7 @@ export function BubbleStack({
   editingId,
   scopeLabel,
   onPromote,
+  onDemote,
 }: Props) {
   const stacked = comments.length >= 2;
   return (
@@ -60,9 +63,7 @@ export function BubbleStack({
           <CommentBubble
             key={c.id}
             shade={shade}
-            meta={
-              stacked ? `${metaLabel(c)} — comment ${i + 1} of ${comments.length}` : metaLabel(c)
-            }
+            meta={stacked ? `${metaLabel(c)} — ${i + 1} of ${comments.length}` : metaLabel(c)}
             text={c.text}
             sent={c.sent}
             byAgent={c.author === 'agent'}
@@ -76,8 +77,9 @@ export function BubbleStack({
             onDelete={() => onDelete(c.id)}
             onReopen={() => onReopen(c.id)}
             isFadingOut={c.id === editingId}
-            kindTag={onPromote ? c.kind : undefined}
+            kind={c.kind}
             onPromote={onPromote && canPromote(c) ? () => onPromote(c.id) : undefined}
+            onDemote={onDemote && canDemote(c) ? () => onDemote(c.id) : undefined}
           />
         );
       })}

@@ -1,13 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  commentCountsByScope,
-  commentScope,
-  commitShortHash,
-  filterCommentsByScope,
-  groupByFile,
-  scopeLabel,
-  withoutPrComments,
-} from '../commentScope';
+import { commentCountsByScope, commentScope, commitShortHash, scopeLabel } from '../commentScope';
 
 describe('commentScope', () => {
   it('maps working and branch views to the shared "live" scope', () => {
@@ -25,26 +17,6 @@ describe('commentScope', () => {
     const view = { kind: 'pr', provider: 'ado', number: 7, base: 'b', head: 'h' } as const;
     expect(commentScope(view)).toBe('pr:ado:7');
     expect(scopeLabel('pr:github:812')).toBe('PR #812');
-  });
-});
-
-describe('filterCommentsByScope', () => {
-  const c = (id: string, viewScope: string) => ({ id, viewScope });
-
-  it('keeps only matching-scope comments and drops emptied files', () => {
-    const byFile = {
-      'a.ts': [c('1', 'live'), c('2', 'commit:abc')],
-      'b.ts': [c('3', 'commit:abc')],
-      'c.ts': [c('4', 'live')],
-    };
-    expect(filterCommentsByScope(byFile, 'live')).toEqual({
-      'a.ts': [c('1', 'live')],
-      'c.ts': [c('4', 'live')],
-    });
-  });
-
-  it('returns an empty map when nothing matches', () => {
-    expect(filterCommentsByScope({ 'a.ts': [c('1', 'live')] }, 'commit:xyz')).toEqual({});
   });
 });
 
@@ -100,37 +72,5 @@ describe('commentCountsByScope', () => {
       ],
     });
     expect(counts.get('pr:github:4')).toBe(1);
-  });
-});
-
-describe('withoutPrComments', () => {
-  it("keeps notes, a PR view's too, and drops PR review comments", () => {
-    const c = (id: string, viewScope: string, kind: 'note' | 'comment' = 'note') => ({
-      id,
-      viewScope,
-      kind,
-    });
-    expect(
-      withoutPrComments({
-        'a.ts': [c('1', 'live'), c('2', 'pr:github:4', 'comment'), c('3', 'pr:github:4')],
-        'b.ts': [c('4', 'pr:ado:7', 'comment')],
-      }),
-    ).toEqual({ 'a.ts': [c('1', 'live'), c('3', 'pr:github:4')] });
-  });
-});
-
-describe('groupByFile', () => {
-  const at = (id: string, filePath: string) => ({ id, filePath });
-
-  it("groups by path in order, keeping each file's own order", () => {
-    expect(groupByFile([at('1', 'b.ts'), at('2', 'a.ts'), at('3', 'b.ts')])).toEqual([
-      ['a.ts', [at('2', 'a.ts')]],
-      ['b.ts', [at('1', 'b.ts'), at('3', 'b.ts')]],
-    ]);
-  });
-
-  it('puts the given file first', () => {
-    const groups = groupByFile([at('1', 'a.ts'), at('2', 'c.ts'), at('3', 'b.ts')], 'c.ts');
-    expect(groups.map(([path]) => path)).toEqual(['c.ts', 'a.ts', 'b.ts']);
   });
 });

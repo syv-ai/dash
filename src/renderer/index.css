@@ -871,6 +871,15 @@
   color: hsl(var(--primary)) !important;
   font-weight: 600;
 }
+/* A comment's kind beside its lines (D10: shape, not colour): a dashed
+ * rule for a note to the agent, a solid one for a PR comment. */
+.monaco-comment-rule-note,
+.monaco-comment-rule-comment {
+  border-left: 2px solid hsl(var(--ink-3));
+}
+.monaco-comment-rule-note {
+  border-left-style: dashed;
+}
 .monaco-select-line {
   background-color: hsl(var(--primary) / 0.18);
 }

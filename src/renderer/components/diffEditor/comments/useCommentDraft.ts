@@ -16,8 +16,9 @@ export interface CommentDraft {
   pendingText: string;
   /** Id of the comment being edited, or null for a fresh comment. */
   editingId: string | null;
-  /** Submit handler for the draft bubble; routes to add or edit. */
-  submit: (text: string, pendingRange: LineRange | null) => void;
+  /** Submit handler for the draft bubble; routes to add or edit. Returns the
+   *  new comment's id when it added one. */
+  submit: (text: string, pendingRange: LineRange | null) => string | null;
   cancel: () => void;
   /** Begin editing an existing comment (dbl-click) — seeds text + range. */
   beginEdit: (comment: LiveComment) => void;
@@ -32,14 +33,16 @@ export function useCommentDraft({ modifiedEditor, setPendingRange, binding }: Ar
 
   const submit = useCallback(
     (text: string, pendingRange: LineRange | null) => {
+      let added: string | null = null;
       if (editingId) {
         binding.updateText(editingId, text);
       } else if (pendingRange) {
-        binding.addComment(pendingRange, text);
+        added = binding.addComment(pendingRange, text)?.id ?? null;
       }
       setEditingId(null);
       setPendingText('');
       setPendingRange(null);
+      return added;
     },
     [editingId, binding, setPendingRange],
   );

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  canDemote,
   canPromote,
   clearedByClearNotes,
   clearedBySent,
@@ -45,6 +46,12 @@ describe('comment rules', () => {
       agent: isPrDraft(c),
       prune: isPrunable(c, new Set()),
     }).toEqual(want);
+  });
+
+  it('demotes a line comment to a note, never a reply or a note', () => {
+    expect(canDemote({ kind: 'comment', replyTo: null })).toBe(true);
+    expect(canDemote({ kind: 'comment', replyTo: 't1' })).toBe(false);
+    expect(canDemote({ kind: 'note', replyTo: null })).toBe(false);
   });
 
   it('limits Clear sent and Clear notes to the scope asked for', () => {

@@ -80,6 +80,17 @@ export function useCommentBands({
         },
       };
     });
+    // The kind's rule beside the line numbers: dashed for a note to the
+    // agent, solid for a PR comment (D10).
+    for (const c of liveComments) {
+      decos.push({
+        range: new monaco.Range(c.startLine, 1, c.endLine, 1),
+        options: {
+          isWholeLine: true,
+          linesDecorationsClassName: `monaco-comment-rule-${c.kind}`,
+        },
+      });
+    }
     commentDecorations.current.set(decos);
   }, [liveComments, shadeById, isDark, disabled, modifiedEditor, monaco, hoveredCommentId]);
 }

@@ -1,5 +1,5 @@
 import { parsePrScope, prScope } from '../../../../shared/prScope';
-import { isPrComment, needsAttention } from '../../../../shared/diffComments';
+import { needsAttention } from '../../../../shared/diffComments';
 import type { DiffCommentKind } from '../../../../shared/types';
 import type { EditorView } from '../types';
 
@@ -43,50 +43,4 @@ export function commentCountsByScope<
     }
   }
   return counts;
-}
-
-/** Keep only the comments belonging to `scope`, dropping now-empty files.
- *  Used to scope the comments menu / prompt to the view currently open. */
-export function filterCommentsByScope<T extends { viewScope: string }>(
-  byFile: Record<string, T[]>,
-  scope: string,
-): Record<string, T[]> {
-  const out: Record<string, T[]> = {};
-  for (const [path, list] of Object.entries(byFile)) {
-    const kept = list.filter((c) => c.viewScope === scope);
-    if (kept.length > 0) out[path] = kept;
-  }
-  return out;
-}
-
-/** Notes only: no PR review comments. Those belong to their PR view's
- *  widget, where they're submitted, not to the task's comments menu. */
-export function withoutPrComments<T extends { kind?: DiffCommentKind }>(
-  byFile: Record<string, T[]>,
-): Record<string, T[]> {
-  const out: Record<string, T[]> = {};
-  for (const [path, list] of Object.entries(byFile)) {
-    const kept = list.filter((c) => !isPrComment(c));
-    if (kept.length > 0) out[path] = kept;
-  }
-  return out;
-}
-
-/** Group comments by file, keeping each file's order: `first`'s file first,
- *  then by path. */
-export function groupByFile<T extends { filePath: string }>(
-  comments: readonly T[],
-  first?: string,
-): [string, T[]][] {
-  const out = new Map<string, T[]>();
-  for (const c of comments) {
-    const at = out.get(c.filePath);
-    if (at) at.push(c);
-    else out.set(c.filePath, [c]);
-  }
-  return [...out.entries()].sort(([a], [b]) => {
-    if (a === first) return -1;
-    if (b === first) return 1;
-    return a.localeCompare(b);
-  });
 }

@@ -30,6 +30,7 @@ import { confirm } from '../ui/ConfirmHost';
 import { absolutePath } from './editor/fileRef';
 import { LspStatusIndicator } from './LspStatusIndicator';
 import { CompareButton } from './CompareButton';
+import { PrReviewActions } from './prReview/PrReviewActions';
 import { commentScope } from './comments/commentScope';
 import { installLsp } from '../../lsp';
 
@@ -37,8 +38,6 @@ interface Props {
   ws: EditorWorkspace;
   terminalTheme: XtermTheme;
   isDark: boolean;
-  /** Close the editor. The host's close asks `mayCloseEditor()` first. */
-  onClose: () => void;
 }
 
 function useDirtyVersion(): number {
@@ -53,7 +52,7 @@ function useDirtyVersion(): number {
  * and swap models as tabs change; files open in a tab stay loaded (unsaved
  * edits included) until their last tab closes.
  */
-export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
+export function EditorGroups({ ws, terminalTheme, isDark }: Props) {
   const { layout, tabsKey, cwd } = ws;
   const closeBinding = useSettings((s) => s.keybindings.closeEditorTab);
   useEffect(installLsp, []);
@@ -158,8 +157,18 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
   // Editor-wide, so once: at the end of the last group's tab row, the
   // editor's top-right corner however it splits (the tree toggle holds the
   // first group's start). Language servers show here only when unwell.
+  const focusedActive = layout.groups[layout.focused]?.active ?? null;
   const editorActions = (
     <>
+      {ws.view.kind === 'pr' && ws.activeTaskId && (
+        <PrReviewActions
+          pr={ws.view}
+          taskId={ws.activeTaskId}
+          paneId={`pane:${tabsKey}:${layout.focused}`}
+          activePath={focusedActive && isFileTab(focusedActive) ? focusedActive : null}
+          onOpenFile={ws.openFile}
+        />
+      )}
       <LspStatusIndicator worktree={cwd} />
       <CompareButton
         cwd={cwd}
@@ -237,9 +246,10 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
                         revealCommentId={ws.revealCommentId}
                         onNavigateToComment={ws.navigateToComment}
                         onClearReveal={ws.clearRevealComment}
-                        onClose={onClose}
                         projectId={ws.projectId}
-                        onSelectFile={ws.openFile}
+                        onOpenFileAt={(path, range) =>
+                          useEditorTabs.getState().openAt(tabsKey, path, range)
+                        }
                         revealRange={groupReveal}
                         onRevealed={clearReveal}
                         onIsDirectory={(path) => showFolder(index, path)}

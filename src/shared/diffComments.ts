@@ -44,6 +44,11 @@ export const isSubmittable = (c: Kinded & Scoped): boolean =>
 export const canPromote = (c: Kinded & Scoped): boolean =>
   isPrScope(c.viewScope) && !isPrComment(c);
 
+/** A PR comment on lines that can become a note. A reply stays a comment: a
+ *  note about a thread is "Ask agent". */
+export const canDemote = (c: Kinded & Pick<DiffComment, 'replyTo'>): boolean =>
+  isPrComment(c) && !isReplyDraft(c);
+
 /** A PR's note or comment: what an agent may read and change through the control API. */
 export const isPrDraft = (c: Scoped): boolean => isPrScope(c.viewScope);
 

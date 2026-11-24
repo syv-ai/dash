@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type {
+  DiffCommentKind,
   PrProvider,
   PrRef,
   PrReview,
@@ -28,6 +29,11 @@ interface PrReviewState {
    *  blob they were viewed at (`isViewed` says whether a mark still holds).
    *  Absent until loaded. */
   viewed: Record<string, Record<string, string>>;
+  /** Per PR (`prKey`): what the person last picked in the composer there,
+   *  kept for the session (in memory only). */
+  kindPicks: Record<string, DiffCommentKind>;
+  /** Remember the composer's kind for a PR. */
+  pickKind: (provider: PrProvider, number: number, kind: DiffCommentKind) => void;
   /** Per task and PR (`reviewKey`): the draft summary, the review's PR-level
    *  comment. Null when there is none; absent until loaded. */
   summaries: Record<string, PrReviewSummary | null>;
@@ -110,7 +116,11 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
     byPr: {},
     targets: {},
     viewed: {},
+    kindPicks: {},
     summaries: {},
+
+    pickKind: (provider, number, kind) =>
+      set({ kindPicks: { ...get().kindPicks, [prKey(provider, number)]: kind } }),
 
     loadReview: (taskId, provider, number) => loadSummary(taskId, provider, number),
 

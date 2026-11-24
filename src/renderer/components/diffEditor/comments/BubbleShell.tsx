@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { cn } from '../../../lib/cn';
 import type { Shade } from './types';
 
 interface Props {
@@ -13,6 +14,9 @@ interface Props {
   onMouseEnter?(): void;
   onMouseLeave?(): void;
   onDoubleClick?(): void;
+  /** The kind's left rule: dashed for a note to the agent, solid for a PR
+   *  comment (D10: shape, not colour). */
+  rule?: 'dashed' | 'solid';
   children: ReactNode;
 }
 
@@ -27,6 +31,7 @@ export function BubbleShell({
   onMouseEnter,
   onMouseLeave,
   onDoubleClick,
+  rule,
   children,
 }: Props) {
   const shadeVar = shade === 2 ? '--shade-2' : '--shade-1';
@@ -37,7 +42,11 @@ export function BubbleShell({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onDoubleClick={onDoubleClick}
-      className="relative rounded-xl px-[16px] pt-[20px] pb-[20px] text-sm leading-normal tracking-[-0.005em]"
+      className={cn(
+        'relative rounded-xl px-[16px] pt-[20px] pb-[20px] text-sm leading-normal tracking-[-0.005em]',
+        rule && 'border-l-2 border-ink-3',
+        rule === 'dashed' && 'border-dashed',
+      )}
       style={{
         background: fill,
         color: 'hsl(var(--foreground) / 0.92)',

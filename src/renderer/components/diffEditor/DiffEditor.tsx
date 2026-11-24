@@ -79,7 +79,7 @@ export function DiffEditor({
         </ResizablePanel>
         <ResizableHandle />
         <ResizablePanel id="editor" minSize="40%">
-          <EditorGroups ws={ws} terminalTheme={terminalTheme} isDark={isDark} onClose={onClose} />
+          <EditorGroups ws={ws} terminalTheme={terminalTheme} isDark={isDark} />
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>

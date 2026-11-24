@@ -108,3 +108,30 @@ export function viewOnSegment({
   if (from === 'review' && to !== 'history' && viewKind === 'pr') return 'working';
   return null;
 }
+
+/** The editor's compare view, as far as following the review target goes. */
+type ViewOfPr =
+  | { kind: 'pr'; provider: string; number: number; base: string; head: string }
+  | { kind: 'working' | 'branch' | 'commit' };
+
+/**
+ * Whether the editor's PR view must follow the Review view (D38): on Review,
+ * showing a PR, but not the target (Stop reviewing fell back to the own PR) or
+ * not at the head its refreshed review has. Other views are the person's pick.
+ */
+export function prViewLags({
+  segment,
+  view,
+  target,
+  review,
+}: {
+  segment: CodeSegment | 'details';
+  view: ViewOfPr;
+  target: { provider: string; number: number } | null | undefined;
+  /** The target's review as last fetched, if it has been. */
+  review: { base: string; head: string } | null;
+}): boolean {
+  if (segment !== 'review' || !target || view.kind !== 'pr') return false;
+  if (view.provider !== target.provider || view.number !== target.number) return true;
+  return !!review && (review.base !== view.base || review.head !== view.head);
+}
