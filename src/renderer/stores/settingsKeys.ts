@@ -22,9 +22,8 @@ export interface SettingsState {
   showTaskCost: boolean;
   showRateLimits: boolean;
   showUsageInline: boolean;
-  showContextUsageOnTaskCards: boolean;
-  showContextBarOnTaskCards: boolean;
-  showActiveTasksSection: boolean;
+  /** The left sidebar's view: the state-ordered task list or the project tree. */
+  sidebarView: 'tasks' | 'projects';
   showProjectTokens: boolean;
   desktopNotification: boolean;
   syncShellEnv: boolean;
@@ -97,9 +96,9 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('showTaskCost', 'showTaskCost', boolDefaultTrue()),
   entry('showRateLimits', 'showRateLimits', boolNotFalse()),
   entry('showUsageInline', 'showUsageInline', boolNotFalse()),
-  entry('showContextUsageOnTaskCards', 'showContextUsageOnTaskCards', boolNotFalse()),
-  entry('showContextBarOnTaskCards', 'showContextBarOnTaskCards', boolNotFalse()),
-  entry('showActiveTasksSection', 'showActiveTasksSection', boolNotFalse()),
+  // Removed keys (showActiveTasksSection, showContextUsageOnTaskCards,
+  // showContextBarOnTaskCards) are simply no longer read; stored values linger, unused.
+  entry('sidebarView', 'sidebarView', strEnum(['tasks', 'projects'] as const, 'tasks')),
   entry('showProjectTokens', 'showProjectTokens', boolDefaultTrue()),
   entry('desktopNotification', 'desktopNotification', boolDefaultFalse()),
   entry('syncShellEnv', 'syncShellEnv', boolDefaultFalse()),

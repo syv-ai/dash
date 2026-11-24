@@ -22,7 +22,18 @@ export interface TaskStateList {
   idle: TaskStateRow[];
 }
 
-const ACTIVE_ORDER: AgentState[] = ['needs', 'fail', 'work', 'done'];
+/** Every state, in list order. */
+export const STATE_ORDER: AgentState[] = ['needs', 'fail', 'work', 'done', 'idle'];
+const ACTIVE_ORDER = STATE_ORDER.filter((s) => s !== 'idle');
+
+/** What each state is called where words are needed (labels, group headings). */
+export const STATE_LABELS: Record<AgentState, string> = {
+  needs: 'Needs you',
+  fail: 'Failed',
+  work: 'Working',
+  done: 'Done',
+  idle: 'Idle',
+};
 
 const ERROR_LABELS: Record<ActivityError['type'], string> = {
   rate_limit: 'Rate limited',
@@ -122,4 +133,19 @@ export function visibleIdleRows(
 ): TaskStateRow[] {
   if (expanded || idle.length <= IDLE_LIMIT) return idle;
   return idle.filter((r, i) => i < IDLE_LIMIT || r.task.id === selectedTaskId);
+}
+
+/**
+ * The project a new task goes to when none is named: the active project,
+ * else the one whose task was updated last, else the first. Null with no projects.
+ */
+export function newTaskProjectId(
+  activeProjectId: string | null,
+  projects: Project[],
+  tasks: Task[],
+): string | null {
+  if (activeProjectId && projects.some((p) => p.id === activeProjectId)) return activeProjectId;
+  const listed = new Set(projects.map((p) => p.id));
+  const latest = tasks.filter((t) => !t.archivedAt && listed.has(t.projectId)).sort(byRecency)[0];
+  return latest?.projectId ?? projects[0]?.id ?? null;
 }

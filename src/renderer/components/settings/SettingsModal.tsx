@@ -24,7 +24,6 @@ import {
   Puzzle,
   Info,
   ChevronDown,
-  PanelLeft,
   Terminal as TerminalIcon,
   GitCommit,
   Shield,
@@ -71,7 +70,6 @@ const DASH_DEFAULT_ATTRIBUTION =
   '\n\nCo-Authored-By: Claude <noreply@anthropic.com> via Dash <dash@syv.ai>';
 
 type SettingsTab =
-  | 'sidebar'
   | 'appearance'
   | 'notifications'
   | 'terminal'
@@ -86,7 +84,7 @@ type SettingsTab =
   | 'about';
 
 const NAV_GROUPS: Array<{ label: string; ids: SettingsTab[] }> = [
-  { label: 'Interface', ids: ['sidebar', 'appearance', 'notifications'] },
+  { label: 'Interface', ids: ['appearance', 'notifications'] },
   { label: 'Editor', ids: ['terminal', 'ide'] },
   { label: 'Workflow', ids: ['attribution', 'claude-code', 'keybindings', 'usage'] },
   { label: 'System', ids: ['add-ons', 'updates', 'privacy', 'about'] },
@@ -98,12 +96,6 @@ const NAV_ITEMS: Array<{
   description: string;
   Icon: LucideIcon;
 }> = [
-  {
-    id: 'sidebar',
-    label: 'Sidebar',
-    description: 'What appears in the left sidebar.',
-    Icon: PanelLeft,
-  },
   {
     id: 'appearance',
     label: 'Appearance',
@@ -366,10 +358,6 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
   const onShowRateLimitsChange = useSettings((s) => s.setShowRateLimits);
   const showUsageInline = useSettings((s) => s.showUsageInline);
   const onShowUsageInlineChange = useSettings((s) => s.setShowUsageInline);
-  const showContextUsageOnTaskCards = useSettings((s) => s.showContextUsageOnTaskCards);
-  const onShowContextUsageOnTaskCardsChange = useSettings((s) => s.setShowContextUsageOnTaskCards);
-  const showContextBarOnTaskCards = useSettings((s) => s.showContextBarOnTaskCards);
-  const onShowContextBarOnTaskCardsChange = useSettings((s) => s.setShowContextBarOnTaskCards);
   const showTaskTokens = useSettings((s) => s.showTaskTokens);
   const onShowTaskTokensChange = useSettings((s) => s.setShowTaskTokens);
   const showTaskCost = useSettings((s) => s.showTaskCost);
@@ -441,26 +429,6 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
           label="Show context usage"
           description="Current session's context-window bar in the right sidebar."
           control={<Switch checked={showUsageInline} onCheckedChange={onShowUsageInlineChange} />}
-        />
-        <SettingsRow
-          label="Context percentage on task cards"
-          description="Context-window usage as a percentage next to each task in the left sidebar."
-          control={
-            <Switch
-              checked={showContextUsageOnTaskCards}
-              onCheckedChange={onShowContextUsageOnTaskCardsChange}
-            />
-          }
-        />
-        <SettingsRow
-          label="Context bar on task cards"
-          description="Thin progress bar beneath each task in the left sidebar."
-          control={
-            <Switch
-              checked={showContextBarOnTaskCards}
-              onCheckedChange={onShowContextBarOnTaskCardsChange}
-            />
-          }
         />
         <SettingsRow
           label="Show task token badge"
@@ -838,8 +806,6 @@ export function SettingsModal({
   const onAutoUpdateEnabledChange = useSettings((s) => s.setAutoUpdateEnabled);
   const updateNotificationsEnabled = useSettings((s) => s.updateNotificationsEnabled);
   const onUpdateNotificationsEnabledChange = useSettings((s) => s.setUpdateNotificationsEnabled);
-  const showActiveTasksSection = useSettings((s) => s.showActiveTasksSection);
-  const onShowActiveTasksSectionChange = useSettings((s) => s.setShowActiveTasksSection);
   const shellDrawerPosition = useSettings((s) => s.shellDrawerPosition);
   const onShellDrawerPositionChange = useSettings((s) => s.setShellDrawerPosition);
   const terminalTheme = useSettings((s) => s.terminalTheme);
@@ -864,7 +830,7 @@ export function SettingsModal({
   const [tab, setTab] = useState<SettingsTab>(
     initialTab && validTabs.includes(initialTab as SettingsTab)
       ? (initialTab as SettingsTab)
-      : 'sidebar',
+      : 'appearance',
   );
   const [claudeInfo, setClaudeInfo] = useState<ClaudeCliInfo | null>(null);
   const [appVersion, setAppVersion] = useState('');
@@ -1044,23 +1010,6 @@ export function SettingsModal({
                   {activeNav.description}
                 </p>
               </div>
-
-              {tab === 'sidebar' && (
-                <SettingsPane key={`pane-${tab}`}>
-                  <SettingsCard title="Active tasks">
-                    <SettingsRow
-                      label="Show active tasks"
-                      description="Quick-switch between running tasks with Ctrl+Tab."
-                      control={
-                        <Switch
-                          checked={showActiveTasksSection}
-                          onCheckedChange={onShowActiveTasksSectionChange}
-                        />
-                      }
-                    />
-                  </SettingsCard>
-                </SettingsPane>
-              )}
 
               {tab === 'attribution' && (
                 <SettingsPane key={`pane-${tab}`}>

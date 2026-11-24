@@ -4,6 +4,7 @@ import {
   IDLE_LIMIT,
   agentState,
   failureReason,
+  newTaskProjectId,
   orderTasksByState,
   visibleIdleRows,
 } from '../taskStates';
@@ -143,5 +144,29 @@ describe('visibleIdleRows', () => {
 
   it('returns a short list as is', () => {
     expect(visibleIdleRows(idle.slice(0, 2), false, null)).toHaveLength(2);
+  });
+});
+
+describe('newTaskProjectId', () => {
+  const projects = [project('a'), project('b')];
+  const tasks = [
+    task('1', '2026-01-01', { projectId: 'a' }),
+    task('2', '2026-01-03', { projectId: 'b' }),
+    task('3', '2026-01-09', { projectId: 'gone' }),
+    task('4', '2026-01-08', { projectId: 'a', archivedAt: '2026-01-08' }),
+  ];
+
+  it('uses the active project', () => {
+    expect(newTaskProjectId('a', projects, tasks)).toBe('a');
+  });
+
+  it("else the project of the latest live task that's still listed", () => {
+    expect(newTaskProjectId(null, projects, tasks)).toBe('b');
+    expect(newTaskProjectId('archived-project', projects, tasks)).toBe('b');
+  });
+
+  it('else the first project, or none', () => {
+    expect(newTaskProjectId(null, projects, [])).toBe('a');
+    expect(newTaskProjectId(null, [], tasks)).toBeNull();
   });
 });

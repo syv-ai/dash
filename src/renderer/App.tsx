@@ -22,7 +22,8 @@ import { TaskModal } from './components/task/TaskModal';
 import { NewProjectWizard } from './components/newProject/NewProjectWizard';
 import { DeleteTaskModal } from './components/task/DeleteTaskModal';
 import { DeleteProjectModal } from './components/project/DeleteProjectModal';
-import { orderRotationTasks } from './components/leftSidebar/rotationGroups';
+import { TaskFinder } from './components/leftSidebar/TaskFinder';
+import { newTaskProjectId } from './components/leftSidebar/taskStates';
 import {
   WorktreeMigrationModal,
   isWorktreeMigrationDismissed,
@@ -72,7 +73,6 @@ const TUI_PANEL_MAX_PCT = 40;
 const SHELL_PANELS = ['sidebar', 'main'];
 const SHELL_PANELS_WITH_TASK = ['sidebar', 'main', 'changes'];
 const isMac = window.electronAPI.getPlatform() === 'darwin';
-const EMPTY_CONTEXT_USAGE: Record<string, import('../shared/types').ContextUsage> = {};
 
 export function App() {
   // Projects/tasks domain state lives in projectsStore; subscribe via selectors.
@@ -108,6 +108,8 @@ export function App() {
   const adoSetup = useUi((s) => s.adoSetup);
   const setAdoSetup = useUi((s) => s.setAdoSetup);
   const showSettings = useUi((s) => s.showSettings);
+  const taskFinderOpen = useUi((s) => s.taskFinderOpen);
+  const setTaskFinderOpen = useUi((s) => s.setTaskFinderOpen);
   const setShowSettings = useUi((s) => s.setShowSettings);
   const memoryProjectId = useUi((s) => s.memoryProjectId);
   const setMemoryProjectId = useUi((s) => s.setMemoryProjectId);
@@ -300,12 +302,6 @@ export function App() {
   // Right-sidebar: 5-hour / 7-day rate limit bars
   const showRateLimits = useSettings((s) => s.showRateLimits);
   const showUsageInline = useSettings((s) => s.showUsageInline);
-  const showContextUsageOnTaskCards = useSettings((s) => s.showContextUsageOnTaskCards);
-  const showContextBarOnTaskCards = useSettings((s) => s.showContextBarOnTaskCards);
-
-  // Rotation — tasks the user cycles through with Ctrl+Tab
-  const showActiveTasksSection = useSettings((s) => s.showActiveTasksSection);
-  const setShowActiveTasksSection = useSettings((s) => s.setShowActiveTasksSection);
 
   // Token-stats rollups (runtimeStore; live-updated via its init() tokenStats subscription).
   const globalTokenStats = useRuntime((s) => s.globalTokenStats);
@@ -334,8 +330,8 @@ export function App() {
     }
   }, [globalTokenStats.totalTokens]);
 
+  // Rotation — the live-session tasks Ctrl+Tab walks, minus exclusions.
   const rotationExclusions = useSettings((s) => s.rotationExclusions);
-  const setRotationExclusions = useSettings((s) => s.setRotationExclusions);
 
   const rotationOrder = useSettings((s) => s.rotationOrder);
   const setRotationOrder = useSettings((s) => s.setRotationOrder);
@@ -497,9 +493,8 @@ export function App() {
       const orderMap = new Map(rotationOrder.map((id, i) => [id, i]));
       tasks.sort((a, b) => (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity));
     }
-    // Shown grouped by project, so keep the list in that order too.
-    return orderRotationTasks(tasks, projects);
-  }, [tasksByProject, taskActivity, rotationExclusions, rotationOrder, projects]);
+    return tasks;
+  }, [tasksByProject, taskActivity, rotationExclusions, rotationOrder]);
 
   // Load projects on mount
   useEffect(() => {
@@ -750,18 +745,6 @@ export function App() {
     };
   }, [commitCycle]);
 
-  const removeFromRotation = useCallback((taskId: string) => {
-    setRotationExclusions((prev) => {
-      const next = new Set(prev);
-      next.add(taskId);
-      return next;
-    });
-  }, []);
-
-  const handleReorderRotation = useCallback((reordered: Task[]) => {
-    setRotationOrder(reordered.map((t) => t.id));
-  }, []);
-
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -785,12 +768,22 @@ export function App() {
         toggleSidebar();
         return;
       }
+      if (shellChord && keybindings.findTask && matchesBinding(e, keybindings.findTask)) {
+        e.preventDefault();
+        setTaskFinderOpen((v) => !v);
+        return;
+      }
       if (inTextField) return;
 
       // Tasks
       if (keybindings.newTask && matchesBinding(e, keybindings.newTask)) {
         e.preventDefault();
-        if (activeProjectId) void handleNewTask(activeProjectId);
+        const projectId = newTaskProjectId(
+          activeProjectId,
+          projects,
+          Object.values(tasksByProject).flat(),
+        );
+        if (projectId) void handleNewTask(projectId);
       }
       if (keybindings.nextTask && matchesBinding(e, keybindings.nextTask)) {
         e.preventDefault();
@@ -1110,13 +1103,6 @@ export function App() {
           maxSize="28%"
           collapsible
           collapsedSize="3%"
-          style={{
-            overflow: 'visible',
-            position: 'relative',
-            zIndex: 1,
-            minWidth: 0,
-            background: terminalBg,
-          }}
           onCollapse={() => {
             setSidebarCollapsed(true);
             setTimeout(() => setSidebarAnimating(false), 200);
@@ -1163,22 +1149,12 @@ export function App() {
               setShowCommitGraph(true);
             }}
             collapsed={sidebarCollapsed}
-            onToggleCollapse={toggleSidebar}
             unseenTaskIds={unseenTaskIds}
-            contextUsage={
-              showContextUsageOnTaskCards || showContextBarOnTaskCards
-                ? contextUsage
-                : EMPTY_CONTEXT_USAGE
-            }
             onReorderProjects={handleReorderProjects}
             onReorderTasks={handleReorderTasks}
             onReorderTasksCommit={(projectId, reordered) => {
               void handleReorderTasksCommit(projectId, reordered);
             }}
-            rotationTasks={rotationTasks}
-            onReorderRotation={handleReorderRotation}
-            onRemoveFromRotation={removeFromRotation}
-            onToggleActiveTasksSection={() => setShowActiveTasksSection(!showActiveTasksSection)}
           />
         </ResizablePanel>
         <ResizableHandle disabled={sidebarCollapsed} />
@@ -1466,6 +1442,10 @@ export function App() {
             })();
           }}
         />
+      )}
+
+      {taskFinderOpen && (
+        <TaskFinder onSelectTask={handleSelectTask} onClose={() => setTaskFinderOpen(false)} />
       )}
 
       {showSettings && (

@@ -1,4 +1,5 @@
 import type { Task, ActivityInfo } from '../../../shared/types';
+import type { AgentState } from '../ui/StatusDot';
 
 export type ProjectActivity = 'busy' | 'idle' | 'waiting' | 'error' | null;
 
@@ -21,19 +22,21 @@ export function getProjectActivity(
   return null;
 }
 
-/** Dot class and tooltip for a project's rolled-up activity. */
-export function projectActivityDot(activity: Exclude<ProjectActivity, null>): {
-  className: string;
-  label: string;
-} {
+/**
+ * The dot a collapsed project shows for its rolled-up activity, or none: a
+ * project whose live sessions all sit idle gets no dot, like an idle task.
+ */
+export function projectActivityDot(
+  activity: ProjectActivity,
+): { state: AgentState; label: string } | null {
   switch (activity) {
     case 'error':
-      return { className: 'status-dot-err', label: 'Error' };
+      return { state: 'fail', label: 'A task failed' };
     case 'waiting':
-      return { className: 'status-dot-wait', label: 'Waiting for user' };
+      return { state: 'needs', label: 'A task needs you' };
     case 'busy':
-      return { className: 'bg-amber-400 status-pulse', label: 'Claude is working' };
-    case 'idle':
-      return { className: 'status-dot-idle', label: 'Idle' };
+      return { state: 'work', label: 'Claude is working' };
+    default:
+      return null;
   }
 }

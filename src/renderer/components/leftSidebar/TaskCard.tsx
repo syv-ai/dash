@@ -1,22 +1,21 @@
 import { useState } from 'react';
 import { Globe } from 'lucide-react';
-import type { Task, ActivityInfo, ContextUsage, PullRequestInfo } from '../../../shared/types';
+import type { Task, ActivityInfo, PullRequestInfo } from '../../../shared/types';
 import { TaskActions } from '../task/TaskActions';
+import { ListRow } from '../ui/ListRow';
+import { StatusDot, type AgentState } from '../ui/StatusDot';
 import { Tooltip } from '../ui/Tooltip';
-import { Meter, usageTone } from '../ui/Meter';
 import { MainRepoBadge } from '../ui/MainRepoBadge';
 import { PrBadge } from '../ui/PrBadge';
 import { SetupStatus } from '../task/SetupStatus';
 import type { DragHandlers } from '../../hooks/useDragReorder';
-import { useSettings } from '../../stores/settingsStore';
+import { cn } from '../../lib/cn';
+import { STATE_LABELS, agentState, failureReason } from './taskStates';
 
 interface TaskCardProps {
-  /** Registers the row with the tree's sliding selection pill. */
-  rowRef?: (el: HTMLDivElement | null) => void;
   task: Task;
   isActive: boolean;
   activityInfo?: ActivityInfo;
-  ctx?: ContextUsage;
   /** The PRs standing for the task's branch now, newest first. */
   prs?: PullRequestInfo[];
   /** Every PR from the branch, newest first (the badge's list). */
@@ -33,13 +32,22 @@ interface TaskCardProps {
   onDelete: () => void;
 }
 
-/** A single task row in the project tree (expanded sidebar). */
+/** What the state dot's tooltip says: the tool at work, the wait, the failure. */
+function dotTooltip(state: AgentState, info: ActivityInfo | undefined): string {
+  if (state === 'work') {
+    if (info?.compacting) return 'Compacting context…';
+    return info?.tool?.label ?? 'Claude is working';
+  }
+  if (state === 'needs') return info?.detail ? `Waiting: ${info.detail}` : 'Waiting for you';
+  if (state === 'fail') return failureReason(info?.error);
+  return STATE_LABELS[state];
+}
+
+/** A task row in the project tree: state dot, name, badges, and its actions on hover. */
 export function TaskCard({
-  rowRef,
   task,
   isActive,
   activityInfo,
-  ctx,
   prs,
   allPrs,
   isUnseen,
@@ -53,130 +61,55 @@ export function TaskCard({
   onArchive,
   onDelete,
 }: TaskCardProps) {
-  const activityState = activityInfo?.state;
-  // The percentage and the bar are separate preferences; either may be off.
-  const showPercent = useSettings((s) => s.showContextUsageOnTaskCards);
-  const showBar = useSettings((s) => s.showContextBarOnTaskCards);
-  const hasCtx = !!ctx && ctx.percentage > 0;
-  const percentVisible = hasCtx && showPercent;
-  const barVisible = hasCtx && showBar;
-  // The "…" menu is open: keep the actions revealed (and the percentage
-  // tucked away) even though the pointer has moved off the row.
+  // The "…" menu is open: keep the actions shown though the pointer has left.
   const [menuOpen, setMenuOpen] = useState(false);
-
-  // Hover reveal as a slide: the actions column grows from 0fr to 1fr while
-  // fading and easing in from the right; the percentage column does the
-  // reverse. Grid-fraction tracks animate where `width: auto` can't.
-  const revealCls = menuOpen
-    ? 'grid-cols-[1fr] opacity-100 translate-x-0'
-    : 'grid-cols-[0fr] opacity-0 translate-x-1.5 group-hover/task:grid-cols-[1fr] group-hover/task:opacity-100 group-hover/task:translate-x-0';
-  const tuckCls = menuOpen
-    ? 'grid-cols-[0fr] opacity-0'
-    : 'grid-cols-[1fr] opacity-100 group-hover/task:grid-cols-[0fr] group-hover/task:opacity-0';
-
-  // Build tooltip text with tool details when available
-  const busyTooltip = activityInfo?.compacting
-    ? 'Compacting context...'
-    : activityInfo?.tool?.label
-      ? activityInfo.tool.label
-      : 'Claude is working';
-  const errorTooltip = activityInfo?.error
-    ? activityInfo.error.type === 'rate_limit'
-      ? 'Rate limited'
-      : activityInfo.error.type === 'auth_error'
-        ? 'Authentication error'
-        : activityInfo.error.type === 'billing_error'
-          ? 'Billing error'
-          : activityInfo.error.type === 'supervisor'
-            ? `Session failed${activityInfo.error.message ? `: ${activityInfo.error.message}` : ''}`
-            : 'Error'
-    : 'Error';
-
-  const statusDot: { tooltip: string; className: string } | null =
-    activityState === 'error'
-      ? { tooltip: errorTooltip, className: 'status-dot-err' }
-      : activityState === 'waiting'
-        ? {
-            tooltip: activityInfo?.detail ? `Waiting: ${activityInfo.detail}` : 'Waiting for user',
-            className: 'status-dot-wait',
-          }
-        : activityState === 'busy'
-          ? { tooltip: busyTooltip, className: 'bg-amber-400 status-pulse' }
-          : activityState === 'idle'
-            ? isUnseen
-              ? { tooltip: 'Done (unseen)', className: 'status-dot-unseen' }
-              : { tooltip: 'Idle', className: 'status-dot-idle' }
-            : null;
+  const state = agentState(activityInfo, isUnseen);
 
   return (
-    <div
-      ref={rowRef}
-      draggable
-      {...dragHandlers}
-      className={`group/task grid grid-cols-[14px_minmax(0,1fr)] -ml-2 pl-2 pr-2 py-[3px] rounded-md text-base cursor-pointer transition-[transform,color] duration-200 ease-out ${
-        isActive
-          ? 'text-foreground font-medium scale-[1.035]'
-          : 'sidebar-row-hover text-muted-foreground hover:text-foreground'
-      } ${isDragging ? 'opacity-40' : ''}`}
-      onClick={onSelect}
-    >
-      {/* Status dot column — reserved so the title column always
-        starts at the same x whether a dot is shown or not. */}
-      <div className="row-start-1 col-start-1 self-center pt-[3px]">
-        {statusDot && (
-          <Tooltip content={statusDot.tooltip}>
-            <div className={`${statusDot.className} w-[6px] h-[6px] rounded-full`} />
-          </Tooltip>
-        )}
-      </div>
-
-      {/* Main row */}
-      <div className="row-start-1 col-start-2 flex items-center gap-2 min-w-0">
-        {hasRemoteControl && (
-          <Globe size={10} strokeWidth={2} className="text-primary shrink-0 -ml-0.5" />
-        )}
-
-        <span className={`truncate flex-1 min-w-0 ${!isActive && !statusDot ? 'fade-50' : ''}`}>
-          {task.name}
-        </span>
-
-        {task.useWorktree && <SetupStatus worktreePath={task.path} variant="inline" />}
-
-        {/* Runs in the project's own checkout, not a worktree */}
-        {!task.useWorktree && <MainRepoBadge task={task} />}
-
-        {/* PR on this branch — icon-only link to the remote */}
-        {(prs || allPrs) && (
-          <PrBadge prs={prs ?? []} allPrs={allPrs} variant="icon" taskId={task.id} />
-        )}
-
-        {/* Right slot: context percentage at rest, the action row on hover
-            (or while its menu is open), each sliding over the other. The
-            percentage lives inside the slot (not before it) so no flex gap
-            pushes it left. `-mr-0.5` on the clipping wrapper (not the span:
-            a negative margin inside an overflow-hidden box would clip the
-            glyph) lands its right edge where the project rows put their task
-            count, while the grid track — and so the actions' start — stays
-            where it was. */}
-        <div className="flex items-center shrink-0">
-          <div
-            className={`grid transition-[grid-template-columns,opacity] duration-200 ease-out ${tuckCls}`}
-          >
-            <div className="overflow-hidden min-w-0 -mr-0.5 flex items-center">
-              {percentVisible && (
-                <span className="text-xs tabular-nums shrink-0 text-muted-foreground">
-                  {Math.round(ctx!.percentage)}%
+    <div draggable {...dragHandlers} className={cn('group/task', isDragging && 'opacity-40')}>
+      <ListRow
+        as="div"
+        role="button"
+        tabIndex={0}
+        selected={isActive}
+        dimmed={state === 'idle'}
+        onClick={onSelect}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelect();
+          }
+        }}
+        leading={
+          state === 'idle' ? (
+            <span className="size-1.5" />
+          ) : (
+            <Tooltip content={dotTooltip(state, activityInfo)}>
+              <span className="flex">
+                <StatusDot state={state} label={STATE_LABELS[state]} />
+              </span>
+            </Tooltip>
+          )
+        }
+        trailing={
+          <>
+            {hasRemoteControl && (
+              <Tooltip content="Remote control on">
+                <span className="flex">
+                  <Globe size={12} strokeWidth={1.8} />
                 </span>
-              )}
-            </div>
-          </div>
-          <div
-            className={`grid transition-[grid-template-columns,opacity,translate] duration-200 ease-out ${revealCls}`}
-          >
-            <div className="overflow-hidden min-w-0">
+              </Tooltip>
+            )}
+            {task.useWorktree && <SetupStatus worktreePath={task.path} variant="inline" />}
+            {/* Runs in the project's own checkout, not a worktree */}
+            {!task.useWorktree && <MainRepoBadge task={task} />}
+            {(prs || allPrs) && (
+              <PrBadge prs={prs ?? []} allPrs={allPrs} variant="icon" taskId={task.id} />
+            )}
+            <div className={menuOpen ? 'flex' : 'hidden group-hover/task:flex'}>
               <TaskActions
                 taskId={task.id}
-                activityState={activityState}
+                activityState={activityInfo?.state}
                 onOpenIde={onOpenIde}
                 onClose={onClose}
                 onSettings={onSettings}
@@ -185,33 +118,11 @@ export function TaskCard({
                 onMenuOpenChange={setMenuOpen}
               />
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Context usage bar — sits in the title column, naturally
-        aligned with the title above. Wrapped in a grid-template-rows
-        animator so it opens/closes smoothly when ctx becomes
-        available or goes away. */}
-      <div
-        className="row-start-2 col-start-2 grid transition-[grid-template-rows,opacity] duration-200 ease-out"
-        style={{
-          gridTemplateRows: barVisible ? '1fr' : '0fr',
-          opacity: barVisible ? 1 : 0,
-        }}
+          </>
+        }
       >
-        <div className="overflow-hidden">
-          {barVisible && (
-            <Meter
-              value={ctx.percentage}
-              tone={usageTone(ctx.percentage)}
-              size="sm"
-              className="mt-1.5 mb-[3px]"
-              title={`Context: ${ctx.used.toLocaleString()} / ${ctx.total.toLocaleString()} tokens (${Math.round(ctx.percentage)}%)`}
-            />
-          )}
-        </div>
-      </div>
+        {task.name}
+      </ListRow>
     </div>
   );
 }

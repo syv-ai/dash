@@ -37,7 +37,7 @@ describe('settings registry', () => {
   it('registers the phase-1b booleans with correct defaults', () => {
     const byField = Object.fromEntries(SETTINGS_REGISTRY.map((r) => [r.field, r]));
     expect(byField.showRateLimits!.codec.decode(null)).toBe(true); // boolNotFalse
-    expect(byField.showActiveTasksSection!.codec.decode('false')).toBe(false);
+    expect(byField.showUsageInline!.codec.decode('false')).toBe(false);
     expect(byField.desktopNotification!.codec.decode(null)).toBe(false); // boolDefaultFalse
     expect(byField.syncShellEnv!.codec.decode('true')).toBe(true);
     expect(byField.showProjectTokens!.codec.decode(null)).toBe(true); // boolDefaultTrue
@@ -115,5 +115,12 @@ describe('settings registry', () => {
     expect(e.codec.decode(null)).toBeUndefined();
     expect(e.codec.decode('0.13.0')).toBe('0.13.0');
     expect(e.codec.encode('0.13.0')).toBe('0.13.0');
+  });
+
+  it('registers sidebarView, the task list unless the tree was chosen', () => {
+    const e = SETTINGS_REGISTRY.find((r) => r.field === 'sidebarView')!;
+    expect(e.codec.decode(null)).toBe('tasks');
+    expect(e.codec.decode('projects')).toBe('projects');
+    expect(e.codec.decode('garbage')).toBe('tasks');
   });
 });

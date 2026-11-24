@@ -1,14 +1,15 @@
-import { useState, useRef } from 'react';
-import { Plus, Settings } from 'lucide-react';
-import type { Project, Task, ContextUsage } from '../../../shared/types';
-import { Tooltip } from '../ui/Tooltip';
+import { FolderTree, Plus, Search, Settings } from 'lucide-react';
+import type { Project, Task } from '../../../shared/types';
 import { IconButton } from '../ui/IconButton';
-import { RotationSection } from './RotationSection';
+import { StatusDot } from '../ui/StatusDot';
 import { ProjectsSection } from './ProjectsSection';
-import { useSettings } from '../../stores/settingsStore';
-import { useRuntime } from '../../stores/runtimeStore';
-import { getProjectActivity, projectActivityDot } from './projectActivity';
+import { TaskStateList } from './TaskStateList';
 import { UpdateBanner } from './UpdateBanner';
+import { useTaskStateList } from './useTaskStateList';
+import { STATE_LABELS, newTaskProjectId } from './taskStates';
+import { useSettings } from '../../stores/settingsStore';
+import { useUi } from '../../stores/uiStore';
+import { formatBinding, type KeyBinding } from '../../keybindings';
 
 interface LeftSidebarProps {
   projects: Project[];
@@ -29,268 +30,138 @@ interface LeftSidebarProps {
   onOpenSettings: () => void;
   onShowCommitGraph: (projectId: string) => void;
   collapsed: boolean;
-  onToggleCollapse: () => void;
   unseenTaskIds?: Set<string>;
-  contextUsage?: Record<string, ContextUsage>;
   onReorderProjects?: (reordered: Project[]) => void;
   onReorderTasks?: (projectId: string, reordered: Task[]) => void;
   onReorderTasksCommit?: (projectId: string, reordered: Task[]) => void;
-  rotationTasks?: Task[];
-  onReorderRotation?: (reordered: Task[]) => void;
-  onRemoveFromRotation?: (taskId: string) => void;
-  onToggleActiveTasksSection?: () => void;
 }
 
-export function LeftSidebar({
-  projects,
-  activeProjectId,
-  onSelectProject,
-  onOpenFolder,
-  onDeleteProject,
-  onProjectSettings,
-  tasksByProject,
-  activeTaskId,
-  onSelectTask,
-  onNewTask,
-  onDeleteTask,
-  onArchiveTask,
-  onRestoreTask,
-  onCloseTask,
-  onTaskSettings,
-  onOpenSettings,
-  onShowCommitGraph,
-  collapsed,
-  unseenTaskIds,
-  contextUsage = {},
-  onReorderProjects,
-  onReorderTasks,
-  onReorderTasksCommit,
-  rotationTasks = [],
-  onReorderRotation,
-  onRemoveFromRotation,
-}: LeftSidebarProps) {
-  const showActiveTasksSection = useSettings((s) => s.showActiveTasksSection);
-  const taskActivity = useRuntime((s) => s.taskActivity);
-  // Project-reorder drag state for the collapsed rail. The expanded view owns
-  // its own drag state inside ProjectsSection (the two views never coexist).
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const dragIdRef = useRef<string | null>(null);
+const isMac = window.electronAPI.getPlatform() === 'darwin';
 
-  const isMac = window.electronAPI.getPlatform() === 'darwin';
+/** A tooltip label with its shortcut, e.g. "Find a task  ⌘K". */
+function withShortcut(label: string, binding: KeyBinding | undefined): string {
+  return binding ? `${label}  ${formatBinding(binding)}` : label;
+}
 
-  /* ── Collapsed ──────────────────────────────────────────── */
+/**
+ * The app sidebar: a title bar (find, new task, tasks/projects toggle), the
+ * state-ordered task list or the project tree, and settings at the foot.
+ * Collapsed, it is a rail of state dots for the tasks that aren't idle.
+ */
+export function LeftSidebar(props: LeftSidebarProps) {
+  const { projects, activeProjectId, tasksByProject, activeTaskId, collapsed } = props;
+  const rows = useTaskStateList();
+  const view = useSettings((s) => s.sidebarView);
+  const setView = useSettings((s) => s.setSidebarView);
+  const keybindings = useSettings((s) => s.keybindings);
+  const setTaskFinderOpen = useUi((s) => s.setTaskFinderOpen);
+
+  const settingsButton = (
+    <IconButton
+      title={withShortcut('Settings', keybindings.openSettings)}
+      onClick={props.onOpenSettings}
+    >
+      <Settings size={14} strokeWidth={1.8} />
+    </IconButton>
+  );
 
   if (collapsed) {
-    const showRotation = showActiveTasksSection && rotationTasks.length > 0;
-
     return (
-      <div className="sidebar-shell h-full flex flex-col items-center gap-1">
-        {/* Top inset: on macOS the 28px draggable strip clears the traffic
-            lights; elsewhere a smaller spacer gives the first item breathing
-            room and aligns it with the main header strip (which has no
-            titlebar spacer but a tall centered h-[52px] row). */}
-        <div className={`w-full shrink-0 ${isMac ? 'h-[28px] titlebar-drag' : 'h-[14px]'}`} />
-
-        {/* Everything between the top inset and the footer scrolls as one
-            column, so every task and project stays reachable however many
-            there are. The rail is too narrow for a scrollbar, so it's hidden;
-            wheel and trackpad scrolling still work. The scroller is 8px wider
-            than the rail on each side (with matching padding, so the content
-            box is the rail) because status dots sit centred on the rail's
-            border and a scroll container clips anything past its own box. */}
-        <div className="flex-1 min-h-0 w-[calc(100%+16px)] px-2 flex flex-col items-center gap-1 overflow-y-auto overflow-x-hidden scrollbar-none">
-          {showRotation && (
-            <>
-              <div className="shrink-0 flex flex-col items-center gap-1 w-full">
-                {rotationTasks.map((task) => {
-                  const activity = taskActivity[task.id]?.state;
-                  const isActiveTask = task.id === activeTaskId;
-                  return (
-                    <div key={task.id} className="relative flex items-center justify-center w-full">
-                      <Tooltip content={task.name}>
-                        <button
-                          onClick={() => onSelectTask(task.projectId, task.id)}
-                          className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 text-xs font-medium transition-colors titlebar-no-drag ${
-                            isActiveTask
-                              ? 'sidebar-pill-active text-primary'
-                              : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
-                          }`}
-                        >
-                          {task.name.charAt(0).toUpperCase()}
-                        </button>
-                      </Tooltip>
-                      {activity === 'error' ? (
-                        <div className="status-dot-err absolute -right-1 top-1/2 mt-[-3px] w-2 h-2 rounded-full" />
-                      ) : activity === 'waiting' ? (
-                        <div className="status-dot-wait absolute -right-1 top-1/2 mt-[-3px] w-2 h-2 rounded-full" />
-                      ) : activity === 'busy' ? (
-                        <div className="absolute -right-1 top-1/2 mt-[-3px] w-2 h-2 rounded-full bg-amber-400 status-pulse" />
-                      ) : activity === 'idle' && unseenTaskIds?.has(task.id) ? (
-                        <div className="status-dot-unseen absolute -right-1 top-1/2 mt-[-3px] w-2 h-2 rounded-full" />
-                      ) : activity === 'idle' ? (
-                        <div className="status-dot-idle absolute -right-1 top-1/2 mt-[-3px] w-2 h-2 rounded-full" />
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="glass-hairline w-6 my-1 shrink-0" />
-            </>
-          )}
-
-          <Tooltip content="Create project">
-            <button
-              onClick={onOpenFolder}
-              className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
+      <div className="flex h-full flex-col items-center bg-ground pb-3">
+        <div className={isMac ? 'titlebar-drag h-11 w-full shrink-0' : 'h-2 w-full shrink-0'} />
+        <div className="scrollbar-none flex min-h-0 w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto">
+          {rows.active.map(({ task, state }) => (
+            <IconButton
+              key={task.id}
+              size="sm"
+              title={`${task.name} · ${STATE_LABELS[state]}`}
+              pressed={task.id === activeTaskId}
+              onClick={() => props.onSelectTask(task.projectId, task.id)}
             >
-              <Plus size={16} strokeWidth={1.8} />
-            </button>
-          </Tooltip>
-
-          <div className="glass-hairline w-6 my-1 shrink-0" />
-
-          <div className="shrink-0 flex flex-col items-center gap-1 w-full pb-1">
-            {projects.map((project) => {
-              const isActive = project.id === activeProjectId;
-              const activity = getProjectActivity(tasksByProject[project.id] || [], taskActivity);
-              const dot = activity && projectActivityDot(activity);
-              return (
-                <div
-                  key={project.id}
-                  className={`relative flex items-center justify-center w-full ${draggingId === project.id ? 'opacity-40' : ''}`}
-                >
-                  <Tooltip content={project.name}>
-                    <button
-                      draggable
-                      onDragStart={(e) => {
-                        dragIdRef.current = project.id;
-                        setDraggingId(project.id);
-                        e.dataTransfer.effectAllowed = 'move';
-                      }}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = 'move';
-                        const fromId = dragIdRef.current;
-                        if (!fromId || fromId === project.id) return;
-                        const fromIdx = projects.findIndex((p) => p.id === fromId);
-                        const toIdx = projects.findIndex((p) => p.id === project.id);
-                        if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
-                        const reordered = [...projects];
-                        const [moved] = reordered.splice(fromIdx, 1);
-                        reordered.splice(toIdx, 0, moved!);
-                        onReorderProjects?.(reordered);
-                      }}
-                      onDrop={(e) => e.preventDefault()}
-                      onDragEnd={() => {
-                        dragIdRef.current = null;
-                        setDraggingId(null);
-                      }}
-                      onClick={() => onSelectProject(project.id)}
-                      className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-medium transition-transform duration-200 ease-in-out titlebar-no-drag ${
-                        isActive
-                          ? 'sidebar-pill-active text-primary'
-                          : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
-                      }`}
-                    >
-                      {project.name.charAt(0).toUpperCase() + project.name.charAt(1).toLowerCase()}
-                    </button>
-                  </Tooltip>
-                  {dot && (
-                    <Tooltip content={dot.label}>
-                      <div
-                        className={`${dot.className} absolute -right-1 top-1/2 mt-[-3px] w-2 h-2 rounded-full`}
-                      />
-                    </Tooltip>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+              <StatusDot state={state} />
+            </IconButton>
+          ))}
         </div>
-
-        <div className="glass-hairline w-6 my-1 shrink-0" />
-
-        <Tooltip content="Settings">
-          <button
-            onClick={onOpenSettings}
-            className="relative w-8 h-8 rounded-md flex items-center justify-center shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
-          >
-            <Settings size={16} strokeWidth={1.5} />
-          </button>
-        </Tooltip>
-        <div className="h-3 shrink-0" />
+        {settingsButton}
       </div>
     );
   }
 
-  /* ── Expanded ───────────────────────────────────────────── */
+  const newTask = () => {
+    const projectId = newTaskProjectId(
+      activeProjectId,
+      projects,
+      Object.values(tasksByProject).flat(),
+    );
+    if (projectId) props.onNewTask(projectId);
+    else props.onOpenFolder();
+  };
+  const showingProjects = view === 'projects';
 
   return (
-    <div className="sidebar-shell h-full min-w-0 flex flex-col">
-      {/* Top inset: on macOS the 28px draggable strip clears the traffic
-          lights; elsewhere a smaller spacer gives "Active tasks" breathing room
-          and aligns it with the main header strip (no titlebar spacer there,
-          but a tall centered h-[52px] row). */}
-      <div className={`shrink-0 ${isMac ? 'h-[28px] titlebar-drag' : 'h-[14px]'}`} />
+    <div className="flex h-full min-w-0 flex-col bg-ground">
+      {/* Title bar: on macOS the traffic lights sit at its left; the strip
+          drags the window, its buttons don't. */}
+      <div className="titlebar-drag flex h-11 shrink-0 items-center justify-end gap-0.5 px-2">
+        <div className="titlebar-no-drag flex items-center gap-0.5">
+          <IconButton
+            title={withShortcut('Find a task', keybindings.findTask)}
+            onClick={() => setTaskFinderOpen(true)}
+          >
+            <Search size={14} strokeWidth={1.8} />
+          </IconButton>
+          <IconButton title={withShortcut('New task', keybindings.newTask)} onClick={newTask}>
+            <Plus size={14} strokeWidth={1.8} />
+          </IconButton>
+          <IconButton
+            title={showingProjects ? 'Tasks' : 'Projects'}
+            pressed={showingProjects}
+            onClick={() => setView(showingProjects ? 'tasks' : 'projects')}
+          >
+            <FolderTree size={14} strokeWidth={1.8} />
+          </IconButton>
+        </div>
+      </div>
 
-      {/* Rotation section */}
-      {showActiveTasksSection && rotationTasks.length > 0 && (
-        <RotationSection
-          rotationTasks={rotationTasks}
-          activeTaskId={activeTaskId}
-          unseenTaskIds={unseenTaskIds}
+      {showingProjects ? (
+        <ProjectsSection
           projects={projects}
-          onSelectTask={onSelectTask}
-          onReorderRotation={onReorderRotation}
-          onRemoveFromRotation={onRemoveFromRotation}
-          contextUsage={contextUsage}
+          activeProjectId={activeProjectId}
+          tasksByProject={tasksByProject}
+          activeTaskId={activeTaskId}
+          unseenTaskIds={props.unseenTaskIds}
+          onSelectProject={props.onSelectProject}
+          onOpenFolder={props.onOpenFolder}
+          onDeleteProject={props.onDeleteProject}
+          onProjectSettings={props.onProjectSettings}
+          onShowCommitGraph={props.onShowCommitGraph}
+          onSelectTask={props.onSelectTask}
+          onNewTask={props.onNewTask}
+          onDeleteTask={props.onDeleteTask}
+          onArchiveTask={props.onArchiveTask}
+          onRestoreTask={props.onRestoreTask}
+          onCloseTask={props.onCloseTask}
+          onTaskSettings={props.onTaskSettings}
+          onReorderProjects={props.onReorderProjects}
+          onReorderTasks={props.onReorderTasks}
+          onReorderTasksCommit={props.onReorderTasksCommit}
+        />
+      ) : (
+        <TaskStateList
+          rows={rows}
+          projects={projects}
+          activeTaskId={activeTaskId}
+          onOpenFolder={props.onOpenFolder}
+          onSelectTask={props.onSelectTask}
+          onCloseTask={props.onCloseTask}
+          onTaskSettings={props.onTaskSettings}
+          onArchiveTask={props.onArchiveTask}
+          onDeleteTask={props.onDeleteTask}
         />
       )}
 
-      {/* Project list — rows extend to the full sidebar width on the right
-          (no reserved gutter). When content overflows, the scrollbar takes
-          its slot at the right edge and rows shift to the same 8→W-8 range
-          as the active-tasks rows; otherwise rows fill 8→W with no gap.
-          The "Projects" header sits outside the scroll container so it stays
-          pinned to the top while the list scrolls. */}
-      <ProjectsSection
-        projects={projects}
-        activeProjectId={activeProjectId}
-        tasksByProject={tasksByProject}
-        activeTaskId={activeTaskId}
-        unseenTaskIds={unseenTaskIds}
-        contextUsage={contextUsage}
-        onSelectProject={onSelectProject}
-        onOpenFolder={onOpenFolder}
-        onDeleteProject={onDeleteProject}
-        onProjectSettings={onProjectSettings}
-        onShowCommitGraph={onShowCommitGraph}
-        onSelectTask={onSelectTask}
-        onNewTask={onNewTask}
-        onDeleteTask={onDeleteTask}
-        onArchiveTask={onArchiveTask}
-        onRestoreTask={onRestoreTask}
-        onCloseTask={onCloseTask}
-        onTaskSettings={onTaskSettings}
-        onReorderProjects={onReorderProjects}
-        onReorderTasks={onReorderTasks}
-        onReorderTasksCommit={onReorderTasksCommit}
-      />
-
-      {/* Update banner — persistent, above the footer actions */}
       <UpdateBanner />
-
-      {/* Settings */}
-      <div className="glass-hairline-t flex items-center gap-1 px-3 py-3">
-        <IconButton
-          onClick={onOpenSettings}
-          title="Settings"
-          variant="muted"
-          className="titlebar-no-drag"
-        >
-          <Settings size={14} strokeWidth={1.8} />
-        </IconButton>
-      </div>
+      <div className="flex shrink-0 items-center px-2 pt-1 pb-3">{settingsButton}</div>
     </div>
   );
 }

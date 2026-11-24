@@ -1,18 +1,12 @@
 import { useMemo, useState } from 'react';
-import {
-  ChevronDown,
-  ChevronRight,
-  MoreHorizontal,
-  Plug,
-  Square,
-  Trash2,
-  Import,
-} from 'lucide-react';
+import { MoreHorizontal, Plug, Square, Trash2, Import } from 'lucide-react';
 import type { Project, SupervisorSession } from '../../../shared/types';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useProjects } from '../../stores/projectsStore';
 import { formatRelativeTime } from '../../../shared/relativeTime';
 import { IconButton } from '../ui/IconButton';
+import { ListRow } from '../ui/ListRow';
+import { StatusDot, type AgentState } from '../ui/StatusDot';
 import { Tooltip } from '../ui/Tooltip';
 import {
   DropdownMenu,
@@ -22,22 +16,20 @@ import {
 } from '../ui/DropdownMenu';
 import { SessionAttachModal } from '../session/SessionAttachModal';
 import { foreignSessionsFor, taskOwnership } from './foreignSessions';
+import { Disclosure } from './Disclosure';
 
 interface ForeignSessionsSectionProps {
   project: Project;
   onSelectTask: (projectId: string, taskId: string) => void;
 }
 
-function stateDot(s: SupervisorSession): { className: string; label: string } {
-  if (s.state === 'failed') return { className: 'status-dot-err', label: 'Failed' };
-  if (s.state === 'stopped' || s.pid === undefined) {
-    return { className: 'status-dot-stopped', label: 'Sleeping' };
-  }
-  if (s.status === 'busy') return { className: 'bg-amber-400 status-pulse', label: 'Working' };
-  if (s.status === 'waiting') {
-    return { className: 'status-dot-wait', label: s.waitingFor ?? 'Waiting' };
-  }
-  return { className: 'status-dot-idle', label: 'Idle' };
+/** A session's state as a task dot; sleeping and idle sessions get none. */
+function sessionDot(s: SupervisorSession): { state: AgentState; label: string } | null {
+  if (s.state === 'failed') return { state: 'fail', label: 'Failed' };
+  if (s.state === 'stopped' || s.pid === undefined) return null;
+  if (s.status === 'busy') return { state: 'work', label: 'Working' };
+  if (s.status === 'waiting') return { state: 'needs', label: s.waitingFor ?? 'Waiting' };
+  return null;
 }
 
 /**
@@ -74,69 +66,52 @@ export function ForeignSessionsSection({ project, onSelectTask }: ForeignSession
 
   return (
     <>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 w-full pl-3.5 pr-2 py-[5px] rounded-md text-xs text-muted-foreground hover:text-foreground transition-colors"
+      <Disclosure
+        label={`Other sessions (${rows.length})`}
+        open={open}
+        onToggle={() => setOpen((v) => !v)}
       >
-        {open ? (
-          <ChevronDown size={12} strokeWidth={2} />
-        ) : (
-          <ChevronRight size={12} strokeWidth={2} />
-        )}
-        <span>Other sessions ({rows.length})</span>
-      </button>
-
-      <div
-        className="grid transition-[grid-template-rows] duration-200 ease-in-out"
-        style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
-      >
-        <div className="overflow-hidden">
-          <div className="space-y-px">
-            {rows.map((row) => {
-              const dot = stateDot(row);
-              const key = row.id ?? row.sessionId ?? `${row.cwd}:${row.startedAt}`;
-              const label = row.name || row.cwd.split('/').filter(Boolean).pop() || 'session';
-              const isBusy = busyId === row.id;
-              return (
-                <div
-                  key={key}
-                  className="group/foreign grid grid-cols-[14px_minmax(0,1fr)] -ml-2 pl-2 pr-2 py-[3px] rounded-md text-base text-muted-fade-70 sidebar-row-hover"
-                >
-                  <div className="row-start-1 col-start-1 self-center pt-[3px]">
-                    <Tooltip content={dot.label}>
-                      <div className={`${dot.className} w-[6px] h-[6px] rounded-full`} />
-                    </Tooltip>
-                  </div>
-                  <div className="row-start-1 col-start-2 flex items-center gap-2 min-w-0">
-                    <Tooltip content={row.cwd}>
-                      <span className="truncate flex-1 min-w-0">{label}</span>
-                    </Tooltip>
-                    <span className="text-xs text-muted-fade-50 shrink-0 group-hover/foreign:hidden">
-                      {row.id ? row.id : 'interactive'}
-                      {row.startedAt
-                        ? ` · ${formatRelativeTime(Math.floor(row.startedAt / 1000), Math.floor(Date.now() / 1000))}`
-                        : ''}
-                    </span>
+        {rows.map((row) => {
+          const dot = sessionDot(row);
+          const key = row.id ?? row.sessionId ?? `${row.cwd}:${row.startedAt}`;
+          const label = row.name || row.cwd.split('/').filter(Boolean).pop() || 'session';
+          const isBusy = busyId === row.id;
+          const meta = `${row.id ? row.id : 'interactive'}${
+            row.startedAt
+              ? ` · ${formatRelativeTime(Math.floor(row.startedAt / 1000), Math.floor(Date.now() / 1000))}`
+              : ''
+          }`;
+          return (
+            <div key={key} className="group/foreign">
+              <ListRow
+                as="div"
+                size="sm"
+                dimmed
+                leading={
+                  dot ? (
+                    <StatusDot state={dot.state} label={dot.label} />
+                  ) : (
+                    <span className="size-1.5" />
+                  )
+                }
+                trailing={
+                  <>
+                    <span className="text-xs group-hover/foreign:hidden">{meta}</span>
                     {row.id && (
-                      <div className="hidden group-hover/foreign:flex items-center gap-0.5 shrink-0">
+                      <span className="hidden items-center gap-0.5 group-hover/foreign:flex">
                         <IconButton
                           size="sm"
                           title="Attach"
-                          onClick={() => {
-                            if (!isBusy) setAttachRow(row);
-                          }}
+                          disabled={isBusy}
+                          onClick={() => setAttachRow(row)}
                         >
-                          <Plug size={12} strokeWidth={1.8} />
+                          <Plug size={13} strokeWidth={1.8} />
                         </IconButton>
                         <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              className="rounded-md p-0.5 transition-colors duration-150 hover:bg-accent text-fg-fade-80 hover:text-foreground disabled:opacity-40"
-                              aria-label="Session actions"
-                              disabled={isBusy}
-                            >
-                              <MoreHorizontal size={12} strokeWidth={1.8} />
-                            </button>
+                          <DropdownMenuTrigger asChild disabled={isBusy}>
+                            <IconButton size="sm" title="Session actions" disabled={isBusy}>
+                              <MoreHorizontal size={13} strokeWidth={1.8} />
+                            </IconButton>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem
@@ -147,32 +122,37 @@ export function ForeignSessionsSection({ project, onSelectTask }: ForeignSession
                                 })
                               }
                             >
-                              <Import size={12} strokeWidth={1.8} />
+                              <Import size={13} strokeWidth={1.8} />
                               Adopt as task
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onSelect={() => void run(row.id!, () => stopSession(row.id!))}
                             >
-                              <Square size={12} strokeWidth={1.8} />
+                              <Square size={13} strokeWidth={1.8} />
                               Stop
                             </DropdownMenuItem>
                             <DropdownMenuItem
+                              variant="destructive"
                               onSelect={() => void run(row.id!, () => removeSession(row.id!))}
                             >
-                              <Trash2 size={12} strokeWidth={1.8} />
+                              <Trash2 size={13} strokeWidth={1.8} />
                               Remove
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                      </div>
+                      </span>
                     )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+                  </>
+                }
+              >
+                <Tooltip content={row.cwd}>
+                  <span>{label}</span>
+                </Tooltip>
+              </ListRow>
+            </div>
+          );
+        })}
+      </Disclosure>
 
       {attachRow?.id && (
         <SessionAttachModal

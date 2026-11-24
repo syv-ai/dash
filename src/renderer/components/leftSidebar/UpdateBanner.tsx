@@ -38,12 +38,10 @@ export function UpdateBanner() {
     return (
       <Shell>
         <div className="flex items-center gap-2">
-          <Download size={14} strokeWidth={1.8} className="text-muted-foreground shrink-0" />
-          <span className="text-xs text-muted-foreground truncate">Downloading {version}…</span>
+          <Download size={14} strokeWidth={1.8} className="shrink-0 text-ink-3" />
+          <span className="truncate text-sm text-ink-2">Downloading {version}…</span>
           {status.percent !== null && (
-            <span className="text-xs text-muted-fade-70 tabular-nums ml-auto">
-              {status.percent}%
-            </span>
+            <span className="ml-auto text-sm tabular-nums text-ink-3">{status.percent}%</span>
           )}
         </div>
         <Meter
@@ -59,12 +57,10 @@ export function UpdateBanner() {
   if (status.state === 'ready' && !dismissed) {
     return (
       <Shell onClose={onClose}>
-        <p className="text-xs text-fg-fade-90 leading-snug pr-4">
+        <p className="pr-6 text-sm text-ink">
           {status.availableVersion ? `v${status.availableVersion}` : 'An update'} is ready.
         </p>
-        <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
-          Your sessions re-attach after restarting.
-        </p>
+        <p className="mt-0.5 text-sm text-ink-3">Your sessions re-attach after restarting.</p>
         <Button
           size="sm"
           className="w-full mt-2"
@@ -74,7 +70,7 @@ export function UpdateBanner() {
             void installUpdate().finally(() => setInstalling(false));
           }}
         >
-          <RefreshCw size={12} strokeWidth={1.8} />
+          <RefreshCw size={14} strokeWidth={1.8} />
           {installing ? 'Restarting…' : 'Restart to update'}
         </Button>
       </Shell>
@@ -84,18 +80,14 @@ export function UpdateBanner() {
   if (strandedError && !dismissed) {
     return (
       <Shell onClose={onClose}>
-        <div className="flex items-start gap-2 pr-4">
-          <AlertTriangle
-            size={14}
-            strokeWidth={1.8}
-            className="text-[hsl(var(--destructive))] shrink-0 mt-px"
-          />
+        <div className="flex items-start gap-2 pr-6">
+          <AlertTriangle size={14} strokeWidth={1.8} className="mt-0.5 shrink-0 text-state-fail" />
           <div className="min-w-0">
-            <p className="text-xs text-fg-fade-90 leading-snug">
+            <p className="text-sm text-ink">
               {status.availableVersion ? `v${status.availableVersion}` : 'An update'} could not be
               downloaded.
             </p>
-            <p className="text-xs text-muted-foreground mt-0.5 truncate" title={strandedError}>
+            <p className="mt-0.5 truncate text-sm text-ink-3" title={strandedError}>
               {strandedError}
             </p>
           </div>
@@ -109,17 +101,16 @@ export function UpdateBanner() {
 
 function Shell({ children, onClose }: { children: React.ReactNode; onClose?: () => void }) {
   return (
-    <div className="px-2 pt-2">
-      <div className="relative rounded-md border border-border/60 bg-[hsl(var(--surface-2))] px-2.5 py-2">
+    <div className="shrink-0 px-2 pt-2">
+      <div className="relative rounded-lg bg-hover px-3 py-2.5">
         {onClose && (
           <IconButton
             title="Dismiss"
-            variant="muted"
             size="sm"
             onClick={onClose}
             className="absolute top-1.5 right-1.5"
           >
-            <X size={12} strokeWidth={1.8} />
+            <X size={14} strokeWidth={1.8} />
           </IconButton>
         )}
         {children}
