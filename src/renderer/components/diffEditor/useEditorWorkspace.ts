@@ -255,7 +255,10 @@ export function useEditorWorkspace({
       return;
     }
     if (view.kind === 'commit' || view.kind === 'pr') {
-      if (repoPathsLoading) return;
+      // Settled, not merely not loading: in the render the editor opens in,
+      // the listing (skipped while closed) has not started and reads empty,
+      // which would drop a view picked while closed (Review, narrow).
+      if (!settled) return;
       validated.current = true;
       if (repoPaths.length === 0) setView({ kind: 'working', ref: 'HEAD' });
       return;
@@ -266,7 +269,7 @@ export function useEditorWorkspace({
       const exists = resp.success && !!resp.data?.some((b) => b.ref === base);
       if (!exists) setView({ kind: 'working', ref: 'HEAD' });
     });
-  }, [editorOpen, view, repoPaths, repoPathsLoading, cwd]);
+  }, [editorOpen, view, repoPaths, settled, cwd]);
 
   // ── Comments ──
   // Task-scoped, persisted to SQLite. With no task of its own the editor
