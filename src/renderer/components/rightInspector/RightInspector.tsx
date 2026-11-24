@@ -10,7 +10,7 @@ import {
   type RefObject,
 } from 'react';
 import type { ITheme as XtermTheme } from '@xterm/xterm';
-import { FileDiff, FolderTree, History, Info, MessageSquareCode, Minus, Plus } from 'lucide-react';
+import { Info, MessageSquareCode, Minus, Plus } from 'lucide-react';
 import { FileChangesPanel } from '../changes/FileChangesPanel';
 import { CommitPopover } from '../changes/CommitPopover';
 import { useCommitRun } from '../changes/useCommitRun';
@@ -47,12 +47,11 @@ const EditorGroups = lazy(() =>
   import('../diffEditor/EditorGroups').then((m) => ({ default: m.EditorGroups })),
 );
 
-/** What the sidebar's list shows: the changes, the whole repo, the commits,
- *  or the task's details. Details comes last: the three code views keep
- *  their places (muscle memory), and it is the one read least often. */
-type Segment = 'changes' | 'files' | 'history' | 'details';
-
-const SEGMENT_ICON = { size: 14, strokeWidth: 1.8 } as const;
+/** What the sidebar's list shows: the changes, the whole repo or the
+ *  commits (the view switch, always in words), or the task's details (an
+ *  icon toggle at the row's end, read least often). */
+type CodeSegment = 'changes' | 'files' | 'history';
+type Segment = CodeSegment | 'details';
 
 interface RightInspectorProps {
   task: Task;
@@ -135,6 +134,8 @@ export function RightInspector({
   // ── The editor's state: one workspace per task, open or not ──
   const wide = diff !== null;
   const [segment, setSegment] = useState<Segment>('changes');
+  // Where the Details toggle returns to.
+  const [lastCodeSegment, setLastCodeSegment] = useState<CodeSegment>('changes');
   const target = useMemo<EditorTarget | null>(
     () => (diff ? { filePath: diff.filePath, initialView: diff.initialView } : null),
     [diff],
@@ -157,14 +158,20 @@ export function RightInspector({
 
   // Changes and Files list the working tree (or the branch or PR compared
   // with): leaving History for them leaves the commit it showed.
-  const selectSegment = (next: Segment) => {
+  const selectSegment = (next: CodeSegment) => {
     setSegment(next);
+    setLastCodeSegment(next);
     if (next !== 'history' && view.kind === 'commit') selectView({ kind: 'working', ref: 'HEAD' });
     if (next === 'files') openEditor();
+  };
+  const toggleDetails = () => {
+    if (segment === 'details') selectSegment(lastCodeSegment);
+    else setSegment('details');
   };
   const viewDiff = useCallback(
     (filePath: string, staged: boolean) => {
       setSegment('changes');
+      setLastCodeSegment('changes');
       onViewDiff(filePath, staged);
     },
     [onViewDiff],
@@ -197,28 +204,21 @@ export function RightInspector({
 
   const header = (
     <div className="@container/sidehead flex h-11 shrink-0 items-center gap-0.5 pl-0.5">
-      {/* Narrow, it takes the slack and gives it up first: the labels
-          truncate before the actions are pushed out, and below 20rem fold
-          to icons (four segments don't fit). Wide, the path does. */}
+      {/* Narrow, it takes the slack and gives it up first: the padding
+          tightens, then the labels truncate, before the actions are pushed
+          out. They stay words at every width. Wide, the path does. */}
       <div className={wide ? 'shrink-0' : 'min-w-0 flex-1'}>
-        <Segmented
+        <Segmented<Segment>
           aria-label="Task sidebar view"
           size="sm"
           fullWidth={false}
           value={segment}
-          onChange={selectSegment}
-          labelClassName="@max-[20rem]/sidehead:sr-only"
-          iconClassName="hidden @max-[20rem]/sidehead:flex"
+          onChange={(next) => next !== 'details' && selectSegment(next)}
+          segmentClassName="@max-[20rem]/sidehead:px-1.5"
           options={[
-            {
-              value: 'changes',
-              label: 'Changes',
-              icon: <FileDiff {...SEGMENT_ICON} />,
-              count: files.length || undefined,
-            },
-            { value: 'files', label: 'Files', icon: <FolderTree {...SEGMENT_ICON} /> },
-            { value: 'history', label: 'History', icon: <History {...SEGMENT_ICON} /> },
-            { value: 'details', label: 'Details', icon: <Info {...SEGMENT_ICON} /> },
+            { value: 'changes', label: 'Changes', count: files.length || undefined },
+            { value: 'files', label: 'Files' },
+            { value: 'history', label: 'History' },
           ]}
         />
       </div>
@@ -255,6 +255,15 @@ export function RightInspector({
         </div>
       )}
       {wide && <WorktreePath path={task.path} className="ml-auto" />}
+      <IconButton
+        size="sm"
+        title={segment === 'details' ? 'Hide details' : 'Details'}
+        pressed={segment === 'details'}
+        onClick={toggleDetails}
+        className={wide ? 'shrink-0' : 'ml-auto shrink-0'}
+      >
+        <Info size={14} strokeWidth={1.8} />
+      </IconButton>
     </div>
   );
 
