@@ -75,13 +75,16 @@ export function Modal({
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
         // Let a Radix popover own the Esc when focus is inside it — its
-        // onEscapeKeyDown will close just the popover. Same for the diff-
-        // editor's comment textarea: it handles Esc to cancel the draft.
+        // onEscapeKeyDown will close just the popover. Any other element opts
+        // in with data-owns-escape, either always (the comment boxes) or only
+        // while it has something to dismiss (the file search, with a query):
+        // Modal then leaves the Esc to that element, which may act on it or
+        // ignore it.
         const target = e.target as HTMLElement | null;
         if (target?.closest('[data-radix-popper-content-wrapper]')) {
           return;
         }
-        if (target?.closest('[data-diff-comment-input]')) {
+        if (target?.closest('[data-owns-escape]')) {
           return;
         }
         // Only the topmost modal responds — keeps a nested dialog from

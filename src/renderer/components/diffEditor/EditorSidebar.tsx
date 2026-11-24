@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import {
   ChevronDown,
@@ -8,6 +8,7 @@ import {
   GitPullRequestArrow,
   History,
   ListFilter,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { HoverSwapSlot } from '../ui/HoverSwapSlot';
@@ -18,6 +19,8 @@ import type { CommitSummary, EditorView } from './types';
 import { Popover, PopoverAnchor, PopoverContent } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
 import { Markdown } from '../ui/Markdown';
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '../ui/Command';
+import { searchFiles, describeHitCount, type FileHit } from '../../lib/fileSearch';
 
 interface EditorSidebarProps {
   /** Repo root — needed to lazily list gitignored files under "show all files". */
@@ -70,6 +73,8 @@ export interface PrEntry {
   onPeek: () => void;
 }
 
+// Background of the open file's row, in the tree and in the search results.
+const OPEN_ROW_BG = 'bg-primary/15';
 const COMMITS_DRAWER_KEY = 'diffEditor.commitsDrawerSize';
 const CHANGED_ONLY_KEY = 'diffEditor.changedOnly';
 
@@ -229,6 +234,17 @@ function buildRepoTree(
   return root;
 }
 
+/** Every file path in the tree, as the tree shows it. */
+function treeFilePaths(root: TreeFolder): string[] {
+  const out: string[] = [];
+  const walk = (node: TreeFolder) => {
+    for (const f of node.files) out.push(f.fullPath);
+    for (const child of node.children.values()) walk(child);
+  };
+  walk(root);
+  return out;
+}
+
 /** Widths (in `ch` of the tree's monospace font) of the trailing stat columns,
  *  each sized to the widest value in the tree so rows line up with no slack.
  *  0 = no row fills that column, so it isn't drawn. */
@@ -292,16 +308,19 @@ function TreeRow({
   className,
   style,
   title,
+  rowRef,
   children,
 }: {
   onActivate: () => void;
   className: string;
   style: React.CSSProperties;
   title?: string;
+  rowRef?: React.Ref<HTMLDivElement>;
   children: React.ReactNode;
 }) {
   return (
     <div
+      ref={rowRef}
       role="button"
       tabIndex={0}
       title={title}
@@ -434,6 +453,54 @@ function FileTreePanel({
     return { additions, deletions };
   }, [changedFiles]);
   const cols = useMemo(() => treeColumns(tree, badgeCounts), [tree, badgeCounts]);
+
+  // Search reads its files off the tree, so it can't drift from what the tree
+  // shows. A fully ignored directory is a single entry there (`node_modules`,
+  // slash stripped), so it matches by name and is never searched inside.
+  const [query, setQuery] = useState('');
+  const treePaths = useMemo(() => treeFilePaths(tree), [tree]);
+  const result = useMemo(() => searchFiles(treePaths, query), [treePaths, query]);
+  const hits = result.hits;
+  // Until the file list arrives, hits are only the changed files: show no partial list.
+  const listLoading = loading && paths.length === 0;
+  const searching = query.trim() !== '';
+  // The tree stays mounted (just hidden) while searching, so each folder's
+  // open state survives. Its scroll offset does not survive `display:none`
+  // reliably, so it is tracked while the tree is visible and put back when the
+  // search ends.
+  const treeScrollRef = useRef<HTMLDivElement>(null);
+  const savedTreeScroll = useRef(0);
+  useLayoutEffect(() => {
+    if (!searching && treeScrollRef.current)
+      treeScrollRef.current.scrollTop = savedTreeScroll.current;
+  }, [searching]);
+  // A file picked from the results, to be shown in the tree once it is visible
+  // again. Only a pick sets it: other selection changes never open folders.
+  // Cleared by the file's row after it scrolls into view, or here when the
+  // file is not in the tree (e.g. "changed only" flipped during the search).
+  const [revealPath, setRevealPath] = useState<string | null>(null);
+  const clearReveal = useCallback((path: string) => {
+    setRevealPath((cur) => (cur === path ? null : cur));
+  }, []);
+  useEffect(() => {
+    if (!searching && revealPath !== null && !treePaths.includes(revealPath)) setRevealPath(null);
+  }, [searching, revealPath, treePaths]);
+  const statusReady = searching && !listLoading;
+  const hasHits = statusReady && hits.length > 0;
+  // Esc with text in the box clears it. The Command root carries data-owns-escape
+  // only while there is a query, so Modal's window-level Esc handler skips it;
+  // with an empty box the marker is absent and Esc reaches the modal as usual.
+  // Scoped to the box: nothing here listens on window, so Monaco and the
+  // commits drawer keep their keys.
+  const onSearchKeyDown = (e: React.KeyboardEvent) => {
+    // IME: Esc cancels the composition, not the query.
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Escape' && query) {
+      e.preventDefault();
+      e.stopPropagation();
+      setQuery('');
+    }
+  };
   return (
     <div className="h-full min-h-0 flex flex-col">
       <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-muted-fade-70 font-mono flex items-center justify-between shrink-0">
@@ -474,8 +541,112 @@ function FileTreePanel({
           )}
         </span>
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1">
-        {loading && paths.length === 0 ? (
+      {/* cmdk handles Up/Down/Home/End/Enter on its root, so the root holds only
+          the box and its results: the tree stays outside, where those keys keep
+          scrolling and activating rows. The wrapper sizes it (Command is h-full):
+          content height over the tree, the whole panel while searching. */}
+      <div className={searching ? 'flex-1 min-h-0 flex flex-col' : 'shrink-0'}>
+        <Command
+          shouldFilter={false}
+          label="Search files"
+          onKeyDown={onSearchKeyDown}
+          data-owns-escape={query ? '' : undefined}
+          // Keep focus in the search box so keys keep working after a click in
+          // the box area, and no focus ring or Esc gap appears on the root.
+          onMouseDown={(e) => {
+            if (!(e.target instanceof HTMLInputElement)) e.preventDefault();
+          }}
+          className="rounded-none"
+        >
+          <div className="relative px-1 shrink-0">
+            <CommandInput
+              value={query}
+              onValueChange={setQuery}
+              placeholder="Search files"
+              spellCheck={false}
+              // cmdk's root turns Home/End into "first/last result" and prevents
+              // the default, so they would never move the caret. Stopping the
+              // event here keeps it from reaching that handler (Esc and the
+              // arrows still do), and the browser moves the caret as usual.
+              onKeyDown={(e) => {
+                if (e.key === 'Home' || e.key === 'End') e.stopPropagation();
+              }}
+              className="pr-6"
+            />
+            {query && (
+              // A pointer shortcut for Esc. It never takes focus: focused, it
+              // would sit inside cmdk's root, where Enter opens a result
+              // instead of clearing.
+              <button
+                type="button"
+                aria-label="Clear search"
+                tabIndex={-1}
+                onClick={() => setQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-fade-50 hover:text-foreground"
+              >
+                <X size={14} strokeWidth={1.8} />
+              </button>
+            )}
+          </div>
+          {/* One region that is always mounted, so screen readers register it
+              before its text changes. Sighted users get the count line here and
+              the visible "No files match" below, so that copy stays hidden. */}
+          <div
+            aria-live="polite"
+            aria-atomic="true"
+            className={
+              hasHits ? 'px-3 pb-1 text-[10px] text-muted-fade-50 tabular-nums shrink-0' : 'sr-only'
+            }
+          >
+            {statusReady ? (hasHits ? describeHitCount(result) : 'No files match') : ''}
+          </div>
+          {searching && (
+            <CommandList className="flex-1 max-h-none min-h-0 px-1 py-1 scrollbar-gutter-stable scrollbar-thin-hover">
+              {listLoading ? (
+                <div className="px-3 py-2 text-[11px] text-muted-fade-40">Loading…</div>
+              ) : (
+                <CommandEmpty className="px-3 py-2 text-[11px] text-muted-fade-40">
+                  No files match
+                </CommandEmpty>
+              )}
+              {(listLoading ? [] : hits).map((hit) => (
+                <CommandItem
+                  key={hit.path}
+                  value={hit.path}
+                  title={hit.path}
+                  onSelect={() => {
+                    setRevealPath(hit.path);
+                    onSelectFile(hit.path);
+                  }}
+                  aria-current={hit.path === selectedPath ? 'true' : undefined}
+                  // The open file gets the tree's background but its name keeps the
+                  // normal colour: matched letters are primary and must stay visible.
+                  className={`gap-2 px-2 text-[12px] ${
+                    hit.path === selectedPath
+                      ? `${OPEN_ROW_BG} data-[selected=true]:bg-primary/25`
+                      : ''
+                  }`}
+                >
+                  <HitLabel hit={hit} />
+                </CommandItem>
+              ))}
+            </CommandList>
+          )}
+        </Command>
+      </div>
+      {/* Hidden, not unmounted, while searching: display:none also removes it
+          from keyboard focus and screen readers. */}
+      <div
+        ref={treeScrollRef}
+        onScroll={(e) => {
+          // A hidden element has no height; ignore anything reported then.
+          if (e.currentTarget.clientHeight > 0) savedTreeScroll.current = e.currentTarget.scrollTop;
+        }}
+        className={`flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1 ${
+          searching ? 'hidden' : ''
+        }`}
+      >
+        {listLoading ? (
           <div className="px-3 py-2 text-[11px] text-muted-fade-40">Loading…</div>
         ) : changedOnly && tree.changedCount === 0 ? (
           <div className="px-3 py-2 text-[11px] text-muted-fade-40">No changed files</div>
@@ -487,10 +658,44 @@ function FileTreePanel({
             onSelectFile={onSelectFile}
             badgeCounts={badgeCounts}
             cols={cols}
+            // Withheld while hidden: scrolling a display:none row does nothing,
+            // so the request waits for the tree to show again.
+            revealPath={searching ? null : revealPath}
+            onRevealed={clearReveal}
           />
         )}
       </div>
     </div>
+  );
+}
+
+/** A search hit: file name with the matched letters lit, the folder dimmed. */
+function HitLabel({ hit }: { hit: FileHit }) {
+  const slash = hit.path.lastIndexOf('/') + 1;
+  const matched = new Set(hit.indices);
+  const chars = (from: number, to: number) =>
+    Array.from({ length: to - from }, (_, k) => {
+      const i = from + k;
+      return matched.has(i) ? (
+        <span key={i} className="text-primary font-medium">
+          {hit.path[i]}
+        </span>
+      ) : (
+        hit.path[i]
+      );
+    });
+  // Both parts may shrink, and the folder first, so a long name still truncates.
+  return (
+    <>
+      <span className="min-w-0 truncate font-mono text-[11.5px]">
+        {chars(slash, hit.path.length)}
+      </span>
+      {slash > 0 && (
+        <span className="min-w-0 shrink-[3] truncate text-[11px] text-muted-fade-50">
+          {chars(0, slash - 1)}
+        </span>
+      )}
+    </>
   );
 }
 
@@ -501,6 +706,8 @@ interface FolderContentsProps {
   onSelectFile: (path: string) => void;
   badgeCounts: Map<string, FileBadges>;
   cols: TreeColumns;
+  revealPath: string | null;
+  onRevealed: (path: string) => void;
 }
 
 function FolderContents({
@@ -510,6 +717,8 @@ function FolderContents({
   onSelectFile,
   badgeCounts,
   cols,
+  revealPath,
+  onRevealed,
 }: FolderContentsProps) {
   const childFolders = Array.from(node.children.values()).sort((a, b) =>
     a.name.localeCompare(b.name),
@@ -526,6 +735,8 @@ function FolderContents({
           onSelectFile={onSelectFile}
           badgeCounts={badgeCounts}
           cols={cols}
+          revealPath={revealPath}
+          onRevealed={onRevealed}
         />
       ))}
       {childFiles.map((file) => (
@@ -537,6 +748,8 @@ function FolderContents({
           badges={badgeCounts.get(file.fullPath)}
           onClick={() => onSelectFile(file.fullPath)}
           cols={cols}
+          reveal={file.fullPath === revealPath}
+          onRevealed={onRevealed}
         />
       ))}
     </>
@@ -556,6 +769,8 @@ function FolderEntry({
   onSelectFile,
   badgeCounts,
   cols,
+  revealPath,
+  onRevealed,
 }: {
   folder: TreeFolder;
   indent: number;
@@ -563,6 +778,8 @@ function FolderEntry({
   onSelectFile: (path: string) => void;
   badgeCounts: Map<string, FileBadges>;
   cols: TreeColumns;
+  revealPath: string | null;
+  onRevealed: (path: string) => void;
 }) {
   // Default-open if the folder has changes OR it contains the file the editor
   // opened to — so that file is never hidden in a collapsed folder. The user's
@@ -581,6 +798,14 @@ function FolderEntry({
       setOpen(true);
     }
   }, [folder.changedCount]);
+  // Open on the way to a file picked from the search. A pick sets selectedPath
+  // first, so folders that mount after the pick already open via the lazy init
+  // above. This effect is for folders that were mounted and closed when the pick
+  // happened (collapsed by the user, or never opened). The file's row, not the
+  // panel, does the scrolling: the row exists only once every ancestor is open.
+  useEffect(() => {
+    if (revealPath !== null && revealPath.startsWith(`${folder.fullPath}/`)) setOpen(true);
+  }, [revealPath, folder.fullPath]);
   const tint = folder.dominantStatus ? FOLDER_TINT[folder.dominantStatus] : 'text-fg-fade-90';
   return (
     <>
@@ -628,6 +853,8 @@ function FolderEntry({
           onSelectFile={onSelectFile}
           badgeCounts={badgeCounts}
           cols={cols}
+          revealPath={revealPath}
+          onRevealed={onRevealed}
         />
       )}
     </>
@@ -670,6 +897,8 @@ function FileEntry({
   badges,
   onClick,
   cols,
+  reveal,
+  onRevealed,
 }: {
   file: TreeFile;
   indent: number;
@@ -677,15 +906,27 @@ function FileEntry({
   badges: FileBadges | undefined;
   onClick: () => void;
   cols: TreeColumns;
+  reveal: boolean;
+  onRevealed: (path: string) => void;
 }) {
+  // Passive effects run after the parent's layout effect, so the saved scroll
+  // offset is already restored when this brings the row into view. Repeating
+  // under StrictMode is harmless (same scroll, same clear).
+  const rowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!reveal) return;
+    rowRef.current?.scrollIntoView({ block: 'nearest' });
+    onRevealed(file.fullPath);
+  }, [reveal, file.fullPath, onRevealed]);
   const change = file.change;
   const tint = selected ? 'text-primary' : change ? STATUS_TEXT[change.status] : 'text-fg-fade-80';
   return (
     <TreeRow
+      rowRef={rowRef}
       onActivate={onClick}
       title={file.fullPath}
       style={{ paddingLeft: 4 + indent * INDENT_STEP, paddingRight: 8 }}
-      className={selected ? 'bg-primary/15' : 'hover:bg-[hsl(var(--surface-2)/0.6)]'}
+      className={selected ? OPEN_ROW_BG : 'hover:bg-[hsl(var(--surface-2)/0.6)]'}
     >
       {/* Empty icon slot keeps file names aligned with folder names at the
           same indent (the chevron column for folders). */}
