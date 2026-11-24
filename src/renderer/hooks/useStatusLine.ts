@@ -1,19 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import type { ContextUsage, StatusLineData, RateLimits } from '../../shared/types';
+import type { ContextUsage, StatusLineData } from '../../shared/types';
 import { limitBurns, recordLimits, type LimitHistories } from '../lib/burnRate';
-
-/** Account-wide rate limits, from the most recently updated session. */
-function latestRateLimitsOf(data: Record<string, StatusLineData>): RateLimits | undefined {
-  let best: RateLimits | undefined;
-  let bestTime = 0;
-  for (const sl of Object.values(data)) {
-    if (sl.rateLimits && sl.updatedAt > bestTime) {
-      best = sl.rateLimits;
-      bestTime = sl.updatedAt;
-    }
-  }
-  return best;
-}
+import { mergeRateLimits } from '../lib/rateLimits';
 
 export function useStatusLine() {
   const [statusLineData, setStatusLineData] = useState<Record<string, StatusLineData>>({});
@@ -26,7 +14,7 @@ export function useStatusLine() {
   useEffect(() => {
     const receive = (data: Record<string, StatusLineData>) => {
       setStatusLineData(data);
-      const limits = latestRateLimitsOf(data);
+      const limits = mergeRateLimits(data, Date.now());
       if (limits) setLimitHistories((h) => recordLimits(h, limits, Date.now()));
     };
     const unsubscribe = window.electronAPI.onPtyStatusLine((data) => {
@@ -54,7 +42,10 @@ export function useStatusLine() {
     return result;
   }, [statusLineData]);
 
-  const latestRateLimits = useMemo(() => latestRateLimitsOf(statusLineData), [statusLineData]);
+  const latestRateLimits = useMemo(
+    () => mergeRateLimits(statusLineData, Date.now()),
+    [statusLineData],
+  );
   const burns = useMemo(
     () => limitBurns(limitHistories, latestRateLimits ?? {}),
     [limitHistories, latestRateLimits],
