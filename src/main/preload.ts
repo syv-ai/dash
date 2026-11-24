@@ -319,6 +319,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Git operations
   gitClone: (args: { url: string }) => ipcRenderer.invoke('git:clone', args),
   gitGetStatus: (cwd: string) => ipcRenderer.invoke('git:getStatus', cwd),
+  gitGetUpstreamCommits: (cwd: string) => ipcRenderer.invoke('git:getUpstreamCommits', cwd),
   gitGetDiff: (args: { cwd: string; filePath?: string; staged?: boolean; contextLines?: number }) =>
     ipcRenderer.invoke('git:getDiff', args),
   gitGetDiffUntracked: (args: { cwd: string; filePath: string; contextLines?: number }) =>

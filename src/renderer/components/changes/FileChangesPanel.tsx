@@ -6,7 +6,7 @@ import { FileTreeView } from './FileTreeView';
 import { VirtualFileList, VIRTUALIZE_THRESHOLD, type FileSection } from './VirtualFileList';
 import { CommitRunView } from './CommitRunView';
 import { SectionLabel } from './SectionLabel';
-import { SyncStatus } from './SyncStatus';
+import { SyncStatus, type SyncLinks } from './SyncStatus';
 import type { CommitRun } from './useCommitRun';
 import type { CommitRunState } from './commitRunReducer';
 import { useGit } from '../../stores/gitStore';
@@ -17,6 +17,8 @@ interface FileChangesPanelProps {
   /** The commit in flight (or just finished): shown instead of the files. */
   run: CommitRun;
   onViewDiff: (filePath: string, staged: boolean) => void;
+  /** Where the empty view's ahead / behind counts lead. */
+  syncLinks: SyncLinks;
 }
 
 /**
@@ -24,7 +26,7 @@ interface FileChangesPanelProps {
  * past VIRTUALIZE_THRESHOLD files), or the commit run while one is shown.
  * With nothing changed, where the branch stands against its upstream.
  */
-export function FileChangesPanel({ loading, run, onViewDiff }: FileChangesPanelProps) {
+export function FileChangesPanel({ loading, run, onViewDiff, syncLinks }: FileChangesPanelProps) {
   const gitStatus = useGit((s) => s.gitStatus);
   const onStageFiles = useGit((s) => s.stageFiles);
   const onUnstageFiles = useGit((s) => s.unstageFiles);
@@ -70,7 +72,7 @@ export function FileChangesPanel({ loading, run, onViewDiff }: FileChangesPanelP
       <EmptyState
         icon={<FileDiff size={14} strokeWidth={1.8} />}
         title="No changes"
-        description={<SyncStatus status={gitStatus} />}
+        description={<SyncStatus status={gitStatus} links={syncLinks} />}
       />
     );
   }

@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, GitCommit, GitPullRequestArrow, History } from 'lucide-react';
+import {
+  ArrowUp,
+  ChevronDown,
+  ChevronRight,
+  GitCommit,
+  GitPullRequestArrow,
+  History,
+} from 'lucide-react';
 import { formatRelativeTime } from '@shared/relativeTime';
 import type { FileChange } from '../../../shared/types';
 import type { CommitSummary, EditorView } from './types';
@@ -47,6 +54,8 @@ interface HistoryListProps {
   activePath: string | null;
   /** A click opens a preview tab; a double-click keeps it. */
   onOpenFile: (path: string, opts?: OpenOptions) => void;
+  /** Commits not on the upstream yet: marked with the "ahead" arrow. */
+  unpushed?: ReadonlySet<string>;
 }
 
 /**
@@ -65,6 +74,7 @@ export function HistoryList({
   commitFiles,
   activePath,
   onOpenFile,
+  unpushed,
 }: HistoryListProps) {
   const activeHash = view.kind === 'commit' ? view.hash : null;
   // The selected commit unfolds its files; clicking it again folds them away
@@ -119,6 +129,7 @@ export function HistoryList({
               selected={selected}
               unfolded={unfolded}
               commentCount={commentCountByScope.get(`commit:${c.hash}`) ?? 0}
+              unpushed={unpushed?.has(c.hash) ?? false}
               onSelect={() => selectCommit(c.hash)}
             />
             {unfolded &&
@@ -154,6 +165,7 @@ function CommitRow({
   selected,
   unfolded,
   commentCount,
+  unpushed,
   onSelect,
 }: {
   commit: CommitSummary;
@@ -162,6 +174,8 @@ function CommitRow({
   /** Its files are listed under it. */
   unfolded: boolean;
   commentCount: number;
+  /** Not on the upstream yet. */
+  unpushed: boolean;
   /** Select it, or (selected already) fold or unfold its files. */
   onSelect: () => void;
 }) {
@@ -190,6 +204,14 @@ function CommitRow({
           trailing={
             <>
               {commentCount > 0 && <CountBadge count={commentCount} />}
+              {unpushed && (
+                <ArrowUp
+                  size={14}
+                  strokeWidth={1.8}
+                  className="shrink-0 text-loc-add"
+                  aria-label="Not pushed"
+                />
+              )}
               <span className="text-xs tabular-nums">{when}</span>
             </>
           }

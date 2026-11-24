@@ -33,6 +33,8 @@ import { useEditorWorkspace, type EditorTarget } from '../diffEditor/useEditorWo
 import { activePath } from '../diffEditor/tabs/editorLayout';
 import { useTreePanel } from '../diffEditor/TreeToggle';
 import { WorktreePath } from './WorktreePath';
+import { useUnpushedCommits } from './useUnpushedCommits';
+import type { SyncLinks } from '../changes/SyncStatus';
 import { useGit, type DiffFileTarget } from '../../stores/gitStore';
 import { useSettings } from '../../stores/settingsStore';
 import { useUi } from '../../stores/uiStore';
@@ -193,13 +195,14 @@ export function RightInspector({
     selectView(next);
     openEditor();
   };
-  // Details' Last commit: History, on that commit, its files unfolded. The
-  // editor opening sets its own view, so with it closed the commit is
-  // picked once it is open.
+  // Details' Last commit and the ahead count: History (its column unfolded),
+  // on that commit, its files unfolded. The editor opening sets its own
+  // view, so with it closed the commit is picked once it is open.
   const [pendingCommit, setPendingCommit] = useState<string | null>(null);
   const openCommit = (hash: string) => {
     setSegment('history');
     setLastCodeSegment('history');
+    useEditorTabs.getState().setTreeCollapsed(false);
     if (wide) selectView({ kind: 'commit', hash });
     else {
       setPendingCommit(hash);
@@ -211,6 +214,27 @@ export function RightInspector({
     selectView({ kind: 'commit', hash: pendingCommit });
     setPendingCommit(null);
   }, [wide, pendingCommit, selectView]);
+  // The ahead / behind counts: History on the newest unpushed commit (they
+  // are marked there), and the commit graph on the upstream's tip.
+  const unpushed = useUnpushedCommits(
+    task.path,
+    `${gitStatus?.ahead}:${gitStatus?.behind}:${ws.data.commits[0]?.hash}`,
+  );
+  const syncLinks: SyncLinks = {
+    onShowUnpushed: () => {
+      void window.electronAPI.gitGetUpstreamCommits(task.path).then((r) => {
+        const newest = r.success ? r.data?.unpushed[0] : undefined;
+        if (newest) openCommit(newest);
+      });
+    },
+    onShowUpstream: () => {
+      void window.electronAPI.gitGetUpstreamCommits(task.path).then((r) => {
+        const tip = r.success ? r.data?.upstreamHead : null;
+        if (tip) useGit.getState().openCommitGraphAtCommit(tip);
+        else useGit.getState().setShowCommitGraph(true);
+      });
+    },
+  };
   const pr: PrEntry | null = ws.prEntry && {
     ...ws.prEntry,
     onOpen: () => {
@@ -319,6 +343,7 @@ export function RightInspector({
       commitFiles={view.kind === 'commit' ? ws.data.changedFiles : []}
       activePath={activePath(ws.layout)}
       onOpenFile={ws.openFile}
+      unpushed={unpushed}
     />
   );
 
@@ -329,6 +354,7 @@ export function RightInspector({
       contextUsage={contextUsage}
       onEditSettings={onTaskSettings}
       onOpenCommit={openCommit}
+      syncLinks={syncLinks}
     />
   );
 
@@ -360,7 +386,13 @@ export function RightInspector({
     ) : segment === 'history' ? (
       history
     ) : (
-      <FileChangesPanel key={task.id} loading={gitLoading} run={run} onViewDiff={viewDiff} />
+      <FileChangesPanel
+        key={task.id}
+        loading={gitLoading}
+        run={run}
+        onViewDiff={viewDiff}
+        syncLinks={syncLinks}
+      />
     );
 
   const withPorts = (content: ReactNode) => (

@@ -7,6 +7,7 @@ import type {
   CommitDetail,
   CommitLinks,
   ClaudeCliInfo,
+  UpstreamCommits,
 } from '../../shared/types';
 
 /** Git + Claude detection and all git operations: status/diff, staging, commit
@@ -23,6 +24,8 @@ export interface GitApi {
   // Operations
   gitClone: (args: { url: string }) => Promise<IpcResponse<{ path: string; name: string }>>;
   gitGetStatus: (cwd: string) => Promise<IpcResponse<GitStatus>>;
+  /** HEAD's unpushed commits and the upstream's tip (what "n ahead" / "m behind" count). */
+  gitGetUpstreamCommits: (cwd: string) => Promise<IpcResponse<UpstreamCommits>>;
   gitGetDiff: (args: {
     cwd: string;
     filePath?: string;

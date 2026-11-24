@@ -478,6 +478,14 @@ export interface CommitLinks {
   authorUrl: string | null;
 }
 
+/** Which commits the checkout and its upstream don't share. */
+export interface UpstreamCommits {
+  /** HEAD's commits the upstream lacks, newest first. */
+  unpushed: string[];
+  /** The upstream's tip; null without an upstream. */
+  upstreamHead: string | null;
+}
+
 /** A tracked remote branch: `origin` + `feat/x` (shown as `origin/feat/x`). */
 export interface GitUpstream {
   remote: string;

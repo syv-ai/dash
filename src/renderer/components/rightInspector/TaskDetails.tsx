@@ -11,7 +11,7 @@ import { Expandable } from '../ui/Expandable';
 import { Markdown } from '../ui/Markdown';
 import { PrRow } from '../ui/PrBadge';
 import { TextLink } from '../ui/TextLink';
-import { SyncStatus } from '../changes/SyncStatus';
+import { SyncStatus, type SyncLinks } from '../changes/SyncStatus';
 import { CommitHoverCard } from '../commits/CommitHoverCard';
 import { taskDetailSections, type DetailRow } from './taskDetailRows';
 
@@ -23,6 +23,8 @@ interface TaskDetailsProps {
   onEditSettings: () => void;
   /** Open a commit in the sidebar's History (selected, its files unfolded). */
   onOpenCommit: (hash: string) => void;
+  /** Where the Sync row's ahead / behind counts lead. */
+  syncLinks: SyncLinks;
 }
 
 /** The branch's newest commit, refetched when HEAD's status changes. */
@@ -88,6 +90,7 @@ export function TaskDetails({
   contextUsage,
   onEditSettings,
   onOpenCommit,
+  syncLinks,
 }: TaskDetailsProps) {
   const project = useProjects((s) => s.projects.find((p) => p.id === task.projectId) ?? null);
   const parentName = useProjects((s) =>
@@ -162,7 +165,13 @@ export function TaskDetails({
               {branch}
             </DetailItem>
           )}
-          {gitStatus && <UpstreamRows status={gitStatus} remote={project?.gitRemote ?? null} />}
+          {gitStatus && (
+            <UpstreamRows
+              status={gitStatus}
+              remote={project?.gitRemote ?? null}
+              links={syncLinks}
+            />
+          )}
           {lastCommit && (
             <DetailItem label="Last commit" copy={lastCommit.shortHash}>
               <CommitHoverCard
@@ -260,7 +269,15 @@ export function TaskDetails({
  * forge (only an `origin` branch: the project's remote is origin's), then
  * how far ahead and behind it the checkout is.
  */
-function UpstreamRows({ status, remote }: { status: GitStatus; remote: string | null }) {
+function UpstreamRows({
+  status,
+  remote,
+  links,
+}: {
+  status: GitStatus;
+  remote: string | null;
+  links: SyncLinks;
+}) {
   const { upstream } = status;
   if (!status.hasUpstream || !upstream) {
     return <DetailItem label="Upstream">No upstream</DetailItem>;
@@ -279,7 +296,7 @@ function UpstreamRows({ status, remote }: { status: GitStatus; remote: string | 
         )}
       </DetailItem>
       <DetailItem label="Sync">
-        <SyncStatus status={status} />
+        <SyncStatus status={status} links={links} quiet />
       </DetailItem>
     </>
   );

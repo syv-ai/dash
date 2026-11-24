@@ -19,6 +19,7 @@ import type {
   GraphConnection,
   CommitGraphData,
   CommitDetail,
+  UpstreamCommits,
 } from '@shared/types';
 
 const execFileAsync = promisify(execFile);
@@ -484,6 +485,20 @@ export class GitService {
       };
     } catch {
       return { hasUpstream: false, ahead: 0, behind: 0 };
+    }
+  }
+
+  /** The commits behind `getAheadBehind`'s counts: HEAD's unpushed ones and
+   *  the upstream's tip. Empty / null without an upstream. */
+  static async getUpstreamCommits(cwd: string): Promise<UpstreamCommits> {
+    try {
+      const [unpushed, head] = await Promise.all([
+        git(cwd, ['rev-list', '@{upstream}..HEAD']),
+        git(cwd, ['rev-parse', '@{upstream}']),
+      ]);
+      return { unpushed: unpushed.split('\n').filter(Boolean), upstreamHead: head.trim() };
+    } catch {
+      return { unpushed: [], upstreamHead: null };
     }
   }
 

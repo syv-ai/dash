@@ -62,6 +62,16 @@ export function registerGitIpc(): void {
     }
   });
 
+  // The unpushed commits and the upstream's tip
+  ipcMain.handle('git:getUpstreamCommits', async (_event, cwd: string) => {
+    try {
+      parseArgs('git:getUpstreamCommits', z.string(), cwd);
+      return { success: true, data: await GitService.getUpstreamCommits(cwd) };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
   // Get diff for a specific file
   ipcMain.handle(
     'git:getDiff',
