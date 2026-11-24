@@ -41,6 +41,15 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
     alt: false,
     key: 'j',
   },
+  findTask: {
+    id: 'findTask',
+    label: 'Find Task',
+    category: 'Tasks',
+    mod: true,
+    shift: false,
+    alt: false,
+    key: 'k',
+  },
   // ── Git ──
   stageAll: {
     id: 'stageAll',
@@ -78,6 +87,15 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
     shift: false,
     alt: false,
     key: ',',
+  },
+  toggleSidebar: {
+    id: 'toggleSidebar',
+    label: 'Toggle Sidebar',
+    category: 'Navigation',
+    mod: true,
+    shift: false,
+    alt: false,
+    key: 'b',
   },
   openFolder: {
     id: 'openFolder',

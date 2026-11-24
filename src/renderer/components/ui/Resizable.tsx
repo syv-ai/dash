@@ -23,11 +23,14 @@ export type { PanelImperativeHandle };
 interface ResizablePanelGroupProps extends GroupProps {
   /** Persist the layout in localStorage under this id. */
   autoSaveId?: string;
+  /** With `autoSaveId`, when panels mount conditionally: the ids rendered now,
+   *  so each combination keeps its own saved layout. */
+  panelIds?: string[];
 }
 
-export function ResizablePanelGroup({ autoSaveId, ...props }: ResizablePanelGroupProps) {
+export function ResizablePanelGroup({ autoSaveId, panelIds, ...props }: ResizablePanelGroupProps) {
   return autoSaveId ? (
-    <PersistedPanelGroup autoSaveId={autoSaveId} {...props} />
+    <PersistedPanelGroup autoSaveId={autoSaveId} panelIds={panelIds} {...props} />
   ) : (
     <PanelGroupBase {...props} />
   );
@@ -35,10 +38,11 @@ export function ResizablePanelGroup({ autoSaveId, ...props }: ResizablePanelGrou
 
 function PersistedPanelGroup({
   autoSaveId,
+  panelIds,
   onLayoutChanged,
   ...props
-}: GroupProps & { autoSaveId: string }) {
-  const saved = useDefaultLayout({ id: autoSaveId, storage: localStorage });
+}: GroupProps & { autoSaveId: string; panelIds?: string[] }) {
+  const saved = useDefaultLayout({ id: autoSaveId, panelIds, storage: localStorage });
   return (
     <PanelGroupBase
       defaultLayout={saved.defaultLayout}

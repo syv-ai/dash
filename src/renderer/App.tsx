@@ -68,6 +68,10 @@ const TUI_PANEL_WIDTH_SCALE = 0.85;
 /** Bounds for the hugged right-panel width (%) — matches the panel's min/max. */
 const TUI_PANEL_MIN_PCT = 12;
 const TUI_PANEL_MAX_PCT = 40;
+/** The shell group's panels; `changes` mounts only with an active task. */
+const SHELL_PANELS = ['sidebar', 'main'];
+const SHELL_PANELS_WITH_TASK = ['sidebar', 'main', 'changes'];
+const isMac = window.electronAPI.getPlatform() === 'darwin';
 const EMPTY_CONTEXT_USAGE: Record<string, import('../shared/types').ContextUsage> = {};
 
 export function App() {
@@ -770,9 +774,18 @@ export function App() {
         return;
       }
 
-      // Skip global shortcuts when typing in text inputs
+      // Skip global shortcuts when typing in text inputs — except the shell's
+      // own ⌘ chords on macOS: ⌘ never types text or reaches the PTY, so
+      // they work from the terminal (whose input is a textarea) too.
       const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      const inTextField = tag === 'INPUT' || tag === 'TEXTAREA';
+      const shellChord = !inTextField || (isMac && e.metaKey);
+      if (shellChord && keybindings.toggleSidebar && matchesBinding(e, keybindings.toggleSidebar)) {
+        e.preventDefault();
+        toggleSidebar();
+        return;
+      }
+      if (inTextField) return;
 
       // Tasks
       if (keybindings.newTask && matchesBinding(e, keybindings.newTask)) {
@@ -888,16 +901,17 @@ export function App() {
     cycleRotation,
   ]);
 
+  // Reads the panel, not the setting, so the keyboard handler's closure can't go stale.
   const toggleSidebar = useCallback(() => {
     const panel = sidebarPanelRef.current;
     if (!panel) return;
     setSidebarAnimating(true);
-    if (sidebarCollapsed) {
+    if (panel.isCollapsed()) {
       panel.expand();
     } else {
       panel.collapse();
     }
-  }, [sidebarCollapsed]);
+  }, []);
 
   const toggleChangesPanel = useCallback(() => {
     const panel = changesPanelRef.current;
@@ -1081,7 +1095,12 @@ export function App() {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
-      <ResizablePanelGroup orientation="horizontal" className="flex-1">
+      <ResizablePanelGroup
+        orientation="horizontal"
+        className="flex-1"
+        autoSaveId="shell"
+        panelIds={activeTask ? SHELL_PANELS_WITH_TASK : SHELL_PANELS}
+      >
         <ResizablePanel
           id="sidebar"
           panelRef={sidebarPanelRef}
@@ -1187,7 +1206,7 @@ export function App() {
               activeTask={activeTask}
               activeProject={activeProject}
               tasks={activeProjectTasks}
-              isMac={window.electronAPI.getPlatform() === 'darwin'}
+              isMac={isMac}
               terminalBg={terminalBg}
               sidebarCollapsed={sidebarCollapsed}
               changesPanelCollapsed={changesPanelCollapsed}
