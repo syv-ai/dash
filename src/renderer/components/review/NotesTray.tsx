@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { Bot, Send, Trash2, Undo2 } from 'lucide-react';
+import { Bot, MessageSquare, Send, Trash2, Undo2 } from 'lucide-react';
+import { canPromote } from '../../../shared/diffComments';
 import type { DiffComment } from '../../../shared/types';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { scopeLabel } from '../diffEditor/comments/commentScope';
@@ -15,7 +16,8 @@ import { rowAction, rowKeys } from './rowAction';
 /**
  * The task's notes to the agent from every view, by file: each sent on its
  * own or all at once (typed into the task's Claude prompt, never submitted),
- * then the sent ones, folded, with "Clear sent".
+ * then the sent ones, folded, with "Clear sent". A PR's note can become a
+ * comment for the author, as its bubble can.
  */
 export function NotesTray({
   taskId,
@@ -120,6 +122,15 @@ function NoteRow({
               onClick={rowAction(() => store().markUnsent(c.id))}
             >
               <Undo2 size={14} strokeWidth={1.8} />
+            </IconButton>
+          )}
+          {canPromote(c) && (
+            <IconButton
+              size="sm"
+              title="Make it a comment for the author"
+              onClick={rowAction(() => store().setKind(c.id, 'comment'))}
+            >
+              <MessageSquare size={14} strokeWidth={1.8} />
             </IconButton>
           )}
           <IconButton

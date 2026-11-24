@@ -9,10 +9,12 @@ export const rowAction =
   };
 
 /** Enter or Space on a row rendered as a `div` (its buttons can't nest in a
- *  `button`): the row's click. */
+ *  `button`): the row's click. Keys bubbling up from its buttons and inputs
+ *  stay theirs. */
 export const rowKeys =
   (run: () => void) =>
   (e: KeyboardEvent): void => {
+    if (e.target !== e.currentTarget) return;
     if (e.key !== 'Enter' && e.key !== ' ') return;
     e.preventDefault();
     run();

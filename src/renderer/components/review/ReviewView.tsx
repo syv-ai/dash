@@ -90,6 +90,7 @@ function Outline({
       <ReviewHeader
         review={review}
         loading={loading}
+        error={error}
         onRefresh={refresh}
         onOpenOverview={() => onOpenOverview(target)}
         onStop={canStop ? () => usePrReviews.getState().setTarget(task.id, null) : undefined}

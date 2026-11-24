@@ -25,17 +25,21 @@ function checksLine(review: PrReview): string | null {
 /**
  * The Review view's head: the PR's title (it opens the PR overview tab), its
  * branches, how far it is from its base, its state, reviewers and checks;
- * Refresh, and a menu with "Open on <forge>" and "Stop reviewing".
+ * Refresh, and a menu with "Open on <forge>" and "Stop reviewing". A refresh
+ * that failed says why under the title, until the next one lands.
  */
 export function ReviewHeader({
   review,
   loading,
+  error,
   onRefresh,
   onOpenOverview,
   onStop,
 }: {
   review: PrReview;
   loading: boolean;
+  /** Why the last refresh failed; null after a good one. */
+  error: string | null;
   onRefresh: () => void;
   onOpenOverview: () => void;
   /** Stop reviewing the PR picked for the task; absent when it is the task's own. */
@@ -78,6 +82,11 @@ export function ReviewHeader({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      {error && (
+        <p className="type-caption wrap-break-word" role="status">
+          Could not refresh: {error}
+        </p>
+      )}
       <DetailList>
         <DetailItem label="Branches" title={`${review.baseRef} ← ${review.headRef}`}>
           {review.baseRef} ← {review.headRef}
