@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, type FocusEvent } from 'react';
 import {
   Group,
   Panel,
@@ -125,17 +125,50 @@ export function ResizablePanel({
 }
 
 /**
- * An invisible 8px hit area straddling the panel edge (it takes no layout
- * space); a 2px hairline shows on hover, focus and drag.
+ * Gives focus back once the pointer that put it on a handle lets go. The
+ * library focuses a handle on pointerdown (so arrow keys can follow a drag)
+ * and blurs it after a drag but not after a plain press, which left it
+ * holding focus (and its hairline) until something else was clicked. Either
+ * way, focus goes back to what the user was in. Keyboard
+ * focus (Tab, F6) is `:focus-visible` and stays.
  */
-export function ResizableHandle({ className, ...props }: SeparatorProps) {
+function returnPointerFocus(e: FocusEvent<HTMLDivElement>): void {
+  const handle = e.currentTarget;
+  if (handle.matches(':focus-visible')) return;
+  const previous = e.relatedTarget instanceof HTMLElement ? e.relatedTarget : null;
+  const doc = handle.ownerDocument;
+  const release = () => {
+    doc.removeEventListener('pointerup', release, true);
+    doc.removeEventListener('pointercancel', release, true);
+    // After a drag the library has already blurred the handle (focus is on
+    // the body); after a press without one, the handle still holds it.
+    const active = doc.activeElement;
+    if (active !== handle && active !== doc.body) return;
+    if (previous?.isConnected) previous.focus({ preventScroll: true });
+    else handle.blur();
+  };
+  doc.addEventListener('pointerup', release, true);
+  doc.addEventListener('pointercancel', release, true);
+}
+
+/**
+ * An invisible 8px hit area straddling the panel edge (it takes no layout
+ * space); a 2px hairline shows on hover, drag and keyboard focus. A drag
+ * doesn't leave it focused.
+ */
+export function ResizableHandle({ className, onFocusCapture, ...props }: SeparatorProps) {
   return (
     <Separator
       data-slot="resizable-handle"
+      // The library sets its own onFocus over any passed in.
+      onFocusCapture={(e) => {
+        onFocusCapture?.(e);
+        returnPointerFocus(e);
+      }}
       className={cn(
         'relative z-10 shrink-0 outline-none',
         'after:absolute after:rounded-full after:bg-transparent after:transition-colors after:delay-100',
-        'data-[separator=hover]:after:bg-ink-3 data-[separator=active]:after:bg-ink-3 data-[separator=focus]:after:bg-ink-3',
+        'data-[separator=hover]:after:bg-ink-3 data-[separator=active]:after:bg-ink-3 focus-visible:after:bg-ink-3',
         // Between columns (the separator itself is vertical).
         'aria-[orientation=vertical]:-mx-1 aria-[orientation=vertical]:w-2',
         'aria-[orientation=vertical]:after:inset-y-4 aria-[orientation=vertical]:after:left-1/2 aria-[orientation=vertical]:after:w-0.5 aria-[orientation=vertical]:after:-translate-x-1/2',
