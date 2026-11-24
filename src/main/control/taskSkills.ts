@@ -92,7 +92,7 @@ The person sees your drafts in the diff editor's view of that PR, whatever branc
 
 ### When the PR moves
 
-A line draft records the PR's head commit it was written on (\`commit\`; give \`--commit <sha>\` if you read the code at another one). \`drafts-list\` gives each line draft a \`status\`: \`current\`, or \`moved\` once the author has pushed since, so its lines may be other code now. Submit holds moved drafts back. Re-check a moved draft against the PR as it is now and place it again (\`drafts-update <id> --start-line <n>\` and the like anchors it to the head now), or delete it.
+A line draft records the PR's head commit it was written on (\`commit\`; give \`--commit <sha>\` if you read the code at another one). \`drafts-list\` gives each line draft a \`status\`: \`current\`, or \`moved\` once the author has pushed since, so its lines may be other code now. Submit holds moved drafts back. \`unknown\` means Dash couldn't read the PR's head when the draft was written: Submit can't check it, so re-check it yourself, and place it again to anchor it. Re-check a moved draft against the PR as it is now and place it again (\`drafts-update <id> --start-line <n>\` and the like anchors it to the head now), or delete it.
 
 ### Working with what's there
 

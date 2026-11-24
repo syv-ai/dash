@@ -84,6 +84,9 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
   /** Per review, the stored summary's version ('' for none) the person's typing
    *  builds on: a save from it doesn't overwrite what the agent wrote since. */
   const summaryBase = new Map<string, string>();
+  /** Per review, the person's summary text not yet saved (typed, or refused by a
+   *  conflict): a reload doesn't replace it, and "Use mine" saves it. */
+  const unsaved = new Map<string, string>();
 
   /**
    * Save the person's summary, built on version `since` (null: regardless). If
@@ -112,6 +115,8 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
       });
       if (resp.success) {
         summaryBase.set(key, resp.data?.updatedAt ?? '');
+        // Typing since this save was sent is still unsaved.
+        if (unsaved.get(key) === body) unsaved.delete(key);
         return;
       }
       if (resp.code !== 'CONFLICT') return;
@@ -127,7 +132,8 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
           label: 'Use mine',
           onClick: () => {
             cancelPending();
-            const mine = get().summaries[key]?.body ?? body;
+            const mine = unsaved.get(key) ?? body;
+            putSummary(key, { body: mine, author: 'user' });
             void saveSummary(taskId, provider, number, mine, null);
           },
         },
@@ -135,6 +141,7 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
           label: 'Keep theirs',
           onClick: () => {
             cancelPending();
+            unsaved.delete(key);
             putSummary(key, theirs);
             summaryBase.set(key, theirs?.updatedAt ?? '');
           },
@@ -157,8 +164,8 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
     const key = reviewKey(taskId, provider, number);
     try {
       const resp = await window.electronAPI.prReviewGetSummary({ taskId, provider, number });
-      // An edit still being saved wins over what main had.
-      if (resp.success && !pendingSaves.has(key)) {
+      // An edit not yet saved wins over what main had.
+      if (resp.success && !unsaved.has(key)) {
         putSummary(key, resp.data ?? null);
         summaryBase.set(key, resp.data?.updatedAt ?? '');
       }
@@ -190,6 +197,7 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
     setSummary: (taskId, provider, number, body) => {
       const key = reviewKey(taskId, provider, number);
       putSummary(key, { body, author: 'user' });
+      unsaved.set(key, body);
       clearTimeout(pendingSaves.get(key));
       pendingSaves.set(
         key,
@@ -262,6 +270,7 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
           if (heldBackDraftIds.length === 0) markInReview(key, false);
           clearTimeout(pendingSaves.get(key));
           pendingSaves.delete(key);
+          unsaved.delete(key);
           putSummary(key, null);
           summaryBase.set(key, '');
         }

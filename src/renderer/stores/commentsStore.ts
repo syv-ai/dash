@@ -135,6 +135,20 @@ export const useCommentsStore = create<CommentsStore>((set, get) => {
   /** Write a comment, then take main's word on what it decides: its version
    *  (updatedAt), and who owns it (an agent's draft becomes the user's once
    *  they change its text). */
+  // The versions the person's own writes moved each row through ('id@from' →
+  // to): a text edit begun before them is still built on what the person saw.
+  const ownVersions = new Map<string, string>();
+  const latestOwn = (id: string, version: string) => {
+    let v = version;
+    for (let next = ownVersions.get(`${id}@${v}`); next; next = ownVersions.get(`${id}@${v}`)) {
+      v = next;
+    }
+    return v;
+  };
+
+  /** Write a comment, then take main's word on what it decides: its version
+   *  (updatedAt), and who owns it (an agent's draft becomes the user's once
+   *  they change its text). */
   const persist = (
     c: DiffComment,
     patch: Partial<DiffCommentInput> = {},
@@ -145,36 +159,52 @@ export const useCommentsStore = create<CommentsStore>((set, get) => {
       // Gone from the store (deleted, or reloaded away): nothing left to change.
       if (!base) return undefined;
       const since =
-        guard === 'none' ? undefined : guard === 'current' ? base.updatedAt : guard.since;
-      const resp = await window.electronAPI.diffCommentsUpsert({
-        id: base.id,
-        taskId: base.taskId,
-        filePath: base.filePath,
-        startLine: base.startLine,
-        endLine: base.endLine,
-        text: base.text,
-        sent: base.sent,
-        viewScope: base.viewScope,
-        side: base.side,
-        replyTo: base.replyTo,
-        kind: base.kind,
-        commit: base.commit,
-        ...patch,
-        ...(since === undefined ? {} : { ifUnchangedSince: since }),
-      });
+        guard === 'none'
+          ? undefined
+          : guard === 'current'
+            ? base.updatedAt
+            : latestOwn(base.id, guard.since);
+      let resp: UpsertResponse | undefined;
+      try {
+        resp = await window.electronAPI.diffCommentsUpsert({
+          id: base.id,
+          taskId: base.taskId,
+          filePath: base.filePath,
+          startLine: base.startLine,
+          endLine: base.endLine,
+          text: base.text,
+          sent: base.sent,
+          viewScope: base.viewScope,
+          side: base.side,
+          replyTo: base.replyTo,
+          kind: base.kind,
+          commit: base.commit,
+          ...patch,
+          ...(since === undefined ? {} : { ifUnchangedSince: since }),
+        });
+      } catch {
+        return undefined; // best effort, like the rest of the store
+      }
       const saved = resp?.success ? resp.data : undefined;
-      const now = saved && findById(get().byFile, saved.id);
-      if (saved && now && (now.updatedAt !== saved.updatedAt || now.author !== saved.author)) {
-        set((st) => ({
-          byFile: upsertInto(st.byFile, {
-            ...now,
-            updatedAt: saved.updatedAt,
-            author: saved.author,
-          }),
-        }));
+      if (saved) {
+        ownVersions.set(`${saved.id}@${since ?? base.updatedAt}`, saved.updatedAt);
+        // What this write set, as main has it now (a reload may have come in between).
+        const now = findById(get().byFile, saved.id);
+        if (now) {
+          set((st) => ({
+            byFile: upsertInto(st.byFile, {
+              ...now,
+              ...patch,
+              updatedAt: saved.updatedAt,
+              author: saved.author,
+            }),
+          }));
+        }
       }
       if (guard === 'current' && resp && !resp.success && resp.code === 'CONFLICT') {
-        await get().reload();
+        await get()
+          .reload()
+          .catch(() => undefined);
         toast.info("The agent changed this draft first, so your change wasn't applied.");
       }
       return resp;
@@ -183,9 +213,11 @@ export const useCommentsStore = create<CommentsStore>((set, get) => {
     const prev = queues.get(c.id);
     const queued = prev ? prev.then(write, write) : write();
     queues.set(c.id, queued);
-    void queued.finally(() => {
-      if (queues.get(c.id) === queued) queues.delete(c.id);
-    });
+    void queued
+      .finally(() => {
+        if (queues.get(c.id) === queued) queues.delete(c.id);
+      })
+      .catch(() => undefined);
     return queued;
   };
 

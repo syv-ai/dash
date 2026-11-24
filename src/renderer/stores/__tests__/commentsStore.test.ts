@@ -346,4 +346,28 @@ describe('commentsStore', () => {
     expect(api.diffCommentsUpsert).not.toHaveBeenCalled();
     expect(api.diffCommentsList).toHaveBeenCalledTimes(2);
   });
+
+  it("doesn't take the person's own change during an edit for the agent's", async () => {
+    api.diffCommentsList = vi.fn(() =>
+      Promise.resolve({ success: true, data: [cmt({ id: 'a', updatedAt: 'v1' })] }),
+    );
+    let version = 1;
+    api.diffCommentsUpsert = vi.fn((c: unknown) =>
+      Promise.resolve({
+        success: true,
+        data: { ...(c as DiffComment), updatedAt: `v${++version}` },
+      }),
+    );
+    const useCommentsStore = await freshStore();
+    await useCommentsStore.getState().loadForTask('t1');
+    const from = useCommentsStore.getState().byFile['a.ts']![0]!;
+    // While the edit box is open, the person promotes the draft (v1 → v2).
+    useCommentsStore.getState().setKind('a', 'comment');
+    useCommentsStore.getState().updateText('a', 'mine', from);
+    await vi.waitFor(() =>
+      expect(api.diffCommentsUpsert).toHaveBeenLastCalledWith(
+        expect.objectContaining({ text: 'mine', ifUnchangedSince: 'v2' }),
+      ),
+    );
+  });
 });

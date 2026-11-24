@@ -320,9 +320,12 @@ export function useFileComments({
   // ── Snapshot on unmount / file switch (closure-captured path) ──
   useEffect(() => {
     const pathAtMount = filePath;
+    // A PR view is read-only: its ranges come from the store, and a decoration
+    // clamped to a shorter file must not overwrite a draft's real anchor.
+    const frozen = isPrScope(scope);
     return () => {
       const model = modifiedEditor?.getModel();
-      if (!model) return;
+      if (!model || frozen) return;
       const snapshots = liveCommentsRef.current.flatMap((c) => {
         const r = model.getDecorationRange(c.decorationId);
         return r ? [{ id: c.id, startLine: r.startLineNumber, endLine: r.endLineNumber }] : [];
