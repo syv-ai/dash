@@ -11,6 +11,7 @@ import { Markdown } from '../ui/Markdown';
 import { HoverCard } from '../ui/HoverCard';
 import { CommitHoverCard } from '../commits/CommitHoverCard';
 import { LineStats } from '../ui/LineStats';
+import { cn } from '../../lib/cn';
 
 /** The task's open PR in History. `threads` and `body` are null until its
  *  review is fetched. */
@@ -90,7 +91,7 @@ export function HistoryList({
   return (
     <div
       ref={listRef}
-      className="scrollbar-gutter-stable scrollbar-thin-hover flex h-full min-h-0 flex-col gap-px overflow-y-auto pb-2"
+      className="scrollbar-gutter-stable scrollbar-thin-hover @container flex h-full min-h-0 flex-col gap-px overflow-y-auto pb-2"
     >
       {pr && <PrRow pr={pr} />}
       {loading && commits.length === 0 && <EmptyState title="Loading…" />}
@@ -138,6 +139,21 @@ export function HistoryList({
   );
 }
 
+/** A commit row's fixed columns, so they line up from row to row; the
+ *  subject takes what is left and truncates first. The author shows only
+ *  where the list is wide enough (its hover card names it anyway). */
+const COL = {
+  sha: 'w-13 shrink-0',
+  when: 'w-7 shrink-0',
+  author: 'hidden w-18 shrink-0 truncate @md:block',
+  lines: 'flex min-w-16 shrink-0 justify-end',
+} as const;
+
+/**
+ * A commit as columns: short sha, age, author and lines changed, then its
+ * subject. Comments on it, the "not pushed" arrow and (selected) the fold
+ * chevron trail it.
+ */
 function CommitRow({
   commit,
   cwd,
@@ -170,29 +186,32 @@ function CommitRow({
           selected={selected}
           aria-expanded={selected ? unfolded : undefined}
           leading={
-            <span className="flex items-center gap-1 text-xs text-ink-3 tabular-nums">
-              <Chevron
-                size={14}
-                strokeWidth={1.8}
-                className={selected ? '' : 'invisible'}
-                aria-hidden
-              />
-              {commit.shortHash}
+            <span className="flex items-center gap-2 text-xs text-ink-3 tabular-nums">
+              <span className={COL.sha}>{commit.shortHash}</span>
+              <span className={COL.when}>{when}</span>
+              <span className={COL.author}>{commit.authorName}</span>
+              <span className={COL.lines}>
+                <LineStats add={commit.additions} del={commit.deletions} />
+              </span>
             </span>
           }
           trailing={
-            <>
-              {commentCount > 0 && <CountBadge count={commentCount} />}
-              {unpushed && (
-                <ArrowUp
-                  size={14}
-                  strokeWidth={1.8}
-                  className="shrink-0 text-loc-add"
-                  aria-label="Not pushed"
-                />
-              )}
-              <span className="text-xs tabular-nums">{when}</span>
-            </>
+            (commentCount > 0 || unpushed || selected) && (
+              <>
+                {commentCount > 0 && <CountBadge count={commentCount} />}
+                {unpushed && (
+                  <ArrowUp
+                    size={14}
+                    strokeWidth={1.8}
+                    className="text-loc-add"
+                    aria-label="Not pushed"
+                  />
+                )}
+                {selected && (
+                  <Chevron size={14} strokeWidth={1.8} className="text-icon" aria-hidden />
+                )}
+              </>
+            )
           }
           onClick={onSelect}
           {...hover}
@@ -216,7 +235,14 @@ function PrRow({ pr }: { pr: PrEntry }) {
           role="button"
           tabIndex={0}
           size="sm"
-          leading={<GitPullRequestArrow size={14} strokeWidth={1.8} />}
+          leading={
+            <span className="flex items-center gap-2 text-xs text-ink-3 tabular-nums">
+              <span className={cn(COL.sha, 'flex items-center gap-1')}>
+                <GitPullRequestArrow size={14} strokeWidth={1.8} className="text-icon" />
+                <span>#{pr.number}</span>
+              </span>
+            </span>
+          }
           trailing={(pr.threads ?? 0) > 0 && <CountBadge count={pr.threads!} />}
           onClick={pr.onOpen}
           onKeyDown={(e) => {
@@ -228,7 +254,7 @@ function PrRow({ pr }: { pr: PrEntry }) {
           onMouseEnter={hover.onMouseEnter}
           onMouseLeave={hover.onMouseLeave}
         >
-          <span className="tabular-nums">#{pr.number}</span> {pr.title}
+          {pr.title}
         </ListRow>
       )}
     >

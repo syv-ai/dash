@@ -373,38 +373,45 @@ async function listCommitRepoFiles(cwd: string, hash: string): Promise<RepoListi
   return { files: out.split('\0').filter(Boolean).sort(), dirs: [] };
 }
 
-/** Parse `git log --numstat --format=%x1f%H` into a commit-hash → {adds, dels}
- *  map, summing per-file numstat across each commit. A line beginning with the
- *  unit-separator (\x1f) starts a new commit; numstat rows are `<adds>\t<dels>
- *  \t<path>` (binary files use '-'). Locale-independent (numbers only); merge
- *  commits emit no numstat and stay at 0/0. */
-export function parseCommitNumstatLog(
-  stdout: string,
-): Map<string, { additions: number; deletions: number }> {
-  const map = new Map<string, { additions: number; deletions: number }>();
-  let current: { additions: number; deletions: number } | null = null;
-  for (const line of stdout.split('\n')) {
-    if (line.startsWith('\x1f')) {
-      const hash = line.slice(1).trim();
-      if (!hash) {
-        current = null;
-        continue;
-      }
-      current = { additions: 0, deletions: 0 };
-      map.set(hash, current);
-      continue;
-    }
-    if (!current || !line) continue;
-    const t1 = line.indexOf('\t');
-    if (t1 < 0) continue;
-    const t2 = line.indexOf('\t', t1 + 1);
-    if (t2 < 0) continue;
-    const addsStr = line.slice(0, t1);
-    const delsStr = line.slice(t1 + 1, t2);
-    current.additions += addsStr === '-' ? 0 : parseInt(addsStr, 10) || 0;
-    current.deletions += delsStr === '-' ? 0 : parseInt(delsStr, 10) || 0;
+/** `git log --numstat`'s format for `parseCommitLog`: each commit opens with
+ *  \x1e, its fields split by \x1f (the body, which can hold newlines, last),
+ *  and \x1d closes them before its numstat rows. */
+export const COMMIT_LOG_FORMAT = '%x1e%H%x1f%h%x1f%an%x1f%at%x1f%s%x1f%b%x1d';
+
+/** The lines a commit's numstat rows add up to: `<adds>\t<dels>\t<path>`,
+ *  binary files ('-') counting 0. Numbers only, so locale-independent. */
+function numstatTotals(rows: string): { additions: number; deletions: number } {
+  let additions = 0;
+  let deletions = 0;
+  for (const line of rows.split('\n')) {
+    const [adds, dels, path] = line.split('\t');
+    if (path === undefined) continue;
+    additions += parseInt(adds!, 10) || 0;
+    deletions += parseInt(dels!, 10) || 0;
   }
-  return map;
+  return { additions, deletions };
+}
+
+/** Parse `git log --numstat --format=COMMIT_LOG_FORMAT`: one git call for the
+ *  commits and their line totals. A merge carries no numstat and stays 0/0. */
+export function parseCommitLog(stdout: string): EditorCommitListItem[] {
+  const commits: EditorCommitListItem[] = [];
+  for (const record of stdout.split('\x1e')) {
+    const end = record.indexOf('\x1d');
+    if (end < 0) continue;
+    const parts = record.slice(0, end).split('\x1f');
+    if (parts.length < 6) continue;
+    commits.push({
+      hash: parts[0]!,
+      shortHash: parts[1]!,
+      authorName: parts[2] || '',
+      authorDate: parseInt(parts[3]!, 10) || 0,
+      subject: parts[4] || '',
+      body: parts.slice(5).join('\x1f').trim(),
+      ...numstatTotals(record.slice(end + 1)),
+    });
+  }
+  return commits;
 }
 
 /** Git object specs (`<rev>:<path>`) and pathspecs require forward slashes.
@@ -701,48 +708,12 @@ export function registerEditorIpc(): void {
         const limit = args.limit ?? 50;
         // HEAD's history, or a PR's commits (base..head, both present locally).
         const rev = args.range ? `${args.range.base}..${args.range.head}` : 'HEAD';
-        // -z separates records with NUL; %x1f is a unit-separator between
-        // fields. Body can contain newlines, so we keep it last and use the
-        // record NUL as its terminator.
-        const format = '%H%x1f%h%x1f%an%x1f%at%x1f%s%x1f%b';
         const { stdout } = await execFileAsync(
           'git',
-          ['log', '-z', `--max-count=${limit}`, `--format=${format}`, rev],
+          ['log', '--numstat', `--max-count=${limit}`, `--format=${COMMIT_LOG_FORMAT}`, rev],
           { cwd: args.cwd, maxBuffer: 5 * 1024 * 1024, timeout: 15000 },
         );
-        // Second single pass over the same range for per-commit line stats —
-        // O(1) git calls, not one numstat call per commit. The \x1f-prefixed
-        // hash line delimits each commit's numstat block.
-        let lineStats = new Map<string, { additions: number; deletions: number }>();
-        try {
-          const { stdout: numstatOut } = await execFileAsync(
-            'git',
-            ['log', '--numstat', `--max-count=${limit}`, '--format=%x1f%H', rev],
-            { cwd: args.cwd, maxBuffer: 5 * 1024 * 1024, timeout: 15000 },
-          );
-          lineStats = parseCommitNumstatLog(numstatOut);
-        } catch {
-          // Stats are best-effort; fall back to 0/0 if the numstat pass fails.
-        }
-        const commits: EditorCommitListItem[] = [];
-        for (const record of stdout.split('\0')) {
-          if (!record) continue;
-          const parts = record.split('\x1f');
-          if (parts.length < 6) continue;
-          const hash = parts[0]!;
-          const stat = lineStats.get(hash);
-          commits.push({
-            hash,
-            shortHash: parts[1]!,
-            authorName: parts[2] || '',
-            authorDate: parseInt(parts[3]!, 10) || 0,
-            subject: parts[4] || '',
-            body: (parts[5] || '').trim(),
-            additions: stat?.additions ?? 0,
-            deletions: stat?.deletions ?? 0,
-          });
-        }
-        return { success: true, data: commits };
+        return { success: true, data: parseCommitLog(stdout) };
       } catch (err) {
         return errorResponse(err);
       }
