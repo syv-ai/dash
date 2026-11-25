@@ -1,51 +1,25 @@
-import { Fragment, type ReactNode } from 'react';
-import {
-  CalendarClock,
-  CalendarPlus,
-  CircleCheck,
-  CircleDashed,
-  CircleMinus,
-  CircleX,
-  ExternalLink,
-  GitCompareArrows,
-  MessagesSquare,
-  UserCheck,
-  Users,
-  type LucideIcon,
-} from 'lucide-react';
+import { Fragment } from 'react';
+import { CircleCheck, CircleDashed, CircleMinus, CircleX, ExternalLink } from 'lucide-react';
 import type { CiState, PrCheck, PrReview, PrReviewer } from '../../../shared/types';
 import { branchUrl } from '../../../shared/urls';
 import { cn } from '../../lib/cn';
 import { Button } from '../ui/Button';
 import { DetailSection } from '../ui/DetailList';
+import { LineStats } from '../ui/LineStats';
 import { ListRow } from '../ui/ListRow';
 import { Markdown } from '../ui/Markdown';
 import { TextLink } from '../ui/TextLink';
 import { ciLabel, ciPulse, ciText } from '../ui/prStatusColors';
-import { CHECK_LABELS, prDateTime, reviewerGroups, threadsLine } from './labels';
+import {
+  CHECK_LABELS,
+  diffTotals,
+  plural,
+  prDateTime,
+  reviewerGroups,
+  threadsLine,
+} from './labels';
 import { checksRollup, checksSummary } from './outline';
 import { useSectionOpen } from './useSectionOpen';
-
-/** One fact about the PR: an icon naming what it is, then the value, which
- *  wraps rather than truncates (the column can be narrow, D85). */
-function Fact({
-  icon: Icon,
-  name,
-  children,
-}: {
-  icon: LucideIcon;
-  name: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex items-start gap-2" title={name}>
-      <span className="flex h-4 shrink-0 items-center text-ink-3">
-        <Icon size={14} strokeWidth={1.8} aria-label={name} />
-      </span>
-      <div className="type-body min-w-0 flex-1 wrap-break-word">{children}</div>
-    </div>
-  );
-}
 
 /** A person, linked to their page on the forge when it has one. */
 function Person({ name, url }: { name: string; url: string | null }) {
@@ -59,29 +33,26 @@ function Person({ name, url }: { name: string; url: string | null }) {
 }
 
 /** "Approved by A, B" / "Changes requested by C" / "Review requested from D",
- *  one line per group. */
+ *  one fact per group. */
 function Reviewers({ reviewers }: { reviewers: PrReviewer[] }) {
-  return (
-    <div className="grid gap-0.5">
-      {reviewerGroups(reviewers).map((g) => (
-        <p key={g.lead}>
-          <span className="type-label">{g.lead}</span>{' '}
-          {g.reviewers.map((r, i) => (
-            <Fragment key={r.name}>
-              {i > 0 && ', '}
-              <Person name={r.name} url={r.url} />
-            </Fragment>
-          ))}
-        </p>
+  return reviewerGroups(reviewers).map((g) => (
+    <li key={g.lead}>
+      <span className="type-label">{g.lead}</span>{' '}
+      {g.reviewers.map((r, i) => (
+        <Fragment key={r.name}>
+          {i > 0 && ', '}
+          <Person name={r.name} url={r.url} />
+        </Fragment>
       ))}
-    </div>
-  );
+    </li>
+  ));
 }
 
 /**
- * The Review view's Overview tab, under the PR's header: About (how far the PR
- * is behind its base, when it was opened and last moved, its threads,
- * reviewers and assignees, then Finish review… when there is one to give),
+ * The Review view's Overview tab, under the PR's header: About (a bulleted
+ * list: how far the PR is behind its base, when it was opened and last moved,
+ * its files and lines changed, threads, reviewers and assignees; then Finish
+ * review… when there is one to give),
  * its checks and its description, each a band that folds; the open ones are
  * remembered for the session. The general conversation lives in the docked
  * bar's Comments.
@@ -100,6 +71,7 @@ export function ReviewOverview({
   const description = useSectionOpen('overview.description', true);
   const baseHref = remote ? branchUrl(remote, review.baseRef) : null;
   const threads = threadsLine(review.threads);
+  const totals = diffTotals(review.files);
   const created = prDateTime(review.createdAt);
   const active = prDateTime(review.lastActivityAt);
   const finish = onFinish && (
@@ -111,44 +83,33 @@ export function ReviewOverview({
     <div className="pt-2 pb-2">
       {/* Folded, About keeps Finish review… in reach on its band. */}
       <DetailSection title="About" collapsible {...about} action={!about.open && finish}>
+        {/* Plain facts, one bullet each; values wrap rather than truncate (the
+            column can be narrow, D85). */}
         <div className="grid gap-1.5 pt-0.5">
-          {!!review.behindBase && (
-            <Fact icon={GitCompareArrows} name="Behind base">
-              <span className="tabular-nums">{review.behindBase}</span> behind{' '}
-              {baseHref ? (
-                <TextLink href={baseHref} quiet title={`Open ${review.baseRef} on the forge`}>
+          <ul className="type-body grid list-disc gap-1 pl-4 wrap-break-word marker:text-ink-3">
+            {!!review.behindBase && (
+              <li>
+                <span className="tabular-nums">{review.behindBase}</span> behind{' '}
+                {baseHref ? (
+                  <TextLink href={baseHref} quiet title={`Open ${review.baseRef} on the forge`}>
+                    <span className="wrap-anywhere">{review.baseRef}</span>
+                  </TextLink>
+                ) : (
                   <span className="wrap-anywhere">{review.baseRef}</span>
-                </TextLink>
-              ) : (
-                <span className="wrap-anywhere">{review.baseRef}</span>
-              )}
-            </Fact>
-          )}
-          {created && (
-            <Fact icon={CalendarPlus} name="Created">
-              <span className="tabular-nums">Created {created}</span>
-            </Fact>
-          )}
-          {active && (
-            <Fact icon={CalendarClock} name="Last activity">
-              <span className="tabular-nums">Last activity {active}</span>
-            </Fact>
-          )}
-          {threads && (
-            <Fact icon={MessagesSquare} name="Comment threads">
-              <span className="tabular-nums">{threads}</span>
-            </Fact>
-          )}
-          {review.reviewers.length > 0 && (
-            <Fact icon={UserCheck} name="Reviewers">
-              <Reviewers reviewers={review.reviewers} />
-            </Fact>
-          )}
-          {review.assignees.length > 0 && (
-            <Fact icon={Users} name="Assignees">
-              {review.assignees.join(', ')}
-            </Fact>
-          )}
+                )}
+              </li>
+            )}
+            {created && <li className="tabular-nums">Created {created}</li>}
+            {active && <li className="tabular-nums">Last activity {active}</li>}
+            <li className="tabular-nums">
+              {plural(totals.files, 'file')} changed
+              {(totals.additions > 0 || totals.deletions > 0) && ', '}
+              <LineStats add={totals.additions} del={totals.deletions} />
+            </li>
+            {threads && <li className="tabular-nums">{threads}</li>}
+            <Reviewers reviewers={review.reviewers} />
+            {review.assignees.length > 0 && <li>Assigned to {review.assignees.join(', ')}</li>}
+          </ul>
           {finish && <div className="mt-1 grid">{finish}</div>}
         </div>
       </DetailSection>

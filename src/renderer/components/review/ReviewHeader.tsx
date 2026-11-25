@@ -3,20 +3,19 @@ import type { PrReview } from '../../../shared/types';
 import { branchUrl } from '../../../shared/urls';
 import { cn } from '../../lib/cn';
 import { IconButton } from '../ui/IconButton';
-import { LineStats } from '../ui/LineStats';
 import { TextLink } from '../ui/TextLink';
 import { prStateIcon, prStatusText } from '../ui/prStatusColors';
-import { diffTotals, mergeVerb, plural, providerName } from './labels';
+import { mergeVerb, plural, providerName } from './labels';
 
 /** A branch, linked to its page on the forge when the remote names one. */
 function Branch({ remote, name }: { remote: string | null; name: string }) {
   const href = remote ? branchUrl(remote, name) : null;
   return href ? (
-    <TextLink href={href} quiet title={`Open ${name} on the forge`}>
+    <TextLink href={href} tone="inherit" title={`Open ${name} on the forge`}>
       <span className="wrap-anywhere">{name}</span>
     </TextLink>
   ) : (
-    <span className="wrap-anywhere text-ink">{name}</span>
+    <span className="wrap-anywhere">{name}</span>
   );
 }
 
@@ -24,8 +23,9 @@ function Branch({ remote, name }: { remote: string | null; name: string }) {
  * Review mode's head (spec Revision 3), under the mode's banner and views:
  * the PR's state icon (GitHub's shape and colour) and title (to the forge)
  * with its number, refresh at the row's end; then "who wants to merge n
- * commits (f files, +a −d) into base from head", each linked (the commits to
- * History). A failed refresh says why until the next lands.
+ * commits into base from head" in secondary ink, each link underlined (the
+ * commits to History). The diff totals are About's (Overview). A failed
+ * refresh says why until the next lands.
  */
 export function ReviewHeader({
   review,
@@ -46,7 +46,6 @@ export function ReviewHeader({
   onShowCommits: () => void;
 }) {
   const StateIcon = prStateIcon(review.state);
-  const totals = diffTotals(review.files);
   return (
     <section className="grid gap-1.5 px-2.5 pt-2 pb-1">
       <div className="flex items-start gap-1.5">
@@ -72,23 +71,19 @@ export function ReviewHeader({
           <RefreshCw size={14} strokeWidth={1.8} className={cn(loading && 'animate-spin')} />
         </IconButton>
       </div>
-      <p className="type-label wrap-break-word">
+      {/* Running prose, not a name: secondary ink, no type role (D162). */}
+      <p className="text-sm text-ink-2 wrap-break-word">
         {review.authorUrl ? (
-          <TextLink href={review.authorUrl} quiet title={`${review.author}'s profile`}>
+          <TextLink href={review.authorUrl} tone="inherit" title={`${review.author}'s profile`}>
             {review.author}
           </TextLink>
         ) : (
-          <span className="text-ink">{review.author}</span>
+          review.author
         )}{' '}
         {mergeVerb(review.state)}{' '}
-        <TextLink quiet title="Show them in History" onClick={onShowCommits}>
+        <TextLink tone="inherit" title="Show them in History" onClick={onShowCommits}>
           <span className="tabular-nums">{plural(review.commits, 'commit')}</span>
         </TextLink>{' '}
-        <span className="tabular-nums">
-          ({plural(totals.files, 'file')}
-          {(totals.additions > 0 || totals.deletions > 0) && ', '}
-          <LineStats add={totals.additions} del={totals.deletions} />)
-        </span>{' '}
         into <Branch remote={remote} name={review.baseRef} /> from{' '}
         <Branch remote={remote} name={review.headRef} />
       </p>
