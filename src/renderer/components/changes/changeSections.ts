@@ -1,7 +1,8 @@
 /*
- * Changes as the file tree shows them, pure: the staged and unstaged
- * sections, which row reads as the editor's file, and what a row's hover
- * actions may do.
+ * The working tree's changes as Files shows them, pure: the staged and
+ * unstaged sections (its changes alone), one change per path (all files),
+ * which row reads as the editor's file, where a stage tick stands and what
+ * a row's hover actions may do.
  */
 import type { FileChange } from '../../../shared/types';
 import {
@@ -34,7 +35,34 @@ export function changeSections(files: readonly FileChange[]): TreeSection[] {
   return sections;
 }
 
-/** The section a file opened from Changes shows in the editor: the staged
+/** One change per path, for a tree that lists each file once (all
+ *  files): the unstaged one where a file is partly staged, so its letter,
+ *  stats and discard are the working tree's. */
+export function oneChangePerPath(files: readonly FileChange[]): FileChange[] {
+  const byPath = new Map<string, FileChange>();
+  for (const f of files) if (!f.staged || !byPath.has(f.path)) byPath.set(f.path, f);
+  return [...byPath.values()];
+}
+
+/** Where `paths` stand in the index: every change staged (true), none
+ *  (false), or some ('mixed'; a partly staged file is). A tick on it stages
+ *  unless it is true. */
+export function stagedState(
+  files: readonly FileChange[],
+  paths: readonly string[],
+): boolean | 'mixed' {
+  const wanted = new Set(paths);
+  let staged = 0;
+  let unstaged = 0;
+  for (const f of files) {
+    if (!wanted.has(f.path)) continue;
+    if (f.staged) staged++;
+    else unstaged++;
+  }
+  return unstaged === 0 ? staged > 0 : staged === 0 ? false : 'mixed';
+}
+
+/** The section a file opened from Files' changes shows in the editor: the staged
  *  diff is the index view, the unstaged one the working tree's. */
 export const sectionOfView = (view: EditorView): ChangeSectionId | null =>
   view.kind !== 'working' ? null : view.ref === 'index' ? 'staged' : 'unstaged';
@@ -71,10 +99,11 @@ export function folderActions(folder: TreeFolder) {
 }
 
 /** What a file's hover actions may do: discard an unstaged change (not a
- *  deletion), or .gitignore an untracked file. */
+ *  deletion, nor an ignored file listed by all files), or .gitignore an
+ *  untracked file. */
 export function fileActions(change: FileChange) {
   return {
-    canDiscard: !change.staged && change.status !== 'deleted',
+    canDiscard: !change.staged && change.status !== 'deleted' && change.status !== 'ignored',
     canIgnore: change.status === 'untracked',
   };
 }

@@ -1,11 +1,11 @@
-import { useCallback, useId, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import type { PrReview } from '../../../shared/types';
 import { usePrReviews } from '../../stores/prReviewStore';
 import { useUi } from '../../stores/uiStore';
+import { AllFilesSwitch } from '../fileTree/AllFilesSwitch';
 import { RepoTree, type ViewedColumn } from '../fileTree/RepoTree';
 import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
 import type { EditorView } from '../diffEditor/types';
-import { Switch } from '../ui/Switch';
 import { prFileChanges, treeBadges, viewedBlob, viewedPaths, type FileRow } from './outline';
 
 /** Every file at the PR's head, as the editor's workspace lists them. */
@@ -75,7 +75,6 @@ export function ReviewFiles({
     [review.provider, review.number, review.base, review.head],
   );
   const allFiles = useUi((s) => s.reviewAllFiles);
-  const toggleId = useId();
 
   return (
     <div className="h-full min-h-0">
@@ -94,15 +93,10 @@ export function ReviewFiles({
         badgeCounts={badges}
         viewed={viewed}
         headerAction={
-          <label htmlFor={toggleId} className="flex cursor-pointer items-center gap-1.5">
-            All files
-            <Switch
-              id={toggleId}
-              size="sm"
-              checked={allFiles}
-              onCheckedChange={(v) => useUi.getState().setReviewAllFiles(v)}
-            />
-          </label>
+          <AllFilesSwitch
+            checked={allFiles}
+            onChange={(v) => useUi.getState().setReviewAllFiles(v)}
+          />
         }
       />
     </div>

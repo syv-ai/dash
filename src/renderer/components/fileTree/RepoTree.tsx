@@ -6,7 +6,13 @@ import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
 import type { EditorView } from '../diffEditor/types';
 import type { FileChange, RepoListing } from '../../../shared/types';
 import { FileTree } from './FileTree';
-import { buildTree, type FileBadges, type ItemRow, type TreeSection } from './model';
+import {
+  buildTree,
+  type FileBadges,
+  type FolderTally,
+  type ItemRow,
+  type TreeSection,
+} from './model';
 
 /** A PR's viewed marks: a tick in the tree's left-edge column on each changed
  *  file read through (its name quiet), and the tally in the header. */
@@ -41,8 +47,12 @@ interface RepoTreeProps {
   /** The editor shows one pane: a file's menu offers "Open in new pane". */
   canOpenToSide: boolean;
   badgeCounts: ReadonlyMap<string, FileBadges>;
-  /** Review mode's viewed marks. */
+  /** Review mode's viewed marks (their ticks fill the left-edge column). */
   viewed?: ViewedColumn;
+  /** Otherwise, a control at each row's left edge (Files' stage ticks). */
+  leading?: (row: ItemRow) => React.ReactNode;
+  /** A row's hover actions (Files' discard); absent: copy its path. */
+  actions?: (row: ItemRow) => React.ReactNode;
   /** A control at the header's end (review mode's "All files"). */
   headerAction?: React.ReactNode;
 }
@@ -52,8 +62,8 @@ const NO_LISTING: RepoListing = { files: [], dirs: [] };
 
 /**
  * A view's files as one tree: its changes, or the whole repo with them
- * (Files, the editor modal, a PR's files). Headed by its tally ("7 changed
- * · 2 viewed +580 −10") when there is one or a control.
+ * (Files on all files, the editor modal, a PR's files), under its
+ * `TreeHeader`.
  */
 export function RepoTree({
   cwd,
@@ -69,6 +79,8 @@ export function RepoTree({
   canOpenToSide,
   badgeCounts,
   viewed,
+  leading,
+  actions,
   headerAction,
 }: RepoTreeProps) {
   // Plain files have no changes to filter on, and nothing git ignores.
@@ -106,24 +118,10 @@ export function RepoTree({
   const sections = useMemo<TreeSection[]>(() => [{ id: 'files', tree }], [tree]);
   const selected = useMemo(() => (selectedPath ? { path: selectedPath } : null), [selectedPath]);
   const changed = tree.tally.changed;
-  const add = tree.tally.add + tree.tally.untrackedAdd;
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      {(changed > 0 || headerAction) && (
-        <div className="type-caption flex h-8 shrink-0 items-center justify-between px-3">
-          <span className="flex items-center gap-2">
-            {changed > 0 && (
-              <span className="tabular-nums">
-                {changed} changed
-                {viewed && ` · ${viewed.paths.size} viewed`}
-              </span>
-            )}
-            <LineStats add={add} del={tree.tally.del} />
-          </span>
-          {headerAction}
-        </div>
-      )}
+      <TreeHeader tally={tree.tally} viewed={viewed?.paths.size} action={headerAction} />
       {filesLoading && allPaths.length === 0 ? (
         <TreePlaceholder>Loading…</TreePlaceholder>
       ) : changedOnly && changed === 0 ? (
@@ -137,10 +135,41 @@ export function RepoTree({
           canOpenToSide={canOpenToSide}
           badges={badgeCounts}
           quiet={viewed?.paths}
-          leading={viewed && ((row) => <ViewedTick row={row} viewed={viewed} />)}
+          leading={viewed ? (row) => <ViewedTick row={row} viewed={viewed} /> : leading}
+          actions={actions}
           gapAbove={changed === 0 && !headerAction}
         />
       )}
+    </div>
+  );
+}
+
+/** A tree's tally ("7 changed · 2 viewed +580 −10") and a control at its
+ *  end (the "All files" switch); nothing with neither. */
+export function TreeHeader({
+  tally,
+  viewed,
+  action,
+}: {
+  tally: FolderTally;
+  /** Review mode's viewed count. */
+  viewed?: number;
+  action?: React.ReactNode;
+}) {
+  const changed = tally.changed;
+  if (changed === 0 && !action) return null;
+  return (
+    <div className="type-caption flex h-8 shrink-0 items-center justify-between px-3">
+      <span className="flex items-center gap-2">
+        {changed > 0 && (
+          <span className="tabular-nums">
+            {changed} changed
+            {viewed !== undefined && ` · ${viewed} viewed`}
+          </span>
+        )}
+        <LineStats add={tally.add + tally.untrackedAdd} del={tally.del} />
+      </span>
+      {action}
     </div>
   );
 }

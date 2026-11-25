@@ -4,6 +4,8 @@ import {
   changeSelection,
   fileActions,
   folderActions,
+  oneChangePerPath,
+  stagedState,
   sectionOfView,
   viewOfSection,
 } from '../changeSections';
@@ -92,5 +94,36 @@ describe('row actions', () => {
     });
     expect(fileActions(f('a.ts', 'deleted'))).toEqual({ canDiscard: false, canIgnore: false });
     expect(fileActions(f('n.ts', 'untracked'))).toEqual({ canDiscard: true, canIgnore: true });
+    expect(fileActions(f('.env', 'ignored'))).toEqual({ canDiscard: false, canIgnore: false });
+  });
+});
+
+describe('oneChangePerPath', () => {
+  it('keeps the unstaged change of a partly staged file, whichever comes first', () => {
+    expect(oneChangePerPath([f('a.ts', 'added', true), f('a.ts')])).toEqual([f('a.ts')]);
+    expect(oneChangePerPath([f('a.ts'), f('a.ts', 'added', true)])).toEqual([f('a.ts')]);
+  });
+
+  it('keeps every other change as it is', () => {
+    const files = [f('a.ts', 'added', true), f('b.ts')];
+    expect(oneChangePerPath(files)).toEqual(files);
+  });
+});
+
+describe('stagedState', () => {
+  const files = [f('a.ts', 'modified', true), f('b.ts'), f('c.ts', 'modified', true), f('c.ts')];
+
+  it('is true when every change is staged, false when none is', () => {
+    expect(stagedState(files, ['a.ts'])).toBe(true);
+    expect(stagedState(files, ['b.ts'])).toBe(false);
+  });
+
+  it('is mixed for a partly staged file, or a folder of both', () => {
+    expect(stagedState(files, ['c.ts'])).toBe('mixed');
+    expect(stagedState(files, ['a.ts', 'b.ts'])).toBe('mixed');
+  });
+
+  it('is false for paths with no change', () => {
+    expect(stagedState(files, ['z.ts'])).toBe(false);
   });
 });
