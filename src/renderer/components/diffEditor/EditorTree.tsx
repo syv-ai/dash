@@ -21,6 +21,7 @@ import {
   ContextMenuTrigger,
 } from '../ui/ContextMenu';
 import { usePreferredIde } from '../../hooks/usePreferredIde';
+import { cn } from '../../lib/cn';
 import { openInIde } from '../../lib/openInIde';
 import { absolutePath } from './editor/fileRef';
 import { copyText, revealLabel } from './fileActions';
@@ -489,24 +490,27 @@ function FileTreePanel({
   return (
     <TreeContext.Provider value={ctx}>
       <div className="h-full min-h-0 flex flex-col">
-        <div className="px-3 py-2 text-xs text-ink-3 flex items-center justify-between shrink-0">
-          <span className="flex items-center gap-2">
-            <span>
-              Files{' '}
+        {/* The tallies, when there is something to tally or a control. */}
+        {(tree.changedCount > 0 || headerAction) && (
+          <div className="h-8 px-3 text-xs text-ink-3 flex items-center justify-between shrink-0">
+            <span className="flex items-center gap-2">
               {tree.changedCount > 0 && (
-                <span className="tabular-nums">· {tree.changedCount} changed</span>
+                <span className="tabular-nums">
+                  {tree.changedCount} changed
+                  {viewed && ` · ${viewed.paths.size} viewed`}
+                </span>
               )}
-              {viewed && tree.changedCount > 0 && (
-                <span className="tabular-nums"> · {viewed.paths.size} viewed</span>
-              )}
-            </span>
-            <span className="text-xs">
               <LineStats add={totals.additions} del={totals.deletions} />
             </span>
-          </span>
-          {headerAction}
-        </div>
-        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1">
+            {headerAction}
+          </div>
+        )}
+        <div
+          className={cn(
+            'flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1',
+            tree.changedCount === 0 && !headerAction && 'pt-2',
+          )}
+        >
           {loading && paths.length === 0 ? (
             <div className="px-3 py-2 text-xs text-muted-fade-40">Loading…</div>
           ) : changedOnly && tree.changedCount === 0 ? (
