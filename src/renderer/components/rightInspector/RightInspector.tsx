@@ -81,6 +81,28 @@ const EditorGroups = lazy(() =>
  *  at the row's end, read least often). */
 type Segment = CodeSegment | 'details';
 
+/** The sidebar between narrow and expanded: its content is held at `width`
+ *  (px, the expanded width) in the expanded layout, first still (`held`: the
+ *  layout paints, the editor mounts clear), then while the width eases
+ *  (`easing`), the editor fading in or out with it. */
+export interface SidebarMotion {
+  width: number;
+  to: 'expanded' | 'narrow';
+  phase: 'held' | 'easing';
+}
+
+/** The editor's look mid-motion: shown before the ease going narrow and once
+ *  it starts going expanded; fading only while it eases. */
+function editorMotionClass(motion: SidebarMotion | null): string | false {
+  if (!motion) return false;
+  const easing = motion.phase === 'easing';
+  const shown = motion.to === 'expanded' ? easing : !easing;
+  return cn(
+    easing && 'transition-opacity duration-280 ease-panel motion-reduce:transition-none',
+    !shown && 'opacity-0',
+  );
+}
+
 interface RightInspectorProps {
   task: Task;
   /** The model the task's session runs (live, from its status line). */
@@ -96,6 +118,12 @@ interface RightInspectorProps {
   /** The editor shows beside the list (expanded); otherwise the sidebar is
    *  narrow, an open editor kept mounted out of sight. */
   expanded: boolean;
+  /** Mid-ease (see `SidebarMotion`): the expanded layout holds, going narrow
+   *  included. */
+  motion: SidebarMotion | null;
+  /** The editor has mounted (true, its lazy chunk loaded and committed) or
+   *  unmounted (false). */
+  onEditorMounted?: (mounted: boolean) => void;
   terminalTheme: XtermTheme;
   isDark: boolean;
   onViewDiff: (filePath: string, staged: boolean) => void;
@@ -144,6 +172,8 @@ export function RightInspector({
   contextUsage,
   diff,
   expanded: expandedProp,
+  motion,
+  onEditorMounted,
   terminalTheme,
   isDark,
   onViewDiff,
@@ -184,7 +214,8 @@ export function RightInspector({
 
   // ── The editor's state: one workspace per task, open or not ──
   const editorMounted = diff !== null;
-  const expanded = expandedProp && editorMounted;
+  // Going narrow, the expanded layout holds until the ease ends.
+  const expanded = (expandedProp || motion !== null) && editorMounted;
   // A task in review mode opens on Overview.
   const [segment, setSegment] = useState<Segment>(() => initialSegment(task.id));
   // Expanded, Details takes the whole body over the terminals, as narrow;
@@ -700,7 +731,7 @@ export function RightInspector({
                   {/* Mounted while open, out of sight while narrow: its tabs,
                     scroll and unsaved edits wait for the next file to open. */}
                   {editorMounted && (
-                    <div className={split ? 'h-full' : 'hidden'}>
+                    <div className={cn(split ? 'h-full' : 'hidden', editorMotionClass(motion))}>
                       <EditorSheet closeBinding={keybindings.closeDiff} onClose={onCloseDiff}>
                         <Suspense fallback={null}>
                           <EditorGroups
@@ -717,6 +748,7 @@ export function RightInspector({
                               </IconButton>
                             }
                           />
+                          <OnMount onMount={onEditorMounted} />
                         </Suspense>
                       </EditorSheet>
                     </div>
@@ -760,4 +792,14 @@ function EditorSheet({
       {children}
     </div>
   );
+}
+
+/** Tells `onMount` once its Suspense boundary has committed (true), and
+ *  when it goes (false). */
+function OnMount({ onMount }: { onMount?: (mounted: boolean) => void }) {
+  useEffect(() => {
+    onMount?.(true);
+    return () => onMount?.(false);
+  }, [onMount]);
+  return null;
 }

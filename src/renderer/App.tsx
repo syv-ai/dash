@@ -1,4 +1,13 @@
-import React, { useEffect, useState, useCallback, useRef, useMemo, Suspense, lazy } from 'react';
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useState,
+  useCallback,
+  useRef,
+  useMemo,
+  Suspense,
+  lazy,
+} from 'react';
 import { TUI_FEATURE_IDS } from '@shared/tuiProtocol';
 import {
   ResizablePanelGroup,
@@ -18,7 +27,9 @@ import {
   widthOnShow,
 } from './lib/inspectorWidths';
 import { headerModelName } from './lib/modelName';
-import { RightInspector } from './components/rightInspector/RightInspector';
+import { RightInspector, type SidebarMotion } from './components/rightInspector/RightInspector';
+import { whenFramesSettle } from './lib/framesSettled';
+import { cn } from './lib/cn';
 const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
 import { useSetup } from './stores/setupStore';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
@@ -89,6 +100,11 @@ const MAIN_MIN_PX = 280;
 const SHELL_PANELS = ['sidebar', 'main'];
 const SHELL_PANELS_TASK = ['sidebar', 'main', 'changes'];
 const isMac = window.electronAPI.getPlatform() === 'darwin';
+/** How long expanding waits for an editor opening for the first time to
+ *  mount before it eases anyway (it then fades in when it arrives). */
+const EDITOR_MOUNT_WAIT_MS = 300;
+/** The most the sidebar's ease waits for its new layout's long frames. */
+const SIDEBAR_SETTLE_CAP_MS = 250;
 
 export function App() {
   // Projects/tasks domain state lives in projectsStore; subscribe via selectors.
@@ -1032,27 +1048,34 @@ export function App() {
 
   // Expanding eases the task sidebar to its expanded width, going narrow back
   // to its narrow one, each remembered. One panel, resized: swapping panels
-  // re-registers them, and the width jumps. The editor first mounts once the
-  // width settles, so Monaco's start-up and layout don't stall the ease;
-  // then it stays mounted (out of sight while narrow) until it closes.
+  // re-registers them, and the width jumps.
+  //
+  // The motion is planned so nothing arrives mid-ease (D177): the sidebar
+  // takes its expanded layout first (split, the editor mounted but clear),
+  // held at the expanded width and clipped by the panel, so its content
+  // slides with the panel's edge instead of reflowing every frame. The ease
+  // then starts, and the editor fades in over it (out, going narrow). Going
+  // narrow, the split holds until the ease ends. An editor opening for the
+  // first time is waited for (up to EDITOR_MOUNT_WAIT_MS), so Monaco's
+  // start-up lands before the ease, not in it.
   useEffect(() => {
     inspectorExpandedRef.current = expanded;
   }, [expanded]);
-  const editorOpen = !!inlineEditor;
-  const [editorReady, setEditorReady] = useState(expanded);
-  useEffect(() => {
-    if (!editorOpen) setEditorReady(false);
-    else if (!expanded) setEditorReady(true);
-  }, [editorOpen, expanded]);
+  const [sidebarMotion, setSidebarMotion] = useState<SidebarMotion | null>(null);
+  const editorMounted = useRef(false);
+  const onEditorMounted = useRef<(() => void) | null>(null);
+  const handleEditorMounted = useCallback((mounted: boolean) => {
+    editorMounted.current = mounted;
+    if (mounted) onEditorMounted.current?.();
+  }, []);
   const prevExpandedRef = useRef(expanded);
-  useEffect(() => {
+  // A layout effect: the held layout must land with the render that
+  // expands, or the editor shows for a frame before it clears.
+  useLayoutEffect(() => {
     if (prevExpandedRef.current === expanded) return;
     prevExpandedRef.current = expanded;
     const panel = changesPanelRef.current;
-    if (!panel) {
-      if (expanded) setEditorReady(true);
-      return;
-    }
+    if (!panel) return;
     const collapsed = panel.isCollapsed();
     if (!collapsed) {
       saveInspectorWidth(expanded ? 'narrow' : 'expanded', panel.getSize().asPercentage);
@@ -1062,26 +1085,48 @@ export function App() {
       collapsed,
       widths: loadInspectorWidths(),
     });
-    if (width === null) return;
-    // The ease starts after the sidebar's new content has painted, from a
-    // task of its own. A transition's clock starts at the frame its style
-    // change lands in: started in the long frame that splits or unsplits the
-    // sidebar (the editor shown or hidden, the list remounted), or in a frame
-    // whose rAF does the re-render, it runs on unseen, and its ease-out has
-    // covered a third to a half of the distance by the first frame drawn.
+    if (width === null) {
+      setSidebarMotion(null);
+      return;
+    }
+    const groupPx =
+      inspectorBodyRef.current?.closest('[data-slot="resizable-panel-group"]')?.clientWidth ??
+      window.innerWidth;
+    // The expanded width: where expanding goes, where narrowing comes from.
+    const heldPx = Math.round(Math.max(panel.getSize().inPixels, (groupPx * width) / 100));
+    const to = expanded ? 'expanded' : 'narrow';
+    setSidebarMotion({ width: heldPx, to, phase: 'held' });
+
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const raf = requestAnimationFrame(() => {
+    let cancelSettle = () => {};
+    const ease = () => {
+      setChangesAnimating(true);
+      panel.resize(`${width}%`);
+      setSidebarMotion({ width: heldPx, to, phase: 'easing' });
       timer = setTimeout(() => {
-        setChangesAnimating(true);
-        panel.resize(`${width}%`);
-        timer = setTimeout(() => {
-          setChangesAnimating(false);
-          if (expanded) setEditorReady(true);
-        }, panelEaseMs());
-      });
-    });
+        setChangesAnimating(false);
+        setSidebarMotion(null);
+      }, panelEaseMs());
+    };
+    // The ease starts once the held layout has painted and the long frames
+    // that lay it out (and mount the editor) are over, from a task of its
+    // own (D112): a transition's clock starts at the frame its style change
+    // lands in, and an ease-out covers half its distance in its first third.
+    const settleThenEase = () => {
+      cancelSettle = whenFramesSettle(ease, SIDEBAR_SETTLE_CAP_MS);
+    };
+    if (!expanded || editorMounted.current) settleThenEase();
+    else {
+      onEditorMounted.current = () => {
+        onEditorMounted.current = null;
+        clearTimeout(timer);
+        settleThenEase();
+      };
+      timer = setTimeout(() => onEditorMounted.current?.(), EDITOR_MOUNT_WAIT_MS);
+    }
     return () => {
-      cancelAnimationFrame(raf);
+      onEditorMounted.current = null;
+      cancelSettle();
       clearTimeout(timer);
     };
   }, [expanded, setChangesAnimating]);
@@ -1423,33 +1468,50 @@ export function App() {
               {/* Collapsed, it stays mounted out of sight (the editor's tabs
                   and unsaved edits, the terminals) and out of reach of the
                   keyboard; Monaco and xterm re-lay out once shown. */}
-              <div ref={inspectorBodyRef} className={changesPanelCollapsed ? 'hidden' : 'h-full'}>
-                <RightInspector
-                  key={activeTask.id}
-                  task={activeTask}
-                  modelName={headerModelName(
-                    statusLineData[activeTask.id]?.model,
-                    activeTask.model,
+              {/* Held at the expanded width while it eases (`sidebarMotion`),
+                  clipped here (the panel itself would scroll). */}
+              <div className="h-full overflow-hidden">
+                <div
+                  ref={inspectorBodyRef}
+                  className={cn(
+                    changesPanelCollapsed ? 'hidden' : 'h-full',
+                    sidebarMotion && 'w-(--held-width)',
                   )}
-                  rateLimits={latestRateLimits}
-                  burns={burns}
-                  contextUsage={contextUsage[activeTask.id]}
-                  diff={editorReady ? (inlineEditor?.target ?? null) : null}
-                  expanded={expanded}
-                  terminalTheme={resolvedTerminalTheme}
-                  isDark={theme === 'dark'}
-                  onViewDiff={handleViewDiff}
-                  onOpenEditor={() => {
-                    useEditors.getState().open({ cwd: activeTask.path, filePath: '' });
-                  }}
-                  onNarrow={narrowEditor}
-                  onCloseDiff={() => closeEditorOf(activeTask.path)}
-                  onCommitFinished={refreshActiveGitStatus}
-                  shellDrawerRef={shellDrawerPanelRef}
-                  onTuiActiveChange={handleTuiPanelActive}
-                  onTaskSettings={() => handleTaskSettings(activeTask.id)}
-                  onMinWidth={setInspectorMinPx}
-                />
+                  style={
+                    sidebarMotion
+                      ? ({ '--held-width': `${sidebarMotion.width}px` } as React.CSSProperties)
+                      : undefined
+                  }
+                >
+                  <RightInspector
+                    key={activeTask.id}
+                    task={activeTask}
+                    modelName={headerModelName(
+                      statusLineData[activeTask.id]?.model,
+                      activeTask.model,
+                    )}
+                    rateLimits={latestRateLimits}
+                    burns={burns}
+                    contextUsage={contextUsage[activeTask.id]}
+                    diff={inlineEditor?.target ?? null}
+                    expanded={expanded}
+                    motion={sidebarMotion}
+                    onEditorMounted={handleEditorMounted}
+                    terminalTheme={resolvedTerminalTheme}
+                    isDark={theme === 'dark'}
+                    onViewDiff={handleViewDiff}
+                    onOpenEditor={() => {
+                      useEditors.getState().open({ cwd: activeTask.path, filePath: '' });
+                    }}
+                    onNarrow={narrowEditor}
+                    onCloseDiff={() => closeEditorOf(activeTask.path)}
+                    onCommitFinished={refreshActiveGitStatus}
+                    shellDrawerRef={shellDrawerPanelRef}
+                    onTuiActiveChange={handleTuiPanelActive}
+                    onTaskSettings={() => handleTaskSettings(activeTask.id)}
+                    onMinWidth={setInspectorMinPx}
+                  />
+                </div>
               </div>
             </ResizablePanel>
           </>
