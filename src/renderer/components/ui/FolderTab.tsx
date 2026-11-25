@@ -15,6 +15,16 @@ export const sheetSurface = 'bg-(--sheet-bg,var(--color-well))';
  *  the sheet's top edge, 1px over, and keeps them off its 12px corners. */
 export const folderSheet = cn('overflow-hidden rounded-xl border border-line', sheetSurface);
 
+/** A closed folder's box: 28px tall, 1px off the strip's foot. */
+const closedBand = 'mb-px h-7';
+
+/** Where a strip's other controls (the editor's close, the sidebar's Details)
+ *  sit: a closed folder's box, so their centre line is the labels'. */
+export const folderStripBand = cn('self-end', closedBand);
+
+/** A wrapper that puts one such control there. */
+export const folderStripSlot = cn('flex shrink-0 items-center', folderStripBand);
+
 const folderTabVariants = cva(
   cn(
     'group/tab relative flex min-w-11 max-w-48 shrink-0 cursor-pointer items-center rounded-t-lg pr-4 pl-3 select-none',
@@ -30,7 +40,7 @@ const folderTabVariants = cva(
       // sheet by 1px). The rest sit behind on the chrome, and lift on hover.
       active: {
         true: cn('z-10 h-8 border border-b-0 border-line text-ink', sheetSurface),
-        false: 'mb-px h-7 text-ink-2 hover:-translate-y-px hover:bg-hover hover:text-ink',
+        false: cn(closedBand, 'text-ink-2 hover:-translate-y-px hover:bg-hover hover:text-ink'),
       },
       // The open folder of a stack that isn't focused: still open, quieter.
       muted: { true: '', false: '' },

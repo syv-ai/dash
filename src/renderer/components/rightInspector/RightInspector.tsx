@@ -22,7 +22,7 @@ import { TaskDetails } from './TaskDetails';
 import { IconButton } from '../ui/IconButton';
 import { cn } from '../../lib/cn';
 import { FolderTabs } from '../ui/FolderTabs';
-import { folderSheet } from '../ui/FolderTab';
+import { folderSheet, folderStripBand, folderStripSlot } from '../ui/FolderTab';
 import { CountBadge } from '../ui/CountBadge';
 import {
   ResizableHandle,
@@ -507,8 +507,14 @@ export function RightInspector({
               ]
         }
       />
-      {/* The padding keeps focus outlines inside the clip. */}
-      <div className="flex min-w-0 flex-auto items-center gap-0.5 self-stretch overflow-hidden px-1">
+      {/* On the labels' line. It clips across only, its padding keeping
+          focus outlines inside the clip. */}
+      <div
+        className={cn(
+          'flex min-w-0 flex-auto items-center gap-0.5 overflow-x-clip px-1',
+          folderStripBand,
+        )}
+      >
         {showComments && (
           <div className="flex shrink-0 items-center">
             <IconButton
@@ -532,15 +538,16 @@ export function RightInspector({
           </div>
         )}
       </div>
-      <IconButton
-        size="sm"
-        className="shrink-0"
-        title={segment === 'details' ? 'Hide details' : 'Details'}
-        pressed={segment === 'details'}
-        onClick={toggleDetails}
-      >
-        <Info size={14} strokeWidth={1.8} />
-      </IconButton>
+      <div className={folderStripSlot}>
+        <IconButton
+          size="sm"
+          title={segment === 'details' ? 'Hide details' : 'Details'}
+          pressed={segment === 'details'}
+          onClick={toggleDetails}
+        >
+          <Info size={14} strokeWidth={1.8} />
+        </IconButton>
+      </div>
     </div>
   );
 

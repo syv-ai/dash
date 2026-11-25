@@ -1,6 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { Pin, X } from 'lucide-react';
-import { FolderTab } from '../ui/FolderTab';
+import { FolderTab, folderStripSlot } from '../ui/FolderTab';
 import { cn } from '../../lib/cn';
 import {
   ContextMenu,
@@ -66,7 +66,7 @@ export function EditorTabStrip({
 
   return (
     <div className="@container/strip relative z-10 -mb-px flex h-9 shrink-0 items-center gap-0.5 pr-1">
-      {leading}
+      {leading && <div className={folderStripSlot}>{leading}</div>}
       {/* Margins, not padding, keep tabs off the sheet's 12px corners so a
           tab only ever meets its flat edge, scrolled or not: ml-3 (ml-1 after
           the leading toggle, which clears it already); mr-2 plus the pr-1. */}
@@ -144,7 +144,7 @@ export function EditorTabStrip({
           );
         })}
       </div>
-      {trailing}
+      {trailing && <div className={folderStripSlot}>{trailing}</div>}
     </div>
   );
 }
