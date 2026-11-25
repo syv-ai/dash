@@ -4,8 +4,8 @@ import type { ITheme as XtermTheme } from '@xterm/xterm';
 // changes — Monaco caches themes by name, and the EditorPane's theme effect
 // only re-applies when `themeName` actually changes, so renaming forces a
 // fresh defineTheme + setTheme on already-open editors.
-export const MONACO_THEME_DARK = 'dash-terminal-dark-v9';
-export const MONACO_THEME_LIGHT = 'dash-terminal-light-v9';
+export const MONACO_THEME_DARK = 'dash-terminal-dark-v10';
+export const MONACO_THEME_LIGHT = 'dash-terminal-light-v10';
 
 /** HSL channels ("220 4% 47%", optionally "/ 0.06") as #rrggbbaa. */
 export function hslChannelsToHex(channels: string, alpha = 1): string | null {
@@ -104,18 +104,19 @@ export function defineMonacoThemeFromTerminal(
       // borders so the diff editor doesn't sprout its own backdrop.
       'diffEditor.diagonalFill': '#00000000',
       'diffEditor.border': '#00000000',
-      // Insert/remove backgrounds. Monaco's defaults are ~20% alpha
-      // (#9ccc2c33 / #ff000033) which reads as a loud highlighter; we keep the
-      // changed *text* a touch stronger (~18–20%) than the full *line* wash
-      // (~12–14%) so syntax colors stay legible while the region reads clearly.
-      'diffEditor.insertedTextBackground': isDark ? '#3fb9502e' : '#2da14433',
-      'diffEditor.removedTextBackground': isDark ? '#f850492e' : '#cf222e33',
-      'diffEditor.insertedLineBackground': isDark ? '#3fb95020' : '#2da14424',
-      'diffEditor.removedLineBackground': isDark ? '#f8504920' : '#cf222e24',
-      // The gutter and overview ruler mark a changed line in the loc pair
-      // (index.css), firmer than the line wash so a change shows at a glance.
-      'diffEditorGutter.insertedLineBackground': roleColor('--loc-add', '#3fb95040', 0.3),
-      'diffEditorGutter.removedLineBackground': roleColor('--loc-del', '#f8504940', 0.3),
+      // Insert/remove washes, from the loc pair (index.css). Monaco paints
+      // both behind the text (view overlays), but on a wholly added line the
+      // text wash stacks on the line wash, so each stays faint: together
+      // ~16% (was ~28–31%), and code on an added line keeps ~11:1 (was ~9).
+      // A changed run inside a line still reads (17% on 7%).
+      'diffEditor.insertedLineBackground': roleColor('--loc-add', '#3fb95012', 0.07),
+      'diffEditor.removedLineBackground': roleColor('--loc-del', '#f8504912', 0.07),
+      'diffEditor.insertedTextBackground': roleColor('--loc-add', '#3fb9501a', 0.1),
+      'diffEditor.removedTextBackground': roleColor('--loc-del', '#f850491a', 0.1),
+      // The line-number gutter of a changed line: a step firmer than the
+      // line wash, so a change shows at a glance without a slab.
+      'diffEditorGutter.insertedLineBackground': roleColor('--loc-add', '#3fb95024', 0.14),
+      'diffEditorGutter.removedLineBackground': roleColor('--loc-del', '#f8504924', 0.14),
       'diffEditorOverview.insertedForeground': roleColor('--loc-add', '#3fb950b3', 0.7),
       'diffEditorOverview.removedForeground': roleColor('--loc-del', '#f85049b3', 0.7),
       // Peek (definitions, references): the raised surface, hairline edges,
