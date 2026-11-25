@@ -1,5 +1,6 @@
 import { Check, Minus } from 'lucide-react';
 import { cn } from '../../lib/cn';
+import { CheckStateIcon } from './CheckStateIcon';
 import { focusRing } from './styles';
 
 /**
@@ -55,17 +56,18 @@ function Mark({ checked }: { checked: boolean | 'mixed' }) {
   return null;
 }
 
-/** The same box, read-only: a ticked item in rendered text (a Markdown task
- *  list), not a control. */
+/** The same box, read-only: an item in rendered text (a Markdown task list),
+ *  not a control. Done, it is the passing check's solid green tick
+ *  (`CheckStateIcon`); open, the neutral ring. */
 export function CheckboxMark({ checked, className }: { checked: boolean; className?: string }) {
   return (
     <span
       role="checkbox"
       aria-checked={checked}
       aria-readonly
-      className={cn(boxClass(checked), className)}
+      className={cn(checked ? 'inline-flex' : boxClass(false), className)}
     >
-      <Mark checked={checked} />
+      {checked && <CheckStateIcon state="passing" />}
     </span>
   );
 }
