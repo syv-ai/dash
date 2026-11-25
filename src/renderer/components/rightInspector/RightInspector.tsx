@@ -485,7 +485,7 @@ export function RightInspector({
           Past all that the middle clips at its end, short of Details and ✕.
           The padding keeps focus outlines inside the clip. */}
       <div className="flex min-w-0 flex-1 items-center gap-0.5 self-stretch overflow-hidden px-1">
-        <div className={cn('-m-1 min-w-18 overflow-hidden p-1', !expanded && 'flex-1')}>
+        <div className={cn('-m-1 min-w-18 overflow-hidden p-1', !expanded && 'flex-auto')}>
           <Segmented<Segment>
             aria-label="Task sidebar view"
             size="sm"
@@ -540,7 +540,7 @@ export function RightInspector({
             </DropdownMenu>
           </div>
         )}
-        <div className="flex min-w-0 flex-1 justify-end overflow-hidden">
+        <div className="ml-auto flex shrink-0 justify-end">
           <PrButton
             relevant={taskPrs.relevant}
             mode={mode}

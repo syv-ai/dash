@@ -51,7 +51,9 @@ export function PrButton({
         dismissLabel="Exit review"
         onDismiss={onExit}
       >
-        <span className="tabular-nums">Reviewing #{mode.number}</span>
+        {/* The word gives way first in a narrow row; the views keep their room. */}
+        <span className="@max-md/sidehead:hidden">Reviewing </span>
+        <span className="tabular-nums">#{mode.number}</span>
       </Pill>
     );
   }
