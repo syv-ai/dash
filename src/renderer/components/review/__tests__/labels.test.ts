@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { PrReviewer } from '../../../../shared/types';
-import { diffTotals, mergeVerb, prDateTime, reviewerGroups, threadsLine } from '../labels';
+import {
+  commentRole,
+  diffTotals,
+  mergeVerb,
+  prDateTime,
+  reviewerGroups,
+  threadsLine,
+} from '../labels';
 
 describe('diffTotals', () => {
   it('counts the files and totals their lines', () => {
@@ -58,5 +65,21 @@ describe('mergeVerb', () => {
     expect(mergeVerb('draft')).toBe('wants to merge');
     expect(mergeVerb('merged')).toBe('merged');
     expect(mergeVerb('closed')).toBe('wanted to merge');
+  });
+});
+
+describe('commentRole', () => {
+  const pr = { author: 'Ada', reviewers: [{ name: 'bob' }, { name: 'ada' }] };
+
+  it("names the PR's author, even when also listed as a reviewer", () => {
+    expect(commentRole('ada', pr)).toBe('Author');
+  });
+
+  it('names an assigned or requested reviewer', () => {
+    expect(commentRole('Bob', pr)).toBe('Reviewer');
+  });
+
+  it('says nothing of anyone else', () => {
+    expect(commentRole('carol', pr)).toBeNull();
   });
 });

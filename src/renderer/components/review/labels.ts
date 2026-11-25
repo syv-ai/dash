@@ -11,6 +11,19 @@ import { formatDateTime, type ClockOptions } from '../../utils/format';
 /** The forge's name, as people say it. */
 export const providerName = (p: PrProvider): string => (p === 'ado' ? 'Azure DevOps' : 'GitHub');
 
+/** What a comment's author is to the PR, for the badge beside their name:
+ *  "Author" for whoever opened it (first, should they also be listed as a
+ *  reviewer), "Reviewer" for anyone assigned or requested to review, else
+ *  nothing. Forge logins compare case-insensitively. */
+export function commentRole(
+  author: string,
+  pr: { author: string; reviewers: readonly Pick<PrReviewer, 'name'>[] },
+): 'Author' | 'Reviewer' | null {
+  const who = author.toLowerCase();
+  if (pr.author.toLowerCase() === who) return 'Author';
+  return pr.reviewers.some((r) => r.name.toLowerCase() === who) ? 'Reviewer' : null;
+}
+
 /** Who stands where on the PR, said as GitHub's sidebar does: "Approved by",
  *  "Changes requested by", "Review requested from"; ADO's votes add theirs. */
 const REVIEWER_LEADS: Record<PrReviewer['state'], string> = {

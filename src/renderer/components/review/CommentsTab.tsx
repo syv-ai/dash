@@ -169,7 +169,7 @@ function DraftCard({
         draft={c}
         mentions={mentions}
         place={
-          <span className="type-caption min-w-0 truncate">
+          <span className="min-w-0 truncate">
             <TextLink
               quiet
               title={c.filePath}
@@ -191,12 +191,8 @@ function SummaryCard({ text }: { text: string }) {
     <Card>
       <CommentFrame
         avatar={<Avatar name="You" icon={Pencil} dashed />}
-        header={
-          <>
-            <span className="type-heading">Review summary</span>
-            <DraftBadge />
-          </>
-        }
+        name="Review summary"
+        badge={<DraftBadge />}
         footer={<p className="type-caption">Posts when you finish the review.</p>}
       >
         <Markdown text={text} />

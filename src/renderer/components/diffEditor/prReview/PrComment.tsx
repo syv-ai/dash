@@ -4,7 +4,7 @@ import { formatTimeAgo } from '../../../../shared/relativeTime';
 import type { DiffComment, PrReactionContent, PrReviewComment } from '../../../../shared/types';
 import type { ReplyPoster } from '../../../stores/prReviewStore';
 import { DraftActions, DraftEditor } from '../../review/DraftActions';
-import { providerName } from '../../review/labels';
+import { commentRole, providerName } from '../../review/labels';
 import { Avatar } from '../../ui/Avatar';
 import { Badge } from '../../ui/Badge';
 import { IconButton } from '../../ui/IconButton';
@@ -16,19 +16,24 @@ import type { PrThreadContext } from './usePrThreadContext';
 
 /**
  * One comment's layout, posted or draft alike: the avatar in a gutter, then
- * a header line (who · when · status, actions at its end), the body, and a
- * footer (reactions, or a draft's post buttons). Everything right of the
- * gutter shares one left edge.
+ * a name line (who, a badge saying what they are to the PR or that it isn't
+ * posted; actions at its end), a quiet subtitle under it (when, or where a
+ * draft sits), the body, and a footer (reactions, or a draft's post buttons).
+ * Everything right of the gutter shares one left edge.
  */
 export function CommentFrame({
   avatar,
-  header,
+  name,
+  badge,
+  subtitle,
   actions,
   children,
   footer,
 }: {
   avatar: ReactNode;
-  header: ReactNode;
+  name: ReactNode;
+  badge?: ReactNode;
+  subtitle?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
@@ -37,11 +42,15 @@ export function CommentFrame({
     <div className="flex min-w-0 gap-2.5">
       <div className="shrink-0">{avatar}</div>
       <div className="grid min-w-0 flex-1 gap-1.5">
-        <div className="flex min-h-6 min-w-0 items-center gap-2">
-          <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            {header}
+        <div className="grid min-w-0">
+          <div className="flex min-h-6 min-w-0 items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="type-heading min-w-0 truncate">{name}</span>
+              {badge}
+            </div>
+            {actions && <div className="-my-0.5 flex shrink-0 items-center">{actions}</div>}
           </div>
-          {actions && <div className="-my-0.5 flex shrink-0 items-center">{actions}</div>}
+          {subtitle && <div className="type-caption flex min-w-0">{subtitle}</div>}
         </div>
         <div className="type-body">{children}</div>
         {footer && <div className="pt-1">{footer}</div>}
@@ -51,7 +60,7 @@ export function CommentFrame({
 }
 
 /** A comment on the forge: who wrote it (to their profile where the forge
- *  has one), when, a link to it there, its text and its reactions. */
+ *  has one) and what they are to the PR (`commentRole`), when, a link to it there, its text and its reactions. */
 export function PostedComment({
   comment: c,
   context,
@@ -61,27 +70,27 @@ export function PostedComment({
 }) {
   const provider = context.review.provider;
   const at = Date.parse(c.createdAt);
+  const role = commentRole(c.author, context.review);
   const react = (content: PrReactionContent, on: boolean) => context.react(c, content, on);
   return (
     <CommentFrame
       avatar={<Avatar name={c.author} />}
-      header={
-        <>
-          <span className="type-heading min-w-0 truncate">
-            {c.authorUrl ? (
-              <TextLink quiet href={c.authorUrl} title={`${c.author} on ${providerName(provider)}`}>
-                {c.author}
-              </TextLink>
-            ) : (
-              c.author
-            )}
+      name={
+        c.authorUrl ? (
+          <TextLink quiet href={c.authorUrl} title={`${c.author} on ${providerName(provider)}`}>
+            {c.author}
+          </TextLink>
+        ) : (
+          c.author
+        )
+      }
+      badge={role && <Badge size="sm">{role}</Badge>}
+      subtitle={
+        at > 0 && (
+          <span className="whitespace-nowrap" title={new Date(at).toLocaleString()}>
+            {formatTimeAgo(at / 1000, Date.now() / 1000)}
           </span>
-          {at > 0 && (
-            <span className="type-caption whitespace-nowrap" title={new Date(at).toLocaleString()}>
-              {formatTimeAgo(at / 1000, Date.now() / 1000)}
-            </span>
-          )}
-        </>
+        )
       }
       actions={
         <>
@@ -144,13 +153,9 @@ export function DraftComment({
   return (
     <CommentFrame
       avatar={<Avatar name={agent ? 'Agent' : 'You'} icon={agent ? Bot : Pencil} dashed />}
-      header={
-        <>
-          <span className="type-heading">{agent ? 'Agent' : 'You'}</span>
-          <DraftBadge />
-          {place}
-        </>
-      }
+      name={agent ? 'Agent' : 'You'}
+      badge={<DraftBadge />}
+      subtitle={place}
       actions={<DraftActions comment={draft} onEdit={() => setEditing(true)} />}
       footer={footer}
     >
