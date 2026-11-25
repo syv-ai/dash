@@ -182,7 +182,8 @@ export function useEditorWorkspace({
     () => (activeTaskId ? (gitStatus?.files ?? []) : []),
     [gitStatus, activeTaskId],
   );
-  const data = useEditorViewData(cwd, view, workingFiles, git, {
+  const headSha = activeTaskId ? (gitStatus?.headSha ?? null) : null;
+  const data = useEditorViewData(cwd, view, workingFiles, headSha, git, {
     files: editorOpen || treeShown,
     commits: historyShown || editorOpen,
   });

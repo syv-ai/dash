@@ -31,11 +31,14 @@ export interface ViewDataEnabled {
  *  paths, commits) behind one hook. Owns no view/selection
  *  state — those stay in the workspace; this just turns (cwd, view,
  *  workingFiles) into the merged data the sidebar + pane consume. Without
- *  `git` (a folder that is no task's worktree) only its files are listed. */
+ *  `git` (a folder that is no task's worktree) only its files are listed.
+ *  The commit list reloads when `headSha` moves (a commit or checkout made
+ *  anywhere), showing the old list until the new one is in. */
 export function useEditorViewData(
   cwd: string,
   view: EditorView,
   workingFiles: FileChange[],
+  headSha: string | null,
   git: boolean,
   enabled: ViewDataEnabled = { files: true, commits: true },
 ): EditorViewData {
@@ -69,7 +72,7 @@ export function useEditorViewData(
 
   const commits = useAsyncResource<CommitSummary[]>(
     () => listCommits(cwd, 50),
-    [cwd, git, enabled.commits],
+    [cwd, git, enabled.commits, headSha],
     NO_COMMITS,
     git && enabled.commits,
   );

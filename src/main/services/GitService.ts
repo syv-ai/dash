@@ -205,10 +205,24 @@ export function parsePorcelainV2Z(raw: string): FileChange[] {
         deletions: 0,
       });
     }
-    // '#' header lines (only with --branch) and '!' ignored lines (only with
-    // --ignored) are never requested here, so anything else is dropped.
+    // '#' header lines (with --branch; see parseBranchOid) and '!' ignored
+    // lines (never requested here) are dropped.
   }
   return files;
+}
+
+/**
+ * HEAD's commit from `git status --porcelain=v2 --branch` output: its
+ * `# branch.oid` header, detached HEAD included. Null before the first
+ * commit (`(initial)`) or without the header.
+ */
+export function parseBranchOid(raw: string): string | null {
+  for (const rec of raw.split('\0')) {
+    if (!rec.startsWith('# branch.oid ')) continue;
+    const oid = rec.slice('# branch.oid '.length).trim();
+    return oid && oid !== '(initial)' ? oid : null;
+  }
+  return null;
 }
 
 export class GitService {
@@ -371,8 +385,8 @@ export class GitService {
     const branch = await this.getBranch(cwd);
     const { hasUpstream, ahead, behind } = await this.getAheadBehind(cwd);
     const upstream = hasUpstream && branch ? await this.getUpstream(cwd, branch) : null;
-    const files = await this.getFileChanges(cwd);
-    return { branch, hasUpstream, upstream, ahead, behind, files };
+    const { headSha, files } = await this.getFileChanges(cwd);
+    return { branch, headSha, hasUpstream, upstream, ahead, behind, files };
   }
 
   /**
@@ -503,19 +517,31 @@ export class GitService {
   }
 
   /**
-   * Get list of changed files with their status and stat counts.
+   * HEAD's commit and the changed files with their status and stat counts,
+   * from one `git status`.
    */
-  static async getFileChanges(cwd: string): Promise<FileChange[]> {
+  private static async getFileChanges(
+    cwd: string,
+  ): Promise<{ headSha: string | null; files: FileChange[] }> {
+    let headSha: string | null;
     let files: FileChange[];
 
     // Staged + unstaged changes via porcelain v2, NUL-delimited so paths with
-    // spaces/quotes/non-ASCII bytes survive intact (see parsePorcelainV2Z).
+    // spaces/quotes/non-ASCII bytes survive intact (see parsePorcelainV2Z);
+    // `--branch` adds the header that names HEAD's commit.
     try {
-      const out = await git(cwd, ['status', '--porcelain=v2', '-z', '--untracked-files=all']);
+      const out = await git(cwd, [
+        'status',
+        '--porcelain=v2',
+        '--branch',
+        '-z',
+        '--untracked-files=all',
+      ]);
+      headSha = parseBranchOid(out);
       files = parsePorcelainV2Z(out);
     } catch {
       // Not a git repo or git error
-      return [];
+      return { headSha: null, files: [] };
     }
 
     // Hide only the one Dash-managed file: .claude/settings.local.json holds the
@@ -529,7 +555,7 @@ export class GitService {
     // Count lines in untracked files (numstat doesn't cover them)
     await this.enrichUntrackedLineCounts(cwd, filtered);
 
-    return filtered;
+    return { headSha, files: filtered };
   }
 
   /**

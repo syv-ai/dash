@@ -462,6 +462,8 @@ export interface FileChange {
 
 export interface GitStatus {
   branch: string | null;
+  /** HEAD's commit, detached or not; null before the first commit. */
+  headSha: string | null;
   hasUpstream: boolean;
   /** The branch the checkout tracks, when its remote-tracking ref exists
    *  (the branch is on the remote as far as the last fetch knows). */

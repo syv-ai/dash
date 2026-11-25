@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parsePorcelainV2Z } from '../GitService';
+import { parseBranchOid, parsePorcelainV2Z } from '../GitService';
 import type { FileChange } from '../../../shared/types';
 
 /**
@@ -106,5 +106,31 @@ describe('parsePorcelainV2Z', () => {
     expect(find(files, 'a.ts', false)).toMatchObject({ status: 'modified' });
     expect(find(files, 'b new.ts', true)).toMatchObject({ status: 'renamed', oldPath: 'b old.ts' });
     expect(find(files, 'c.ts', false)).toMatchObject({ status: 'untracked' });
+  });
+});
+
+describe('parseBranchOid', () => {
+  const sha = 'a'.repeat(40);
+
+  it("reads HEAD's commit from the --branch header", () => {
+    const out = blob(
+      `# branch.oid ${sha}`,
+      '# branch.head main',
+      '1 .M N... 100644 100644 100644 aaa bbb a.ts',
+    );
+    expect(parseBranchOid(out)).toBe(sha);
+  });
+
+  it('reads it on a detached HEAD', () => {
+    expect(parseBranchOid(blob(`# branch.oid ${sha}`, '# branch.head (detached)'))).toBe(sha);
+  });
+
+  it('is null before the first commit, or without the header', () => {
+    expect(parseBranchOid(blob('# branch.oid (initial)', '# branch.head main'))).toBeNull();
+    expect(parseBranchOid(blob('? a.ts'))).toBeNull();
+  });
+
+  it('leaves the header out of the files', () => {
+    expect(parsePorcelainV2Z(blob(`# branch.oid ${sha}`, '# branch.head main'))).toEqual([]);
   });
 });

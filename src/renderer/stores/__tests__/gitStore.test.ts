@@ -39,6 +39,7 @@ const task = (id: string, projectId: string, over: Partial<Task> = {}): Task =>
   }) as Task;
 const status = (over: Partial<GitStatus> = {}): GitStatus => ({
   branch: 'feature',
+  headSha: 'a1',
   hasUpstream: true,
   upstream: { remote: 'origin', branch: 'feature' },
   ahead: 0,
@@ -424,9 +425,16 @@ describe('gitStore PR re-detection when HEAD moves', () => {
     };
     expect(headMoved(status(), status({ files: [edit] }))).toBe(false);
     expect(headMoved(status(), status({ branch: 'other' }))).toBe(true);
+    expect(headMoved(status(), status({ headSha: 'b2' }))).toBe(true);
     expect(headMoved(status(), status({ ahead: 1 }))).toBe(true);
     expect(headMoved(status(), status({ behind: 1 }))).toBe(true);
     expect(headMoved(status({ hasUpstream: false }), status())).toBe(true);
+  });
+
+  it('tells statuses apart by HEAD, so a moved HEAD reaches subscribers', async () => {
+    const { sameGitStatus } = await import('../gitStore');
+    expect(sameGitStatus(status(), status())).toBe(true);
+    expect(sameGitStatus(status(), status({ headSha: 'b2' }))).toBe(false);
   });
 
   it("refetches the active task's PRs once a burst of HEAD moves settles", async () => {

@@ -75,10 +75,11 @@ export interface GitActions {
 
 export type GitStore = GitState & GitActions;
 
-/** Whether two statuses hold the same branch, counts and file changes, in order. */
+/** Whether two statuses hold the same branch, HEAD, counts and file changes, in order. */
 export function sameGitStatus(a: GitStatus, b: GitStatus): boolean {
   if (
     a.branch !== b.branch ||
+    a.headSha !== b.headSha ||
     a.hasUpstream !== b.hasUpstream ||
     a.ahead !== b.ahead ||
     a.behind !== b.behind ||
@@ -100,13 +101,15 @@ export function sameGitStatus(a: GitStatus, b: GitStatus): boolean {
 }
 
 /**
- * Whether HEAD stands somewhere else for the task's PRs: another branch, or
- * commits made, pulled or pushed (ahead / behind / upstream moved). A PR may
- * have opened, been pushed to or merged since, so its lookup is stale.
+ * Whether HEAD stands somewhere else for the task's PRs: another branch or
+ * commit (made, amended, reset, pulled), or the upstream moved (ahead /
+ * behind). A PR may have opened, been pushed to or merged since, so its
+ * lookup is stale.
  */
 export function headMoved(a: GitStatus, b: GitStatus): boolean {
   return (
     a.branch !== b.branch ||
+    a.headSha !== b.headSha ||
     a.hasUpstream !== b.hasUpstream ||
     a.ahead !== b.ahead ||
     a.behind !== b.behind

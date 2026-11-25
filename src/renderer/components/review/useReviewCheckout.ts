@@ -8,8 +8,8 @@ import { checkoutNotice, nextLiveAt, reviewCheckout, type ReviewCheckout } from 
 /**
  * What the diff's right side is in the task's review mode (see
  * `reviewCheckout`), and the notice saying how the checkout differs from the
- * PR. The checkout is measured against the PR head in main, again on each
- * git status change; unsaved edits in the editor count as uncommitted
+ * PR. The checkout is measured against the PR head in main, again each time
+ * HEAD moves; unsaved edits in the editor count as uncommitted
  * changes. Out of review mode, or until its PR has loaded: not live, no
  * notice. Its own hook, not `useReviewMode`'s: the editor's workspace takes
  * `live`, and `useReviewMode` takes the workspace.
@@ -22,6 +22,7 @@ export function useReviewCheckout(
   const taskBranch = useTaskBranch(task);
   const branch = status ? status.branch : taskBranch;
   const head = review?.head ?? null;
+  const headSha = status?.headSha ?? null;
   const [facts, setFacts] = useState<{ head: string; at: CheckoutVsHead | null } | null>(null);
 
   useEffect(() => {
@@ -34,8 +35,8 @@ export function useReviewCheckout(
     return () => {
       live = false;
     };
-    // `status` is a trigger: a commit, checkout, pull or push.
-  }, [task.path, head, status]);
+    // `headSha` is a trigger: a commit, checkout, pull or reset.
+  }, [task.path, head, headSha]);
 
   useSyncExternalStore(subscribeDirty, dirtyVersion);
   // Unknown (null) until the task's own status is in: a task switched to
