@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Undo2, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { Loader2, Undo2 } from 'lucide-react';
+import { Button } from '../ui/Button';
 
 interface DiscardFolderConfirmProps {
   folderName: string;
@@ -20,6 +21,7 @@ function splitRelative(fullPath: string, folderBasePath: string) {
     : { rel, base: rel.slice(idx + 1), dir: rel.slice(0, idx + 1) };
 }
 
+/** A folder's discard, confirmed: the files it throws away, then Discard. */
 export function DiscardFolderConfirm({
   folderName,
   folderBasePath,
@@ -28,7 +30,7 @@ export function DiscardFolderConfirm({
   onConfirm,
 }: DiscardFolderConfirmProps) {
   const [busy, setBusy] = useState(false);
-  const totalCount = paths.length;
+  const count = paths.length;
   const items = paths.map((p) => splitRelative(p, folderBasePath));
 
   async function handleConfirm() {
@@ -41,57 +43,33 @@ export function DiscardFolderConfirm({
   }
 
   return (
-    <div className="w-[320px] p-3 flex flex-col gap-2.5">
+    <div className="flex w-80 flex-col gap-2.5 p-3">
       <div>
         <h4 className="type-heading">Discard folder</h4>
-        <p className="text-xs text-muted-fade-80 truncate mt-0.5">
-          {folderName}/{' '}
-          <span className="text-muted-fade-60">
-            · {totalCount} {totalCount === 1 ? 'file' : 'files'}
-          </span>
+        <p className="type-caption mt-0.5 truncate">
+          {folderName}/ · {count} {count === 1 ? 'file' : 'files'}
         </p>
       </div>
-      <div className="max-h-40 overflow-y-auto rounded-md border border-border/40 bg-[hsl(var(--surface-0))] p-1.5 flex flex-col">
+      <div className="flex max-h-40 flex-col overflow-y-auto rounded-md bg-well p-1.5">
         {items.map((item) => (
-          <div
-            key={item.rel}
-            className="text-xs truncate py-0.5 px-1.5 rounded-md hover:bg-[hsl(var(--surface-2)/0.4)]"
-            title={item.rel}
-          >
-            {item.dir && <span className="text-muted-fade-60">{item.dir}</span>}
-            <span className="text-foreground">{item.base}</span>
+          <div key={item.rel} className="type-body truncate px-1.5 py-0.5" title={item.rel}>
+            {item.dir && <span className="text-ink-3">{item.dir}</span>}
+            {item.base}
           </div>
         ))}
       </div>
-      <div className="flex gap-1.5 justify-end">
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={busy}
-          className="px-3 h-8 rounded-md text-sm text-muted-fade-80 hover:text-foreground hover:bg-accent/60 transition-colors disabled:opacity-40 disabled:pointer-events-none"
-        >
+      <div className="flex justify-end gap-1.5">
+        <Button variant="ghost" onClick={onClose} disabled={busy}>
           Cancel
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            void handleConfirm();
-          }}
-          disabled={busy}
-          className="flex items-center gap-1.5 px-3 h-8 rounded-md text-sm font-medium bg-destructive text-destructive-foreground hover:brightness-110 transition-colors disabled:opacity-70 disabled:pointer-events-none"
-        >
+        </Button>
+        <Button variant="destructive" onClick={() => void handleConfirm()} disabled={busy}>
           {busy ? (
-            <>
-              <Loader2 size={11} strokeWidth={2.5} className="animate-spin" />
-              Discarding…
-            </>
+            <Loader2 size={14} strokeWidth={1.8} className="animate-spin" />
           ) : (
-            <>
-              <Undo2 size={11} strokeWidth={2.5} />
-              Discard
-            </>
+            <Undo2 size={14} strokeWidth={1.8} />
           )}
-        </button>
+          {busy ? 'Discarding…' : 'Discard'}
+        </Button>
       </div>
     </div>
   );
