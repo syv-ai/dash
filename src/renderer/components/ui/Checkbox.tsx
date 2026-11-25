@@ -45,7 +45,8 @@ export function Checkbox({
 const boxClass = (checked: boolean | 'mixed') =>
   cn(
     'inline-flex size-3.5 shrink-0 items-center justify-center rounded-full border transition-colors',
-    checked === false ? 'border-ink-3' : 'border-btn bg-btn text-btn-ink',
+    // Quieter than a button: a faint ring, a mid-grey fill (`ink-3`).
+    checked === false ? 'border-ink-3/60' : 'border-ink-3 bg-ink-3 text-ground',
   );
 
 function Mark({ checked }: { checked: boolean | 'mixed' }) {
