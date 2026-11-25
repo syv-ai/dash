@@ -21,7 +21,13 @@ describe('pickSegment', () => {
     changeCount: number | null = 3,
     listedChanges = 3,
     openThread = true,
-  ) => pickSegment({ current, next, expanded, changeCount, listedChanges, openThread });
+    reselect = true,
+  ) => pickSegment({ current, next, reselect, expanded, changeCount, listedChanges, openThread });
+
+  it('does nothing on a single click of the current view', () => {
+    expect(pick('files', 'files', true, 3, 3, true, false)).toBe('none');
+    expect(pick('files', 'files', false, 3, 3, true, false)).toBe('none');
+  });
 
   it('goes narrow when the expanded view is picked again', () => {
     expect(pick('files', 'files', true)).toBe('narrow');

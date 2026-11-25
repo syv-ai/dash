@@ -85,6 +85,7 @@ export function Segmented<T extends string | number | null>({
   value,
   options,
   onChange,
+  onReselect,
   fullWidth = true,
   size = 'md',
   'aria-label': ariaLabel,
@@ -92,6 +93,10 @@ export function Segmented<T extends string | number | null>({
   value: T;
   options: Array<Option<T>>;
   onChange: (v: T) => void;
+  /** A double click on the option that was already selected when the
+   *  gesture began (a double click that first selects an option doesn't
+   *  count). */
+  onReselect?: (v: T) => void;
   fullWidth?: boolean;
   size?: 'sm' | 'md';
   'aria-label'?: string;
@@ -103,6 +108,9 @@ export function Segmented<T extends string | number | null>({
   // its width (capped by `max-w-full`), so the room it reads never depends on
   // the density it picked.
   const [fullNeed, setFullNeed] = React.useState<number>();
+  // Whether the option pressed first in the current click sequence was the
+  // selected one: a double click reselects only then.
+  const selectedAtPress = React.useRef(false);
 
   React.useLayoutEffect(() => {
     const root = rootRef.current;
@@ -139,6 +147,16 @@ export function Segmented<T extends string | number | null>({
             aria-checked={opt.value === value}
             aria-disabled={opt.disabled || undefined}
             onClick={opt.disabled ? undefined : () => onChange(opt.value)}
+            onPointerDown={(e) => {
+              if (e.detail <= 1) selectedAtPress.current = opt.value === value;
+            }}
+            onDoubleClick={
+              opt.disabled || !onReselect
+                ? undefined
+                : () => {
+                    if (selectedAtPress.current && opt.value === value) onReselect(opt.value);
+                  }
+            }
             className={cn(
               segmentVariants({ size, fullWidth, tight }),
               opt.disabled && 'opacity-40 hover:text-ink-2',

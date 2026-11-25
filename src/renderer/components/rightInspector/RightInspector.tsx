@@ -236,15 +236,16 @@ export function RightInspector({
     showSegment(next);
     review.onSegment(next);
   };
-  // Re-picking the current view while expanded goes narrow (never collapsed:
-  // that is the Hide control's, or ⌘⌥B's); while narrow, it expands on the
-  // view's first file. Expanded with the tree folded away, picking another
-  // view unfolds it, easing as the tree toggle does; leaving Details keeps
-  // the fold as it was.
-  const onPickSegment = (next: CodeSegment) => {
+  // Double-clicking the current view (`reselect`; a single click does
+  // nothing) while expanded goes narrow (never collapsed: that is the Hide
+  // control's, or ⌘⌥B's); while narrow, it expands on the view's first file.
+  // Expanded with the tree folded away, picking another view unfolds it,
+  // easing as the tree toggle does; leaving Details keeps the fold as it was.
+  const onPickSegment = (next: CodeSegment, reselect: boolean) => {
     const pick = pickSegment({
       current: segment,
       next,
+      reselect,
       expanded,
       changeCount,
       listedChanges: files.length,
@@ -425,7 +426,8 @@ export function RightInspector({
             size="sm"
             fullWidth={false}
             value={segment}
-            onChange={(next) => next !== 'details' && onPickSegment(next)}
+            onChange={(next) => next !== 'details' && onPickSegment(next, false)}
+            onReselect={(next) => next !== 'details' && onPickSegment(next, true)}
             options={
               reviewing
                 ? [

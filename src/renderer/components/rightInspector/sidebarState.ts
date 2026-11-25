@@ -37,19 +37,24 @@ export type SegmentPick =
   | 'none';
 
 /**
- * Re-picking the view an expanded sidebar shows goes narrow; re-picking the
- * narrow one expands on its first file, except an empty Changes or a Comments
- * without an open thread on the code, which have none; never collapses.
- * Another view keeps the state, except an empty Changes, which goes narrow.
+ * Re-picking the current view changes the state only on a double click
+ * (`reselect`); a single click on it does nothing. Then: expanded goes
+ * narrow; narrow expands on its first file, except an empty Changes or a
+ * Comments without an open thread on the code, which have none; never
+ * collapses. Another view keeps the state, except an empty Changes, which
+ * goes narrow.
  */
 export function pickSegment({
   current,
   next,
+  reselect,
   expanded,
   changeCount,
   listedChanges,
   openThread,
 }: {
+  /** The current view was double-clicked (not a single click). */
+  reselect: boolean;
   /** What shows now: a view, or the details (any view picked from them shows). */
   current: CodeSegment | 'details';
   next: CodeSegment;
@@ -62,6 +67,7 @@ export function pickSegment({
   openThread: boolean;
 }): SegmentPick {
   if (next === current) {
+    if (!reselect) return 'none';
     if (expanded) return 'narrow';
     const empty =
       (next === 'changes' && listedChanges === 0) || (next === 'comments' && !openThread);
