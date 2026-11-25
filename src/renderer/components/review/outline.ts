@@ -11,7 +11,7 @@ import type { TextRange } from '../../stores/editorTabsStore';
 import type { FileBadges } from '../diffEditor/EditorTree';
 import { threadLocation } from '../../utils/prReviewNotices';
 import { isInlineThread } from '../diffEditor/prReview/prViewPolicy';
-import { editorTreeOrder } from '../diffEditor/treeOrder';
+import { editorTreeOrder } from '../fileTree/treeOrder';
 
 /*
  * The Review view's outline, as data: which PR it is about, the files with

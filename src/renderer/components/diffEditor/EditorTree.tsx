@@ -25,7 +25,7 @@ import { cn } from '../../lib/cn';
 import { openInIde } from '../../lib/openInIde';
 import { absolutePath } from './editor/fileRef';
 import { copyText, revealLabel } from './fileActions';
-import { editorTreeOrder, folderOrder } from './treeOrder';
+import { editorTreeOrder, folderOrder } from '../fileTree/treeOrder';
 import type { DirEntry, FileChange, FileChangeStatus, RepoListing } from '../../../shared/types';
 import type { EditorView } from './types';
 import type { OpenOptions } from './tabs/editorLayout';

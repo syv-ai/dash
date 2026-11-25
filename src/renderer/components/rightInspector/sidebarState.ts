@@ -18,7 +18,7 @@
  * picked in History.
  */
 
-import { byLocale, editorTreeOrder, treeOrder } from '../diffEditor/treeOrder';
+import { byLocale, editorTreeOrder, treeOrder } from '../fileTree/treeOrder';
 
 /** The view switch's views: normal mode's Changes, Files and History; review
  *  mode's Overview, Files, Comments and History. */
@@ -78,7 +78,7 @@ export function pickSegment({
   return expanded && next === 'changes' && changeCount === 0 ? 'narrow' : 'select';
 }
 
-/* The first file of a tree as it displays (see `diffEditor/treeOrder`). */
+/* The first file of a tree as it displays (see `fileTree/treeOrder`). */
 
 function first<T>(items: readonly T[], order: (a: T, b: T) => number): T | null {
   let best: T | null = null;
