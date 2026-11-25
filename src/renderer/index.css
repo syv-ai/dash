@@ -29,6 +29,9 @@
   --color-ink-2: hsl(var(--ink-2));
   --color-ink-3: hsl(var(--ink-3));
   --color-icon: hsl(var(--icon));
+  /* A link in running text (TextLink, Markdown): a soft blue, the one
+     colour outside state (user-requested, D191). */
+  --color-link: hsl(var(--link));
   --color-hover: hsl(var(--hover));
   --color-select: hsl(var(--select));
   --color-btn: hsl(var(--btn));
@@ -176,6 +179,8 @@
     --ink-2: 222 9% 36%;
     --ink-3: 222 6% 45%;
     --icon: 222 8% 41%;
+    /* GitHub-like blue: 5.1:1 on ground, 6.1:1 on well. */
+    --link: 212 85% 40%;
     --hover: 225 20% 20% / 0.05;
     --select: 225 20% 20% / 0.09;
     --btn: 225 14% 22%;
@@ -281,6 +286,8 @@
     --ink-2: 220 5% 81%;
     --ink-3: 220 4% 69%;
     --icon: 220 4.5% 76%;
+    /* Soft blue: 8.0 / 7.3 / 6.6:1 on ground / well / raised. */
+    --link: 213 85% 68%;
     --hover: 0 0% 100% / 0.05;
     --select: 0 0% 100% / 0.09;
     --btn: 220 6% 91%;

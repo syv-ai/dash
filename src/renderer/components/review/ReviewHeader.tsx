@@ -11,7 +11,7 @@ import { mergeVerb, plural, providerName } from './labels';
 function Branch({ remote, name }: { remote: string | null; name: string }) {
   const href = remote ? branchUrl(remote, name) : null;
   return href ? (
-    <TextLink href={href} tone="inherit" title={`Open ${name} on the forge`}>
+    <TextLink href={href} title={`Open ${name} on the forge`}>
       <span className="wrap-anywhere">{name}</span>
     </TextLink>
   ) : (
@@ -23,8 +23,8 @@ function Branch({ remote, name }: { remote: string | null; name: string }) {
  * Review mode's head (spec Revision 3), under the mode's banner and views:
  * the PR's state icon (GitHub's shape and colour) and title (to the forge)
  * with its number, refresh at the row's end; then "who wants to merge n
- * commits into base from head" in secondary ink, each link underlined (the
- * commits to History). The diff totals are About's (Overview). A failed
+ * commits into base from head" in secondary ink, its links in the link
+ * colour (the commits to History). The diff totals are About's (Overview). A failed
  * refresh says why until the next lands.
  */
 export function ReviewHeader({
@@ -71,17 +71,18 @@ export function ReviewHeader({
           <RefreshCw size={14} strokeWidth={1.8} className={cn(loading && 'animate-spin')} />
         </IconButton>
       </div>
-      {/* Running prose, not a name: secondary ink, no type role (D162). */}
+      {/* Running prose, not a name: secondary ink, no type role (D162); its
+          links in the link colour (D191). */}
       <p className="text-sm text-ink-2 wrap-break-word">
         {review.authorUrl ? (
-          <TextLink href={review.authorUrl} tone="inherit" title={`${review.author}'s profile`}>
+          <TextLink href={review.authorUrl} title={`${review.author}'s profile`}>
             {review.author}
           </TextLink>
         ) : (
           review.author
         )}{' '}
         {mergeVerb(review.state)}{' '}
-        <TextLink tone="inherit" title="Show them in History" onClick={onShowCommits}>
+        <TextLink title="Show them in History" onClick={onShowCommits}>
           <span className="tabular-nums">{plural(review.commits, 'commit')}</span>
         </TextLink>{' '}
         into <Branch remote={remote} name={review.baseRef} /> from{' '}

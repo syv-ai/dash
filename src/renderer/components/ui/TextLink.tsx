@@ -3,25 +3,28 @@ import { cn } from '../../lib/cn';
 import { focusRing } from './styles';
 
 const base = cn(
-  'cursor-pointer rounded-sm underline-offset-2 transition-colors decoration-ink-3 hover:decoration-ink',
+  'cursor-pointer rounded-sm underline-offset-2 transition-colors hover:underline',
   focusRing,
 );
 
-const tones = { ink: 'text-ink', inherit: 'hover:text-ink' } as const;
+const looks = {
+  /** In running text: the link colour, underlined only on hover. */
+  prose: 'text-link',
+  /** A value in a row, a name in a meta line: ink, underlined on hover. */
+  quiet: 'text-ink decoration-ink-3 hover:decoration-ink',
+} as const;
 
 /**
  * A link inside text. `href` opens in the browser; `onClick` acts in the app
- * (rendered as a button). In running text it is underlined so it reads as a
- * link; `quiet` (a value in a row, a name in a meta line) underlines only on
- * hover. It inherits size and weight and takes ink, so it shows against the
- * quieter text around it; `tone="inherit"` keeps the text's own ink (a link in
- * secondary prose, told apart by its underline) and brightens to ink on hover.
+ * (rendered as a button). In running text it takes the `link` colour (a soft
+ * blue, D191) and no underline until hovered; `quiet` (a value in a row, a
+ * name in a meta line, a title) stays ink and underlines on hover. It
+ * inherits size and weight.
  */
 export function TextLink({
   href,
   onClick,
   quiet = false,
-  tone = 'ink',
   title,
   children,
 }: {
@@ -29,14 +32,11 @@ export function TextLink({
   href?: string;
   onClick?: () => void;
   quiet?: boolean;
-  /** `ink` (default) sets the link apart by colour; `inherit` takes the
-   *  surrounding ink and leaves the underline to mark it. */
-  tone?: keyof typeof tones;
   /** Hover text. */
   title?: string;
   children: React.ReactNode;
 }) {
-  const classes = cn(base, tones[tone], quiet ? 'hover:underline' : 'underline');
+  const classes = cn(base, quiet ? looks.quiet : looks.prose);
   if (href) {
     return (
       <a

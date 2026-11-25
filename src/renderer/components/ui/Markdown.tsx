@@ -186,7 +186,7 @@ function inline(tokens: Token[]): ReactNode[] {
               e.stopPropagation();
               openLink(l.href);
             }}
-            className="text-primary underline-offset-2 hover:underline wrap-anywhere"
+            className="text-link underline-offset-2 hover:underline wrap-anywhere"
           >
             {t.type === 'image' ? l.text || l.href : inline(l.tokens)}
           </a>
