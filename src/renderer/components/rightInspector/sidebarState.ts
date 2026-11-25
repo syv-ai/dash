@@ -148,13 +148,23 @@ export function segmentOnExpand<S extends CodeSegment | 'details'>(
   return segment === 'changes' && changeCount === 0 ? 'files' : segment;
 }
 
-/** The view to show as review mode starts or ends: Overview is review
- *  mode's alone, so ending it there shows Changes. */
-export function segmentForMode<S extends CodeSegment | 'details'>(
-  segment: S,
-  reviewing: boolean,
-): S | 'changes' {
-  return segment === 'overview' && !reviewing ? 'changes' : segment;
+/**
+ * The view to show as review mode becomes known, starts or ends (each
+ * `undefined` until main has said): a task found in review mode, opened or
+ * just entered, shows Overview (D118); Overview is the mode's alone, so
+ * ending it there shows Changes.
+ */
+export function segmentOnMode<S extends CodeSegment | 'details'>({
+  segment,
+  was,
+  now,
+}: {
+  segment: S;
+  was: boolean | undefined;
+  now: boolean | undefined;
+}): S | 'overview' | 'changes' {
+  if (now && !was) return 'overview';
+  return segment === 'overview' && !now ? 'changes' : segment;
 }
 
 /**

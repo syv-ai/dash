@@ -11,7 +11,7 @@ import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
 import type { EditorWorkspace } from '../diffEditor/useEditorWorkspace';
 import {
   firstChangedTreeFile,
-  segmentForMode,
+  segmentOnMode,
   viewForMode,
   viewOnExit,
   viewOnSegment,
@@ -110,16 +110,20 @@ export function useReviewMode(
   useEffect(() => {
     showViewRef.current(follow);
   }, [follow, modeKey, review?.head]);
-  // Overview is review mode's alone: ending the mode leaves it for Changes.
+  // A task found in review mode, or entering it, shows Overview; Overview
+  // is the mode's alone, so ending the mode leaves it for Changes. Read off
+  // the mode before (the sidebar starts on `initialSegment`'s).
+  const known = taskPrs.mode === undefined ? undefined : reviewing;
+  const knownBefore = useRef(known);
   useEffect(() => {
-    if (segmentForMode(segment, reviewing) === segment) return;
-    showSegment('changes');
-  }, [segment, reviewing, showSegment]);
+    const was = knownBefore.current;
+    knownBefore.current = known;
+    const next = segmentOnMode({ segment, was, now: known });
+    if (next !== segment && next !== 'details') showSegment(next);
+  }, [segment, known, showSegment]);
 
-  const enter = (pr: PrRef) => {
+  const enter = (pr: PrRef) =>
     usePrReviews.getState().setMode(task.id, { provider: pr.provider, number: pr.number });
-    showSegment('overview');
-  };
   const endMode = () => usePrReviews.getState().setMode(task.id, null);
   // Out of the mode the editor returns to the working tree, from a PR
   // commit too (the follow effect only knows the PR's view).
@@ -181,4 +185,15 @@ export function useReviewMode(
       sidebar.openEditor();
     },
   };
+}
+
+/** The view the task sidebar opens on: Overview for a task already in
+ *  review mode (as far as the store knows), else Changes. */
+export function initialSegment(taskId: string): 'overview' | 'changes' {
+  const entry = usePrReviews.getState().prs[taskId];
+  return segmentOnMode({
+    segment: 'changes',
+    was: undefined,
+    now: entry ? entry.mode !== null : undefined,
+  });
 }

@@ -5,7 +5,7 @@ import {
   firstTreeFile,
   onChangeCount,
   pickSegment,
-  segmentForMode,
+  segmentOnMode,
   segmentOnExpand,
   viewForMode,
   viewOnExit,
@@ -155,12 +155,29 @@ describe('segmentOnExpand', () => {
   });
 });
 
-describe('segmentForMode', () => {
+describe('segmentOnMode', () => {
+  const on = (
+    segment: 'overview' | 'changes' | 'files' | 'history' | 'details',
+    was?: boolean,
+    now?: boolean,
+  ) => segmentOnMode({ segment, was, now });
+
+  it('shows Overview for a task found in review mode, or one entering it', () => {
+    expect(on('changes', undefined, true)).toBe('overview');
+    expect(on('files', false, true)).toBe('overview');
+    expect(on('details', false, true)).toBe('overview');
+  });
+
+  it('keeps the view while the mode holds, or before it is known', () => {
+    expect(on('files', true, true)).toBe('files');
+    expect(on('changes', undefined, undefined)).toBe('changes');
+    expect(on('history', undefined, false)).toBe('history');
+  });
+
   it("leaves Overview for Changes once review mode ends; it is review mode's alone", () => {
-    expect(segmentForMode('overview', false)).toBe('changes');
-    expect(segmentForMode('overview', true)).toBe('overview');
-    expect(segmentForMode('files', false)).toBe('files');
-    expect(segmentForMode('details', false)).toBe('details');
+    expect(on('overview', true, false)).toBe('changes');
+    expect(on('files', true, false)).toBe('files');
+    expect(on('details', true, false)).toBe('details');
   });
 });
 

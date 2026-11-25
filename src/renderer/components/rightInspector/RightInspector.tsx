@@ -53,7 +53,7 @@ import { PrButton } from '../review/PrButton';
 import { ReviewBanner } from '../review/ReviewBanner';
 import { ReviewView } from '../review/ReviewView';
 import { useReviewCheckout } from '../review/useReviewCheckout';
-import { useReviewMode } from '../review/useReviewMode';
+import { initialSegment, useReviewMode } from '../review/useReviewMode';
 import { useUnpushedCommits } from './useUnpushedCommits';
 import type { SyncLinks } from '../changes/SyncStatus';
 import { useGit } from '../../stores/gitStore';
@@ -172,13 +172,16 @@ export function RightInspector({
   // ── The editor's state: one workspace per task, open or not ──
   const editorMounted = diff !== null;
   const expanded = expandedProp && editorMounted;
-  const [segment, setSegment] = useState<Segment>('changes');
+  // A task in review mode opens on Overview.
+  const [segment, setSegment] = useState<Segment>(() => initialSegment(task.id));
   // Expanded, Details takes the whole body over the terminals, as narrow;
   // the editor stays mounted out of sight, so leaving Details finds it as it
   // was.
   const split = expanded && segment !== 'details';
   // Where the Details toggle returns to.
-  const [lastCodeSegment, setLastCodeSegment] = useState<CodeSegment>('changes');
+  const [lastCodeSegment, setLastCodeSegment] = useState<CodeSegment>(() =>
+    initialSegment(task.id),
+  );
   const showSegment = useCallback((next: CodeSegment) => {
     setSegment(next);
     setLastCodeSegment(next);
