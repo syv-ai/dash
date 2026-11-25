@@ -1,17 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import {
   BURN_WINDOW_MS,
-  burnFor,
   burnOutlook,
   CLOSE_AT_PCT,
+  formatPace,
   formatProjection,
   formatRate,
+  LIMIT_WINDOW_MS,
+  MIN_ELAPSED_MS,
   pressingBurn,
   limitBurns,
+  projectAverage,
   ratePerHour,
   recordLimits,
   recordSample,
   type LimitHistory,
+  type Projection,
 } from '../burnRate';
 
 const MIN = 60_000;
@@ -84,52 +88,49 @@ describe('ratePerHour', () => {
   });
 });
 
-describe('burnFor', () => {
-  it('projects the time to 100 % at the current rate', () => {
-    // 40 → 46 over an hour: 6 %/h, 54 points left → 9 h. Resets in 20 h.
-    const resetsAt = T0 / 1000 + 20 * 3600;
-    const h = history([40, 43, 46], 30 * MIN, resetsAt);
-    const burn = burnFor(h, { usedPercentage: 46, resetsAt }, T0 + HOUR, 2 * HOUR);
-    expect(burn?.perHour).toBeCloseTo(6);
-    expect(burn?.toLimitMs).toBeCloseTo(9 * HOUR);
-  });
+describe('projectAverage', () => {
+  const WEEK = LIMIT_WINDOW_MS.sevenDay;
+  /** A weekly window `usedPercentage` in, resetting `resetsInH` hours after T0. */
+  const weekly = (usedPercentage: number, resetsInH: number) =>
+    projectAverage({ usedPercentage, resetsAt: T0 / 1000 + resetsInH * 3600 }, T0, WEEK);
 
-  it('says the window resets first when the limit lies beyond the reset', () => {
-    // 6 %/h with 54 points left is 9 h; the window resets in 5 h.
-    const h = history([40, 43, 46], 30 * MIN);
-    const burn = burnFor(h, { usedPercentage: 46, resetsAt: RESETS }, T0 + HOUR, 2 * HOUR);
-    // 46 % now, 6 %/h for the 4 h left: 70 % at the reset.
-    expect(burn).toEqual({
-      perHour: expect.closeTo(6),
+  it('carries the average pace so far on to the reset', () => {
+    // 56 % used, resets in 68 h, so 100 h gone: 0.56 %/h, ~94 % at the reset.
+    const p = weekly(56, 68);
+    expect(p).toEqual({
+      perHour: expect.closeTo(0.56),
       toLimitMs: null,
-      resetsInMs: 4 * HOUR,
-      atResetPct: expect.closeTo(70),
+      resetsInMs: 68 * HOUR,
+      atResetPct: expect.closeTo(94.08),
     });
+    expect(burnOutlook(p!)).toBe('close');
   });
 
-  it('projects past 100 % when the limit comes before the reset', () => {
-    // 6 %/h for 20 h from 46 %: 166 % "at the reset".
-    const resetsAt = T0 / 1000 + 20 * 3600;
-    const h = history([40, 43, 46], 30 * MIN, resetsAt);
-    const burn = burnFor(h, { usedPercentage: 46, resetsAt }, T0 + HOUR, 2 * HOUR);
-    expect(burn?.resetsInMs).toBe(19 * HOUR);
-    expect(burn?.atResetPct).toBeCloseTo(160);
-  });
-
-  it('reaches the limit with no reset in sight when the window reports none', () => {
-    const h = history([40, 43, 46], 30 * MIN, 0);
-    const burn = burnFor(h, { usedPercentage: 46, resetsAt: 0 }, T0 + HOUR, 2 * HOUR);
-    expect(burn).toMatchObject({ resetsInMs: null, atResetPct: Infinity });
-    expect(burn?.toLimitMs).toBeCloseTo(9 * HOUR);
-  });
-
-  it('is null while the % holds still or without enough data', () => {
-    const flat = history([20, 20, 20], 10 * MIN);
-    expect(burnFor(flat, { usedPercentage: 20, resetsAt: RESETS }, T0 + 20 * MIN, WINDOW)).toBe(
-      null,
+  it('gives the time to 100 % when the limit comes before the reset', () => {
+    // 5-hour window, 2 h gone with 80 % used: 40 %/h, 20 points left → 30 min.
+    const p = projectAverage(
+      { usedPercentage: 80, resetsAt: T0 / 1000 + 3 * 3600 },
+      T0,
+      LIMIT_WINDOW_MS.fiveHour,
     );
-    const one = history([20], MIN);
-    expect(burnFor(one, { usedPercentage: 20, resetsAt: RESETS }, T0, WINDOW)).toBeNull();
+    expect(p?.toLimitMs).toBeCloseTo(30 * MIN);
+    expect(p?.atResetPct).toBeCloseTo(200);
+  });
+
+  it('reads an idle window as a pace of 0', () => {
+    expect(weekly(0, 100)).toMatchObject({ perHour: 0, toLimitMs: null, atResetPct: 0 });
+  });
+
+  it('needs MIN_ELAPSED_MS of the window gone', () => {
+    const justIn = (WEEK - MIN_ELAPSED_MS) / HOUR;
+    expect(weekly(1, justIn)).not.toBeNull();
+    expect(weekly(1, justIn + 1 / 60)).toBeNull();
+    // A reset further off than the window is long: none of it gone.
+    expect(weekly(1, WEEK / HOUR + 1)).toBeNull();
+  });
+
+  it('is null without a reset time', () => {
+    expect(projectAverage({ usedPercentage: 40, resetsAt: 0 }, T0, WEEK)).toBeNull();
   });
 });
 
@@ -152,43 +153,72 @@ describe('recordLimits', () => {
 });
 
 describe('limitBurns', () => {
-  it('measures each reported limit as of its latest reading', () => {
+  it('reads each reported limit as of its latest reading, barometer and projection apart', () => {
     const histories = { fiveHour: history([10, 12, 14], 10 * MIN) };
     const burns = limitBurns(histories, {
       fiveHour: { usedPercentage: 14, resetsAt: RESETS },
       sevenDay: { usedPercentage: 3, resetsAt: RESETS },
     });
     expect(burns.fiveHour?.perHour).toBeCloseTo(12);
-    expect(burns.sevenDay).toBeNull();
+    // Resets 5 h after T0, read at T0 + 20 min: 20 min of the window gone.
+    expect(burns.fiveHour?.projection?.perHour).toBeCloseTo(14 / (20 / 60));
+    expect(burns.sevenDay).toEqual({ perHour: null, projection: null });
+  });
+
+  it('looks back 30 minutes on the 5-hour limit and an hour on the weekly', () => {
+    expect(BURN_WINDOW_MS).toEqual({ fiveHour: 30 * MIN, sevenDay: HOUR });
+  });
+
+  it('leaves out a barometer that is not rising, keeping the projection', () => {
+    const histories = { fiveHour: history([20, 20, 20], 10 * MIN) };
+    const burns = limitBurns(histories, { fiveHour: { usedPercentage: 20, resetsAt: RESETS } });
+    expect(burns.fiveHour?.perHour).toBeNull();
+    expect(burns.fiveHour?.projection).not.toBeNull();
   });
 });
 
 describe('pressingBurn', () => {
-  const burn = (perHour: number, toLimitMs: number | null, atResetPct = 50) => ({
-    perHour,
+  const projection = (toLimitMs: number | null, atResetPct = 50): Projection => ({
+    perHour: 1,
     toLimitMs,
     resetsInMs: HOUR,
     atResetPct,
   });
+  const burn = (perHour: number | null, p: Projection | null) => ({ perHour, projection: p });
 
-  it('is null when no limit is burning', () => {
+  it('is null when no limit has a barometer reading', () => {
     expect(pressingBurn({})).toBeNull();
-    expect(pressingBurn({ fiveHour: null, sevenDay: null })).toBeNull();
+    expect(pressingBurn({ fiveHour: burn(null, projection(HOUR)) })).toBeNull();
   });
 
-  it('picks the limit reached soonest', () => {
-    const got = pressingBurn({ fiveHour: burn(10, 5 * HOUR), sevenDay: burn(1, 2 * HOUR) });
-    expect(got?.limit).toBe('sevenDay');
+  it('picks the limit its average pace takes to 100 % soonest, showing its barometer', () => {
+    const got = pressingBurn({
+      fiveHour: burn(10, projection(5 * HOUR)),
+      sevenDay: burn(1, projection(2 * HOUR)),
+    });
+    expect(got).toEqual({ limit: 'sevenDay', perHour: 1, projection: projection(2 * HOUR) });
   });
 
   it('prefers a limit that will be reached over one that resets first', () => {
-    const got = pressingBurn({ fiveHour: burn(30, null), sevenDay: burn(1, 40 * HOUR) });
+    const got = pressingBurn({
+      fiveHour: burn(30, projection(null)),
+      sevenDay: burn(1, projection(40 * HOUR)),
+    });
     expect(got?.limit).toBe('sevenDay');
   });
 
   it('picks the one that comes closest to its limit when both reset first', () => {
-    const got = pressingBurn({ fiveHour: burn(9, null, 60), sevenDay: burn(0.5, null, 92) });
+    const got = pressingBurn({
+      fiveHour: burn(9, projection(null, 60)),
+      sevenDay: burn(0.5, projection(null, 92)),
+    });
     expect(got?.limit).toBe('sevenDay');
+  });
+
+  it('ranks a limit with no projection yet last', () => {
+    const got = pressingBurn({ fiveHour: burn(9, null), sevenDay: burn(0.5, projection(null)) });
+    expect(got?.limit).toBe('sevenDay');
+    expect(pressingBurn({ fiveHour: burn(9, null) })?.projection).toBeNull();
   });
 });
 
@@ -218,14 +248,22 @@ describe('formatting', () => {
     expect(formatRate(12.6)).toBe('+13%/h');
   });
 
-  it('says when the pace reaches the limit, and the time to its reset', () => {
-    const over = { perHour: 20, toLimitMs: 2 * HOUR + 10 * MIN, resetsInMs: 3 * HOUR + 44 * MIN };
-    expect(formatProjection({ ...over, atResetPct: 130 })).toBe(
-      "At this rate you'd reach 100% in 2h 10m; TTR 3h 44m",
-    );
-    const clear = { perHour: 5, toLimitMs: null, resetsInMs: 3 * HOUR, atResetPct: 61.6 };
-    expect(formatProjection(clear)).toBe("At this rate you'd reach 62% by then; TTR 3h 0m");
-    const unknown = { perHour: 5, toLimitMs: 40 * MIN, resetsInMs: null, atResetPct: Infinity };
-    expect(formatProjection(unknown)).toBe("At this rate you'd reach 100% in 40m");
+  it('shows an average pace unsigned, to two places under 1', () => {
+    expect(formatPace(0.56)).toBe('0.56%/h');
+    expect(formatPace(0.5)).toBe('0.5%/h');
+    expect(formatPace(2.54)).toBe('2.5%/h');
+    expect(formatPace(12.6)).toBe('13%/h');
+  });
+
+  it('says where the average pace leads, and the time to the reset', () => {
+    const clear = { perHour: 0.56, toLimitMs: null, resetsInMs: 68 * HOUR, atResetPct: 94.08 };
+    expect(formatProjection(clear)).toBe('0.56%/h → ~94% at reset; TTR 2d 20h');
+    const over = {
+      perHour: 12,
+      toLimitMs: 2 * HOUR + 10 * MIN,
+      resetsInMs: 3 * HOUR + 44 * MIN,
+      atResetPct: 130,
+    };
+    expect(formatProjection(over)).toBe('12%/h → 100% in 2h 10m; TTR 3h 44m');
   });
 });

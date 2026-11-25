@@ -2,10 +2,12 @@ import type { RateLimitInfo, RateLimits } from '../../shared/types';
 import { formatSpan, formatTtr } from '../utils/format';
 
 /*
- * Burn rate: how fast a usage limit is being used (%/hour, the first
- * derivative of its used % over a trailing window) and when, at that pace, it
- * reaches 100 %. Readings are kept in memory per limit window; a new window
- * (another reset time) or a falling % starts the history over.
+ * Burn rate, in two parts (D247). The barometer: how fast a usage limit is
+ * being used right now (%/hour over a short trailing look-back). The
+ * projection: the window's own average pace so far (used % over the time
+ * since it started, idle time included) and where that pace leads by the
+ * reset, which sets the colour. Readings are kept in memory per limit window;
+ * a new window (another reset time) or a falling % starts the history over.
  */
 
 /** One reading of a limit's used %, at epoch ms. */
@@ -25,16 +27,27 @@ export interface LimitHistory {
 export type LimitKey = keyof RateLimits;
 export type LimitHistories = Partial<Record<LimitKey, LimitHistory>>;
 
-export interface Burn {
-  /** Percentage points per hour, above MIN_RATE. */
+/** Where a limit's window is heading at its own average pace so far. */
+export interface Projection {
+  /** The window's average: used % over the hours since it started. */
   perHour: number;
   /** Time until 100 % at this pace; null when the window resets first. */
   toLimitMs: number | null;
-  /** Time until the window resets; null when it reports no reset time. */
-  resetsInMs: number | null;
+  /** Time until the window resets. */
+  resetsInMs: number;
   /** The used % the window would reach at its reset at this pace (over 100:
-   *  the limit comes first); Infinity without a reset time. */
+   *  the limit comes first). */
   atResetPct: number;
+}
+
+/** One limit's burn: the barometer and the projection, each null while it
+ *  has too little to go on. */
+export interface Burn {
+  /** %/hour over the look-back (`BURN_WINDOW_MS`); null with too few readings
+   *  or while the % isn't rising. */
+  perHour: number | null;
+  /** Null without a reset time, or under MIN_ELAPSED_MS into the window. */
+  projection: Projection | null;
 }
 
 /**
@@ -47,22 +60,29 @@ export type BurnOutlook = 'clear' | 'close' | 'over';
 /** From this projected % at the reset, a burn is close to its limit. */
 export const CLOSE_AT_PCT = 85;
 
-export function burnOutlook(burn: Pick<Burn, 'atResetPct'>): BurnOutlook {
-  if (burn.atResetPct > 100) return 'over';
-  return burn.atResetPct >= CLOSE_AT_PCT ? 'close' : 'clear';
+export function burnOutlook(projection: Pick<Projection, 'atResetPct'>): BurnOutlook {
+  if (projection.atResetPct > 100) return 'over';
+  return projection.atResetPct >= CLOSE_AT_PCT ? 'close' : 'clear';
 }
 
-/** Each reported limit's burn; null while there is too little data or it isn't rising. */
-export type LimitBurns = Partial<Record<LimitKey, Burn | null>>;
+/** Each reported limit's burn. */
+export type LimitBurns = Partial<Record<LimitKey, Burn>>;
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 
-/** How far back the rate looks. The weekly % moves slowly, so it looks further. */
+/** How far back the barometer looks. The weekly % moves slowly, so it looks further. */
 export const BURN_WINDOW_MS: Record<LimitKey, number> = {
   fiveHour: 30 * MINUTE,
-  sevenDay: 2 * HOUR,
+  sevenDay: HOUR,
 };
+/** Each limit's whole window: it started this long before its reset. */
+export const LIMIT_WINDOW_MS: Record<LimitKey, number> = {
+  fiveHour: 5 * HOUR,
+  sevenDay: 7 * 24 * HOUR,
+};
+/** Less of the window gone than this is too little to average over. */
+export const MIN_ELAPSED_MS = 15 * MINUTE;
 /** The window's first and last readings must be at least this far apart. */
 export const MIN_SPAN_MS = 5 * MINUTE;
 /** A reading this close to the one before it replaces it (bounds the history). */
@@ -123,59 +143,80 @@ export function ratePerHour(
 }
 
 /**
- * The limit's burn: its rate and the time to 100 % (null if the window resets
- * first). Null when there isn't enough data or the % isn't rising.
+ * Where the window's average pace so far takes the limit: used % over the
+ * time since the window started (`windowMs` before its reset), carried on to
+ * the reset. Null without a reset time or under MIN_ELAPSED_MS in.
  */
-export function burnFor(
-  history: LimitHistory | undefined,
+export function projectAverage(
   info: RateLimitInfo,
   now: number,
   windowMs: number,
-): Burn | null {
-  const perHour = ratePerHour(history, now, windowMs);
-  if (perHour === null || perHour < MIN_RATE) return null;
-  const toLimitMs = (Math.max(0, 100 - info.usedPercentage) / perHour) * HOUR;
-  const resetsInMs = info.resetsAt ? Math.max(0, info.resetsAt * 1000 - now) : null;
-  if (resetsInMs === null) return { perHour, toLimitMs, resetsInMs, atResetPct: Infinity };
+): Projection | null {
+  if (!info.resetsAt) return null;
+  const resetsInMs = Math.max(0, info.resetsAt * 1000 - now);
+  const elapsedMs = windowMs - resetsInMs;
+  if (elapsedMs < MIN_ELAPSED_MS) return null;
+  const used = info.usedPercentage;
+  const perHour = used / (elapsedMs / HOUR);
+  const toLimitMs = perHour > 0 ? (Math.max(0, 100 - used) / perHour) * HOUR : Infinity;
   return {
     perHour,
     toLimitMs: toLimitMs >= resetsInMs ? null : toLimitMs,
     resetsInMs,
-    atResetPct: info.usedPercentage + perHour * (resetsInMs / HOUR),
+    atResetPct: used + perHour * (resetsInMs / HOUR),
   };
 }
 
 /**
- * Each reported limit's burn as of its latest reading (null: not enough data
- * or not rising). Limits not reported are left out.
+ * Each reported limit's burn as of its latest reading. Limits not reported
+ * are left out.
  */
 export function limitBurns(histories: LimitHistories, limits: RateLimits): LimitBurns {
   const out: LimitBurns = {};
   for (const key of Object.keys(BURN_WINDOW_MS) as LimitKey[]) {
     const info = limits[key];
-    const latest = histories[key]?.samples.at(-1);
     if (!info) continue;
-    out[key] = latest ? burnFor(histories[key], info, latest.at, BURN_WINDOW_MS[key]) : null;
+    const now = histories[key]?.samples.at(-1)?.at;
+    if (now === undefined) {
+      out[key] = { perHour: null, projection: null };
+      continue;
+    }
+    const rate = ratePerHour(histories[key], now, BURN_WINDOW_MS[key]);
+    out[key] = {
+      perHour: rate !== null && rate >= MIN_RATE ? rate : null,
+      projection: projectAverage(info, now, LIMIT_WINDOW_MS[key]),
+    };
   }
   return out;
 }
 
+/** The burn the row shows: a limit with a barometer reading. */
+export interface PressingBurn {
+  limit: LimitKey;
+  perHour: number;
+  projection: Projection | null;
+}
+
 /**
- * The burn worth showing when there is room for one: the limit reached
- * soonest at its pace, else (both reset first) the one that comes closest to
- * its limit by its reset. Null when neither limit is burning.
+ * The burn worth showing when there is room for one, among the limits with a
+ * barometer reading, by their projections: the limit reached soonest, else
+ * (all reset first) the one that comes closest to its limit by its reset; a
+ * limit with no projection yet last. Null when no limit is burning.
  */
-export function pressingBurn(burns: LimitBurns): { limit: LimitKey; burn: Burn } | null {
-  let best: { limit: LimitKey; burn: Burn } | null = null;
+export function pressingBurn(burns: LimitBurns): PressingBurn | null {
+  let best: PressingBurn | null = null;
   for (const limit of Object.keys(BURN_WINDOW_MS) as LimitKey[]) {
     const burn = burns[limit];
-    if (!burn) continue;
-    if (!best || morePressing(burn, best.burn)) best = { limit, burn };
+    if (!burn || burn.perHour === null) continue;
+    if (!best || morePressing(burn.projection, best.projection)) {
+      best = { limit, perHour: burn.perHour, projection: burn.projection };
+    }
   }
   return best;
 }
 
-function morePressing(a: Burn, b: Burn): boolean {
+function morePressing(a: Projection | null, b: Projection | null): boolean {
+  if (!a || !b) return !b && !!a;
   if (a.toLimitMs !== null && b.toLimitMs !== null) return a.toLimitMs < b.toLimitMs;
   if (a.toLimitMs !== null || b.toLimitMs !== null) return a.toLimitMs !== null;
   return a.atResetPct > b.atResetPct;
@@ -187,12 +228,18 @@ export function formatRate(perHour: number): string {
   return `+${n}%/h`;
 }
 
-/** Where the pace takes a limit: "At this rate you'd reach 100% in 2h 10m;
- *  TTR 3h 44m", or the % it would reach by its reset. */
-export function formatProjection(burn: Burn): string {
-  const resets = burn.resetsInMs === null ? '' : `; ${formatTtr(burn.resetsInMs)}`;
-  if (burn.toLimitMs !== null) {
-    return `At this rate you'd reach 100% in ${formatSpan(burn.toLimitMs)}${resets}`;
-  }
-  return `At this rate you'd reach ${Math.round(burn.atResetPct)}% by then${resets}`;
+/** An average pace, unsigned: "0.56%/h" under 1, "2.5%/h" under 10, else whole. */
+export function formatPace(perHour: number): string {
+  const places = perHour < 1 ? 2 : perHour < 10 ? 1 : 0;
+  return `${Number(perHour.toFixed(places))}%/h`;
+}
+
+/** The average pace and where it leads: "0.56%/h → ~94% at reset; TTR 2d 20h",
+ *  or "12%/h → 100% in 2h 10m; TTR 3h 44m" when the limit comes first. */
+export function formatProjection(p: Projection): string {
+  const where =
+    p.toLimitMs !== null
+      ? `100% in ${formatSpan(p.toLimitMs)}`
+      : `~${Math.round(p.atResetPct)}% at reset`;
+  return `${formatPace(p.perHour)} → ${where}; ${formatTtr(p.resetsInMs)}`;
 }

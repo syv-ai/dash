@@ -9,6 +9,7 @@ import {
   pressingBurn,
   type Burn,
   type BurnOutlook,
+  type PressingBurn,
   type LimitBurns,
   type LimitKey,
 } from '../../lib/burnRate';
@@ -50,14 +51,15 @@ const COLUMNS = [
   'grid-cols-[repeat(4,minmax(0,6rem))]',
 ];
 
-/** One column's content: a level (the session's context, a limit) or the burn. */
-type Cell = { key: string; tooltip: RichTooltip; label: string } & (
-  | { kind: 'level'; pct: number | null; aria: string; ttr?: string }
-  | { kind: 'burn'; rate: string; outlook: BurnOutlook }
+/** One column's content: a level (the session's context, a limit) or the
+ *  burn; its caption (a limit's TTR, the burn's look-back) under the label. */
+type Cell = { key: string; tooltip: RichTooltip; label: string; caption?: string } & (
+  | { kind: 'level'; pct: number | null; aria: string }
+  | { kind: 'burn'; rate: string; outlook: BurnOutlook | null }
 );
 
 /** The burn's figure by its outlook: green, it resets first; amber, close;
- *  red, the limit comes first. */
+ *  red, the limit comes first; plain ink with no projection yet. */
 const OUTLOOK_TEXT: Record<BurnOutlook, string> = {
   clear: 'text-state-done',
   close: 'text-state-needs',
@@ -67,7 +69,7 @@ const OUTLOOK_TEXT: Record<BurnOutlook, string> = {
 /** One column: the figure on top, its label below, then any caption. Its
  *  tooltip, unless it is a measuring copy (`bare`). */
 function Column({ cell, density, bare }: { cell: Cell; density: UsageDensity; bare?: boolean }) {
-  const caption = cell.kind === 'level' && density !== 'compact' ? cell.ttr : undefined;
+  const caption = density === 'compact' ? undefined : cell.caption;
   const column = (
     <div className="flex min-w-0 flex-col items-center gap-2">
       <Figure cell={cell} density={density} />
@@ -88,7 +90,13 @@ function Figure({ cell, density }: { cell: Cell; density: UsageDensity }) {
   const figure = 'text-lg font-semibold tabular-nums';
   if (cell.kind === 'burn') {
     return (
-      <span className={cn('grid size-16 place-items-center', OUTLOOK_TEXT[cell.outlook], figure)}>
+      <span
+        className={cn(
+          'grid size-16 place-items-center',
+          cell.outlook ? OUTLOOK_TEXT[cell.outlook] : 'text-ink',
+          figure,
+        )}
+      >
         {cell.rate}
       </span>
     );
@@ -134,7 +142,7 @@ function limitCell(limit: LimitKey, info: RateLimitInfo | undefined, now: number
     kind: 'level',
     pct,
     aria: `${long} limit used`,
-    ttr,
+    caption: ttr,
     tooltip,
     label: long,
   };
@@ -163,41 +171,53 @@ function sessionCell(ctx: ContextUsage | null): Cell {
   };
 }
 
-/** The trailing window a rate is measured over: "30 min", "2 h". */
-function windowLabel(key: LimitKey): string {
+/** How far back the barometer looks: "last 30 min", "last hour". */
+function lookBack(key: LimitKey): string {
   const minutes = BURN_WINDOW_MS[key] / 60_000;
-  return minutes < 60 ? `${minutes} min` : `${minutes / 60} h`;
+  if (minutes < 60) return `last ${minutes} min`;
+  return minutes === 60 ? 'last hour' : `last ${minutes / 60} hours`;
 }
 
-/** A limit's burn as a tooltip row: its rate over its window, then where
- *  that pace takes it (on a second line). */
-function burnRow(limit: LimitKey, burn: Burn | null | undefined) {
-  const label = LIMIT_LABELS[limit];
-  if (!burn) return { label, value: 'Not rising, or too few readings yet' };
+/** The span a limit's average pace covers. */
+const AVERAGE_LABELS: Record<LimitKey, string> = {
+  fiveHour: 'Average this window',
+  sevenDay: 'Average this week',
+};
+
+/** A limit's burn as a tooltip row: the barometer, then (on a second line)
+ *  the window's average pace and where it leads. */
+function burnRow(limit: LimitKey, burn: Burn | undefined) {
+  const now =
+    burn && burn.perHour !== null
+      ? `${formatRate(burn.perHour)} (${lookBack(limit)})`
+      : 'not rising, or too few readings yet';
+  const average = burn?.projection ? formatProjection(burn.projection) : 'not enough data yet';
   return {
-    label,
-    value: `${formatRate(burn.perHour)} over the last ${windowLabel(limit)}\n${formatProjection(burn)}`,
+    label: LIMIT_LABELS[limit],
+    value: `Now: ${now}\n${AVERAGE_LABELS[limit]}: ${average}`,
   };
 }
 
-/** The most pressing limit's burn, "+6%/h", coloured by its outlook; both
- *  limits in the tooltip. */
-function burnCell(burns: LimitBurns, burn: Burn): Cell {
+/** The most pressing limit's barometer, "+6%/h" over its look-back, coloured
+ *  by where its window's average pace leads; both limits in the tooltip. */
+function burnCell(burns: LimitBurns, pressing: PressingBurn): Cell {
   const keys = (Object.keys(LIMIT_LABELS) as LimitKey[]).filter((k) => k in burns);
-  const rows = keys.map((k) => burnRow(k, burns[k]));
-  const legend = `Green: the limit resets first. Amber: ${CLOSE_AT_PCT}% or more by the reset. Red: the limit comes first.`;
-  // A row names a TTR wherever its limit's reset is known.
-  const ttr = keys.some((k) => (burns[k]?.resetsInMs ?? null) !== null);
+  const legend =
+    "The colour: where the window's average pace so far, idle time included, leads by the reset. " +
+    `Green: the limit resets first. Amber: ${CLOSE_AT_PCT}% or more by the reset. Red: the limit comes first.`;
+  // A projection names its TTR.
+  const ttr = keys.some((k) => burns[k]?.projection);
   return {
     key: 'burn',
     kind: 'burn',
-    rate: formatRate(burn.perHour),
-    outlook: burnOutlook(burn),
+    rate: formatRate(pressing.perHour),
+    outlook: pressing.projection ? burnOutlook(pressing.projection) : null,
     label: 'Burn',
+    caption: lookBack(pressing.limit),
     tooltip: {
       title: 'Burn rate',
       body: ttr ? `${legend} ${TTR_MEANING}` : legend,
-      rows,
+      rows: keys.map((k) => burnRow(k, burns[k])),
     },
   };
 }
@@ -225,7 +245,7 @@ export function UsageSection({ contextUsage, rateLimits, burns }: UsageSectionPr
     cells.push(limitCell('fiveHour', limits.fiveHour, now));
     cells.push(limitCell('sevenDay', limits.sevenDay, now));
   }
-  if (pressing) cells.push(burnCell(burns, pressing.burn));
+  if (pressing) cells.push(burnCell(burns, pressing));
 
   const { rootRef, sizerRef, density } = useFittedDensity<UsageDensity>(
     fitUsage,
