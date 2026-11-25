@@ -8,7 +8,7 @@ import type {
   PrReviewThread,
 } from '../../../shared/types';
 import type { TextRange } from '../../stores/editorTabsStore';
-import type { FileBadges } from '../diffEditor/EditorTree';
+import type { FileBadges } from '../fileTree/model';
 import { threadLocation } from '../../utils/prReviewNotices';
 import { isInlineThread } from '../diffEditor/prReview/prViewPolicy';
 import { editorTreeOrder } from '../fileTree/treeOrder';

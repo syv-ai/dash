@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ITheme as XtermTheme } from '@xterm/xterm';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../ui/Resizable';
 import type { EditorView } from './types';
-import { EditorTree } from './EditorTree';
+import { RepoTree } from '../fileTree/RepoTree';
 import { EditorGroups } from './EditorGroups';
 import { useEditorWorkspace, type EditorTarget } from './useEditorWorkspace';
 import { activePath } from './tabs/editorLayout';
@@ -62,7 +62,7 @@ export function DiffEditor({
           className="pr-3"
           {...treePanel}
         >
-          <EditorTree
+          <RepoTree
             cwd={cwd}
             git={ws.git}
             view={ws.view}

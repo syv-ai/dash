@@ -31,7 +31,7 @@ import {
   panelEaseMs,
   type PanelImperativeHandle,
 } from '../ui/Resizable';
-import { EditorTree } from '../diffEditor/EditorTree';
+import { RepoTree } from '../fileTree/RepoTree';
 import { HistoryList } from '../diffEditor/HistoryList';
 import { useEditorWorkspace, type EditorTarget } from '../diffEditor/useEditorWorkspace';
 import { activePath, type OpenOptions } from '../diffEditor/tabs/editorLayout';
@@ -589,7 +589,7 @@ export function RightInspector({
 
   // The editor's tree: the changes or the whole repo (review mode has its own).
   const editorTree = (
-    <EditorTree
+    <RepoTree
       cwd={task.path}
       git={ws.git}
       view={view}

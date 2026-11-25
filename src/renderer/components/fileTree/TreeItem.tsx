@@ -1,0 +1,368 @@
+import * as React from 'react';
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  Columns2,
+  Copy,
+  FileText,
+  FolderOpen,
+  Link2,
+} from 'lucide-react';
+import { CharColumn } from '../ui/CharColumn';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItems,
+  ContextMenuTrigger,
+} from '../ui/ContextMenu';
+import { CountBadge } from '../ui/CountBadge';
+import { HoverSwapSlot } from '../ui/HoverSwapSlot';
+import { IconButton } from '../ui/IconButton';
+import { IdeIcon } from '../ui/IdeIcon';
+import { LineStats } from '../ui/LineStats';
+import { ListRow } from '../ui/ListRow';
+import { Tooltip } from '../ui/Tooltip';
+import { usePreferredIde } from '../../hooks/usePreferredIde';
+import { openInIde } from '../../lib/openInIde';
+import { absolutePath } from '../diffEditor/editor/fileRef';
+import { copyText, revealLabel } from '../diffEditor/fileActions';
+import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
+import type { FileChangeStatus } from '../../../shared/types';
+import type { FileBadges, ItemRow, TreeColumns, TreeRow } from './model';
+
+const STATUS_LETTER: Record<FileChangeStatus, string> = {
+  modified: 'M',
+  added: 'A',
+  deleted: 'D',
+  renamed: 'R',
+  untracked: 'U',
+  conflicted: 'C',
+  ignored: 'I',
+};
+
+/** The leading control column (stage, viewed) takes two indent steps at the
+ *  row's left edge; the rows' nesting starts past it. */
+const LEADING_STEPS = 2;
+
+export interface TreeItemProps {
+  row: ItemRow;
+  cwd: string;
+  cols: TreeColumns;
+  selected: boolean;
+  /** Shown quietly: viewed, or ignored. */
+  quiet: boolean;
+  badges: FileBadges | undefined;
+  /** The roving tab stop: the one row Tab lands on. */
+  tabStop: boolean;
+  /** The control in the left-edge column; undefined: the tree has none. */
+  leading: React.ReactNode | undefined;
+  /** Hover actions; null: the default (copy the relative path). */
+  actions: React.ReactNode;
+  canOpenToSide: boolean;
+  /** A file: open it (a click previews, ⌥ to the side). A folder: toggle. */
+  onActivate: (opts?: OpenOptions) => void;
+  onFocusRow: () => void;
+  rowRef: (el: HTMLElement | null) => void;
+}
+
+/** A tree row: its nesting, chevron, name, line and status columns, badges,
+ *  hover actions and right-click menu. Everything a tree varies comes in as
+ *  `leading` and `actions`. */
+export function TreeItem({
+  row,
+  cwd,
+  cols,
+  selected,
+  quiet,
+  badges,
+  tabStop,
+  leading,
+  actions,
+  canOpenToSide,
+  onActivate,
+  onFocusRow,
+  rowRef,
+}: TreeItemProps) {
+  const folder = row.kind === 'folder';
+  const path = folder ? row.folder.path : row.file.path;
+  const Chevron = folder && row.open ? ChevronDown : ChevronRight;
+  const item = (
+    <ListRow
+      as="div"
+      size="sm"
+      ref={rowRef}
+      role="treeitem"
+      aria-level={row.depth + 1}
+      aria-expanded={folder ? row.open : undefined}
+      aria-selected={folder ? undefined : selected}
+      tabIndex={tabStop ? 0 : -1}
+      data-key={row.key}
+      selected={selected}
+      dimmed={quiet}
+      indent={row.depth + (leading !== undefined ? LEADING_STEPS : 0)}
+      title={folder ? undefined : path}
+      className="group/swap relative cursor-pointer"
+      onFocus={(e: React.FocusEvent) => e.target === e.currentTarget && onFocusRow()}
+      onClick={(e: React.MouseEvent) =>
+        onActivate(folder ? undefined : { toSide: e.altKey, preview: true })
+      }
+      onDoubleClick={folder ? undefined : () => onActivate()}
+      onKeyDown={(e: React.KeyboardEvent) => {
+        // A control in the row (a tick, an action) handles its own keys.
+        if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+        e.preventDefault();
+        onActivate(folder ? undefined : { toSide: e.altKey, preview: true });
+      }}
+      leading={
+        <>
+          {leading !== undefined && (
+            <span className="absolute inset-y-0 left-2.5 flex items-center">{leading}</span>
+          )}
+          {/* A file keeps the chevron's room, so names line up with folders'. */}
+          {folder ? <Chevron size={14} strokeWidth={1.8} /> : <span className="size-3.5" />}
+        </>
+      }
+      trailing={
+        <HoverSwapSlot
+          rest={<Columns row={row} cols={cols} badges={badges} />}
+          actions={actions ?? <CopyPathAction path={path} />}
+        />
+      }
+    >
+      {folder ? (
+        <>
+          {row.name}
+          <span className="text-ink-3">/</span>
+        </>
+      ) : (
+        row.file.name
+      )}
+    </ListRow>
+  );
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{item}</ContextMenuTrigger>
+      <ContextMenuContent>
+        {folder ? (
+          <FolderMenu cwd={cwd} path={path} open={row.open} onToggle={() => onActivate()} />
+        ) : (
+          <FileMenu cwd={cwd} path={path} canOpenToSide={canOpenToSide} onOpen={onActivate} />
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+/** A lazy folder's state in place of its rows: reading, empty, or why not,
+ *  under the folder's name. */
+export function TreeNote({
+  row,
+  leading,
+}: {
+  row: Extract<TreeRow, { kind: 'note' }>;
+  /** The tree has a leading column. */
+  leading: boolean;
+}) {
+  return (
+    <ListRow
+      as="div"
+      size="sm"
+      role="presentation"
+      dimmed
+      indent={row.depth + (leading ? LEADING_STEPS : 0)}
+      title={row.failed ? row.text : undefined}
+      className="cursor-default"
+      leading={<span className="size-3.5" />}
+    >
+      {row.text}
+    </ListRow>
+  );
+}
+
+/** The row's columns at rest, each as wide as the tree's widest value: the
+ *  PR's threads, your comments, lines added and removed (a folder's while
+ *  it is closed), and a file's status letter or a folder's changed count. */
+function Columns({
+  row,
+  cols,
+  badges,
+}: {
+  row: ItemRow;
+  cols: TreeColumns;
+  badges: FileBadges | undefined;
+}) {
+  let add = 0;
+  let del = 0;
+  let status: React.ReactNode = null;
+  let statusLabel: string | undefined;
+  if (row.kind === 'file') {
+    const c = row.file.change;
+    if (c) {
+      add = c.additions;
+      del = c.deletions;
+      status = STATUS_LETTER[c.status];
+    }
+  } else {
+    const t = row.folder.tally;
+    if (!row.open) {
+      // New files count too, so the folders sum to the tree's total.
+      add = t.add + t.untrackedAdd;
+      del = t.del;
+    }
+    if (t.changed > 0) {
+      status = t.changed;
+      statusLabel = `${t.changed} changed`;
+    }
+  }
+  return (
+    <span className="flex items-center gap-1.5 text-xs">
+      {cols.threads && (
+        <span className="flex w-4.5 justify-end">
+          {!!badges?.threads && <ThreadBadge count={badges.threads} />}
+        </span>
+      )}
+      {cols.comments && (
+        <span className="flex w-4.5 justify-end">
+          {!!badges?.comments && <CommentBadge count={badges.comments} />}
+        </span>
+      )}
+      {(cols.add > 0 || cols.del > 0) && (
+        <LineStats add={add} del={del} columns={{ add: cols.add, del: cols.del }} />
+      )}
+      {cols.status > 0 && (
+        <CharColumn chars={cols.status} align="center" aria-label={statusLabel}>
+          {status}
+        </CharColumn>
+      )}
+    </span>
+  );
+}
+
+/** The PR's unresolved threads on a file: outlined, apart from yours. */
+function ThreadBadge({ count }: { count: number }) {
+  const label = `${count} unresolved thread${count !== 1 ? 's' : ''}`;
+  return (
+    <Tooltip content={label}>
+      <span aria-label={label} className="flex">
+        <CountBadge count={count} tone="outline" />
+      </span>
+    </Tooltip>
+  );
+}
+
+/** Your notes and comments on a file needing attention. */
+function CommentBadge({ count }: { count: number }) {
+  const label = `${count} comment${count !== 1 ? 's' : ''}`;
+  return (
+    <Tooltip content={label}>
+      <span aria-label={label} className="flex">
+        <CountBadge count={count} />
+      </span>
+    </Tooltip>
+  );
+}
+
+function CopyPathAction({ path }: { path: string }) {
+  return (
+    <IconButton
+      title="Copy relative path"
+      size="sm"
+      onClick={(e) => {
+        e.stopPropagation();
+        copyText(path, 'relative path');
+      }}
+    >
+      <Copy size={14} strokeWidth={1.8} />
+    </IconButton>
+  );
+}
+
+/** A file's right-click menu. Mounted only while open, so the rows don't each
+ *  subscribe to the IDE setting. */
+function FileMenu({
+  cwd,
+  path,
+  canOpenToSide,
+  onOpen,
+}: {
+  cwd: string;
+  path: string;
+  canOpenToSide: boolean;
+  onOpen: (opts?: OpenOptions) => void;
+}) {
+  const { ideId, openLabel } = usePreferredIde();
+  const abs = absolutePath(cwd, path);
+  return (
+    <ContextMenuItems
+      items={[
+        // A menu open is deliberate: it keeps its tab (a click only previews).
+        { label: 'Open', icon: FileText, onSelect: () => onOpen() },
+        canOpenToSide && {
+          label: 'Open in new pane',
+          icon: Columns2,
+          onSelect: () => onOpen({ toSide: true }),
+        },
+        'separator',
+        { label: 'Copy path', icon: Link2, onSelect: () => copyText(abs, 'path') },
+        {
+          label: 'Copy relative path',
+          icon: Copy,
+          onSelect: () => copyText(path, 'relative path'),
+        },
+        'separator',
+        {
+          label: revealLabel(),
+          icon: FolderOpen,
+          onSelect: () => window.electronAPI.showItemInFolder(abs),
+        },
+        {
+          label: openLabel,
+          icon: (
+            <span className="inline-flex size-3.5 items-center justify-center">
+              <IdeIcon ideId={ideId} size={14} />
+            </span>
+          ),
+          onSelect: () => void openInIde(abs),
+        },
+      ]}
+    />
+  );
+}
+
+function FolderMenu({
+  cwd,
+  path,
+  open,
+  onToggle,
+}: {
+  cwd: string;
+  path: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const abs = absolutePath(cwd, path);
+  return (
+    <ContextMenuItems
+      items={[
+        open
+          ? { label: 'Collapse', icon: ChevronsDownUp, onSelect: onToggle }
+          : { label: 'Expand', icon: ChevronsUpDown, onSelect: onToggle },
+        'separator',
+        { label: 'Copy path', icon: Link2, onSelect: () => copyText(abs, 'path') },
+        {
+          label: 'Copy relative path',
+          icon: Copy,
+          onSelect: () => copyText(path, 'relative path'),
+        },
+        'separator',
+        {
+          label: revealLabel(),
+          icon: FolderOpen,
+          onSelect: () => window.electronAPI.showItemInFolder(abs),
+        },
+      ]}
+    />
+  );
+}

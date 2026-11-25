@@ -2,7 +2,7 @@ import { useCallback, useId, useMemo } from 'react';
 import type { PrReview } from '../../../shared/types';
 import { usePrReviews } from '../../stores/prReviewStore';
 import { useUi } from '../../stores/uiStore';
-import { EditorTree, type ViewedColumn } from '../diffEditor/EditorTree';
+import { RepoTree, type ViewedColumn } from '../fileTree/RepoTree';
 import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
 import type { EditorView } from '../diffEditor/types';
 import { Switch } from '../ui/Switch';
@@ -79,7 +79,7 @@ export function ReviewFiles({
 
   return (
     <div className="h-full min-h-0">
-      <EditorTree
+      <RepoTree
         cwd={cwd}
         git
         view={view}

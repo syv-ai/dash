@@ -1,4 +1,5 @@
 import React from 'react';
+import { cn } from '../../lib/cn';
 
 interface HoverSwapSlotProps {
   /** The row's quiet trailing values (an orb, a count, a percentage). Give them
@@ -7,7 +8,9 @@ interface HoverSwapSlotProps {
   /** Slide in from the row's right edge, across `rest`, while the enclosing
    *  `group/swap` row is hovered. Not bound to `rest`'s width. */
   actions: React.ReactNode;
-  /** Keep `actions` shown without hover, e.g. while one of their menus is open. */
+  /** Keep `actions` shown without hover, e.g. while one of their menus is open.
+   *  A Radix menu or popover opened from an action (its trigger's
+   *  `data-state="open"`) keeps them shown by itself. */
   revealed?: boolean;
 }
 
@@ -18,27 +21,33 @@ interface HoverSwapSlotProps {
  */
 export function HoverSwapSlot({ rest, actions, revealed = false }: HoverSwapSlotProps) {
   return (
-    <div className="relative flex items-center justify-end shrink-0">
+    <div className="group/slot relative flex shrink-0 items-center justify-end">
       <div
-        className={`flex items-center transition-opacity duration-200 ease-out ${
-          revealed ? 'opacity-0' : 'opacity-100 group-hover/swap:opacity-0'
-        }`}
+        className={cn(
+          'flex items-center transition-opacity duration-200 ease-out',
+          revealed
+            ? 'opacity-0'
+            : 'opacity-100 group-hover/swap:opacity-0 group-has-[[data-state=open]]/slot:opacity-0',
+        )}
       >
         {rest}
       </div>
       {/* The clip box sits at the row's right edge; the actions slide their
           full width in from behind it, like a drawer. */}
       <div
-        className={`absolute inset-y-0 right-0 flex items-center overflow-x-clip ${
-          revealed ? '' : 'pointer-events-none group-hover/swap:pointer-events-auto'
-        }`}
+        className={cn(
+          'absolute inset-y-0 right-0 flex items-center overflow-x-clip',
+          !revealed &&
+            'pointer-events-none group-hover/swap:pointer-events-auto has-[[data-state=open]]:pointer-events-auto',
+        )}
       >
         <div
-          className={`flex items-center gap-0.5 transition-[opacity,translate] duration-200 ease-out ${
+          className={cn(
+            'flex items-center gap-0.5 transition-[opacity,translate] duration-200 ease-out',
             revealed
-              ? 'opacity-100 translate-x-0'
-              : 'opacity-0 translate-x-full group-hover/swap:opacity-100 group-hover/swap:translate-x-0'
-          }`}
+              ? 'translate-x-0 opacity-100'
+              : 'translate-x-full opacity-0 group-hover/swap:translate-x-0 group-hover/swap:opacity-100 has-[[data-state=open]]:translate-x-0 has-[[data-state=open]]:opacity-100',
+          )}
         >
           {actions}
         </div>

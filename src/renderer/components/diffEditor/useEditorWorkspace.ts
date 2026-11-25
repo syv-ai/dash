@@ -23,7 +23,7 @@ import {
 } from './tabs/editorLayout';
 import { isDirty, workingUri } from './models';
 import { absolutePath } from './editor/fileRef';
-import type { FileBadges } from './EditorTree';
+import type { FileBadges } from '../fileTree/model';
 
 const NO_COMMENTS: Record<string, DiffComment[]> = {};
 
