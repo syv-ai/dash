@@ -16,15 +16,7 @@ import type { CommitRun } from './useCommitRun';
  * files (⌘↵), or push what is already committed. The run itself is shown by
  * the changes panel, through `run`.
  */
-export function CommitPopover({
-  run,
-  labelClassName,
-}: {
-  run: CommitRun;
-  /** Layout only: e.g. a container query that hides the label where room
-   *  is short (the tooltip and accessible name keep it). */
-  labelClassName?: string;
-}) {
+export function CommitPopover({ run }: { run: CommitRun }) {
   const gitStatus = useGit((s) => s.gitStatus);
   const onPush = useGit((s) => s.push);
   const [open, setOpen] = useState(false);
@@ -97,13 +89,13 @@ export function CommitPopover({
             disabled={staged.length === 0 || running}
           >
             <GitCommitHorizontal size={14} strokeWidth={1.8} />
-            <span className={labelClassName}>Commit</span>
+            Commit
           </Button>
         </PopoverTrigger>
       </Tooltip>
       <PopoverContent
         side="left"
-        align="start"
+        align="end"
         sideOffset={12}
         onInteractOutside={(e) => e.preventDefault()}
         className="h-110 w-100"

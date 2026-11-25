@@ -11,9 +11,9 @@ import {
   type RefObject,
 } from 'react';
 import type { ITheme as XtermTheme } from '@xterm/xterm';
-import { Info, MessageSquareCode, Minus, MoreHorizontal, Plus, X } from 'lucide-react';
+import { Info, MessageSquareCode, X } from 'lucide-react';
 import { FileChangesPanel } from '../changes/FileChangesPanel';
-import { CommitPopover } from '../changes/CommitPopover';
+import { CommitBar } from '../changes/CommitBar';
 import { useCommitRun } from '../changes/useCommitRun';
 import { ShellDrawerWrapper } from '../terminal/ShellDrawerWrapper';
 import { PortsDrawerWrapper } from './PortsDrawerWrapper';
@@ -24,13 +24,6 @@ import { cn } from '../../lib/cn';
 import { FolderTabs } from '../ui/FolderTabs';
 import { folderSheet } from '../ui/FolderTab';
 import { CountBadge } from '../ui/CountBadge';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuShortcut,
-  DropdownMenuTrigger,
-} from '../ui/DropdownMenu';
 import {
   ResizableHandle,
   ResizablePanel,
@@ -72,7 +65,7 @@ import { useSettings } from '../../stores/settingsStore';
 import { useUi } from '../../stores/uiStore';
 import { useEditorTabs } from '../../stores/editorTabsStore';
 import { useCommentsStore } from '../../stores/commentsStore';
-import { formatBinding, matchesBinding, type KeyBinding } from '../../keybindings';
+import { matchesBinding, type KeyBinding } from '../../keybindings';
 import { needsAttention } from '../../../shared/diffComments';
 import type { ContextUsage, RateLimits, Task } from '../../../shared/types';
 import type { LimitBurns } from '../../lib/burnRate';
@@ -189,8 +182,6 @@ export function RightInspector({
 }: RightInspectorProps) {
   const gitStatus = useGit((s) => s.gitStatus);
   const gitLoading = useGit((s) => s.gitLoading);
-  const stageAll = useGit((s) => s.stageAll);
-  const unstageAll = useGit((s) => s.unstageAll);
   const keybindings = useSettings((s) => s.keybindings);
   const shellDrawerCollapsed = useSettings((s) => s.shellDrawerCollapsed);
   const setShellDrawerCollapsed = useSettings((s) => s.setShellDrawerCollapsed);
@@ -412,44 +403,20 @@ export function RightInspector({
   };
 
   const files = gitStatus?.files ?? [];
-  const stagedCount = files.filter((f) => f.staged).length;
-  const unstagedCount = files.length - stagedCount;
   // Collapse/expand animates; the flag drops once the ease is over.
   const settleShellDrawer = (collapsed: boolean) => {
     setShellDrawerCollapsed(collapsed);
     setTimeout(() => setShellDrawerAnimating(false), panelEaseMs());
   };
 
-  // Below 24rem the bulk actions fold into a menu and Commit drops its label,
-  // so the views keep their room.
-  const compact = '@max-sm/sidehead:hidden';
-  // Working-tree actions: review mode's Changes are the PR's.
-  const bulkActions = [
-    !reviewing &&
-      unstagedCount > 0 && {
-        label: 'Stage all',
-        binding: keybindings.stageAll,
-        icon: <Plus size={14} strokeWidth={1.8} />,
-        run: () => void stageAll(),
-      },
-    !reviewing &&
-      stagedCount > 0 && {
-        label: 'Unstage all',
-        binding: keybindings.unstageAll,
-        icon: <Minus size={14} strokeWidth={1.8} />,
-        run: () => void unstageAll(),
-      },
-    // The editor holds the comments; this opens it. Review mode's Comments
-    // tab counts and lists them itself.
-    !reviewing &&
-      commentCount > 0 && {
-        label: `Comments: ${commentCount} to send`,
-        binding: undefined,
-        icon: <MessageSquareCode size={14} strokeWidth={1.8} />,
-        run: onOpenEditor,
-        count: commentCount,
-      },
-  ].filter((a) => a !== false);
+  // The comments to send: the editor holds them; the header's button opens
+  // it. Review mode's Comments tab counts and lists them itself.
+  const showComments = !reviewing && commentCount > 0;
+  // The commit actions, as Changes' footer, while it lists any (review
+  // mode's Changes are the PR's).
+  const commitBar = !reviewing && segment === 'changes' && files.length > 0 && (
+    <CommitBar run={run} />
+  );
 
   // The list column's width while split: its mode's own (`loadListWidth`),
   // taken as it splits and as the mode changes; kept only when the user
@@ -497,12 +464,12 @@ export function RightInspector({
 
   const header = (
     // On the sheet's top edge, 1px over, like the editor's tab strip.
-    <div className="@container/sidehead relative z-10 -mb-px flex h-9 shrink-0 items-center gap-0.5 pr-1">
+    <div className="relative z-10 -mb-px flex h-9 shrink-0 items-center gap-0.5 pr-1">
       {/* Who gives way as the row narrows: the views' counts first (into
-          their tooltips), then the middle (the bulk actions, Commit, the PR
+          their tooltips), then the middle (the comments to send, the PR
           button), which clips at its end. The views' labels and Details never
-          do: the sidebar is kept as wide as they need (`onMinWidth`).
-          Commit's label goes below 24rem, the bulk actions into a menu. */}
+          do: the sidebar is kept as wide as they need (`onMinWidth`). The
+          commit actions are Changes' footer (`CommitBar`), not the row's. */}
       <FolderTabs<Segment>
         aria-label="Task sidebar view"
         className="ml-3"
@@ -542,39 +509,16 @@ export function RightInspector({
       />
       {/* The padding keeps focus outlines inside the clip. */}
       <div className="flex min-w-0 flex-auto items-center gap-0.5 self-stretch overflow-hidden px-1">
-        {bulkActions.map((a) => (
-          <div key={a.label} className={cn('flex shrink-0 items-center', compact)}>
-            <IconButton size="sm" title={a.label} shortcut={a.binding} onClick={a.run}>
-              {a.icon}
+        {showComments && (
+          <div className="flex shrink-0 items-center">
+            <IconButton
+              size="sm"
+              title={`Comments: ${commentCount} to send`}
+              onClick={onOpenEditor}
+            >
+              <MessageSquareCode size={14} strokeWidth={1.8} />
             </IconButton>
-            {a.count !== undefined && <CountBadge count={a.count} className="-ml-1" />}
-          </div>
-        ))}
-        {!reviewing && stagedCount > 0 && (
-          <div className="ml-1 shrink-0">
-            <CommitPopover run={run} labelClassName={compact} />
-          </div>
-        )}
-        {bulkActions.length > 0 && (
-          <div className="hidden shrink-0 @max-sm/sidehead:block">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <IconButton size="sm" title="More actions">
-                  <MoreHorizontal size={14} strokeWidth={1.8} />
-                </IconButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {bulkActions.map((a) => (
-                  <DropdownMenuItem key={a.label} onSelect={a.run}>
-                    {a.icon}
-                    {a.label}
-                    {a.binding && (
-                      <DropdownMenuShortcut>{formatBinding(a.binding)}</DropdownMenuShortcut>
-                    )}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <CountBadge count={commentCount} className="-ml-1" />
           </div>
         )}
         {!reviewing && (
@@ -700,9 +644,13 @@ export function RightInspector({
       />
     );
 
-  // The view tabs' sheet: the list under them, as an open file under its tab.
+  // The view tabs' sheet: the list under them, as an open file under its
+  // tab, over Changes' commit actions.
   const onSheet = (content: ReactNode) => (
-    <div className={cn('h-full', folderSheet)}>{content}</div>
+    <div className={cn('flex h-full flex-col', folderSheet)}>
+      <div className="flex min-h-0 flex-1 flex-col">{content}</div>
+      {commitBar}
+    </div>
   );
 
   const withPorts = (content: ReactNode) => (
