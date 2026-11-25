@@ -479,6 +479,30 @@
   background: hsl(var(--muted-foreground) / 0.45);
 }
 
+/* ── Terminal resize curtain (`TerminalResizeVeil`) ───────── */
+
+/* Shown, it covers the terminal at once (a short fade); lifted, its left edge
+   sweeps across to the right, revealing the settled terminal, and only then
+   goes clear. When it shows and lifts is `terminal/resizeVeil.ts`'s. */
+.terminal-curtain {
+  clip-path: inset(0 0 0 100%);
+  opacity: 0;
+  transition:
+    clip-path 240ms var(--ease-calm),
+    opacity 0s linear 240ms;
+}
+.terminal-curtain[data-shown] {
+  clip-path: inset(0);
+  opacity: 1;
+  transition: opacity 80ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .terminal-curtain,
+  .terminal-curtain[data-shown] {
+    transition: none;
+  }
+}
+
 /* ── Resizable panels ─────────────────────────────────────── */
 
 /* `ResizablePanel animate`: ease collapse/expand and imperative resizes. The
