@@ -17,18 +17,18 @@ export function CheckStateIcon({
   label?: string;
 }) {
   const { icon: Icon, tone, pulse } = checkLook(state);
+  // The tone sits on a wrapper and the svg takes `currentColor`, so rows that
+  // recolour their svgs (`[&_svg]:text-current`, a menu entry) keep it.
   return (
-    <Icon
-      size={14}
-      strokeWidth={1.8}
-      fill="currentColor"
-      aria-label={label}
-      aria-hidden={label ? undefined : true}
-      className={cn(
-        'shrink-0 [&>:not(:first-child)]:fill-none [&>:not(:first-child)]:stroke-well',
-        tone,
-        pulse,
-      )}
-    />
+    <span className={cn('inline-flex shrink-0', tone, pulse)}>
+      <Icon
+        size={14}
+        strokeWidth={1.8}
+        fill="currentColor"
+        aria-label={label}
+        aria-hidden={label ? undefined : true}
+        className="[&>:not(:first-child)]:fill-none [&>:not(:first-child)]:stroke-well"
+      />
+    </span>
   );
 }
