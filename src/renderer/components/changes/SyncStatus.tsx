@@ -1,6 +1,9 @@
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import type { GitStatus } from '../../../shared/types';
+import { cn } from '../../lib/cn';
 import { TextLink } from '../ui/TextLink';
+import { Tooltip } from '../ui/Tooltip';
+import { firstFitting, useFittedDensity } from '../ui/useFittedDensity';
 
 /** Where each count leads: the unpushed commits, the upstream's commits. */
 export interface SyncLinks {
@@ -59,28 +62,129 @@ export function syncWords(ahead: number, behind: number): { ahead: string; behin
   };
 }
 
+/** "3 commits ahead, 1 behind", "2 commits behind": the words with their
+ *  counts, a zero side left out (the compact text's tooltip). */
+export function syncSentence(ahead: number, behind: number): string {
+  const words = syncWords(ahead, behind);
+  const parts = [ahead > 0 && `${ahead} ${words.ahead}`, behind > 0 && `${behind} ${words.behind}`];
+  return parts.filter(Boolean).join(', ');
+}
+
+/** How the sync text fits its room: in words, or (narrow) "↑3 ↓1". */
+export type SyncDensity = 'words' | 'arrows';
+
+/** The measured densities, widest first; `arrows` is the floor. */
+const SYNC_MEASURED = ['words'] as const;
+
+/** Room the words must leave beyond their natural width, so they never run
+ *  up against what follows them in the row (Files' "Show filetree"). */
+export const SYNC_COMFORT_PX = 16;
+
+/** Words while their natural width (`needs[0]`) plus `SYNC_COMFORT_PX` fits
+ *  `available`, else arrows. */
+export const fitSync = (available: number, needs: readonly number[]): SyncDensity =>
+  firstFitting(available - SYNC_COMFORT_PX, needs, SYNC_MEASURED) ?? 'arrows';
+
+const arrowIcon = { size: 12, strokeWidth: 1.8, 'aria-hidden': true } as const;
+
+/** One side's count and what follows it: the words, or an arrow before it. */
+function SyncPart({
+  count,
+  words,
+  side,
+  density,
+}: {
+  count: number;
+  words: string;
+  side: 'ahead' | 'behind';
+  density: SyncDensity;
+}) {
+  const tone = side === 'ahead' ? 'text-loc-add' : 'text-loc-del';
+  if (density === 'words') {
+    return (
+      <>
+        <span className={tone}>{count}</span> {words}
+      </>
+    );
+  }
+  const Arrow = side === 'ahead' ? ArrowUp : ArrowDown;
+  return (
+    <span className={cn('inline-flex items-center', tone)}>
+      <Arrow {...arrowIcon} />
+      {count}
+    </span>
+  );
+}
+
+/** The text at `density`, each side a link to its commits; a bare copy (for
+ *  measuring) has no links. */
+function SyncLine({
+  status: { ahead, behind },
+  density,
+  links,
+}: {
+  status: Sync;
+  density: SyncDensity;
+  links?: SyncLinks;
+}) {
+  const words = syncWords(ahead, behind);
+  // The compact text names itself in one tooltip, so its links carry none.
+  const titled = density === 'words';
+  const part = (side: 'ahead' | 'behind', count: number, title: string, onClick?: () => void) => {
+    const text = <SyncPart count={count} words={words[side]} side={side} density={density} />;
+    if (!links) return text;
+    return (
+      <TextLink look="muted" title={titled ? title : undefined} onClick={onClick}>
+        {text}
+      </TextLink>
+    );
+  };
+  return (
+    <span className="whitespace-nowrap text-ink-2 tabular-nums">
+      {ahead > 0 && part('ahead', ahead, 'Show the unpushed commits', links?.onShowUnpushed)}
+      {ahead > 0 && behind > 0 && (density === 'words' ? ', ' : ' ')}
+      {behind > 0 && part('behind', behind, "Show the upstream's commits", links?.onShowUpstream)}
+    </span>
+  );
+}
+
 /**
  * "3 commits ahead, 1 behind", for a branch and upstream that have moved apart
- * (`isOutOfSync`): Files' top row, always. Secondary ink,
- * the counts green and red, each part a link to those commits; it inherits
- * size.
+ * (`isOutOfSync`): Files' top row, always. Secondary ink, the counts green and
+ * red, each part a link to those commits; it inherits size. Where the words
+ * don't fit (measured, `fitSync`) it reads "↑3 ↓1", the words in its tooltip.
+ * It takes the room it is given (it grows to fill a flex row).
  */
 export function SyncText({ status, links }: { status: Sync; links: SyncLinks }) {
-  const { ahead, behind } = status;
-  const words = syncWords(ahead, behind);
+  const { rootRef, sizerRef, density } = useFittedDensity<SyncDensity>(
+    fitSync,
+    'words',
+    `${status.ahead}:${status.behind}`,
+  );
+  const line = <SyncLine status={status} density={density} links={links} />;
   return (
-    <span className="text-ink-2 tabular-nums">
-      {ahead > 0 && (
-        <TextLink look="muted" title="Show the unpushed commits" onClick={links.onShowUnpushed}>
-          <span className="text-loc-add">{ahead}</span> {words.ahead}
-        </TextLink>
+    <div ref={rootRef} className="relative flex min-w-0 flex-1">
+      {density === 'words' ? (
+        line
+      ) : (
+        <Tooltip
+          content={{
+            title: syncSentence(status.ahead, status.behind),
+            body: 'Click a count to show those commits.',
+          }}
+        >
+          <span className="flex min-w-0">{line}</span>
+        </Tooltip>
       )}
-      {ahead > 0 && behind > 0 && ', '}
-      {behind > 0 && (
-        <TextLink look="muted" title="Show the upstream's commits" onClick={links.onShowUpstream}>
-          <span className="text-loc-del">{behind}</span> {words.behind}
-        </TextLink>
-      )}
-    </span>
+      <div
+        ref={sizerRef}
+        aria-hidden
+        className="invisible absolute inset-x-0 top-0 h-0 overflow-hidden"
+      >
+        <div className="w-max">
+          <SyncLine status={status} density="words" />
+        </div>
+      </div>
+    </div>
   );
 }

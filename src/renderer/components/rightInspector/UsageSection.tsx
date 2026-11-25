@@ -18,7 +18,7 @@ import {
 import { usageColor } from '../../lib/usageColor';
 import { useMinuteClock } from '../../hooks/useMinuteClock';
 import { useSettings } from '../../stores/settingsStore';
-import { LevelText } from '../ui/LevelText';
+import { LEVEL_FIGURE, LevelText } from '../ui/LevelText';
 import { ProgressRing } from '../ui/ProgressRing';
 import { Tooltip, type RichTooltip } from '../ui/Tooltip';
 import { useFittedDensity } from '../ui/useFittedDensity';
@@ -89,14 +89,13 @@ function Column({ cell, density, bare }: { cell: Cell; density: UsageDensity; ba
 /** A level as a ring with its percent inside, or (compact) the percent alone,
  *  coloured by how close it is to full; the pace's rate in a ring-sized box. */
 function Figure({ cell, density }: { cell: Cell; density: UsageDensity }) {
-  const figure = 'text-base font-semibold tabular-nums';
   if (cell.kind === 'pace') {
     return (
       <span
         className={cn(
           'flex size-16 items-center justify-center',
           cell.outlook ? OUTLOOK_TEXT[cell.outlook] : 'text-ink',
-          figure,
+          LEVEL_FIGURE,
         )}
       >
         {cell.rate}
@@ -116,7 +115,7 @@ function Figure({ cell, density }: { cell: Cell; density: UsageDensity }) {
   }
   return (
     <ProgressRing value={pct} size={64} stroke={6} color={color} aria-label={aria}>
-      <span className={cn(figure, pct === null ? 'text-ink-3' : 'text-ink')}>{reading}</span>
+      <span className={cn(LEVEL_FIGURE, pct === null ? 'text-ink-3' : 'text-ink')}>{reading}</span>
     </ProgressRing>
   );
 }
