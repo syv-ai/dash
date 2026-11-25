@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fitDensity, segmentTip } from '../Segmented';
+import { firstFitting } from '../useFittedDensity';
 
 describe('fitDensity', () => {
   const needs = [300, 260, 230];
@@ -30,5 +31,12 @@ describe('segmentTip', () => {
     expect(segmentTip({ label: 'Files', count: 7 }, false)).toBe('Files: 7');
     expect(segmentTip({ label: 'Files', count: 7, title: 'PR files' }, false)).toBe('PR files (7)');
     expect(segmentTip({ label: 'History' }, false)).toBeUndefined();
+  });
+});
+
+describe('firstFitting', () => {
+  it('is null when no measured row fits (the folder tabs then keep their labels)', () => {
+    expect(firstFitting(200, [334, 302], ['full', 'uncounted'])).toBeNull();
+    expect(firstFitting(310, [334, 302], ['full', 'uncounted'])).toBe('uncounted');
   });
 });

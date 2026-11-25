@@ -4,6 +4,8 @@ import { cn } from '../../lib/cn';
 import { CountBadge } from './CountBadge';
 import { focusRing } from './styles';
 import { Tooltip } from './Tooltip';
+import { firstFitting, useFittedDensity } from './useFittedDensity';
+import { useReselect } from './useReselect';
 
 const segmentVariants = cva(
   cn(
@@ -33,8 +35,7 @@ const measured = ['full', 'uncounted', 'tight'] as const;
 /** The first density whose natural width fits `available`; `needs` holds the
  *  natural widths of `measured`, in that order. */
 export function fitDensity(available: number, needs: readonly number[]): SegmentDensity {
-  // Half a pixel of slack: layout widths are fractional, client widths not.
-  return measured.find((_, i) => (needs[i] ?? Infinity) <= available + 0.5) ?? 'truncated';
+  return firstFitting(available, needs, measured) ?? 'truncated';
 }
 
 /** A segment's tooltip: its `title`, plus the count once the badge is gone. */
@@ -101,32 +102,16 @@ export function Segmented<T extends string | number | null>({
   size?: 'sm' | 'md';
   'aria-label'?: string;
 }) {
-  const rootRef = React.useRef<HTMLDivElement>(null);
-  const sizerRef = React.useRef<HTMLDivElement>(null);
-  const [density, setDensity] = React.useState<SegmentDensity>('full');
+  const { rootRef, sizerRef, density, needs } = useFittedDensity<SegmentDensity>(
+    fitDensity,
+    'full',
+    options.length,
+  );
   // The full row's natural width. A hugging row (not `fullWidth`) holds it as
   // its width (capped by `max-w-full`), so the room it reads never depends on
   // the density it picked.
-  const [fullNeed, setFullNeed] = React.useState<number>();
-  // Whether the option pressed first in the current click sequence was the
-  // selected one: a double click reselects only then.
-  const selectedAtPress = React.useRef(false);
-
-  React.useLayoutEffect(() => {
-    const root = rootRef.current;
-    const sizer = sizerRef.current;
-    if (!root || !sizer) return;
-    const fit = () => {
-      const needs = Array.from(sizer.children, (row) => row.getBoundingClientRect().width);
-      setFullNeed(Math.ceil(needs[0] ?? 0));
-      setDensity(fitDensity(root.clientWidth, needs));
-    };
-    fit();
-    const observer = new ResizeObserver(fit);
-    observer.observe(root);
-    for (const row of sizer.children) observer.observe(row);
-    return () => observer.disconnect();
-  }, [options.length]);
+  const fullNeed = needs[0];
+  const reselect = useReselect(value, onReselect);
 
   const tight = density === 'tight' || density === 'truncated';
   return (
@@ -147,16 +132,7 @@ export function Segmented<T extends string | number | null>({
             aria-checked={opt.value === value}
             aria-disabled={opt.disabled || undefined}
             onClick={opt.disabled ? undefined : () => onChange(opt.value)}
-            onPointerDown={(e) => {
-              if (e.detail <= 1) selectedAtPress.current = opt.value === value;
-            }}
-            onDoubleClick={
-              opt.disabled || !onReselect
-                ? undefined
-                : () => {
-                    if (selectedAtPress.current && opt.value === value) onReselect(opt.value);
-                  }
-            }
+            {...reselect(opt.value, opt.disabled)}
             className={cn(
               segmentVariants({ size, fullWidth, tight }),
               opt.disabled && 'opacity-40 hover:text-ink-2',

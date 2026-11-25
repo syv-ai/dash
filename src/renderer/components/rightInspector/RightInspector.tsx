@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
   type RefObject,
 } from 'react';
@@ -20,7 +21,8 @@ import { UsageSection } from './UsageSection';
 import { TaskDetails } from './TaskDetails';
 import { IconButton } from '../ui/IconButton';
 import { cn } from '../../lib/cn';
-import { Segmented } from '../ui/Segmented';
+import { FolderTabs } from '../ui/FolderTabs';
+import { folderSheet } from '../ui/FolderTab';
 import { CountBadge } from '../ui/CountBadge';
 import {
   DropdownMenu,
@@ -106,10 +108,17 @@ interface RightInspectorProps {
   shellDrawerRef: RefObject<PanelImperativeHandle | null>;
   onTuiActiveChange: (active: boolean, canvasPx?: number) => void;
   onTaskSettings: () => void;
+  /** The narrowest the sidebar may go (px) so its view tabs read in full;
+   *  reported once measured, and again as the views change. */
+  onMinWidth?: (px: number) => void;
 }
 
 /** The list column's narrowest in review mode, in px (D81). */
 const REVIEW_LIST_MIN_PX = 320;
+/** The view row around its tabs, in px: the 12px that keeps the first tab
+ *  off the sheet's corner, the middle's 8px padding, Details (24) and the
+ *  row's two 2px gaps, its 4px end padding, and the column's 8px gutter. */
+const VIEW_ROW_CHROME_PX = 12 + 8 + 24 + 2 * 2 + 4 + 8;
 
 /** A tooltip label with its shortcut, e.g. "Stage all  ⇧⌘A". */
 function withShortcut(label: string, binding: KeyBinding | undefined): string {
@@ -145,6 +154,7 @@ export function RightInspector({
   shellDrawerRef,
   onTuiActiveChange,
   onTaskSettings,
+  onMinWidth,
 }: RightInspectorProps) {
   const gitStatus = useGit((s) => s.gitStatus);
   const gitLoading = useGit((s) => s.gitLoading);
@@ -409,45 +419,50 @@ export function RightInspector({
       },
   ].filter((a) => a !== false);
 
+  // The view tabs' labels, measured: the list column (narrow, the sidebar)
+  // never goes narrower than they and the row's chrome need.
+  const [tabsMinPx, setTabsMinPx] = useState<number>();
+  const listMinPx = tabsMinPx === undefined ? undefined : tabsMinPx + VIEW_ROW_CHROME_PX;
+  useEffect(() => {
+    if (listMinPx !== undefined) onMinWidth?.(listMinPx);
+  }, [listMinPx, onMinWidth]);
+
   const header = (
-    <div className="@container/sidehead flex h-11 shrink-0 items-center gap-0.5">
-      {/* Who gives way as the row narrows, last first: the views (their
-          counts go, then their padding tightens, then their labels truncate,
-          never below a floor; `Segmented` fits itself), then
-          Details (never), Commit (its label goes below 24rem), the bulk
-          actions (into a menu below 24rem), the PR button (normal mode only;
-          review mode's banner sits above the row).
-          Past all that the middle clips at its end, short of Details.
-          The padding keeps focus outlines inside the clip. */}
-      <div className="flex min-w-0 flex-1 items-center gap-0.5 self-stretch overflow-hidden px-1">
-        <div className={cn('-m-1 min-w-18 overflow-hidden p-1', !expanded && 'flex-auto')}>
-          <Segmented<Segment>
-            aria-label="Task sidebar view"
-            size="sm"
-            fullWidth={false}
-            value={segment}
-            onChange={(next) => next !== 'details' && onPickSegment(next, false)}
-            onReselect={(next) => next !== 'details' && onPickSegment(next, true)}
-            options={
-              reviewing
-                ? [
-                    { value: 'overview', label: 'Overview' },
-                    {
-                      value: 'files',
-                      label: 'Files',
-                      count: review.review?.files.length || undefined,
-                    },
-                    { value: 'comments', label: 'Comments', count: tally?.comments || undefined },
-                    { value: 'history', label: 'History' },
-                  ]
-                : [
-                    { value: 'changes', label: 'Changes', count: files.length || undefined },
-                    { value: 'files', label: 'Files' },
-                    { value: 'history', label: 'History' },
-                  ]
-            }
-          />
-        </div>
+    // On the sheet's top edge, 1px over, like the editor's tab strip.
+    <div className="@container/sidehead relative z-10 -mb-px flex h-9 shrink-0 items-center gap-0.5 pr-1">
+      {/* Who gives way as the row narrows: the views' counts first (into
+          their tooltips), then the middle (the bulk actions, Commit, the PR
+          button), which clips at its end. The views' labels and Details never
+          do: the sidebar is kept as wide as they need (`onMinWidth`).
+          Commit's label goes below 24rem, the bulk actions into a menu. */}
+      <FolderTabs<Segment>
+        aria-label="Task sidebar view"
+        className="ml-3"
+        value={segment}
+        onChange={(next) => next !== 'details' && onPickSegment(next, false)}
+        onReselect={(next) => next !== 'details' && onPickSegment(next, true)}
+        onMinWidth={setTabsMinPx}
+        options={
+          reviewing
+            ? [
+                { value: 'overview', label: 'Overview' },
+                {
+                  value: 'files',
+                  label: 'Files',
+                  count: review.review?.files.length || undefined,
+                },
+                { value: 'comments', label: 'Comments', count: tally?.comments || undefined },
+                { value: 'history', label: 'History' },
+              ]
+            : [
+                { value: 'changes', label: 'Changes', count: files.length || undefined },
+                { value: 'files', label: 'Files' },
+                { value: 'history', label: 'History' },
+              ]
+        }
+      />
+      {/* The padding keeps focus outlines inside the clip. */}
+      <div className="flex min-w-0 flex-auto items-center gap-0.5 self-stretch overflow-hidden px-1">
         {bulkActions.map((a) => (
           <div key={a.label} className={cn('flex shrink-0 items-center', compact)}>
             <IconButton size="sm" title={withShortcut(a.label, a.binding)} onClick={a.run}>
@@ -494,16 +509,15 @@ export function RightInspector({
           </div>
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-0.5">
-        <IconButton
-          size="sm"
-          title={segment === 'details' ? 'Hide details' : 'Details'}
-          pressed={segment === 'details'}
-          onClick={toggleDetails}
-        >
-          <Info size={14} strokeWidth={1.8} />
-        </IconButton>
-      </div>
+      <IconButton
+        size="sm"
+        className="shrink-0"
+        title={segment === 'details' ? 'Hide details' : 'Details'}
+        pressed={segment === 'details'}
+        onClick={toggleDetails}
+      >
+        <Info size={14} strokeWidth={1.8} />
+      </IconButton>
     </div>
   );
 
@@ -607,6 +621,11 @@ export function RightInspector({
       />
     );
 
+  // The view tabs' sheet: the list under them, as an open file under its tab.
+  const onSheet = (content: ReactNode) => (
+    <div className={cn('h-full', folderSheet)}>{content}</div>
+  );
+
   const withPorts = (content: ReactNode) => (
     <PortsDrawerWrapper
       taskId={task.id}
@@ -621,7 +640,11 @@ export function RightInspector({
   return (
     // pb-2: the terminal sheet keeps the same 8px gutter from the window's
     // bottom edge as the main sheet.
-    <div className="flex h-full min-w-0 flex-col bg-ground pt-2 pr-2 pb-2">
+    // The sheets (list, editor, terminals) share the terminal palette's ground.
+    <div
+      className="flex h-full min-w-0 flex-col bg-ground pt-2 pr-2 pb-2"
+      style={{ '--sheet-bg': terminalTheme.background } as CSSProperties}
+    >
       <div className="min-h-0 flex-1">
         <ResizablePanelGroup
           orientation="horizontal"
@@ -636,8 +659,9 @@ export function RightInspector({
                 id="list"
                 defaultSize="30%"
                 // Review mode's header and rows need room for their counts and
-                // actions beside their text; the tree and commits do with less.
-                minSize={reviewing ? REVIEW_LIST_MIN_PX : '15%'}
+                // actions beside their text (the tree and commits do with less),
+                // and the view tabs need theirs in full.
+                minSize={Math.max(listMinPx ?? 0, reviewing ? REVIEW_LIST_MIN_PX : 0) || '15%'}
                 maxSize="50%"
                 {...treePanel}
               >
@@ -645,7 +669,7 @@ export function RightInspector({
                   {usage}
                   {banner}
                   {header}
-                  <div className="min-h-0 flex-1">{withPorts(tree)}</div>
+                  <div className="min-h-0 flex-1">{withPorts(onSheet(tree))}</div>
                 </div>
               </ResizablePanel>
               <ResizableHandle />
@@ -697,7 +721,7 @@ export function RightInspector({
                       </EditorSheet>
                     </div>
                   )}
-                  {!split && withPorts(list)}
+                  {!split && withPorts(onSheet(list))}
                 </ShellDrawerWrapper>
               </div>
             </div>

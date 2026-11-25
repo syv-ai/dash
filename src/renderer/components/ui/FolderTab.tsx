@@ -11,6 +11,10 @@ import { Tab, type TabProps } from './Tab';
  */
 export const sheetSurface = 'bg-(--sheet-bg,var(--color-well))';
 
+/** The sheet a strip of folder tabs opens into: the strip lays its tabs on
+ *  the sheet's top edge, 1px over, and keeps them off its 12px corners. */
+export const folderSheet = cn('overflow-hidden rounded-xl border border-line', sheetSurface);
+
 const folderTabVariants = cva(
   cn(
     'group/tab relative flex min-w-11 max-w-48 shrink-0 cursor-pointer items-center rounded-t-lg pr-4 pl-3 select-none',

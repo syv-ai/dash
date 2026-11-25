@@ -10,7 +10,7 @@ import { FileText } from 'lucide-react';
 import type { ITheme as XtermTheme } from '@xterm/xterm';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/Resizable';
 import { EmptyState } from '../ui/EmptyState';
-import { sheetSurface } from '../ui/FolderTab';
+import { folderSheet } from '../ui/FolderTab';
 import { cn } from '../../lib/cn';
 import { selectLayout, useEditorTabs, type TextRange } from '../../stores/editorTabsStore';
 import { useEditors } from '../../stores/editorsStore';
@@ -224,12 +224,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, actions }: Props) {
                     leading={i === 0 ? <TreeToggle /> : undefined}
                     trailing={isLast ? editorActions : null}
                   />
-                  <div
-                    className={cn(
-                      'flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-line',
-                      sheetSurface,
-                    )}
-                  >
+                  <div className={cn('flex min-h-0 flex-1 flex-col', folderSheet)}>
                     {filePath ? (
                       <EditorPane
                         paneId={`pane:${tabsKey}:${i}`}

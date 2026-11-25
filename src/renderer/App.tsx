@@ -1004,6 +1004,8 @@ export function App() {
   // width the panel comes back at is the expanded one (set however it
   // collapsed).
   const expandedAtCollapseRef = useRef(false);
+  // The task sidebar's least width (px), which its view tabs report.
+  const [inspectorMinPx, setInspectorMinPx] = useState<number>();
   // The width before a side-car TUI sized the panel to hug it (below).
   const changesSizeBeforeTui = useRef<number | null>(null);
   const inspectorBodyRef = useRef<HTMLDivElement>(null);
@@ -1390,7 +1392,8 @@ export function App() {
               panelRef={changesPanelRef}
               animate={changesAnimating}
               defaultSize={startedCollapsed.inspector ? '0%' : '26%'}
-              minSize={`${TUI_PANEL_MIN_PCT}%`}
+              // Never narrower than its view tabs' labels, once measured.
+              minSize={inspectorMinPx ?? `${TUI_PANEL_MIN_PCT}%`}
               maxSize={`${INSPECTOR_MAX_PCT}%`}
               collapsible
               collapsedSize="0%"
@@ -1445,6 +1448,7 @@ export function App() {
                   shellDrawerRef={shellDrawerPanelRef}
                   onTuiActiveChange={handleTuiPanelActive}
                   onTaskSettings={() => handleTaskSettings(activeTask.id)}
+                  onMinWidth={setInspectorMinPx}
                 />
               </div>
             </ResizablePanel>
