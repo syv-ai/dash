@@ -12,38 +12,90 @@ export interface InspectorWidths {
 const KEY = 'dash:inspector-widths';
 const DEFAULTS: InspectorWidths = { narrow: 26, expanded: 50 };
 
-/** As stored: the expanded width keeps its first name, `wide`. */
+/** As stored: the expanded width keeps its first name, `wide`; `list` and
+ *  `reviewList` are the expanded list column's, per mode. */
 interface Stored {
   narrow?: unknown;
   wide?: unknown;
+  list?: unknown;
+  reviewList?: unknown;
 }
 
 function valid(n: unknown): n is number {
   return typeof n === 'number' && Number.isFinite(n) && n > 0 && n < 100;
 }
 
-export function loadInspectorWidths(): InspectorWidths {
+function readStored(): Stored {
   try {
-    const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Stored;
-    return {
-      narrow: valid(saved.narrow) ? saved.narrow : DEFAULTS.narrow,
-      expanded: valid(saved.wide) ? saved.wide : DEFAULTS.expanded,
-    };
+    const saved: unknown = JSON.parse(localStorage.getItem(KEY) ?? '{}');
+    return saved && typeof saved === 'object' ? (saved as Stored) : {};
   } catch {
-    return DEFAULTS;
+    return {};
   }
+}
+
+function writeStored(patch: Stored): void {
+  try {
+    localStorage.setItem(KEY, JSON.stringify({ ...readStored(), ...patch }));
+  } catch {
+    // Storage full or unavailable: the default width serves next time.
+  }
+}
+
+export function loadInspectorWidths(): InspectorWidths {
+  const saved = readStored();
+  return {
+    narrow: valid(saved.narrow) ? saved.narrow : DEFAULTS.narrow,
+    expanded: valid(saved.wide) ? saved.wide : DEFAULTS.expanded,
+  };
 }
 
 /** Remember one of the widths, keeping the other. */
 export function saveInspectorWidth(which: keyof InspectorWidths, pct: number): void {
   if (!valid(pct)) return;
-  const widths = { ...loadInspectorWidths(), [which]: pct };
-  const stored: Stored = { narrow: widths.narrow, wide: widths.expanded };
+  writeStored(which === 'narrow' ? { narrow: pct } : { wide: pct });
+}
+
+/*
+ * The expanded sidebar's list column, in % of the sidebar: one width per
+ * mode, since review mode's column (the PR's overview, files and comments)
+ * reads better wider than the tree. A width the user drags is kept for that
+ * mode and never set for them; double-clicking the divider goes back to the
+ * mode's default.
+ */
+
+export type ListMode = 'normal' | 'review';
+
+/** Each mode's default list column width (%). */
+export const LIST_DEFAULTS: Record<ListMode, number> = { normal: 30, review: 45 };
+
+/** Where the normal mode's column was kept before it had a mode: the panel
+ *  library's own layout for the split. */
+const LEGACY_LIST_KEY = 'react-resizable-panels:task-sidebar-columns:list:main';
+
+/** A mode's list column width (%) from what is stored: its own, else (normal
+ *  mode) the library's legacy layout, else the mode's default. */
+export function listWidthFrom(mode: ListMode, stored: Stored, legacy: unknown): number {
+  const own = mode === 'review' ? stored.reviewList : stored.list;
+  if (valid(own)) return own;
+  const old = legacy && typeof legacy === 'object' ? (legacy as { list?: unknown }).list : null;
+  if (mode === 'normal' && valid(old)) return old;
+  return LIST_DEFAULTS[mode];
+}
+
+export function loadListWidth(mode: ListMode): number {
+  let legacy: unknown = null;
   try {
-    localStorage.setItem(KEY, JSON.stringify(stored));
+    legacy = JSON.parse(localStorage.getItem(LEGACY_LIST_KEY) ?? 'null');
   } catch {
-    // Storage full or unavailable: the default width serves next time.
+    // Unreadable: the default serves.
   }
+  return listWidthFrom(mode, readStored(), legacy);
+}
+
+export function saveListWidth(mode: ListMode, pct: number): void {
+  if (!valid(pct)) return;
+  writeStored(mode === 'review' ? { reviewList: pct } : { list: pct });
 }
 
 /**

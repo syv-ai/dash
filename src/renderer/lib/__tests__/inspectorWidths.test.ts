@@ -1,6 +1,9 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
   handOffWidth,
+  listWidthFrom,
+  loadListWidth,
+  saveListWidth,
   loadInspectorWidths,
   saveInspectorWidth,
   widthOnExpandedToggle,
@@ -92,5 +95,45 @@ describe('stored widths', () => {
     expect(loadInspectorWidths()).toEqual({ narrow: 30, expanded: 55 });
     saveInspectorWidth('expanded', 60);
     expect(JSON.parse(store.get('dash:inspector-widths')!)).toEqual({ narrow: 30, wide: 60 });
+  });
+});
+
+describe('list column widths', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('defaults per mode: the tree 30%, review mode 45%', () => {
+    expect(listWidthFrom('normal', {}, null)).toBe(30);
+    expect(listWidthFrom('review', {}, null)).toBe(45);
+  });
+
+  it('keeps each mode its own dragged width', () => {
+    const stored = { list: 28, reviewList: 52 };
+    expect(listWidthFrom('normal', stored, null)).toBe(28);
+    expect(listWidthFrom('review', stored, null)).toBe(52);
+  });
+
+  it("takes normal mode's width from the panel library's old layout until it has its own", () => {
+    expect(listWidthFrom('normal', {}, { list: 33.97, main: 66.03 })).toBe(33.97);
+    expect(listWidthFrom('review', {}, { list: 33.97, main: 66.03 })).toBe(45);
+    expect(listWidthFrom('normal', { list: 25 }, { list: 33.97 })).toBe(25);
+  });
+
+  it('stores beside the sidebar widths without dropping them', () => {
+    const store = new Map<string, string>([
+      ['dash:inspector-widths', JSON.stringify({ narrow: 30, wide: 55 })],
+    ]);
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => store.set(k, v),
+    });
+    saveListWidth('review', 50);
+    saveInspectorWidth('narrow', 27);
+    expect(JSON.parse(store.get('dash:inspector-widths')!)).toEqual({
+      narrow: 27,
+      wide: 55,
+      reviewList: 50,
+    });
+    expect(loadListWidth('review')).toBe(50);
+    expect(loadListWidth('normal')).toBe(30);
   });
 });

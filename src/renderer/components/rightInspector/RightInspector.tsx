@@ -51,6 +51,12 @@ import {
   segmentOnExpand,
   type CodeSegment,
 } from './sidebarState';
+import {
+  LIST_DEFAULTS,
+  loadListWidth,
+  saveListWidth,
+  type ListMode,
+} from '../../lib/inspectorWidths';
 import { PrButton } from '../review/PrButton';
 import { ReviewBanner } from '../review/ReviewBanner';
 import { ReviewView } from '../review/ReviewView';
@@ -450,6 +456,42 @@ export function RightInspector({
       },
   ].filter((a) => a !== false);
 
+  // The list column's width while split: its mode's own (`loadListWidth`),
+  // taken as it splits and as the mode changes; kept only when the user
+  // sets it on the divider, so a clamp never overwrites it.
+  const listMode: ListMode = reviewing ? 'review' : 'normal';
+  const listDragged = useRef(false);
+  // A gesture on the divider: the layout change it makes is the user's. It
+  // lapses shortly after the pointer or key lets go (a press that moved
+  // nothing makes no change to claim).
+  const listGesture = useMemo(() => {
+    let lapse: ReturnType<typeof setTimeout> | undefined;
+    const end = () => {
+      clearTimeout(lapse);
+      lapse = setTimeout(() => (listDragged.current = false), 300);
+    };
+    return () => {
+      clearTimeout(lapse);
+      listDragged.current = true;
+      window.addEventListener('pointerup', end, { once: true, capture: true });
+      window.addEventListener('keyup', end, { once: true, capture: true });
+    };
+  }, []);
+  const listPanelRef = treePanel.panelRef;
+  const listWidth = loadListWidth(listMode);
+  // As the mode changes while split (the column splits at it already: the
+  // group's `defaultLayout`). The group registers its panels after this
+  // render's effects, so the resize waits a frame.
+  useEffect(() => {
+    if (!split) return;
+    listDragged.current = false;
+    const frame = requestAnimationFrame(() => {
+      const panel = listPanelRef.current;
+      if (panel && !panel.isCollapsed()) panel.resize(`${loadListWidth(listMode)}%`);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [split, listMode, listPanelRef]);
+
   // The view tabs' labels, measured: the list column (narrow, the sidebar)
   // never goes narrower than they and the row's chrome need.
   const [tabsMinPx, setTabsMinPx] = useState<number>();
@@ -679,8 +721,13 @@ export function RightInspector({
       <div className="min-h-0 flex-1">
         <ResizablePanelGroup
           orientation="horizontal"
-          autoSaveId="task-sidebar-columns"
-          panelIds={split ? ['list', 'main'] : ['main']}
+          defaultLayout={split ? { list: listWidth, main: 100 - listWidth } : undefined}
+          onLayoutChanged={(layout) => {
+            const list = layout.list;
+            if (!listDragged.current || list === undefined) return;
+            listDragged.current = false;
+            saveListWidth(listMode, list);
+          }}
         >
           {/* Mounted only while split, ahead of "main", which keeps its place
               in the tree either way: the terminals below never remount. */}
@@ -688,12 +735,14 @@ export function RightInspector({
             <>
               <ResizablePanel
                 id="list"
-                defaultSize="30%"
+                // The divider's double click goes back to it.
+                defaultSize={`${LIST_DEFAULTS[listMode]}%`}
                 // Review mode's header and rows need room for their counts and
                 // actions beside their text (the tree and commits do with less),
                 // and the view tabs need theirs in full.
                 minSize={Math.max(listMinPx ?? 0, reviewing ? REVIEW_LIST_MIN_PX : 0) || '15%'}
-                maxSize="50%"
+                // Review mode's wider default needs more room.
+                maxSize={reviewing ? '60%' : '50%'}
                 {...treePanel}
               >
                 <div className="flex h-full min-h-0 flex-col pr-2">
@@ -703,7 +752,17 @@ export function RightInspector({
                   <div className="min-h-0 flex-1">{withPorts(onSheet(tree))}</div>
                 </div>
               </ResizablePanel>
-              <ResizableHandle />
+              {/* A press (a drag, the double click that resets) or a key on
+                  it makes the width that follows the user's. */}
+              <ResizableHandle
+                onPointerDown={listGesture}
+                onKeyDown={listGesture}
+                // Back to the mode's default, kept as the user's choice.
+                onDoubleClick={() => {
+                  listDragged.current = true;
+                  listPanelRef.current?.resize(`${LIST_DEFAULTS[listMode]}%`);
+                }}
+              />
             </>
           )}
           <ResizablePanel id="main" minSize="40%">
