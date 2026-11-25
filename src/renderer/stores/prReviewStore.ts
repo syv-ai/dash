@@ -87,8 +87,14 @@ interface PrReviewState {
   setSummary: (taskId: string, provider: PrProvider, number: number, body: string) => void;
   /** Fetch PR `number` of the project, with its commits fetched into `cwd`. On
    *  failure the last fetched review stays. A fetch of the same PR already
-   *  under way is shared, not repeated. */
-  load: (projectId: string, cwd: string, number: number) => Promise<PrLoadResult>;
+   *  under way is shared, not repeated; with `force` (the PR is known to
+   *  have moved since it started) a fresh one follows it instead. */
+  load: (
+    projectId: string,
+    cwd: string,
+    number: number,
+    opts?: { force?: boolean },
+  ) => Promise<PrLoadResult>;
   /** Resolve or reactivate a thread: shown at once, undone if the PR refuses. */
   setResolved: (
     projectId: string,
@@ -261,11 +267,11 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
         .catch(() => undefined);
     },
 
-    load: (projectId, cwd, number) => {
+    load: (projectId, cwd, number, opts) => {
       const key = `${projectId}\0${cwd}\0${number}`;
       const pending = loading.get(key);
-      if (pending) return pending;
-      const run = (async (): Promise<PrLoadResult> => {
+      if (pending && !opts?.force) return pending;
+      const fetchOnce = async (): Promise<PrLoadResult> => {
         try {
           const resp = await window.electronAPI.prReviewLoad({ projectId, cwd, number });
           if (!resp.success || !resp.data)
@@ -275,10 +281,15 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
           return { ok: true, review };
         } catch (err) {
           return { ok: false, error: String(err) };
-        } finally {
-          loading.delete(key);
         }
-      })();
+      };
+      // A forced fetch starts once the pending one is done, so the older
+      // answer can't land after it; later loads share the forced one.
+      const run: Promise<PrLoadResult> = (pending ? pending.then(fetchOnce) : fetchOnce()).finally(
+        () => {
+          if (loading.get(key) === run) loading.delete(key);
+        },
+      );
       loading.set(key, run);
       return run;
     },

@@ -43,15 +43,21 @@ export function useReviewData({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const refresh = useCallback(() => {
-    const store = usePrReviews.getState();
-    void store.loadViewed(taskId, provider, number);
-    setLoading(true);
-    void store.load(projectId, cwd, number).then((r) => {
-      setLoading(false);
-      setError(r.ok ? null : r.error);
-    });
-  }, [taskId, projectId, cwd, provider, number]);
+  // `force`: the PR is known to have moved, so a fetch already under way
+  // (started before the push) can't answer for it.
+  const reload = useCallback(
+    (force: boolean) => {
+      const store = usePrReviews.getState();
+      void store.loadViewed(taskId, provider, number);
+      setLoading(true);
+      void store.load(projectId, cwd, number, { force }).then((r) => {
+        setLoading(false);
+        setError(r.ok ? null : r.error);
+      });
+    },
+    [taskId, projectId, cwd, provider, number],
+  );
+  const refresh = useCallback(() => reload(false), [reload]);
 
   useEffect(() => {
     refresh();
@@ -74,8 +80,8 @@ export function useReviewData({
   useEffect(() => {
     if (!stale || reloadedFor.current === detectedHead) return;
     reloadedFor.current = detectedHead;
-    refresh();
-  }, [stale, detectedHead, refresh]);
+    reload(true);
+  }, [stale, detectedHead, reload]);
 
   return { review, marks, error, loading, refresh };
 }

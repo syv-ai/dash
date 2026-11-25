@@ -67,6 +67,31 @@ describe('prReviewStore.load', () => {
     expect(api.prReviewLoad).toHaveBeenCalledTimes(2);
   });
 
+  it('a forced fetch follows one under way instead of sharing its stale answer', async () => {
+    let answerOld!: () => void;
+    const pushed = { ...review(4), head: 'h2' };
+    api.prReviewLoad = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answerOld = () => resolve({ success: true, data: review(4) });
+          }),
+      )
+      .mockResolvedValue({ success: true, data: pushed });
+    const { usePrReviews, prKey } = await freshStore();
+    const older = usePrReviews.getState().load('p1', '/wt/t1', 4);
+    const forced = usePrReviews.getState().load('p1', '/wt/t1', 4, { force: true });
+    const shared = usePrReviews.getState().load('p1', '/wt/t1', 4);
+    expect(api.prReviewLoad).toHaveBeenCalledTimes(1);
+    answerOld();
+    expect(await older).toEqual({ ok: true, review: review(4) });
+    expect(await forced).toEqual({ ok: true, review: pushed });
+    expect(await shared).toEqual({ ok: true, review: pushed });
+    expect(api.prReviewLoad).toHaveBeenCalledTimes(2);
+    expect(usePrReviews.getState().byPr[prKey('github', 4)]!.head).toBe('h2');
+  });
+
   it('keeps what it had when a fetch fails, and says why', async () => {
     api.prReviewLoad = vi
       .fn()
