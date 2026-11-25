@@ -411,7 +411,8 @@ export function RightInspector({
   const header = (
     <div className="@container/sidehead flex h-11 shrink-0 items-center gap-0.5">
       {/* Who gives way as the row narrows, last first: the views (their
-          padding tightens, their labels truncate, never below a floor), then
+          counts go, then their padding tightens, then their labels truncate,
+          never below a floor; `Segmented` fits itself), then
           Details and ✕ (never), Commit (its label goes below 24rem), the bulk
           actions (into a menu below 24rem), the PR button (normal mode only;
           review mode's banner sits above the row).
@@ -425,7 +426,6 @@ export function RightInspector({
             fullWidth={false}
             value={segment}
             onChange={(next) => next !== 'details' && onPickSegment(next)}
-            segmentClassName="@max-[20rem]/sidehead:px-1.5"
             options={
               reviewing
                 ? [
