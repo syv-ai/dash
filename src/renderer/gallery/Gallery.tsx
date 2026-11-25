@@ -334,6 +334,8 @@ function Badges() {
         <Badge tone="work">working</Badge>
         <Badge tone="done">done</Badge>
         <Badge tone="bare">bare</Badge>
+        <Badge tone="link">Author</Badge>
+        <Badge tone="merged">Reviewer</Badge>
       </Line>
       <Line>
         <Badge size="sm">sm</Badge>

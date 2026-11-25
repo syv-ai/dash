@@ -4,12 +4,13 @@ import { formatTimeAgo } from '../../../../shared/relativeTime';
 import type { DiffComment, PrReactionContent, PrReviewComment } from '../../../../shared/types';
 import type { ReplyPoster } from '../../../stores/prReviewStore';
 import { DraftActions, DraftEditor } from '../../review/DraftActions';
-import { commentRole, providerName } from '../../review/labels';
+import { commentRole, commentRoleTip, providerName } from '../../review/labels';
 import { Avatar } from '../../ui/Avatar';
 import { Badge } from '../../ui/Badge';
 import { IconButton } from '../../ui/IconButton';
 import { Markdown } from '../../ui/Markdown';
 import { TextLink } from '../../ui/TextLink';
+import { Tooltip } from '../../ui/Tooltip';
 import { PostReplyButtons } from './PostReplyButtons';
 import { AddReaction, ReactionChips } from './Reactions';
 import type { PrThreadContext } from './usePrThreadContext';
@@ -59,6 +60,10 @@ export function CommentFrame({
   );
 }
 
+/** A role badge's colour (D223): the author in the link blue, a reviewer in
+ *  the merged-PR purple. */
+const ROLE_TONES = { Author: 'link', Reviewer: 'merged' } as const;
+
 /** A comment on the forge: who wrote it (to their profile where the forge
  *  has one) and what they are to the PR (`commentRole`), when, a link to it there, its text and its reactions. */
 export function PostedComment({
@@ -84,7 +89,15 @@ export function PostedComment({
           c.author
         )
       }
-      badge={role && <Badge size="sm">{role}</Badge>}
+      badge={
+        role && (
+          <Tooltip content={{ title: commentRoleTip(role, c.author, context.review) }}>
+            <Badge size="sm" tone={ROLE_TONES[role]}>
+              {role}
+            </Badge>
+          </Tooltip>
+        )
+      }
       subtitle={
         at > 0 && (
           <span className="whitespace-nowrap" title={new Date(at).toLocaleString()}>

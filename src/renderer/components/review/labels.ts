@@ -24,6 +24,32 @@ export function commentRole(
   return pr.reviewers.some((r) => r.name.toLowerCase() === who) ? 'Reviewer' : null;
 }
 
+/** A reviewer's state in words, for a tooltip after their role. */
+const REVIEWER_STATE_WORDS: Record<PrReviewer['state'], string> = {
+  approved: 'approved',
+  approved_with_suggestions: 'approved with suggestions',
+  changes_requested: 'changes requested',
+  rejected: 'rejected',
+  waiting: 'waiting for the author',
+  commented: 'commented',
+  pending: 'pending',
+};
+
+/** What a role badge's tooltip says: "Author of this pull request", or
+ *  "Requested reviewer · approved" with where the reviewer stands. */
+export function commentRoleTip(
+  role: 'Author' | 'Reviewer',
+  author: string,
+  pr: { reviewers: readonly Pick<PrReviewer, 'name' | 'state'>[] },
+): string {
+  if (role === 'Author') return 'Author of this pull request';
+  const who = author.toLowerCase();
+  const reviewer = pr.reviewers.find((r) => r.name.toLowerCase() === who);
+  return reviewer
+    ? `Requested reviewer · ${REVIEWER_STATE_WORDS[reviewer.state]}`
+    : 'Requested reviewer';
+}
+
 /** Who stands where on the PR, said as GitHub's sidebar does: "Approved by",
  *  "Changes requested by", "Review requested from"; ADO's votes add theirs. */
 const REVIEWER_LEADS: Record<PrReviewer['state'], string> = {

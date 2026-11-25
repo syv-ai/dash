@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../../lib/cn';
+import { prStatusTint } from './prStatusColors';
 
 /**
  * The badge base: a small rounded-sm tag. `neutral` is ink on the hover
@@ -22,6 +23,8 @@ export const badgeVariants = cva(
         fail: 'bg-state-fail/12 text-state-fail',
         work: 'bg-state-work/12 text-state-work',
         done: 'bg-state-done/12 text-state-done',
+        link: 'bg-link/12 text-link',
+        merged: prStatusTint('merged'),
       },
       size: {
         sm: 'h-4.5 px-1.5 text-xs',

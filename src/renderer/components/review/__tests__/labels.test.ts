@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { PrReviewer } from '../../../../shared/types';
 import {
   commentRole,
+  commentRoleTip,
   diffTotals,
   mergeVerb,
   prDateTime,
@@ -81,5 +82,29 @@ describe('commentRole', () => {
 
   it('says nothing of anyone else', () => {
     expect(commentRole('carol', pr)).toBeNull();
+  });
+});
+
+describe('commentRoleTip', () => {
+  const pr = {
+    reviewers: [
+      { name: 'bob', state: 'approved' as const },
+      { name: 'cy', state: 'changes_requested' as const },
+      { name: 'dee', state: 'pending' as const },
+    ],
+  };
+
+  it('says the author opened the PR', () => {
+    expect(commentRoleTip('Author', 'ada', pr)).toBe('Author of this pull request');
+  });
+
+  it('says where a reviewer stands, matching logins case-insensitively', () => {
+    expect(commentRoleTip('Reviewer', 'Bob', pr)).toBe('Requested reviewer · approved');
+    expect(commentRoleTip('Reviewer', 'cy', pr)).toBe('Requested reviewer · changes requested');
+    expect(commentRoleTip('Reviewer', 'dee', pr)).toBe('Requested reviewer · pending');
+  });
+
+  it('leaves the state out when the reviewer is not listed', () => {
+    expect(commentRoleTip('Reviewer', 'eve', pr)).toBe('Requested reviewer');
   });
 });
