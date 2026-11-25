@@ -145,6 +145,7 @@ function Review({
           ) : tab === 'files' ? (
             <ReviewFiles
               review={review}
+              taskId={task.id}
               rows={rows}
               repo={repo}
               cwd={task.path}

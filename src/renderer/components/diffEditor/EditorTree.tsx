@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Check,
   ChevronDown,
   ChevronRight,
   ChevronsDownUp,
@@ -28,6 +27,7 @@ import { copyText, revealLabel } from './fileActions';
 import type { DirEntry, FileChange, FileChangeStatus, RepoListing } from '../../../shared/types';
 import type { EditorView } from './types';
 import type { OpenOptions } from './tabs/editorLayout';
+import { Checkbox } from '../ui/Checkbox';
 import { Tooltip } from '../ui/Tooltip';
 import { useEditorTabs } from '../../stores/editorTabsStore';
 
@@ -59,10 +59,19 @@ interface EditorTreeProps {
   /** Per-file badge counts: your notes and comments, and (in a PR view) the
    *  PR's unresolved threads. */
   badgeCounts: Map<string, FileBadges>;
-  /** Files read through (a PR's viewed marks): a quiet tick, the name dimmed. */
-  viewed?: ReadonlySet<string>;
+  /** A PR's viewed marks: a check column at the tree's left edge, ticked on
+   *  each changed file read through (its name dimmed), and the tally in the
+   *  header. Absent outside review mode. */
+  viewed?: ViewedColumn;
   /** A control at the header's end (review mode's "All files"). */
   headerAction?: React.ReactNode;
+}
+
+/** The viewed check column: the files ticked, and toggling one. */
+export interface ViewedColumn {
+  paths: ReadonlySet<string>;
+  /** Mark `path` viewed, or not. */
+  onToggle: (path: string, viewed: boolean) => void;
 }
 
 /** A file's badges in the tree. */
@@ -74,7 +83,6 @@ export interface FileBadges {
 }
 
 const NO_DIRS: string[] = [];
-const NONE_VIEWED: ReadonlySet<string> = new Set();
 const NO_LISTING: RepoListing = { files: [], dirs: [] };
 
 /** The editor's file tree: the view's changed files, or the whole repo. */
@@ -94,7 +102,7 @@ export function EditorTree(props: EditorTreeProps) {
         onOpenFile={props.onOpenFile}
         canOpenToSide={props.canOpenToSide}
         badgeCounts={props.badgeCounts}
-        viewed={props.viewed ?? NONE_VIEWED}
+        viewed={props.viewed ?? null}
         headerAction={props.headerAction}
       />
     </div>
@@ -323,13 +331,15 @@ const TreeRow = React.forwardRef<
       title={title}
       onClick={(e) => onActivate(e.altKey)}
       onKeyDown={(e) => {
+        // A control in the row (copy, the viewed tick) handles its own keys.
+        if (e.target !== e.currentTarget) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onActivate(e.altKey);
         }
       }}
       style={style}
-      className={`group/swap w-full flex items-center gap-1 py-0.5 rounded-md text-sm cursor-pointer outline-hidden focus-visible:ring-1 focus-visible:ring-primary/40 transition-colors ${className}`}
+      className={`group/swap relative w-full flex items-center gap-1 py-0.5 rounded-md text-sm cursor-pointer outline-hidden focus-visible:ring-1 focus-visible:ring-primary/40 transition-colors ${className}`}
     >
       {children}
     </div>
@@ -388,7 +398,7 @@ interface FileTreePanelProps {
   onOpenFile: (path: string, opts?: OpenOptions) => void;
   canOpenToSide: boolean;
   badgeCounts: Map<string, FileBadges>;
-  viewed: ReadonlySet<string>;
+  viewed: ViewedColumn | null;
   headerAction?: React.ReactNode;
 }
 
@@ -399,7 +409,7 @@ interface TreeContextValue {
   onOpenFile: (path: string, opts?: OpenOptions) => void;
   canOpenToSide: boolean;
   badgeCounts: Map<string, FileBadges>;
-  viewed: ReadonlySet<string>;
+  viewed: ViewedColumn | null;
   cols: TreeColumns;
 }
 
@@ -485,6 +495,9 @@ function FileTreePanel({
               {tree.changedCount > 0 && (
                 <span className="tabular-nums">· {tree.changedCount} changed</span>
               )}
+              {viewed && tree.changedCount > 0 && (
+                <span className="tabular-nums"> · {viewed.paths.size} viewed</span>
+              )}
             </span>
             <span className="text-xs">
               <LineStats add={totals.additions} del={totals.deletions} />
@@ -523,7 +536,7 @@ function FolderContents({ node, indent }: { node: TreeFolder; indent: number }) 
           indent={indent}
           selected={file.fullPath === selectedPath}
           badges={badgeCounts.get(file.fullPath)}
-          viewed={viewed.has(file.fullPath)}
+          viewed={viewed?.paths.has(file.fullPath) ?? false}
           onOpen={(opts) => onOpenFile(file.fullPath, opts)}
           cols={cols}
         />
@@ -566,7 +579,8 @@ function LazyFolderContents({ folder, indent }: { folder: TreeFolder; indent: nu
     return n;
   }, [entries, folder]);
 
-  const pad = { paddingLeft: 4 + indent * INDENT_STEP + ICON_SLOT + 4 };
+  const { viewed } = useTree();
+  const pad = { paddingLeft: rowInset(indent, viewed !== null) + ICON_SLOT + 4 };
   if (error) {
     return (
       <div className="py-0.5 text-xs text-muted-fade-55 truncate" style={pad} title={error}>
@@ -596,9 +610,17 @@ function LazyFolderContents({ folder, indent }: { folder: TreeFolder; indent: nu
 // (chevron column = name's left edge).
 const ICON_SLOT = 12;
 const INDENT_STEP = 10; // px per nesting level (Tailwind gap-1 = 4px is used inside rows)
+// The viewed check column (review mode): a 14px box and its gap, at the
+// row's left edge, before any indent.
+const CHECK_COL = 18;
+
+/** A row's left inset: past the check column when there is one, then its
+ *  nesting. */
+const rowInset = (indent: number, checks: boolean) =>
+  4 + (checks ? CHECK_COL : 0) + indent * INDENT_STEP;
 
 function FolderEntry({ folder, indent }: { folder: TreeFolder; indent: number }) {
-  const { selectedPath, cols } = useTree();
+  const { selectedPath, cols, viewed } = useTree();
   // Default-open if the folder has changes OR it contains the file the editor
   // opened to — so that file is never hidden in a collapsed folder. The user's
   // collapse/expand owns it after. A lazy folder starts closed: opening it is
@@ -646,7 +668,7 @@ function FolderEntry({ folder, indent }: { folder: TreeFolder; indent: number })
             aria-expanded={open}
             onActivate={() => setOpen((v) => !v)}
             className="hover:bg-[hsl(var(--surface-2)/0.6)]"
-            style={{ paddingLeft: 4 + indent * INDENT_STEP, paddingRight: 8 }}
+            style={{ paddingLeft: rowInset(indent, viewed !== null), paddingRight: 8 }}
           >
             <span
               className="shrink-0 inline-flex items-center justify-center"
@@ -740,13 +762,14 @@ function FileEntry({
   indent: number;
   selected: boolean;
   badges: FileBadges | undefined;
-  /** Read through: a tick in the icon slot, the name dimmed. */
+  /** Marked viewed: ticked in the check column, the name dimmed. */
   viewed: boolean;
   /** Open in the last focused pane (a click: as its preview; a double-click
    *  keeps it); ⌥-click or "Open in new pane": in the other pane. */
   onOpen: (opts?: OpenOptions) => void;
   cols: TreeColumns;
 }) {
+  const { viewed: column } = useTree();
   const change = file.change;
   const tint = selected
     ? 'text-primary'
@@ -764,16 +787,23 @@ function FileEntry({
           onActivate={(alt) => onOpen({ toSide: alt, preview: true })}
           onDoubleClick={() => onOpen()}
           title={file.fullPath}
-          style={{ paddingLeft: 4 + indent * INDENT_STEP, paddingRight: 8 }}
+          style={{ paddingLeft: rowInset(indent, column !== null), paddingRight: 8 }}
           className={selected ? 'bg-primary/15' : 'hover:bg-[hsl(var(--surface-2)/0.6)]'}
         >
+          {/* The viewed tick, only on a file the PR changes; at the row's left
+          edge, so the column reads straight down the tree whatever the nesting. */}
+          {column && change && (
+            <span className="absolute left-1 flex items-center">
+              <Checkbox
+                checked={viewed}
+                aria-label={viewed ? 'Mark not viewed' : 'Mark viewed'}
+                onChange={() => column.onToggle(file.fullPath, !viewed)}
+              />
+            </span>
+          )}
           {/* Empty icon slot keeps file names aligned with folder names at the
           same indent (the chevron column for folders). */}
-          <span className="flex shrink-0 justify-center" style={{ width: ICON_SLOT }}>
-            {viewed && (
-              <Check size={11} strokeWidth={1.8} className="text-icon" aria-label="Viewed" />
-            )}
-          </span>
+          <span className="shrink-0" style={{ width: ICON_SLOT }} />
           <span className={`flex-1 min-w-0 text-sm truncate text-left ${tint}`}>{file.name}</span>
           {/* Stat columns at rest (each as wide as the tree's widest value, so
           they line up down the list); "Copy relative path" slides in on hover. */}

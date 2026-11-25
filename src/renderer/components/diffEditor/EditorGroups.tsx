@@ -163,6 +163,10 @@ export function EditorGroups({ ws, terminalTheme, isDark, actions }: Props) {
     (path: string, range: TextRange) => useEditorTabs.getState().openAt(tabsKey, path, range),
     [tabsKey],
   );
+  const openPreview = useCallback(
+    (path: string) => useEditorTabs.getState().open(tabsKey, path, { preview: true }),
+    [tabsKey],
+  );
   // A PR view's next/previous thread or draft: each pane's toolbar buttons
   // drive the focused group's pane (the one clicked into), ⌥F9 each pane's own.
   const reviewNav = useReviewNavigation({
@@ -170,6 +174,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, actions }: Props) {
     taskId: ws.activeTaskId,
     layout,
     onOpenAt: openAt,
+    onOpen: openPreview,
   });
   // Editor-wide, so once: at the end of the last group's tab row, the
   // editor's top-right corner however it splits (the tree toggle holds the

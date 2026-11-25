@@ -25,6 +25,9 @@ export interface ReviewNav {
   canStep: boolean;
   /** Step the focused group's editor to its next (1) or previous (-1) stop. */
   step: (dir: NavDirection) => void;
+  /** Open a file of the PR in the focused group, as its preview (the toolbar's
+   *  Next unviewed file). Stable across renders. */
+  open: (path: string) => void;
   /** Stable across renders. */
   attach: AttachReviewNav;
 }
@@ -41,12 +44,15 @@ export function useReviewNavigation({
   taskId,
   layout,
   onOpenAt,
+  onOpen,
 }: {
   view: EditorView;
   taskId: string | null;
   layout: EditorLayout;
   /** Open another file and reveal `range` once it shows. */
   onOpenAt: (path: string, range: TextRange) => void;
+  /** Open a file as the focused group's preview. */
+  onOpen: (path: string) => void;
 }): ReviewNav {
   const review = usePrReviews((s) =>
     view.kind === 'pr' ? (s.byPr[prKey(view.provider, view.number)] ?? null) : null,
@@ -68,8 +74,8 @@ export function useReviewNavigation({
   const panes = useRef(
     new Map<GroupIndex, { editor: monacoEditor.IStandaloneCodeEditor; monaco: Monaco }>(),
   );
-  const latest = useRef({ stops, layout, onOpenAt });
-  latest.current = { stops, layout, onOpenAt };
+  const latest = useRef({ stops, layout, onOpenAt, onOpen });
+  latest.current = { stops, layout, onOpenAt, onOpen };
 
   const go = useCallback((group: GroupIndex, dir: NavDirection) => {
     const pane = panes.current.get(group);
@@ -122,5 +128,6 @@ export function useReviewNavigation({
   );
 
   const step = useCallback((dir: NavDirection) => go(latest.current.layout.focused, dir), [go]);
-  return { canStep: stops.length > 0, step, attach };
+  const open = useCallback((path: string) => latest.current.onOpen(path), []);
+  return { canStep: stops.length > 0, step, open, attach };
 }
