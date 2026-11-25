@@ -18,7 +18,7 @@ export function EmptyState({
   /** A lucide icon at 14px/1.8, like everywhere else. */
   icon?: React.ReactNode;
   /** In place of `icon`, where the pane is the view's whole body: a lucide
-   *  icon drawn at 36px, thin, in ink-3, with more room under it. */
+   *  icon drawn at 28px, thin, in ink-3, with a little more room under it. */
   illustration?: LucideIcon;
   title: React.ReactNode;
   /** A quieter line under the title (a status, a hint). */
@@ -31,11 +31,11 @@ export function EmptyState({
     <div
       className={cn(
         'flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-sm text-ink-2',
-        Illustration && 'gap-4',
+        Illustration && 'gap-3',
         className,
       )}
     >
-      {Illustration ? <Illustration size={36} strokeWidth={1.4} className="text-ink-3" /> : icon}
+      {Illustration ? <Illustration size={28} strokeWidth={1.5} className="text-ink-3" /> : icon}
       <div className="grid gap-1">
         <p className="type-body">{title}</p>
         {description && <div>{description}</div>}
