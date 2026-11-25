@@ -22,26 +22,34 @@ export const Tab = React.forwardRef<HTMLDivElement, TabProps>(function Tab(
   { active, onSelect, onClose, closeLabel, indicator, children, ...props },
   ref,
 ) {
+  // A wrapping trigger (a Tooltip's, a ContextMenu's) hands its own handlers
+  // in as props: they run alongside the tab's, never in place of them.
+  const { onClick, onKeyDown, onAuxClick, ...rest } = props;
   return (
     <div
       ref={ref}
       role="tab"
       tabIndex={0}
       aria-selected={!!active}
-      onClick={onSelect}
+      {...rest}
+      onClick={(e) => {
+        onClick?.(e);
+        onSelect();
+      }}
       onKeyDown={(e) => {
+        onKeyDown?.(e);
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onSelect();
         }
       }}
       onAuxClick={(e) => {
+        onAuxClick?.(e);
         if (e.button === 1 && onClose) {
           e.preventDefault();
           onClose();
         }
       }}
-      {...props}
     >
       {/* The label and its indicator sit together; the × floats in the right
           gutter so it never shifts them. */}
