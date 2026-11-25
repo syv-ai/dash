@@ -14,7 +14,7 @@ const why = (e: PrWriteError): string =>
 /**
  * Post reply / Post & resolve for a draft reply on the own PR: the person's
  * gate for a reply (theirs or the agent's). Both disable while it posts; a
- * refusal toasts and keeps the draft. The thread card and "Your replies"
+ * refusal toasts and keeps the draft. The thread card and the Comments tab
  * both use it.
  */
 export function PostReplyButtons({ draft, poster }: { draft: DiffComment; poster: ReplyPoster }) {

@@ -555,7 +555,7 @@ export function RightInspector({
   );
 
   // Review mode's column: the PR's header over the picked view, with
-  // Communication docked under it.
+  // the Comments / Notes bar docked under it.
   const reviewColumn = mode && segment !== 'details' && (
     <ReviewView
       task={task}

@@ -48,10 +48,18 @@ export interface UiState {
   // The update the sidebar banner was closed for. Session-only: a ready
   // update installs on quit, and a newer version brings the banner back.
   dismissedUpdateVersion: string | null;
-  /** Whether review mode's Communication bar is open: session-only, the
+  /** Review mode's docked bar: open or not, and its tab. Session-only, the
    *  same for every task. */
-  reviewCommsOpen: boolean;
+  reviewDockOpen: boolean;
+  reviewDockTab: ReviewDockTab;
+  /** Review mode's collapsible sections, open or not, by id
+   *  (`useSectionOpen`); a section not in it keeps its default. Session-only. */
+  reviewSections: Readonly<Record<string, boolean>>;
 }
+
+/** The review dock's tabs: every exchange with the author, and the notes to
+ *  the agent. */
+export type ReviewDockTab = 'comments' | 'notes';
 
 export interface UiActions {
   setShowTaskModal: (v: boolean) => void;
@@ -74,7 +82,9 @@ export interface UiActions {
   setChangesAnimating: (v: boolean) => void;
   setShellDrawerAnimating: (v: boolean) => void;
   setDismissedUpdateVersion: (v: string | null) => void;
-  setReviewCommsOpen: (v: boolean) => void;
+  setReviewDockOpen: (v: boolean) => void;
+  setReviewDockTab: (v: ReviewDockTab) => void;
+  setReviewSectionOpen: (id: string, open: boolean) => void;
   // Data-mutating UI flows (own their modal state; delegate domain ops to projectsStore)
   finishProjectCreation: (projectId: string) => Promise<void>;
   confirmDeleteProject: (options: DeleteProjectOptions) => Promise<void>;
@@ -102,7 +112,9 @@ const initialState: UiState = {
   changesAnimating: false,
   shellDrawerAnimating: false,
   dismissedUpdateVersion: null,
-  reviewCommsOpen: false,
+  reviewDockOpen: false,
+  reviewDockTab: 'comments',
+  reviewSections: {},
 };
 
 export const useUi = create<UiStore>((set, get) => ({
@@ -133,7 +145,10 @@ export const useUi = create<UiStore>((set, get) => ({
   setChangesAnimating: (v) => set({ changesAnimating: v }),
   setShellDrawerAnimating: (v) => set({ shellDrawerAnimating: v }),
   setDismissedUpdateVersion: (v) => set({ dismissedUpdateVersion: v }),
-  setReviewCommsOpen: (v) => set({ reviewCommsOpen: v }),
+  setReviewDockOpen: (v) => set({ reviewDockOpen: v }),
+  setReviewDockTab: (v) => set({ reviewDockTab: v }),
+  setReviewSectionOpen: (id, open) =>
+    set((s) => ({ reviewSections: { ...s.reviewSections, [id]: open } })),
 
   finishProjectCreation: async (projectId) => {
     set({ showAddProjectModal: false });

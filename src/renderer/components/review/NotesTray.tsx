@@ -7,18 +7,18 @@ import { scopeLabel } from '../diffEditor/comments/commentScope';
 import { sendComments } from '../diffEditor/comments/sendComments';
 import { Button } from '../ui/Button';
 import { DetailSection } from '../ui/DetailList';
-import { Expandable } from '../ui/Expandable';
 import { IconButton } from '../ui/IconButton';
 import { ListRow } from '../ui/ListRow';
-import { communicationCounts } from './labels';
 import { groupByPath, lineLabel, trayNotes } from './outline';
 import { rowAction, rowKeys } from './rowAction';
+import { useSectionOpen } from './useSectionOpen';
 
 /**
- * The task's notes to the agent from every view, by file: each sent on its
- * own or all at once (typed into the task's Claude prompt, never submitted),
- * then the sent ones, folded, with "Clear sent". A PR's note can become a
- * comment for the author, as its bubble can.
+ * The task's notes to the agent from every view, by file: To send, each sent
+ * on its own or all at once (typed into the task's Claude prompt, never
+ * submitted), then Sent, folded, with "Clear sent". A PR's note can become a
+ * comment for the author, as its bubble can. The docked bar's Notes and the
+ * editor's "n to send" both show it.
  */
 export function NotesTray({
   taskId,
@@ -30,42 +30,47 @@ export function NotesTray({
 }) {
   const byFile = useCommentsStore((s) => s.byFile);
   const ownTask = useCommentsStore((s) => s.taskId === taskId);
+  const toSend = useSectionOpen('notes.unsent', true);
+  const sentOpen = useSectionOpen('notes.sent', false);
   const { unsent, sent } = useMemo(() => trayNotes(byFile), [byFile]);
-  if (!ownTask || unsent.length + sent.length === 0) return null;
+  if (!ownTask || unsent.length + sent.length === 0) {
+    return <p className="type-caption px-2.5 pt-2">No notes yet.</p>;
+  }
   const send = (ids: string[]) => void sendComments(taskId, ids);
 
   return (
-    <DetailSection
-      title="Notes to agent"
-      summary={communicationCounts({ notes: unsent.length })}
-      collapsible
-      action={
-        unsent.length > 0 && (
-          <Button size="sm" variant="secondary" onClick={() => send(unsent.map((c) => c.id))}>
-            <Send size={14} strokeWidth={1.8} />
-            Send all ({unsent.length})
-          </Button>
-        )
-      }
-    >
-      <NoteGroups notes={unsent} onSend={(id) => send([id])} onNavigate={onNavigate} />
-      {sent.length > 0 && (
-        <Expandable label={`Sent · ${sent.length}`}>
-          <div className="grid gap-1">
-            <NoteGroups notes={sent} onNavigate={onNavigate} />
-            <div className="flex justify-end px-2.5">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => useCommentsStore.getState().clearSent()}
-              >
-                Clear sent
-              </Button>
-            </div>
-          </div>
-        </Expandable>
+    <div>
+      {unsent.length > 0 && (
+        <DetailSection
+          title="To send"
+          summary={String(unsent.length)}
+          collapsible
+          {...toSend}
+          action={
+            <Button size="sm" variant="secondary" onClick={() => send(unsent.map((c) => c.id))}>
+              <Send size={14} strokeWidth={1.8} />
+              Send all
+            </Button>
+          }
+        >
+          <NoteGroups notes={unsent} onSend={(id) => send([id])} onNavigate={onNavigate} />
+        </DetailSection>
       )}
-    </DetailSection>
+      {sent.length > 0 && (
+        <DetailSection title="Sent" summary={String(sent.length)} collapsible {...sentOpen}>
+          <NoteGroups notes={sent} onNavigate={onNavigate} />
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => useCommentsStore.getState().clearSent()}
+            >
+              Clear sent
+            </Button>
+          </div>
+        </DetailSection>
+      )}
+    </div>
   );
 }
 

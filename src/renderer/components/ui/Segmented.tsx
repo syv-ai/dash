@@ -38,6 +38,8 @@ export function Segmented<T extends string | number | null>({
     label: string;
     icon?: React.ReactNode;
     count?: number;
+    /** After the label, quieter ("· 5 open"); omitted when empty. */
+    summary?: string;
     /** Greyed out and inert; `title` says why (its tooltip still shows). */
     disabled?: boolean;
     /** Tooltip text. */
@@ -74,6 +76,9 @@ export function Segmented<T extends string | number | null>({
           >
             {opt.icon && <span className="flex">{opt.icon}</span>}
             <span className="truncate">{opt.label}</span>
+            {opt.summary && (
+              <span className="type-caption shrink-0 tabular-nums">· {opt.summary}</span>
+            )}
             {opt.count != null && <CountBadge count={opt.count} />}
           </button>
         );

@@ -103,24 +103,60 @@ export const viewedPaths = (rows: readonly FileRow[]): Set<string> =>
 
 // ── Threads ──
 
-export interface ThreadGroups {
-  /** Open, and drawn on their lines. */
-  unresolved: PrReviewThread[];
-  /** Open, with no line to sit on: outdated, on the whole file, or on a removed line. */
-  offCode: PrReviewThread[];
-  resolved: PrReviewThread[];
+/** A row of the Comments tab: a PR thread with the person's draft replies to
+ *  it, or one of their own draft line comments (a thread still to start). */
+export type CommentItem =
+  | { kind: 'thread'; thread: PrReviewThread; replies: DiffComment[] }
+  | { kind: 'draft'; draft: DiffComment };
+
+export interface CommentGroups {
+  /** Open threads (on the code or off it) and the person's draft comments. */
+  unresolved: CommentItem[];
+  resolved: CommentItem[];
 }
 
-const byPlace = (a: PrReviewThread, b: PrReviewThread) =>
-  a.path.localeCompare(b.path) || (a.line ?? 0) - (b.line ?? 0);
+/** Where a row sits for ordering: its file, then its line; a thread off the
+ *  code (no line) leads its file. */
+const itemPlace = (i: CommentItem): { path: string; line: number } =>
+  i.kind === 'thread'
+    ? { path: i.thread.path, line: i.thread.line ?? 0 }
+    : { path: i.draft.filePath, line: i.draft.startLine };
 
-/** The PR's threads in the outline's three groups, each by file and line. */
-export function threadGroups(threads: readonly PrReviewThread[]): ThreadGroups {
-  const sorted = [...threads].sort(byPlace);
+/**
+ * The Comments tab's groups, each by file and line: open threads with the
+ * person's draft comments among them, and resolved threads. A draft reply
+ * goes with its thread; one whose thread is gone stands as its own draft row.
+ */
+export function commentGroups(
+  threads: readonly PrReviewThread[],
+  drafts: readonly DiffComment[],
+): CommentGroups {
+  const known = new Set(threads.map((t) => t.id));
+  const replies = new Map<string, DiffComment[]>();
+  const own: CommentItem[] = [];
+  for (const c of drafts) {
+    if (c.replyTo && known.has(c.replyTo)) {
+      const list = replies.get(c.replyTo);
+      if (list) list.push(c);
+      else replies.set(c.replyTo, [c]);
+    } else own.push({ kind: 'draft', draft: c });
+  }
+  const item = (t: PrReviewThread): CommentItem => ({
+    kind: 'thread',
+    thread: t,
+    replies: replies.get(t.id) ?? [],
+  });
+  const byPlace = (a: CommentItem, b: CommentItem) => {
+    const pa = itemPlace(a);
+    const pb = itemPlace(b);
+    return pa.path.localeCompare(pb.path) || pa.line - pb.line;
+  };
   return {
-    unresolved: sorted.filter((t) => !t.resolved && isInlineThread(t)),
-    offCode: sorted.filter((t) => !t.resolved && !isInlineThread(t)),
-    resolved: sorted.filter((t) => t.resolved),
+    unresolved: [...threads.filter((t) => !t.resolved).map(item), ...own].sort(byPlace),
+    resolved: threads
+      .filter((t) => t.resolved)
+      .map(item)
+      .sort(byPlace),
   };
 }
 
@@ -145,11 +181,18 @@ export function threadPlace(t: PrReviewThread): { name: string; dir: string } {
   };
 }
 
-/** Per thread id, the person's draft replies to it. */
-export function replyDraftCounts(drafts: readonly DiffComment[]): Map<string, number> {
-  const m = new Map<string, number>();
-  for (const c of drafts) if (c.replyTo) m.set(c.replyTo, (m.get(c.replyTo) ?? 0) + 1);
-  return m;
+/** Where a draft comment sits, split as `threadPlace` splits a thread's:
+ *  "a.ts:3" or "a.ts:3-5", and its folder. */
+export function draftPlace(c: Pick<DiffComment, 'filePath' | 'startLine' | 'endLine'>): {
+  name: string;
+  dir: string;
+} {
+  const slash = c.filePath.lastIndexOf('/');
+  const lines = c.startLine === c.endLine ? `${c.startLine}` : `${c.startLine}-${c.endLine}`;
+  return {
+    name: `${c.filePath.slice(slash + 1)}:${lines}`,
+    dir: slash > 0 ? c.filePath.slice(0, slash) : '',
+  };
 }
 
 // ── Drafts and notes ──
@@ -190,9 +233,9 @@ export function trayNotes(byFile: Readonly<Record<string, DiffComment[]>>): {
   return { unsent: notes.filter((c) => !c.sent), sent: notes.filter((c) => c.sent) };
 }
 
-/** The Communication bar's counts: open threads (on the code or off it), the
+/** The docked bar's counts: open threads (on the code or off it), the
  *  person's comments and replies for the PR, and the task's unsent notes. */
-export function communicationTally(
+export function dockTally(
   threads: readonly PrReviewThread[],
   comments: readonly DiffComment[],
   byFile: Readonly<Record<string, DiffComment[]>>,

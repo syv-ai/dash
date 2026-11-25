@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PrReviewer } from '../../../../shared/types';
 import {
-  communicationCounts,
+  dockSummaries,
   diffTotals,
   mergeVerb,
   prDateTime,
@@ -59,15 +59,17 @@ describe('prDateTime', () => {
   });
 });
 
-describe('communicationCounts', () => {
-  it('lists the counts there are', () => {
-    expect(communicationCounts({ open: 5, drafts: 2, notes: 1 })).toBe(
-      '5 open · 2 drafts · 1 note',
-    );
-    expect(communicationCounts({ open: 0, drafts: 1, notes: 0 })).toBe('1 draft');
-    expect(communicationCounts({ notes: 2 })).toBe('2 notes');
-    expect(communicationCounts({ open: 0 })).toBe('');
-    expect(communicationCounts({ open: 0, drafts: 0, notes: 0 })).toBe('');
+describe('dockSummaries', () => {
+  it('captions each tab with the counts there are', () => {
+    expect(dockSummaries({ open: 5, drafts: 2, notes: 1 })).toEqual({
+      comments: '5 open · 2 drafts',
+      notes: '1',
+    });
+    expect(dockSummaries({ open: 0, drafts: 1, notes: 0 })).toEqual({
+      comments: '1 draft',
+      notes: '',
+    });
+    expect(dockSummaries({ open: 0, drafts: 0, notes: 0 })).toEqual({ comments: '', notes: '' });
   });
 });
 

@@ -1,53 +1,69 @@
 import * as React from 'react';
 import { ChevronUp } from 'lucide-react';
 import { cn } from '../../lib/cn';
-import { focusRing } from './styles';
+import { IconButton } from './IconButton';
+import { Segmented } from './Segmented';
 
 /**
- * A bar docked at the bottom of a column that opens upward over it: a title
- * and a quiet summary ("· 5 open · 2 drafts") on a toggle row, and, open, its
- * content scrolling inside, capped at three fifths of the column's height so
- * what it sits under stays in reach. Controlled: the owner keeps `open`.
- * Mount it as the last child of a full-height flex column.
+ * A bar docked at the bottom of a column that opens upward over it: a toggle
+ * and its tabs, each with a quiet summary ("Comments · 5 open"), on one row;
+ * open, the picked tab's content scrolls inside, capped at three fifths of the
+ * column's height so what it sits under stays in reach. Picking another tab
+ * opens the bar on it; picking the current one folds or unfolds it.
+ * Controlled: the owner keeps `open` and `tab`. Mount it as the last child of
+ * a full-height flex column.
  */
-export function DockedPanel({
-  title,
-  summary,
+export function DockedPanel<T extends string>({
+  tabs,
+  tab,
+  onTabChange,
   open,
   onOpenChange,
+  'aria-label': ariaLabel,
   children,
 }: {
-  title: string;
-  /** Beside the title, quieter; omitted when empty. */
-  summary?: string;
+  tabs: { value: T; label: string; summary?: string }[];
+  tab: T;
+  onTabChange: (tab: T) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  'aria-label': string;
+  /** The picked tab's content. */
   children: React.ReactNode;
 }) {
   const id = React.useId();
   return (
     <section
+      aria-label={ariaLabel}
       className={cn('flex shrink-0 flex-col border-t border-line bg-ground', open && 'max-h-3/5')}
     >
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={id}
-        onClick={() => onOpenChange(!open)}
-        className={cn(
-          'flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-left transition-colors hover:bg-hover',
-          focusRing,
-        )}
-      >
-        <ChevronUp
-          size={14}
-          strokeWidth={1.8}
-          className={cn('shrink-0 text-icon transition-transform', open && 'rotate-180')}
-          aria-hidden
+      <div className="flex h-9 shrink-0 items-center gap-1 px-1.5">
+        <IconButton
+          size="sm"
+          title={open ? 'Fold' : 'Unfold'}
+          aria-expanded={open}
+          aria-controls={id}
+          onClick={() => onOpenChange(!open)}
+        >
+          <ChevronUp
+            size={14}
+            strokeWidth={1.8}
+            className={cn('transition-transform', open && 'rotate-180')}
+          />
+        </IconButton>
+        <Segmented
+          size="sm"
+          fullWidth={false}
+          aria-label={ariaLabel}
+          value={tab}
+          options={tabs}
+          onChange={(t) => {
+            if (t === tab) return onOpenChange(!open);
+            onTabChange(t);
+            onOpenChange(true);
+          }}
         />
-        <span className="type-heading shrink-0">{title}</span>
-        {summary && <span className="type-caption min-w-0 truncate tabular-nums">· {summary}</span>}
-      </button>
+      </div>
       {open && (
         <div
           id={id}

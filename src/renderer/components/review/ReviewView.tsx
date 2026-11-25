@@ -14,15 +14,14 @@ import { EmptyState } from '../ui/EmptyState';
 import { Notice } from '../ui/Notice';
 import { finishOffered, unsentNoteCount } from './finishReview';
 import { FinishReviewSheet } from './FinishReviewSheet';
-import { communicationCounts } from './labels';
+import { CommentsTab } from './CommentsTab';
+import { dockSummaries } from './labels';
 import { NotesTray } from './NotesTray';
-import { communicationTally, fileRows, replyDraftCounts, reviewComments } from './outline';
+import { dockTally, fileRows, reviewComments } from './outline';
 import { ReviewChanges } from './ReviewChanges';
 import { ReviewHeader } from './ReviewHeader';
 import { ReviewOverview } from './ReviewOverview';
-import { ReviewThreads } from './ReviewThreads';
 import { useReviewData } from './useReviewData';
-import { YourReview } from './YourReview';
 
 interface ReviewViewProps {
   task: Task;
@@ -53,8 +52,9 @@ interface ReviewViewProps {
 /**
  * The task sidebar's list column in review mode (spec Revision 3), under the
  * mode's banner and views: the PR's header, then the picked view (Overview, the PR's Changes,
- * Files at its head, its History), then the Communication bar docked at the
- * bottom (threads, the person's drafts, the notes to the agent). Narrow it is
+ * Files at its head, its History), then the bar docked at the bottom with its
+ * two tabs: Comments (every exchange with the author, the person's drafts
+ * among them) and Notes (to the agent). Narrow it is
  * the whole column; expanded, the list column beside the editor's PR view.
  */
 export function ReviewView(props: ReviewViewProps) {
@@ -84,7 +84,8 @@ function Review({
   const remote = useProjects(
     (s) => s.projects.find((p) => p.id === task.projectId)?.gitRemote ?? null,
   );
-  const commsOpen = useUi((s) => s.reviewCommsOpen);
+  const dockOpen = useUi((s) => s.reviewDockOpen);
+  const dockTab = useUi((s) => s.reviewDockTab);
   const [finishing, setFinishing] = useState(false);
   const scope = prScope(mode.provider, mode.number);
   const commentsReady = useCommentsStore((s) => s.taskId === task.id && !s.disabled);
@@ -94,7 +95,6 @@ function Review({
     () => (review ? fileRows(review.files, review.threads, marks, comments) : []),
     [review, marks, comments],
   );
-  const replyDrafts = useMemo(() => replyDraftCounts(comments), [comments]);
   const { summary } = useTaskReview(task.id, mode);
 
   if (!review) {
@@ -114,10 +114,11 @@ function Review({
     );
   }
 
-  const tally = communicationTally(review.threads, comments, byFile);
+  const counts = dockSummaries(dockTally(review.threads, comments, byFile));
   const canFinish =
     commentsReady &&
     finishOffered({ own: review.viewerIsAuthor, comments, summary: summary?.body ?? '' });
+  const onFinish = canFinish ? () => setFinishing(true) : undefined;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -137,11 +138,7 @@ function Review({
         )}
         <div className="min-h-0 flex-1">
           {tab === 'overview' ? (
-            <ReviewOverview
-              review={review}
-              remote={remote}
-              onFinish={canFinish ? () => setFinishing(true) : undefined}
-            />
+            <ReviewOverview review={review} remote={remote} onFinish={onFinish} />
           ) : tab === 'changes' ? (
             <ReviewChanges
               review={review}
@@ -159,32 +156,30 @@ function Review({
         </div>
       </div>
       <DockedPanel
-        title="Communication"
-        summary={communicationCounts(tally)}
-        open={commsOpen}
-        onOpenChange={(open) => useUi.getState().setReviewCommsOpen(open)}
+        aria-label="Comments and notes"
+        tabs={[
+          { value: 'comments', label: 'Comments', summary: counts.comments },
+          { value: 'notes', label: 'Notes', summary: counts.notes },
+        ]}
+        tab={dockTab}
+        onTabChange={(t) => useUi.getState().setReviewDockTab(t)}
+        open={dockOpen}
+        onOpenChange={(open) => useUi.getState().setReviewDockOpen(open)}
       >
-        <ReviewThreads
-          review={review}
-          taskId={task.id}
-          projectId={task.projectId}
-          cwd={task.path}
-          draftScope={commentsReady ? scope : null}
-          replyDrafts={replyDrafts}
-        />
-        {commentsReady && (
-          <YourReview
+        {dockTab === 'comments' ? (
+          <CommentsTab
             review={review}
             taskId={task.id}
             projectId={task.projectId}
             cwd={task.path}
-            comments={comments}
+            draftScope={commentsReady ? scope : null}
+            comments={commentsReady ? comments : []}
+            summary={summary?.body.trim() ?? ''}
+            onFinish={onFinish}
             onNavigate={onNavigate}
           />
-        )}
-        <NotesTray taskId={task.id} onNavigate={onNavigate} />
-        {tally.open + tally.drafts + tally.notes === 0 && !review.threads.length && (
-          <p className="type-caption px-2.5 pt-2">No threads, drafts or notes yet.</p>
+        ) : (
+          <NotesTray taskId={task.id} onNavigate={onNavigate} />
         )}
       </DockedPanel>
       {finishing && (

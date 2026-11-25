@@ -8,9 +8,11 @@ import { focusRing } from './styles';
  * A titled block of a details view: a `type-heading` (with an optional action
  * at its end; the action wraps under a long title, which never truncates),
  * then its rows. Sections stack with their own spacing.
- * `collapsible` makes the heading a disclosure that folds the rows away.
+ * `collapsible` makes it a band instead: the heading on a filled `well` row
+ * between hairlines, a disclosure that folds the rows away. Banded sections
+ * stack flush, sharing their rules, so a column of them reads as one list.
  * A `summary` follows the title quietly ("Checks · 1 passing"), as
- * `DockedPanel`'s does, so every titled section counts the same way.
+ * `DockedPanel`'s tabs do, so every titled section counts the same way.
  */
 export function DetailSection({
   title,
@@ -19,6 +21,8 @@ export function DetailSection({
   action,
   collapsible = false,
   defaultOpen = true,
+  open: openProp,
+  onOpenChange,
   children,
 }: {
   title: React.ReactNode;
@@ -30,11 +34,17 @@ export function DetailSection({
   /** A small control at the label's end ("Edit"). */
   action?: React.ReactNode;
   collapsible?: boolean;
-  /** Collapsible only: open on first render. */
+  /** Collapsible only: open on first render (uncontrolled). */
   defaultOpen?: boolean;
+  /** Collapsible only: controlled open state, with `onOpenChange`. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = React.useState(defaultOpen);
+  const [ownOpen, setOwnOpen] = React.useState(defaultOpen);
+  const open = openProp ?? ownOpen;
+  const setOpen = onOpenChange ?? setOwnOpen;
+  const id = React.useId();
   if (!collapsible) {
     return (
       <section className="grid gap-1 px-2.5 pt-4 pb-1">
@@ -50,14 +60,18 @@ export function DetailSection({
     );
   }
   return (
-    <section className="px-2.5 pt-4 pb-1">
-      <div className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1">
-        <h3 className="type-heading min-w-0 flex-1">
+    <section className="not-first:-mt-px">
+      <div className="flex min-h-8 flex-wrap items-center gap-x-2 border-y border-line bg-well pr-2.5">
+        <h3 className="type-heading flex min-w-0 flex-1 self-stretch">
           <button
             type="button"
             aria-expanded={open}
-            onClick={() => setOpen((o) => !o)}
-            className={cn('flex max-w-full items-center gap-1 rounded-sm text-left', focusRing)}
+            aria-controls={id}
+            onClick={() => setOpen(!open)}
+            className={cn(
+              'flex min-h-8 min-w-0 flex-1 items-center gap-1.5 py-1 pl-2.5 text-left',
+              focusRing,
+            )}
           >
             <ChevronRight
               size={14}
@@ -73,8 +87,11 @@ export function DetailSection({
         </h3>
         {action}
       </div>
-      <div className="collapse-grid" data-open={open}>
-        <div className="grid gap-1 pt-1">{children}</div>
+      <div id={id} className="collapse-grid" data-open={open}>
+        {/* The padding sits inside the clipped child, which folds to nothing. */}
+        <div>
+          <div className="grid gap-1 px-2.5 py-1.5">{children}</div>
+        </div>
       </div>
     </section>
   );

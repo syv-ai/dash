@@ -76,21 +76,20 @@ export function prDateTime(iso: string, clock?: ClockOptions): string {
   return Number.isNaN(ms) ? '' : formatDateTime(new Date(ms), clock);
 }
 
-/** Communication's counts, read one way in its bar ("5 open · 2 drafts ·
- *  1 note") and in each of its sections ("Your drafts · 2 drafts"): the
- *  empty or absent ones left out; '' with nothing to count. */
-export const communicationCounts = (n: {
-  open?: number;
-  drafts?: number;
-  notes?: number;
-}): string =>
-  [
-    !!n.open && `${n.open} open`,
-    !!n.drafts && plural(n.drafts, 'draft'),
-    !!n.notes && plural(n.notes, 'note'),
-  ]
-    .filter(Boolean)
-    .join(' · ');
+/** The docked bar's tab captions from its tally (`dockTally`): Comments
+ *  "5 open · 1 draft", Notes "1" (unsent); the empty or absent counts left
+ *  out, '' with nothing to count. */
+export function dockSummaries(n: { open: number; drafts: number; notes: number }): {
+  comments: string;
+  notes: string;
+} {
+  return {
+    comments: [!!n.open && `${n.open} open`, !!n.drafts && plural(n.drafts, 'draft')]
+      .filter(Boolean)
+      .join(' · '),
+    notes: n.notes ? String(n.notes) : '',
+  };
+}
 
 /** What the author does with the PR's commits, by its state: "wants to merge"
  *  (open, draft), "merged", or "wanted to merge" (closed). */

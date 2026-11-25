@@ -13,32 +13,18 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react';
-import { formatTimeAgo } from '../../../shared/relativeTime';
-import type {
-  CiState,
-  PrCheck,
-  PrReview,
-  PrReviewComment,
-  PrReviewer,
-} from '../../../shared/types';
+import type { CiState, PrCheck, PrReview, PrReviewer } from '../../../shared/types';
 import { branchUrl } from '../../../shared/urls';
 import { cn } from '../../lib/cn';
 import { Button } from '../ui/Button';
 import { DetailSection } from '../ui/DetailList';
-import { IconButton } from '../ui/IconButton';
 import { ListRow } from '../ui/ListRow';
 import { Markdown } from '../ui/Markdown';
 import { TextLink } from '../ui/TextLink';
 import { ciLabel, ciPulse, ciText } from '../ui/prStatusColors';
-import {
-  CHECK_LABELS,
-  plural,
-  prDateTime,
-  providerName,
-  reviewerGroups,
-  threadsLine,
-} from './labels';
+import { CHECK_LABELS, prDateTime, reviewerGroups, threadsLine } from './labels';
 import { checksRollup, checksSummary } from './outline';
+import { useSectionOpen } from './useSectionOpen';
 
 /** One fact about the PR: an icon naming what it is, then the value, which
  *  wraps rather than truncates (the column can be narrow, D85). */
@@ -93,11 +79,12 @@ function Reviewers({ reviewers }: { reviewers: PrReviewer[] }) {
 }
 
 /**
- * The Review view's Overview tab: how far the PR is behind its base (when it
- * is), when it was opened and last moved, its threads, reviewers and
- * assignees, and Finish review… when there is one to give; then its checks
- * (folded), its description and the general conversation (read-only, oldest
- * first).
+ * The Review view's Overview tab, under the PR's header: About (how far the PR
+ * is behind its base, when it was opened and last moved, its threads,
+ * reviewers and assignees, then Finish review… when there is one to give),
+ * its checks and its description, each a band that folds; the open ones are
+ * remembered for the session. The general conversation lives in the docked
+ * bar's Comments.
  */
 export function ReviewOverview({
   review,
@@ -109,70 +96,72 @@ export function ReviewOverview({
   /** Open the Finish-review sheet; absent while there is nothing to finish. */
   onFinish?: () => void;
 }) {
+  const about = useSectionOpen('overview.about', true);
+  const description = useSectionOpen('overview.description', true);
   const baseHref = remote ? branchUrl(remote, review.baseRef) : null;
   const threads = threadsLine(review.threads);
   const created = prDateTime(review.createdAt);
   const active = prDateTime(review.lastActivityAt);
+  const finish = onFinish && (
+    <Button size="sm" variant="primary" onClick={onFinish} className="justify-self-start">
+      Finish review…
+    </Button>
+  );
   return (
-    <div className="grid gap-1 pb-2">
-      <div className="grid gap-1.5 px-2.5 pt-2">
-        {!!review.behindBase && (
-          <Fact icon={GitCompareArrows} name="Behind base">
-            <span className="tabular-nums">{review.behindBase}</span> behind{' '}
-            {baseHref ? (
-              <TextLink href={baseHref} quiet title={`Open ${review.baseRef} on the forge`}>
+    <div className="pt-2 pb-2">
+      {/* Folded, About keeps Finish review… in reach on its band. */}
+      <DetailSection title="About" collapsible {...about} action={!about.open && finish}>
+        <div className="grid gap-1.5 pt-0.5">
+          {!!review.behindBase && (
+            <Fact icon={GitCompareArrows} name="Behind base">
+              <span className="tabular-nums">{review.behindBase}</span> behind{' '}
+              {baseHref ? (
+                <TextLink href={baseHref} quiet title={`Open ${review.baseRef} on the forge`}>
+                  <span className="wrap-anywhere">{review.baseRef}</span>
+                </TextLink>
+              ) : (
                 <span className="wrap-anywhere">{review.baseRef}</span>
-              </TextLink>
-            ) : (
-              <span className="wrap-anywhere">{review.baseRef}</span>
-            )}
-          </Fact>
-        )}
-        {created && (
-          <Fact icon={CalendarPlus} name="Created">
-            <span className="tabular-nums">Created {created}</span>
-          </Fact>
-        )}
-        {active && (
-          <Fact icon={CalendarClock} name="Last activity">
-            <span className="tabular-nums">Last activity {active}</span>
-          </Fact>
-        )}
-        {threads && (
-          <Fact icon={MessagesSquare} name="Comment threads">
-            <span className="tabular-nums">{threads}</span>
-          </Fact>
-        )}
-        {review.reviewers.length > 0 && (
-          <Fact icon={UserCheck} name="Reviewers">
-            <Reviewers reviewers={review.reviewers} />
-          </Fact>
-        )}
-        {review.assignees.length > 0 && (
-          <Fact icon={Users} name="Assignees">
-            {review.assignees.join(', ')}
-          </Fact>
-        )}
-        {onFinish && (
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={onFinish}
-            className="mt-1 justify-self-start"
-          >
-            Finish review…
-          </Button>
-        )}
-      </div>
+              )}
+            </Fact>
+          )}
+          {created && (
+            <Fact icon={CalendarPlus} name="Created">
+              <span className="tabular-nums">Created {created}</span>
+            </Fact>
+          )}
+          {active && (
+            <Fact icon={CalendarClock} name="Last activity">
+              <span className="tabular-nums">Last activity {active}</span>
+            </Fact>
+          )}
+          {threads && (
+            <Fact icon={MessagesSquare} name="Comment threads">
+              <span className="tabular-nums">{threads}</span>
+            </Fact>
+          )}
+          {review.reviewers.length > 0 && (
+            <Fact icon={UserCheck} name="Reviewers">
+              <Reviewers reviewers={review.reviewers} />
+            </Fact>
+          )}
+          {review.assignees.length > 0 && (
+            <Fact icon={Users} name="Assignees">
+              {review.assignees.join(', ')}
+            </Fact>
+          )}
+          {finish && <div className="mt-1 grid">{finish}</div>}
+        </div>
+      </DetailSection>
       <Checks checks={review.checks} />
-      <div className="type-body px-2.5 pt-4">
-        {review.body.trim() ? (
-          <Markdown text={review.body} />
-        ) : (
-          <p className="type-caption">No description.</p>
-        )}
-      </div>
-      <Conversation comments={review.conversation} forge={providerName(review.provider)} />
+      <DetailSection title="Description" collapsible {...description}>
+        <div className="type-body">
+          {review.body.trim() ? (
+            <Markdown text={review.body} />
+          ) : (
+            <p className="type-caption">No description.</p>
+          )}
+        </div>
+      </DetailSection>
     </div>
   );
 }
@@ -206,6 +195,7 @@ function CheckIcon({ state }: { state: PrCheck['state'] }) {
 }
 
 function Checks({ checks }: { checks: PrCheck[] }) {
+  const section = useSectionOpen('overview.checks', false);
   const ci = checksRollup(checks);
   if (!ci) return null;
   return (
@@ -214,7 +204,7 @@ function Checks({ checks }: { checks: PrCheck[] }) {
       summary={checksSummary(checks)}
       closedHint={<ChecksRollupIcon ci={ci} />}
       collapsible
-      defaultOpen={false}
+      {...section}
     >
       <div className="grid gap-px">
         {checks.map((c, i) => {
@@ -239,40 +229,6 @@ function Checks({ checks }: { checks: PrCheck[] }) {
           );
         })}
       </div>
-    </DetailSection>
-  );
-}
-
-function Conversation({ comments, forge }: { comments: PrReviewComment[]; forge: string }) {
-  if (comments.length === 0) return null;
-  const now = Date.now() / 1000;
-  return (
-    <DetailSection title="Conversation" summary={plural(comments.length, 'comment')} collapsible>
-      <ol className="grid gap-2 px-2.5">
-        {comments.map((c) => (
-          <li key={c.id} className="grid gap-1 rounded-lg border border-line px-3 py-2">
-            <div className="flex items-baseline gap-2">
-              <span className="type-subheading min-w-0 truncate">{c.author}</span>
-              <span className="type-caption" title={c.createdAt}>
-                {formatTimeAgo(Date.parse(c.createdAt) / 1000, now)}
-              </span>
-              <span className="flex-1" />
-              {c.url && (
-                <IconButton
-                  size="sm"
-                  title={`Open on ${forge}`}
-                  onClick={() => void window.electronAPI.openExternal(c.url)}
-                >
-                  <ExternalLink size={14} strokeWidth={1.8} />
-                </IconButton>
-              )}
-            </div>
-            <div className="type-body">
-              <Markdown text={c.body.trim()} />
-            </div>
-          </li>
-        ))}
-      </ol>
     </DetailSection>
   );
 }

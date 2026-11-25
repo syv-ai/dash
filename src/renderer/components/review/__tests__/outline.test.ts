@@ -4,7 +4,9 @@ import {
   DELETED_BLOB,
   checksRollup,
   checksSummary,
-  communicationTally,
+  commentGroups,
+  dockTally,
+  draftPlace,
   fileRows,
   groupByPath,
   lineLabel,
@@ -12,14 +14,13 @@ import {
   nextStop,
   nextUnviewed,
   prFileChanges,
-  replyDraftCounts,
   reviewComments,
-  threadGroups,
   threadHeadline,
   threadPlace,
   trayNotes,
   treeBadges,
   viewedPaths,
+  type CommentItem,
 } from '../outline';
 
 const file = (path: string, blob: string | null = `b-${path}`): PrFile => ({
@@ -107,18 +108,46 @@ describe('nextUnviewed', () => {
   });
 });
 
-describe('threadGroups', () => {
-  it('splits open threads on lines from those off the code, and resolved ones', () => {
-    const g = threadGroups([
-      thread('r', { resolved: true }),
-      thread('late', { line: 9 }),
-      thread('early', { line: 2 }),
-      thread('outdated', { line: null, isOutdated: true }),
-      thread('left', { side: 'LEFT' }),
+describe('commentGroups', () => {
+  it('puts open threads and the person’s draft comments together, by file and line', () => {
+    const g = commentGroups(
+      [
+        thread('r', { resolved: true }),
+        thread('late', { line: 9 }),
+        thread('early', { line: 2 }),
+        thread('outdated', { line: null, isOutdated: true }),
+        thread('other', { path: 'b.ts', line: 1 }),
+      ],
+      [draft('mine', { startLine: 5, endLine: 5 }), draft('top', { filePath: '0.ts' })],
+    );
+    const ids = (items: CommentItem[]) =>
+      items.map((i) => (i.kind === 'thread' ? i.thread.id : `draft:${i.draft.id}`));
+    expect(ids(g.unresolved)).toEqual([
+      'draft:top',
+      'outdated',
+      'early',
+      'draft:mine',
+      'late',
+      'other',
     ]);
-    expect(g.unresolved.map((t) => t.id)).toEqual(['early', 'late']);
-    expect(g.offCode.map((t) => t.id)).toEqual(['outdated', 'left']);
-    expect(g.resolved.map((t) => t.id)).toEqual(['r']);
+    expect(ids(g.resolved)).toEqual(['r']);
+  });
+
+  it('nests a draft reply under its thread, open or resolved', () => {
+    const g = commentGroups(
+      [thread('T'), thread('R', { resolved: true })],
+      [draft('a', { replyTo: 'T' }), draft('b', { replyTo: 'R' }), draft('c', { replyTo: 'T' })],
+    );
+    const replies = (i: CommentItem | undefined) =>
+      i?.kind === 'thread' ? i.replies.map((c) => c.id) : null;
+    expect(replies(g.unresolved[0])).toEqual(['a', 'c']);
+    expect(replies(g.resolved[0])).toEqual(['b']);
+    expect(g.unresolved).toHaveLength(1);
+  });
+
+  it('keeps a reply whose thread is gone as its own draft row', () => {
+    const g = commentGroups([], [draft('lost', { replyTo: 'gone' })]);
+    expect(g.unresolved).toEqual([{ kind: 'draft', draft: draft('lost', { replyTo: 'gone' }) }]);
   });
 });
 
@@ -156,10 +185,15 @@ describe('drafts and notes', () => {
     expect(sent.map((c) => c.id)).toEqual(['n2']);
   });
 
-  it('counts draft replies per thread', () => {
-    expect(
-      replyDraftCounts([draft('a', { replyTo: 'T' }), draft('b', { replyTo: 'T' }), draft('c')]),
-    ).toEqual(new Map([['T', 2]]));
+  it('places a draft as a thread row does', () => {
+    expect(draftPlace({ filePath: 'src/a.ts', startLine: 3, endLine: 3 })).toEqual({
+      name: 'a.ts:3',
+      dir: 'src',
+    });
+    expect(draftPlace({ filePath: 'a.ts', startLine: 3, endLine: 5 })).toEqual({
+      name: 'a.ts:3-5',
+      dir: '',
+    });
   });
 
   it('labels a line or a range', () => {
@@ -287,7 +321,7 @@ describe('the Changes tab', () => {
   });
 });
 
-describe('communicationTally', () => {
+describe('dockTally', () => {
   it('counts open threads, the person’s drafts and every unsent note of the task', () => {
     const byFile = {
       'a.ts': [
@@ -298,7 +332,7 @@ describe('communicationTally', () => {
       ],
     };
     expect(
-      communicationTally(
+      dockTally(
         [thread('1'), thread('2', { line: null }), thread('3', { resolved: true })],
         [draft('c1')],
         byFile,
