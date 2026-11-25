@@ -4,8 +4,8 @@ import type { ITheme as XtermTheme } from '@xterm/xterm';
 // changes — Monaco caches themes by name, and the EditorPane's theme effect
 // only re-applies when `themeName` actually changes, so renaming forces a
 // fresh defineTheme + setTheme on already-open editors.
-export const MONACO_THEME_DARK = 'dash-terminal-dark-v10';
-export const MONACO_THEME_LIGHT = 'dash-terminal-light-v10';
+export const MONACO_THEME_DARK = 'dash-terminal-dark-v11';
+export const MONACO_THEME_LIGHT = 'dash-terminal-light-v11';
 
 /** HSL channels ("220 4% 47%", optionally "/ 0.06") as #rrggbbaa. */
 export function hslChannelsToHex(channels: string, alpha = 1): string | null {
@@ -51,13 +51,15 @@ export function defineMonacoThemeFromTerminal(
   const bg = t.background ?? (isDark ? '#131415' : '#ffffff');
   const fg = t.foreground ?? (isDark ? '#e7e8e9' : '#2c2f3a');
   // The editor's chrome reads the page's role tokens, so it tracks the theme
-  // and its contrast floor (index.css): line numbers in ink-3, the active one
-  // in ink, guides on the hairline, the current line on the hover wash, the
-  // fold chevrons in the icon ink. The scrollbar is an ink-3 wash that firms
+  // and its contrast floor (index.css): line numbers in their own quiet token
+  // (`line-number`, below ink-3, so the code leads), the active one in ink,
+  // guides on the hairline, the current line on the hover wash, the fold
+  // chevrons in the icon ink. The scrollbar is an ink-3 wash that firms
   // up under the pointer (no grey slab), and the peek view sits on the
   // raised surface like the app's other popovers.
   const ink = roleColor('--ink', fg);
   const ink3 = roleColor('--ink-3', isDark ? '#adafb3' : '#6d717b');
+  const lineNumber = roleColor('--line-number', isDark ? '#7a7e85' : '#7d828c');
   const icon = roleColor('--icon', isDark ? '#bfc1c5' : '#606570');
   const line = roleColor('--line', isDark ? '#ffffff11' : '#28303d17');
   const hover = roleColor('--hover', isDark ? '#ffffff0d' : '#28303d0d');
@@ -76,7 +78,7 @@ export function defineMonacoThemeFromTerminal(
       'editor.lineHighlightBackground': hover,
       'editor.lineHighlightBorder': '#00000000',
       'editorCursor.foreground': t.cursor ?? fg,
-      'editorLineNumber.foreground': ink3,
+      'editorLineNumber.foreground': lineNumber,
       'editorLineNumber.activeForeground': ink,
       'editorIndentGuide.background1': line,
       'editorIndentGuide.activeBackground1': roleColor('--ink-3', '#80808080', 0.6),
