@@ -12,7 +12,7 @@ export interface SyncLinks {
 
 type Sync = Pick<GitStatus, 'hasUpstream' | 'ahead' | 'behind'>;
 
-/** The branch and its upstream have moved apart: Files' sync row shows. */
+/** The branch and its upstream have moved apart: Files' sync text shows. */
 export const isOutOfSync = (status: Sync): boolean =>
   status.hasUpstream && (status.ahead > 0 || status.behind > 0);
 
@@ -50,15 +50,14 @@ export function SyncStatus({ status, links }: { status: Sync; links: SyncLinks }
 }
 
 /**
- * Files' top row while the branch and its upstream have moved apart (see
- * `isOutOfSync`; nothing otherwise): "3 ahead · 1 behind" in secondary ink,
- * the counts green and red, each part a link to those commits.
+ * "3 ahead · 1 behind", for a branch and upstream that have moved apart
+ * (`isOutOfSync`): Files' top row, or under its "No changes". Secondary ink, the counts green and red, each part a link to
+ * those commits; it inherits size.
  */
-export function SyncRow({ status, links }: { status: Sync; links: SyncLinks }) {
-  if (!isOutOfSync(status)) return null;
+export function SyncText({ status, links }: { status: Sync; links: SyncLinks }) {
   const { ahead, behind } = status;
   return (
-    <div className="flex h-8 shrink-0 items-center gap-1 px-3 text-xs text-ink-2 tabular-nums">
+    <span className="inline-flex items-center gap-1 text-ink-2 tabular-nums">
       {ahead > 0 && (
         <TextLink look="muted" title="Show the unpushed commits" onClick={links.onShowUnpushed}>
           <span className="text-loc-add">{ahead}</span> ahead
@@ -70,6 +69,6 @@ export function SyncRow({ status, links }: { status: Sync; links: SyncLinks }) {
           <span className="text-loc-del">{behind}</span> behind
         </TextLink>
       )}
-    </div>
+    </span>
   );
 }

@@ -19,7 +19,8 @@ export interface RepoFiles {
  * Review mode's Files tab: one tree, the PR's changed files by default, or
  * with "All files" every file at its head. Changed files are badged with their
  * open threads and the person's draft comments, and carry a viewed tick at the
- * tree's left edge (viewed ones dimmed); the header tallies "n viewed".
+ * tree's left edge (viewed ones dimmed); the top row tallies "n viewed" beside
+ * the switch.
  */
 export function ReviewFiles({
   review,

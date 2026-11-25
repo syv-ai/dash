@@ -5,6 +5,7 @@ import { LineStats } from '../ui/LineStats';
 import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
 import type { EditorView } from '../diffEditor/types';
 import type { FileChange, RepoListing } from '../../../shared/types';
+import { FilesTopRow } from './FilesTopRow';
 import { FileTree } from './FileTree';
 import {
   buildTree,
@@ -53,7 +54,8 @@ interface RepoTreeProps {
   leading?: (row: ItemRow) => React.ReactNode;
   /** A row's hover actions (Files' discard); absent: copy its path. */
   actions?: (row: ItemRow) => React.ReactNode;
-  /** A control at the header's end (review mode's "All files"). */
+  /** A control at the header's end (review Files' "All files"): the header
+   *  is then the pane's top row. */
   headerAction?: React.ReactNode;
 }
 
@@ -144,8 +146,9 @@ export function RepoTree({
   );
 }
 
-/** A tree's tally ("7 changed · 2 viewed +580 −10") and a control at its
- *  end (the "All files" switch); nothing with neither. */
+/** A tree's tally ("7 changed · 2 viewed +580 −10"); with a control at its
+ *  end (review Files' "All files" switch), as the pane's divided top row.
+ *  Nothing with neither. */
 export function TreeHeader({
   tally,
   viewed,
@@ -157,21 +160,18 @@ export function TreeHeader({
   action?: React.ReactNode;
 }) {
   const changed = tally.changed;
-  if (changed === 0 && !action) return null;
-  return (
-    <div className="type-caption flex h-8 shrink-0 items-center justify-between px-3">
-      <span className="flex items-center gap-2">
-        {changed > 0 && (
-          <span className="tabular-nums">
-            {changed} changed
-            {viewed !== undefined && ` · ${viewed} viewed`}
-          </span>
-        )}
-        <LineStats add={tally.add + tally.untrackedAdd} del={tally.del} />
+  const summary = changed > 0 && (
+    <>
+      <span className="tabular-nums">
+        {changed} changed
+        {viewed !== undefined && ` · ${viewed} viewed`}
       </span>
-      {action}
-    </div>
+      <LineStats add={tally.add + tally.untrackedAdd} del={tally.del} />
+    </>
   );
+  if (action) return <FilesTopRow start={summary} end={action} />;
+  if (!summary) return null;
+  return <div className="type-caption flex h-8 shrink-0 items-center gap-2 px-3">{summary}</div>;
 }
 
 /** The viewed tick, only on a file the view changes. */

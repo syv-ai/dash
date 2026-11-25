@@ -6,6 +6,7 @@ import { EmptyState } from '../ui/EmptyState';
 import { IconButton } from '../ui/IconButton';
 import { Popover, PopoverArrow, PopoverContent, PopoverTrigger } from '../ui/Popover';
 import { AllFilesSwitch } from '../fileTree/AllFilesSwitch';
+import { FilesTopRow } from '../fileTree/FilesTopRow';
 import { FileTree } from '../fileTree/FileTree';
 import { RepoTree, TreeHeader } from '../fileTree/RepoTree';
 import { buildTree, subtreeChanges, type FileBadges, type ItemRow } from '../fileTree/model';
@@ -14,7 +15,7 @@ import type { EditorView } from '../diffEditor/types';
 import type { FilesScope } from '../rightInspector/filesScope';
 import { CommitRunView } from './CommitRunView';
 import { DiscardFolderConfirm } from './DiscardFolderConfirm';
-import { SyncRow, type SyncLinks } from './SyncStatus';
+import { isOutOfSync, SyncText, type SyncLinks } from './SyncStatus';
 import {
   changeSections,
   changeSelection,
@@ -57,16 +58,16 @@ interface WorkingFilesProps {
   view: EditorView;
   canOpenToSide: boolean;
   repo: RepoView;
-  /** Where the sync row's ahead / behind counts lead. */
+  /** Where the sync text's ahead / behind counts lead. */
   syncLinks: SyncLinks;
 }
 
 /**
- * Normal mode's Files: where the branch stands against its upstream (while
- * they differ), then one tree with an "All files" switch in its header. Off
+ * Normal mode's Files: a top row with where the branch stands against its
+ * upstream (while they differ) and the "All files" switch, then one tree. Off
  * (`changed`), the working tree's changes as staged and unstaged sections,
- * or the commit run while one is shown, or "No changes"; on (`all`), every
- * file with its changes. Changed rows carry a stage tick at the left edge
+ * or the commit run while one is shown (no switch), or "No changes" with the
+ * sync text under it instead; on (`all`), every file with its changes. Changed rows carry a stage tick at the left edge
  * and discard and .gitignore on hover, either way (all files: in the working
  * tree's view, which those act on).
  */
@@ -88,22 +89,30 @@ export function WorkingFiles({
   if (!gitStatus) {
     return <EmptyState title={loading ? 'Loading…' : 'No task selected'} />;
   }
-  const toggle = (
-    <AllFilesSwitch
-      checked={scope === 'all'}
-      onChange={(all) => onScope(all ? 'all' : 'changed')}
-    />
-  );
+  const changedOnly = scope === 'changed';
+  const showingRun = changedOnly && isShowingRun(run.state);
+  const empty = changedOnly && !showingRun && gitStatus.files.length === 0;
+  const sync = isOutOfSync(gitStatus) && <SyncText status={gitStatus} links={syncLinks} />;
   const working = repo.git && view.kind === 'working';
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <SyncRow status={gitStatus} links={syncLinks} />
-      {scope === 'changed' ? (
+      <FilesTopRow
+        start={!empty && sync}
+        end={
+          !showingRun && (
+            <AllFilesSwitch
+              checked={!changedOnly}
+              onChange={(all) => onScope(all ? 'all' : 'changed')}
+            />
+          )
+        }
+      />
+      {changedOnly ? (
         <ChangedFiles
           files={gitStatus.files}
           cwd={cwd}
           run={run}
-          header={toggle}
+          emptyNote={sync}
           onOpenChange={onOpenChange}
           activePath={activePath}
           view={view}
@@ -114,7 +123,6 @@ export function WorkingFiles({
           files={gitStatus.files}
           working={working}
           cwd={cwd}
-          header={toggle}
           onOpenFile={onOpenFile}
           activePath={activePath}
           view={view}
@@ -126,12 +134,18 @@ export function WorkingFiles({
   );
 }
 
+/** The commit run shows in place of the changes (a success is the footer's). */
+const isShowingRun = (
+  state: CommitRunState,
+): state is Exclude<CommitRunState, { status: 'idle' } | { status: 'success' }> =>
+  state.status === 'running' || state.status === 'failed' || state.status === 'cancelled';
+
 /** The changes alone: Staged, then Unstaged. */
 function ChangedFiles({
   files,
   cwd,
   run,
-  header,
+  emptyNote,
   onOpenChange,
   activePath,
   view,
@@ -140,7 +154,8 @@ function ChangedFiles({
   files: readonly FileChange[];
   cwd: string;
   run: CommitRun;
-  header: ReactNode;
+  /** Under "No changes". */
+  emptyNote: ReactNode;
   onOpenChange: WorkingFilesProps['onOpenChange'];
   activePath: string | null;
   view: EditorView;
@@ -152,20 +167,15 @@ function ChangedFiles({
     () => changeSelection(activePath, view, files),
     [activePath, view, files],
   );
-  const top = <TreeHeader tally={tally} action={header} />;
 
   const runState = run.state;
-  if (
-    runState.status === 'running' ||
-    runState.status === 'failed' ||
-    runState.status === 'cancelled'
-  ) {
+  if (isShowingRun(runState)) {
     const unstaged = new Set(files.filter((f) => !f.staged).map((f) => f.path));
     const autoFixPaths = run.autoFixPaths(unstaged);
     return (
       <div className="flex min-h-0 flex-1 flex-col animate-fade-in">
         <CommitRunView
-          state={runState as Exclude<CommitRunState, { status: 'idle' } | { status: 'success' }>}
+          state={runState}
           autoFixCount={autoFixPaths.length}
           onCancel={run.cancel}
           onBackToFiles={run.dismiss}
@@ -180,17 +190,12 @@ function ChangedFiles({
   }
 
   if (files.length === 0) {
-    return (
-      <>
-        {top}
-        <EmptyState illustration={FileDiff} title="No changes" />
-      </>
-    );
+    return <EmptyState illustration={FileDiff} title="No changes" description={emptyNote} />;
   }
 
   return (
     <>
-      {top}
+      <TreeHeader tally={tally} />
       <FileTree
         sections={sections}
         cwd={cwd}
@@ -210,7 +215,6 @@ function AllFiles({
   files,
   working,
   cwd,
-  header,
   onOpenFile,
   activePath,
   view,
@@ -220,7 +224,6 @@ function AllFiles({
   files: readonly FileChange[];
   working: boolean;
   cwd: string;
-  header: ReactNode;
   onOpenFile: WorkingFilesProps['onOpenFile'];
   activePath: string | null;
   view: EditorView;
@@ -243,7 +246,6 @@ function AllFiles({
         onOpenFile={onOpenFile}
         canOpenToSide={canOpenToSide}
         badgeCounts={repo.badges}
-        headerAction={header}
         leading={working ? (row) => <PathsTick row={row} files={files} /> : undefined}
         actions={working ? (row) => <ChangeActions row={row} /> : undefined}
       />

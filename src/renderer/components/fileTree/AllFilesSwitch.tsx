@@ -1,7 +1,7 @@
 import { useId } from 'react';
 import { Switch } from '../ui/Switch';
 
-/** A tree header's "All files" switch: off, the tree lists the changed files
+/** A Files top row's "All files" switch: off, the tree lists the changed files
  *  alone; on, every file with them (Files, review mode's Files). */
 export function AllFilesSwitch({
   checked,
