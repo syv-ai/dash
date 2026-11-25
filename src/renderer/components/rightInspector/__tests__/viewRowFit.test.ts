@@ -22,9 +22,9 @@ describe('fitExtras', () => {
 });
 
 describe('viewRowMinPx', () => {
-  it('is the bare labels, the empty middle, the row end and the gutter: no inset', () => {
-    // Normal mode's labels measure 207 px (D176): the 12 px inset no longer counts.
-    expect(viewRowMinPx(207)).toBe(207 + 8 + VIEW_ROW_END_PX + 8);
-    expect(viewRowMinPx(207)).toBe(255);
+  it('is the tabs at their least, the empty middle, the row end and the gutter', () => {
+    // Normal mode's labels measure 207 px (D176), plus the fixed 12 px inset.
+    expect(viewRowMinPx(219)).toBe(219 + 8 + VIEW_ROW_END_PX + 8);
+    expect(viewRowMinPx(219)).toBe(267);
   });
 });

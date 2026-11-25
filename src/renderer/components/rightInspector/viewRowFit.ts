@@ -7,16 +7,17 @@ export const VIEW_ROW_MIDDLE_PAD_PX = 8;
 /** The list column's gutter around the row (8). */
 const LIST_GUTTER_PX = 8;
 
-/** The list column's least width: the view tabs' labels (no inset, no
- *  counts), the empty middle, the row's end and the gutter. */
+/** The list column's least width: the view tabs at their least (the corner
+ *  inset and labels, no counts), the empty middle, the row's end and the
+ *  gutter. */
 export function viewRowMinPx(tabsMinPx: number): number {
   return tabsMinPx + VIEW_ROW_MIDDLE_PAD_PX + VIEW_ROW_END_PX + LIST_GUTTER_PX;
 }
 
 /**
  * How many of the row's middle items show, by the room left once the tabs are
- * at their least (they give up their inset and counts first, flex-shrinking
- * ahead of the middle): the items give way whole, last first, never clipping
+ * at their least (they drop their counts first, flex-shrinking ahead of the
+ * middle): the items give way whole, last first, never clipping
  * under Details. `needs[i]`: the middle's natural width (padding included)
  * with its first `needs.length - i` items.
  */

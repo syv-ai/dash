@@ -28,9 +28,9 @@ function Middle({ extras, className }: { extras: ViewRowExtra[]; className?: str
 /**
  * The task sidebar's view row, on the sheet's top edge, 1px over, like the
  * editor's tab strip: the view tabs, the middle's extras, then `end`
- * (Details). Who gives way as it narrows: the tabs' inset off the sheet's
- * corner, then their counts (`FolderTabs`, which shrinks first), then the
- * extras, whole and last first. The tabs' labels and `end` never do: the
+ * (Details). Who gives way as it narrows: the tabs' counts (`FolderTabs`,
+ * which shrinks first), then the extras, whole and last first. The tabs'
+ * inset and labels and `end` never do: the
  * sidebar is kept as wide as they need (`viewRowMinPx`).
  */
 export function ViewRow({
