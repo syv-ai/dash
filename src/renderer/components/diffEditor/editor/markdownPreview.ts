@@ -10,7 +10,7 @@ marked.setOptions({ gfm: true });
 function previewStyles(isDark: boolean): string {
   const c = isDark
     ? {
-        bg: '#101011',
+        bg: '#131415',
         fg: '#d6d7de',
         muted: '#9aa0aa',
         border: '#2a2c34',

@@ -4,8 +4,8 @@ import type { ITheme as XtermTheme } from '@xterm/xterm';
 // changes — Monaco caches themes by name, and the EditorPane's theme effect
 // only re-applies when `themeName` actually changes, so renaming forces a
 // fresh defineTheme + setTheme on already-open editors.
-export const MONACO_THEME_DARK = 'dash-terminal-dark-v7';
-export const MONACO_THEME_LIGHT = 'dash-terminal-light-v7';
+export const MONACO_THEME_DARK = 'dash-terminal-dark-v8';
+export const MONACO_THEME_LIGHT = 'dash-terminal-light-v8';
 
 /** HSL channels ("220 4% 47%", optionally "/ 0.06") as #rrggbbaa. */
 export function hslChannelsToHex(channels: string, alpha = 1): string | null {
@@ -48,19 +48,22 @@ export function defineMonacoThemeFromTerminal(
   isDark: boolean,
   t: XtermTheme,
 ): void {
-  const bg = t.background ?? (isDark ? '#101011' : '#ffffff');
+  const bg = t.background ?? (isDark ? '#131415' : '#ffffff');
   const fg = t.foreground ?? (isDark ? '#e7e8e9' : '#2c2f3a');
-  // The page's role tokens: the scrollbar is a faint ink-3 wash that firms
+  // The editor's chrome reads the page's role tokens, so it tracks the theme
+  // and its contrast floor (index.css): line numbers in ink-3, the active one
+  // in ink, guides on the hairline, the current line on the hover wash, the
+  // fold chevrons in the icon ink. The scrollbar is an ink-3 wash that firms
   // up under the pointer (no grey slab), and the peek view sits on the
   // raised surface like the app's other popovers.
   const ink = roleColor('--ink', fg);
-  const ink3 = roleColor('--ink-3', isDark ? '#74777c' : '#82858d');
-  const line = roleColor('--line', isDark ? '#ffffff0f' : '#28303d14');
-  const select = roleColor('--select', isDark ? '#ffffff0f' : '#28303d11');
-  const raised = roleColor('--raised', isDark ? '#171819' : '#ffffff');
-  const sliderBg = roleColor('--ink-3', '#80808026', 0.15);
-  const sliderHover = roleColor('--ink-3', '#80808040', 0.3);
-  const sliderActive = roleColor('--ink-3', '#80808059', 0.45);
+  const ink3 = roleColor('--ink-3', isDark ? '#93969c' : '#6d717b');
+  const icon = roleColor('--icon', isDark ? '#a8abb0' : '#606570');
+  const line = roleColor('--line', isDark ? '#ffffff29' : '#28303d36');
+  const hover = roleColor('--hover', isDark ? '#ffffff0d' : '#28303d0d');
+  const select = roleColor('--select', isDark ? '#ffffff17' : '#28303d17');
+  const raised = roleColor('--raised', isDark ? '#1e1f21' : '#ffffff');
+  const slider = (alpha: number) => roleColor('--ink-3', '#808080', alpha);
 
   monaco.editor.defineTheme(themeName, {
     base: isDark ? 'vs-dark' : 'vs',
@@ -69,12 +72,19 @@ export function defineMonacoThemeFromTerminal(
     colors: {
       'editor.background': bg,
       'editor.foreground': fg,
-      'editor.selectionBackground': t.selectionBackground ?? (isDark ? '#2a2f3c' : '#dde2f0'),
-      'editor.lineHighlightBackground': isDark ? '#ffffff08' : '#00000008',
+      'editor.selectionBackground': t.selectionBackground ?? (isDark ? '#363c4d' : '#c9d2ea'),
+      'editor.lineHighlightBackground': hover,
+      'editor.lineHighlightBorder': '#00000000',
       'editorCursor.foreground': t.cursor ?? fg,
-      'editorLineNumber.foreground': isDark ? '#5c607080' : '#4a484280',
-      'editorLineNumber.activeForeground': fg,
+      'editorLineNumber.foreground': ink3,
+      'editorLineNumber.activeForeground': ink,
+      'editorIndentGuide.background1': line,
+      'editorIndentGuide.activeBackground1': roleColor('--ink-3', '#80808080', 0.6),
+      'editorWhitespace.foreground': roleColor('--ink-3', '#80808066', 0.5),
+      'editorRuler.foreground': line,
+      'editorGutter.foldingControlForeground': icon,
       'editorWidget.background': bg,
+      'editorWidget.border': line,
       // Gutter and overview ruler — fully transparent so the right-side diff
       // strip and the line-number gutter both blend into editor.background.
       'editorGutter.background': '#00000000',
@@ -84,9 +94,12 @@ export function defineMonacoThemeFromTerminal(
       // Scrollbar track inherits editor.background; slider becomes a faint
       // overlay rather than a distinct tinted strip.
       'scrollbar.shadow-sm': '#00000000',
-      'scrollbarSlider.background': sliderBg,
-      'scrollbarSlider.hoverBackground': sliderHover,
-      'scrollbarSlider.activeBackground': sliderActive,
+      'scrollbarSlider.background': slider(0.25),
+      'scrollbarSlider.hoverBackground': slider(0.4),
+      'scrollbarSlider.activeBackground': slider(0.55),
+      'minimapSlider.background': slider(0.2),
+      'minimapSlider.hoverBackground': slider(0.3),
+      'minimapSlider.activeBackground': slider(0.4),
       // Diff-specific decorations: drop the diagonal fill and any tinted
       // borders so the diff editor doesn't sprout its own backdrop.
       'diffEditor.diagonalFill': '#00000000',
@@ -99,8 +112,12 @@ export function defineMonacoThemeFromTerminal(
       'diffEditor.removedTextBackground': isDark ? '#f850492e' : '#cf222e33',
       'diffEditor.insertedLineBackground': isDark ? '#3fb95020' : '#2da14424',
       'diffEditor.removedLineBackground': isDark ? '#f8504920' : '#cf222e24',
-      'diffEditorOverview.insertedForeground': isDark ? '#3fb95080' : '#2da14480',
-      'diffEditorOverview.removedForeground': isDark ? '#f8504980' : '#cf222e80',
+      // The gutter and overview ruler mark a changed line in the loc pair
+      // (index.css), firmer than the line wash so a change shows at a glance.
+      'diffEditorGutter.insertedLineBackground': roleColor('--loc-add', '#3fb95040', 0.3),
+      'diffEditorGutter.removedLineBackground': roleColor('--loc-del', '#f8504940', 0.3),
+      'diffEditorOverview.insertedForeground': roleColor('--loc-add', '#3fb950b3', 0.7),
+      'diffEditorOverview.removedForeground': roleColor('--loc-del', '#f85049b3', 0.7),
       // Peek (definitions, references): the raised surface, hairline edges,
       // the select tint, in place of Monaco's blue.
       'peekView.border': line,

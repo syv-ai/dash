@@ -11,10 +11,13 @@
      icons (between ink-2 and ink-3), hover/select = row states,
      btn/btn-ink = the neutral primary button. Colour means agent
      state only: needs (amber), fail (red), work (blue), done (green).
-     Contrast floor, both themes, on ground, well and raised: ink-2 ≥ 4.5:1
-     (body text), ink-3 ≥ 3:1 (faint text), icon ≥ 4:1. Dark sits well above
-     it (ink-2 ≥ 8.8, icon ≥ 7.3, ink-3 ≥ 5.3): near-black ground makes thin
-     grey text look fainter than its ratio says.
+     Contrast floor, both themes, on ground, well and raised: ink-2 ≥ 5.5:1,
+     icon ≥ 4.5:1, ink-3 ≥ 4:1 (it labels things, so it reads as text, not
+     decoration); line ≥ 1.45:1 against every surface, so a hairline shows.
+     Dark sits well above it (ink-2 ≥ 8.6, icon ≥ 7.2, ink-3 ≥ 5.6): near-
+     black ground makes thin grey text look fainter than its ratio says.
+     Surfaces step apart in tone (ground < well < raised in dark; ground
+     under a white well in light), hairlines do the rest.
      Every resting icon takes `text-icon` (IconButton, ListRow's leading
      slot, menu rows and Notice do it for you); hover or pressed may
      brighten it to ink. State colours (agent, PR, loc) stay their own. */
@@ -163,17 +166,19 @@
      them as Tailwind colours (`/N` still works), never as `hsl(var(--line) / a)`. */
   :root {
     /* Light — mirrors the dark roles. */
-    --ground: 225 18% 95%;
+    --ground: 225 16% 92.5%;
     --well: 0 0% 100%;
     --raised: 0 0% 100%;
-    --line: 225 20% 20% / 0.08;
+    /* 1.47:1 on ground, 1.5:1 on well (was 1.15 / 1.16: invisible). */
+    --line: 225 20% 20% / 0.21;
     --ink: 225 14% 20%;
-    --ink-2: 222 8% 41%;
-    --ink-3: 222 6% 53%;
-    /* 4.3:1 on ground, 4.8:1 on well (ink-3: 3.3 / 3.7). */
-    --icon: 222 7% 46%;
-    --hover: 225 20% 20% / 0.04;
-    --select: 225 20% 20% / 0.065;
+    /* On ground / well — ink-2 5.9 / 7.1, icon 4.9 / 5.8, ink-3 4.1 / 5.0
+       (were 5.2 / 5.8, 4.3 / 4.8, 3.3 / 3.7). */
+    --ink-2: 222 9% 36%;
+    --ink-3: 222 6% 45%;
+    --icon: 222 8% 41%;
+    --hover: 225 20% 20% / 0.05;
+    --select: 225 20% 20% / 0.09;
     --btn: 225 14% 22%;
     --btn-ink: 0 0% 100%;
     --state-needs: 34 72% 44%;
@@ -183,7 +188,7 @@
     --scrim: 225 20% 30% / 0.16;
     --edge: 225 20% 20% / 0.8;
     --shade: 225 20% 20% / 0.3;
-    --elevation: 0 0 0 1px hsl(225 20% 20% / 0.08), 0 18px 48px hsl(225 20% 20% / 0.14);
+    --elevation: 0 0 0 1px hsl(var(--line)), 0 18px 48px hsl(225 20% 20% / 0.14);
     --text-fade-k: 0.7;
 
     /* Aliases. Opaque on purpose: call sites add their own alpha. */
@@ -195,24 +200,26 @@
     --popover-foreground: var(--ink);
     --primary: var(--btn);
     --primary-foreground: var(--btn-ink);
-    --secondary: 225 18% 93%;
+    --secondary: 225 16% 91%;
     --secondary-foreground: var(--ink);
-    --muted: 225 18% 93%;
+    --muted: 225 16% 91%;
     --muted-foreground: var(--ink-2);
-    --accent: 225 16% 94%;
+    --accent: 225 16% 92%;
     --accent-foreground: var(--ink);
     --destructive: var(--state-fail);
     --destructive-foreground: 0 0% 100%;
     --warn: var(--state-needs);
     --warn-foreground: 0 0% 100%;
-    --border: 225 12% 88%;
-    --input: 225 12% 88%;
+    /* Opaque hairline (the shadcn alias): 1.4:1 on ground, 1.7:1 on well.
+       input, a form field's edge, 2.7 / 3.2 (WCAG 1.4.11's 3:1 on well). */
+    --border: 225 12% 79%;
+    --input: 225 8% 58%;
     --ring: var(--ink-3);
 
     --surface-0: var(--well);
     --surface-1: var(--ground);
-    --surface-2: 225 16% 92%;
-    --surface-3: 225 14% 88%;
+    --surface-2: 225 16% 89%;
+    --surface-3: 225 14% 85%;
 
     --shadow-card: 0 0 0 1px hsl(var(--line)), 0 1px 3px hsl(225 20% 20% / 0.06);
 
@@ -222,8 +229,8 @@
     --git-modified: var(--state-needs);
     --git-deleted: var(--loc-del);
     --git-renamed: var(--state-work);
-    /* 5.8:1 on ground, 6.5:1 on well: between ink and ink-2, readable. */
-    --git-untracked: 222 8% 38%;
+    /* 7.4:1 on ground, 8.9:1 on well: between ink and ink-2, readable. */
+    --git-untracked: 222 9% 30%;
     --git-conflicted: 25 85% 48%;
     --pr-merged: 262 60% 55%; /* GitHub merged-PR purple */
     --badge-main: 218 34% 36%; /* "main checkout" task badge */
@@ -263,19 +270,22 @@
   .dark {
     /* Very dark reference (Linear-like): near-black chrome, the content sheet
        one step up, white-alpha hairlines only where tone can't separate. */
-    --ground: 220 6% 4%;
-    --well: 220 5% 6.5%;
-    --raised: 220 5% 9.5%;
-    --line: 0 0% 100% / 0.06;
+    /* ground 3.5 → well 8 → raised 12.5 % L: each sheet a visible step up
+       (were 4 / 6.5 / 9.5, too close to tell apart). */
+    --ground: 220 6% 3.5%;
+    --well: 220 5% 8%;
+    --raised: 220 5% 12.5%;
+    /* 1.5 / 1.6 / 1.7:1 on ground / well / raised (was 0.06: 1.1–1.2). */
+    --line: 0 0% 100% / 0.16;
     --ink: 220 6% 91%;
-    /* On ground / well / raised — ink-2 9.8 / 9.4 / 8.8, icon 8.2 / 7.9 / 7.4,
-       ink-3 6.0 / 5.7 / 5.4 (were ink-2 7.5 / 7.2 / 6.7, icon 6.0 / 5.7 / 5.4,
-       ink-3 4.4 / 4.2 / 3.9: compliant, yet too faint to read). */
-    --ink-2: 220 5% 72%;
-    --ink-3: 220 4% 56%;
-    --icon: 220 4.5% 66%;
-    --hover: 0 0% 100% / 0.035;
-    --select: 0 0% 100% / 0.06;
+    /* On ground / well / raised — ink-2 10.4 / 9.6 / 8.6, icon 8.8 / 8.1 / 7.2,
+       ink-3 6.9 / 6.3 / 5.7 (were 9.8 / 9.4 / 8.8, 8.2 / 7.9 / 7.4,
+       6.0 / 5.7 / 5.4 on the old surfaces). */
+    --ink-2: 220 5% 74%;
+    --ink-3: 220 4% 60%;
+    --icon: 220 4.5% 68%;
+    --hover: 0 0% 100% / 0.05;
+    --select: 0 0% 100% / 0.09;
     --btn: 220 6% 91%;
     --btn-ink: 220 6% 5%;
     --state-needs: 40 75% 62%;
@@ -285,25 +295,26 @@
     --scrim: 0 0% 0% / 0.55;
     --edge: 0 0% 100%;
     --shade: 0 0% 0%;
-    --elevation: 0 0 0 1px hsl(0 0% 100% / 0.08), 0 24px 60px hsl(0 0% 0% / 0.7);
+    --elevation: 0 0 0 1px hsl(var(--line)), 0 24px 60px hsl(0 0% 0% / 0.7);
     --text-fade-k: 1;
 
-    --secondary: 220 5% 12%;
-    --muted: 220 5% 12%;
-    --accent: 220 5% 11%;
+    --secondary: 220 5% 15.5%;
+    --muted: 220 5% 15.5%;
+    --accent: 220 5% 14.5%;
     --destructive-foreground: var(--btn-ink);
     --warn-foreground: var(--btn-ink);
-    --border: 220 5% 14%;
-    --input: 220 5% 14%;
+    /* 1.8 / 1.6 / 1.4:1 on ground / well / raised; input 3.2 / 2.9 / 2.6. */
+    --border: 220 5% 22%;
+    --input: 220 4% 38%;
 
     --surface-0: var(--ground);
     --surface-1: var(--well);
     --surface-2: var(--raised);
-    --surface-3: 220 5% 12.5%;
+    --surface-3: 220 5% 16%;
 
     --shadow-card: 0 0 0 1px hsl(var(--line)), 0 12px 28px hsl(0 0% 0% / 0.45);
 
-    /* 12.2:1 on ground, 11.7:1 on well: between ink and ink-2, as in light. */
+    /* 12.3:1 on ground, 11.4:1 on well: between ink and ink-2, as in light. */
     --git-untracked: 220 5% 80%;
     --git-conflicted: 25 85% 60%;
     --pr-merged: 262 70% 72%;

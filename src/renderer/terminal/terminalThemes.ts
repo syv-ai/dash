@@ -10,11 +10,12 @@ export interface TerminalThemeDef {
 /** Background is the `well` role and foreground the `ink` role from index.css,
  *  so the terminal sits flush on the content sheet. */
 export const darkTheme: ITheme = {
-  background: '#101011',
+  background: '#131415',
   foreground: '#e7e8e9',
   cursor: '#e7e8e9',
-  cursorAccent: '#101011',
-  selectionBackground: '#2a2f3c',
+  cursorAccent: '#131415',
+  // 1.7:1 on the background, so a selection shows (was 1.4).
+  selectionBackground: '#363c4d',
   black: '#1a1a1f',
   red: '#d18a8a',
   green: '#93b09c',
@@ -23,7 +24,8 @@ export const darkTheme: ITheme = {
   magenta: '#c4a0c4',
   cyan: '#a0c4c4',
   white: '#f1eee5',
-  brightBlack: '#5c6070',
+  // Dim text: 4.2:1 on the background (was 3.0).
+  brightBlack: '#737889',
   brightRed: '#e8a5a5',
   brightGreen: '#a8c5b0',
   brightYellow: '#e0d4a8',
@@ -38,7 +40,8 @@ export const lightTheme: ITheme = {
   foreground: '#2c2f3a',
   cursor: '#2c2f3a',
   cursorAccent: '#ffffff',
-  selectionBackground: '#dde2f0',
+  // 1.5:1 on the background (was 1.3).
+  selectionBackground: '#c9d2ea',
   black: '#1c1b18',
   red: '#b85858',
   green: '#5a7361',
