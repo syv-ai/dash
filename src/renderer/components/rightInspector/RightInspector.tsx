@@ -480,8 +480,8 @@ export function RightInspector({
       {/* Who gives way as the row narrows, last first: the views (their
           padding tightens, their labels truncate, never below a floor), then
           Details and ✕ (never), Commit (its label goes below 24rem), the bulk
-          actions (into a menu below 24rem), the PR button (it takes the slack;
-          its "Reviewing #n" label truncates).
+          actions (into a menu below 24rem), the PR button (normal mode only;
+          review mode's pill is in the PR's header).
           Past all that the middle clips at its end, short of Details and ✕.
           The padding keeps focus outlines inside the clip. */}
       <div className="flex min-w-0 flex-1 items-center gap-0.5 self-stretch overflow-hidden px-1">
@@ -540,16 +540,16 @@ export function RightInspector({
             </DropdownMenu>
           </div>
         )}
-        <div className="ml-auto flex shrink-0 justify-end">
-          <PrButton
-            relevant={taskPrs.relevant}
-            mode={mode}
-            ownThreads={ownThreads}
-            onOpen={taskPrs.refresh}
-            onPick={enterReview}
-            onExit={exitReview}
-          />
-        </div>
+        {!reviewing && (
+          <div className="ml-auto flex shrink-0 justify-end">
+            <PrButton
+              relevant={taskPrs.relevant}
+              ownThreads={ownThreads}
+              onOpen={taskPrs.refresh}
+              onPick={enterReview}
+            />
+          </div>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-0.5">
         <IconButton

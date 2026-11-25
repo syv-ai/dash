@@ -7,6 +7,7 @@ import { useProjects } from '../../stores/projectsStore';
 import { useUi } from '../../stores/uiStore';
 import { useTaskReview } from '../diffEditor/prReview/useTaskReview';
 import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
+import { Button } from '../ui/Button';
 import { DockedPanel } from '../ui/DockedPanel';
 import { EmptyState } from '../ui/EmptyState';
 import { finishOffered, unsentNoteCount } from './finishReview';
@@ -102,6 +103,11 @@ function Review({
         icon={<GitPullRequestArrow size={14} strokeWidth={1.8} />}
         title={`Could not load PR #${mode.number}`}
         description={error}
+        action={
+          <Button size="sm" onClick={onExit}>
+            Exit review
+          </Button>
+        }
       />
     ) : (
       <EmptyState title="Loading…" />

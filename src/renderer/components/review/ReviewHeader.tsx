@@ -1,16 +1,11 @@
-import { MoreHorizontal, RefreshCw, X } from 'lucide-react';
+import { GitPullRequestArrow, RefreshCw } from 'lucide-react';
 import type { PrReview } from '../../../shared/types';
 import { branchUrl } from '../../../shared/urls';
 import { cn } from '../../lib/cn';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '../ui/DropdownMenu';
 import { IconButton } from '../ui/IconButton';
+import { Pill } from '../ui/Pill';
 import { TextLink } from '../ui/TextLink';
 import { mergeVerb, plural, providerName, STATE_LABELS } from './labels';
 
@@ -27,11 +22,12 @@ function Branch({ remote, name }: { remote: string | null; name: string }) {
 }
 
 /**
- * Review mode's head (spec Revision 3): the PR's title (to the forge), its
- * number and state; "who wants to merge n commits into base from head", each
+ * Review mode's head (spec Revision 3): the mode's pill, "Reviewing pull
+ * request", whose ✕ exits; the PR's title (to the forge), its number and
+ * state; "who wants to merge n commits into base from head", each
  * linked (the commits to History). Its actions sit on their own row under
- * it, never beside the title: Finish review… when there is one to give,
- * refresh, and the … menu. A failed refresh says why until the next lands.
+ * it, never beside the title: Finish review… when there is one to give, and
+ * refresh. A failed refresh says why until the next lands.
  */
 export function ReviewHeader({
   review,
@@ -59,6 +55,14 @@ export function ReviewHeader({
 }) {
   return (
     <section className="grid gap-1.5 px-2.5 pt-2 pb-1">
+      <Pill
+        icon={<GitPullRequestArrow size={14} strokeWidth={1.8} />}
+        dismissLabel="Exit review"
+        onDismiss={onExit}
+        className="justify-self-start"
+      >
+        Reviewing pull request
+      </Pill>
       <h2 className="type-heading wrap-break-word">
         <TextLink href={review.url} quiet title={`Open on ${providerName(review.provider)}`}>
           {review.title}
@@ -93,19 +97,6 @@ export function ReviewHeader({
         <IconButton size="sm" title="Refresh" onClick={onRefresh} disabled={loading}>
           <RefreshCw size={14} strokeWidth={1.8} className={cn(loading && 'animate-spin')} />
         </IconButton>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <IconButton size="sm" title="More">
-              <MoreHorizontal size={14} strokeWidth={1.8} />
-            </IconButton>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={onExit}>
-              <X size={14} strokeWidth={1.8} />
-              Exit review
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
       {error && (
         <p className="type-caption wrap-break-word" role="status">

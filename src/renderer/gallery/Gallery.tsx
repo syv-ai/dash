@@ -331,7 +331,7 @@ function Badges() {
       </Line>
       <Line>
         <Pill dismissLabel="Exit review" onDismiss={() => {}}>
-          Reviewing #215
+          Reviewing pull request
         </Pill>
       </Line>
       <Line>
