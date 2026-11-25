@@ -10,6 +10,7 @@ import {
   FolderOpen,
   Link2,
 } from 'lucide-react';
+import { cn } from '../../lib/cn';
 import { CharColumn } from '../ui/CharColumn';
 import {
   ContextMenu,
@@ -42,8 +43,8 @@ const STATUS_LETTER: Record<FileChangeStatus, string> = {
   ignored: 'I',
 };
 
-/** The leading control column (stage, viewed) takes two indent steps at the
- *  row's left edge; the rows' nesting starts past it. */
+/** The leading control column (review's viewed tick) takes two indent steps
+ *  at the row's left edge; the rows' nesting starts past it. */
 const LEADING_STEPS = 2;
 
 export interface TreeItemProps {
@@ -60,6 +61,8 @@ export interface TreeItemProps {
   leading: React.ReactNode | undefined;
   /** Hover actions; null: the default (copy the relative path). */
   actions: React.ReactNode;
+  /** Space: the row's own toggle (Files' stage); absent, Space opens it. */
+  onSpace?: () => void;
   canOpenToSide: boolean;
   /** A file: open it (a click previews, ⌥ to the side). A folder: toggle. */
   onActivate: (opts?: OpenOptions) => void;
@@ -80,6 +83,7 @@ export function TreeItem({
   tabStop,
   leading,
   actions,
+  onSpace,
   canOpenToSide,
   onActivate,
   onFocusRow,
@@ -113,7 +117,8 @@ export function TreeItem({
         // A control in the row (a tick, an action) handles its own keys.
         if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
         e.preventDefault();
-        onActivate(folder ? undefined : { toSide: e.altKey, preview: true });
+        if (e.key === ' ' && onSpace) onSpace();
+        else onActivate(folder ? undefined : { toSide: e.altKey, preview: true });
       }}
       leading={
         <>
@@ -183,7 +188,7 @@ export function TreeNote({
 
 /** The row's columns at rest, each as wide as the tree's widest value: the
  *  PR's threads, your comments, lines added and removed (a folder's while
- *  it is closed), and a file's status letter. A folder shows no count of its
+ *  it is closed), and a file's status letter (boxed when staged). A folder shows no count of its
  *  changes: its lines say as much, and the counts crowded the column. */
 function Columns({
   row,
@@ -227,10 +232,35 @@ function Columns({
       )}
       {cols.status && (
         <CharColumn chars={1} align="center">
-          {status}
+          {status && badges?.staged ? (
+            <StagedLetter staged={badges.staged} letter={status} />
+          ) : (
+            status
+          )}
         </CharColumn>
       )}
     </span>
+  );
+}
+
+/** A whole tree's staged file (it has no Staged section to say so): its
+ *  letter in a quiet box, filled when every change is staged, outlined when
+ *  some are. The box overhangs the 1ch column, so the columns stay put. */
+function StagedLetter({ staged, letter }: { staged: true | 'mixed'; letter: React.ReactNode }) {
+  const label = staged === true ? 'Staged' : 'Partly staged';
+  return (
+    <Tooltip content={label}>
+      <span aria-label={label} className="relative inline-block">
+        <span
+          aria-hidden
+          className={cn(
+            'absolute -inset-x-0.75 -inset-y-px rounded-sm',
+            staged === true ? 'bg-ink/12' : 'ring-1 ring-ink-3 ring-inset',
+          )}
+        />
+        <span className="relative">{letter}</span>
+      </span>
+    </Tooltip>
   );
 }
 

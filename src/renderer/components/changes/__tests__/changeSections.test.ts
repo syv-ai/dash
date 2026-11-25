@@ -5,11 +5,13 @@ import {
   fileActions,
   folderActions,
   oneChangePerPath,
+  stageAction,
   stagedState,
   sectionOfView,
   viewOfSection,
+  withStaged,
 } from '../changeSections';
-import { buildTree } from '../../fileTree/model';
+import { buildTree, flattenTree, type ItemRow } from '../../fileTree/model';
 import type { FileChange, FileChangeStatus } from '../../../../shared/types';
 
 const f = (path: string, status: FileChangeStatus = 'modified', staged = false): FileChange => ({
@@ -125,5 +127,50 @@ describe('stagedState', () => {
 
   it('is false for paths with no change', () => {
     expect(stagedState(files, ['z.ts'])).toBe(false);
+  });
+});
+
+describe('stageAction', () => {
+  const rows = (sections: ReturnType<typeof changeSections>) =>
+    flattenTree(sections, { open: new Map(), listings: new Map(), selected: null }).filter(
+      (r): r is ItemRow => r.kind === 'file' || r.kind === 'folder',
+    );
+  const files = [f('src/a.ts', 'modified', true), f('src/b.ts'), f('c.ts', 'modified', true)];
+
+  it('goes the other way from its section: unstages a staged row, stages an unstaged one', () => {
+    const [stagedFolder, stagedA, stagedC, unstagedFolder, unstagedB] = rows(changeSections(files));
+    expect(stageAction(stagedFolder!, files)).toEqual({ stage: false, paths: ['src/a.ts'] });
+    expect(stageAction(stagedA!, files)).toEqual({ stage: false, paths: ['src/a.ts'] });
+    expect(stageAction(stagedC!, files)).toEqual({ stage: false, paths: ['c.ts'] });
+    expect(stageAction(unstagedFolder!, files)).toEqual({ stage: true, paths: ['src/b.ts'] });
+    expect(stageAction(unstagedB!, files)).toEqual({ stage: true, paths: ['src/b.ts'] });
+  });
+
+  it('in a whole tree, stages unless every change under the row is staged', () => {
+    const tree = rows([{ id: 'files', tree: buildTree(oneChangePerPath(files)) }]);
+    const byName = (name: string) =>
+      tree.find((r) => (r.kind === 'file' ? r.file.name : r.name) === name)!;
+    expect(stageAction(byName('src'), files)).toEqual({
+      stage: true,
+      paths: ['src/a.ts', 'src/b.ts'],
+    });
+    expect(stageAction(byName('c.ts'), files)?.stage).toBe(false);
+    expect(stageAction(byName('b.ts'), files)?.stage).toBe(true);
+  });
+
+  it('has none on an ignored file', () => {
+    const ignored = [{ ...f('x.log', 'ignored'), additions: 0 }];
+    const [row] = rows([{ id: 'files', tree: buildTree(ignored) }]);
+    expect(stageAction(row!, ignored)).toBeNull();
+  });
+});
+
+describe('withStaged', () => {
+  it('marks fully staged files true and partly staged ones mixed, keeping other badges', () => {
+    const files = [f('a.ts', 'modified', true), f('b.ts', 'modified', true), f('b.ts'), f('c.ts')];
+    const badges = withStaged(new Map([['a.ts', { comments: 1, threads: 0 }]]), files);
+    expect(badges.get('a.ts')).toEqual({ comments: 1, threads: 0, staged: true });
+    expect(badges.get('b.ts')?.staged).toBe('mixed');
+    expect(badges.has('c.ts')).toBe(false);
   });
 });

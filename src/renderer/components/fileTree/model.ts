@@ -369,6 +369,9 @@ export function folderRowIndex(rows: readonly TreeRow[], path: string): number {
 export interface FileBadges {
   comments: number;
   threads: number;
+  /** Its changes in the index (a whole tree, which has no Staged section):
+   *  all of them, or some. */
+  staged?: true | 'mixed';
 }
 
 /** The trailing columns, each as wide as the tree's widest value (in `ch`)

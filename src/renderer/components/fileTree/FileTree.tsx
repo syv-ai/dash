@@ -38,11 +38,15 @@ export interface FileTreeProps {
   badges?: ReadonlyMap<string, FileBadges>;
   /** Files named quietly (a PR's viewed ones). */
   quiet?: ReadonlySet<string>;
-  /** A control in a column at the tree's left edge (stage, viewed), straight
-   *  down the tree whatever the nesting; null leaves a row's cell empty. */
+  /** A control in a column at the tree's left edge (review's viewed tick),
+   *  straight down the tree whatever the nesting; null leaves a row's cell
+   *  empty. Absent: no column, no room kept for it. */
   leading?: (row: ItemRow) => React.ReactNode;
   /** A row's hover actions; null or absent: copy its relative path. */
   actions?: (row: ItemRow) => React.ReactNode;
+  /** A row's Space action (Files: stage or unstage); null or absent: Space
+   *  opens it, like Enter. */
+  spaceAction?: (row: ItemRow) => (() => void) | null;
   /** 8px above the first row, when nothing heads the tree. */
   gapAbove?: boolean;
 }
@@ -56,8 +60,8 @@ const estimate = (row: TreeRow | undefined) => (row?.kind === 'section' ? 28 : 3
  * repo-sized tree stays light. It owns which folders are open (changed ones
  * and the selection's by default; lazy folders read when opened), the
  * selection highlight, the arrow keys and every row's look. Trees differ
- * only in what they pass: sections, a leading control, hover actions,
- * badges and quiet paths.
+ * only in what they pass: sections, a leading control, hover actions, a
+ * Space action, badges and quiet paths.
  */
 export function FileTree({
   sections,
@@ -69,6 +73,7 @@ export function FileTree({
   quiet,
   leading,
   actions,
+  spaceAction,
   gapAbove,
 }: FileTreeProps) {
   const [open, setOpen] = useState<ReadonlyMap<string, boolean>>(() => new Map());
@@ -191,6 +196,7 @@ export function FileTree({
             tabStop={row.key === tabStop}
             leading={leading ? (leading(row) ?? null) : undefined}
             actions={actions?.(row) ?? null}
+            onSpace={spaceAction?.(row) ?? undefined}
             canOpenToSide={canOpenToSide}
             onActivate={(opts) => (row.kind === 'file' ? onOpenFile(row, opts) : toggle(row))}
             onFocusRow={() => setFocusKey(row.key)}

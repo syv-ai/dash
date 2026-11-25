@@ -50,11 +50,11 @@ interface RepoTreeProps {
   badgeCounts: ReadonlyMap<string, FileBadges>;
   /** Review mode's viewed marks (their ticks fill the left-edge column). */
   viewed?: ViewedColumn;
-  /** Otherwise, a control at each row's left edge (Files' stage ticks). */
-  leading?: (row: ItemRow) => React.ReactNode;
-  /** A row's hover actions (Files' discard); absent: copy its path. */
+  /** A row's hover actions (Files' stage and discard); absent: copy its path. */
   actions?: (row: ItemRow) => React.ReactNode;
-  /** A control at the header's end (review Files' "All files"): the header
+  /** A row's Space action (Files' stage); see `FileTree`. */
+  spaceAction?: (row: ItemRow) => (() => void) | null;
+  /** A control at the header's end (review Files' "Show filetree"): the header
    *  is then the pane's top row. */
   headerAction?: React.ReactNode;
 }
@@ -81,14 +81,14 @@ export function RepoTree({
   canOpenToSide,
   badgeCounts,
   viewed,
-  leading,
   actions,
+  spaceAction,
   headerAction,
 }: RepoTreeProps) {
   // Plain files have no changes to filter on, and nothing git ignores.
   const changedOnly = git && changedOnlyProp;
 
-  // "All files" means every local file, gitignored ones included, so a
+  // "Show filetree" means every local file, gitignored ones included, so a
   // local-only config or scratch file can be reached. Ignored files are a
   // working-tree concept (a commit's tree can't contain them); git collapses
   // fully ignored folders to one entry (quiet, read when opened), which keeps
@@ -137,8 +137,9 @@ export function RepoTree({
           canOpenToSide={canOpenToSide}
           badges={badgeCounts}
           quiet={viewed?.paths}
-          leading={viewed ? (row) => <ViewedTick row={row} viewed={viewed} /> : leading}
+          leading={viewed && ((row) => <ViewedTick row={row} viewed={viewed} />)}
           actions={actions}
+          spaceAction={spaceAction}
           gapAbove={changed === 0 && !headerAction}
         />
       )}
@@ -147,7 +148,7 @@ export function RepoTree({
 }
 
 /** A tree's tally ("7 changed · 2 viewed +580 −10"); with a control at its
- *  end (review Files' "All files" switch), as the pane's divided top row.
+ *  end (review Files' "Show filetree" switch), as the pane's divided top row.
  *  Nothing with neither. */
 export function TreeHeader({
   tally,

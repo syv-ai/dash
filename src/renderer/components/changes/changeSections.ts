@@ -1,13 +1,15 @@
 /*
  * The working tree's changes as Files shows them, pure: the staged and
  * unstaged sections (its changes alone), one change per path (all files),
- * which row reads as the editor's file, where a stage tick stands and what
- * a row's hover actions may do.
+ * which row reads as the editor's file, what a row's stage button and hover
+ * actions do, and which files a whole tree marks staged.
  */
 import type { FileChange } from '../../../shared/types';
 import {
   buildTree,
   subtreeChanges,
+  type FileBadges,
+  type ItemRow,
   type TreeFolder,
   type TreeSection,
   type TreeSelection,
@@ -45,8 +47,8 @@ export function oneChangePerPath(files: readonly FileChange[]): FileChange[] {
 }
 
 /** Where `paths` stand in the index: every change staged (true), none
- *  (false), or some ('mixed'; a partly staged file is). A tick on it stages
- *  unless it is true. */
+ *  (false), or some ('mixed'; a partly staged file is). Its stage button
+ *  stages unless it is true. */
 export function stagedState(
   files: readonly FileChange[],
   paths: readonly string[],
@@ -60,6 +62,49 @@ export function stagedState(
     else unstaged++;
   }
   return unstaged === 0 ? staged > 0 : staged === 0 ? false : 'mixed';
+}
+
+/** What a changed row's stage button (and Space on it) does. */
+export interface StageAction {
+  /** Stage `paths`; else unstage them. */
+  stage: boolean;
+  paths: string[];
+}
+
+/** A row's stage action, null on one with nothing to stage (unchanged,
+ *  ignored). A row of the Staged or Unstaged section goes the other way;
+ *  a row of a whole tree stages unless every change under it is staged. */
+export function stageAction(row: ItemRow, files: readonly FileChange[]): StageAction | null {
+  const paths =
+    row.kind === 'folder'
+      ? subtreeChanges(row.folder).map((c) => c.path)
+      : row.file.change && row.file.change.status !== 'ignored'
+        ? [row.file.path]
+        : [];
+  if (paths.length === 0) return null;
+  const stage =
+    row.section === 'staged'
+      ? false
+      : row.section === 'unstaged'
+        ? true
+        : stagedState(files, paths) !== true;
+  return { stage, paths };
+}
+
+/** A whole tree's badges with each file's place in the index: the tree has
+ *  no Staged section to say so. */
+export function withStaged(
+  badges: ReadonlyMap<string, FileBadges>,
+  files: readonly FileChange[],
+): ReadonlyMap<string, FileBadges> {
+  const unstaged = new Set(files.filter((f) => !f.staged).map((f) => f.path));
+  const out = new Map(badges);
+  for (const { path, staged } of files) {
+    if (!staged) continue;
+    const base = out.get(path) ?? { comments: 0, threads: 0 };
+    out.set(path, { ...base, staged: unstaged.has(path) ? 'mixed' : true });
+  }
+  return out;
 }
 
 /** The section a file opened from Files' changes shows in the editor: the staged

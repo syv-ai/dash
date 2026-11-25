@@ -1,7 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { EyeOff, FileDiff, Undo2 } from 'lucide-react';
+import { EyeOff, FileDiff, Minus, Plus, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Checkbox } from '../ui/Checkbox';
 import { EmptyState } from '../ui/EmptyState';
 import { IconButton } from '../ui/IconButton';
 import { Popover, PopoverArrow, PopoverContent, PopoverTrigger } from '../ui/Popover';
@@ -9,7 +8,7 @@ import { AllFilesSwitch } from '../fileTree/AllFilesSwitch';
 import { FilesTopRow } from '../fileTree/FilesTopRow';
 import { FileTree } from '../fileTree/FileTree';
 import { RepoTree, TreeHeader } from '../fileTree/RepoTree';
-import { buildTree, subtreeChanges, type FileBadges, type ItemRow } from '../fileTree/model';
+import { buildTree, type FileBadges, type ItemRow } from '../fileTree/model';
 import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
 import type { EditorView } from '../diffEditor/types';
 import type { FilesScope } from '../rightInspector/filesScope';
@@ -22,7 +21,9 @@ import {
   fileActions,
   folderActions,
   oneChangePerPath,
-  stagedState,
+  stageAction,
+  withStaged,
+  type StageAction,
 } from './changeSections';
 import type { CommitRun } from './useCommitRun';
 import type { CommitRunState } from './commitRunReducer';
@@ -64,12 +65,13 @@ interface WorkingFilesProps {
 
 /**
  * Normal mode's Files: a top row with where the branch stands against its
- * upstream (while they differ) and the "All files" switch, then one tree. Off
+ * upstream (while they differ) and the "Show filetree" switch, then one tree. Off
  * (`changed`), the working tree's changes as staged and unstaged sections,
  * or the commit run while one is shown (no switch), or "No changes" with the
- * sync text under it instead; on (`all`), every file with its changes. Changed rows carry a stage tick at the left edge
- * and discard and .gitignore on hover, either way (all files: in the working
- * tree's view, which those act on).
+ * sync text under it instead; on (`all`), every file with its changes, a staged one's letter boxed. Changed
+ * rows swap their line counts for stage (or unstage), .gitignore and discard
+ * on hover, and Space stages too, either way (all files: in the working tree's
+ * view, which those act on).
  */
 export function WorkingFiles({
   cwd,
@@ -202,8 +204,8 @@ function ChangedFiles({
         selected={selected}
         onOpenFile={(row, opts) => onOpenChange(row.file.path, row.section === 'staged', opts)}
         canOpenToSide={canOpenToSide}
-        leading={(row) => <SectionTick row={row} />}
-        actions={(row) => <ChangeActions row={row} />}
+        actions={(row) => <ChangeActions row={row} files={files} />}
+        spaceAction={(row) => stageToggle(row, files)}
       />
     </>
   );
@@ -231,6 +233,10 @@ function AllFiles({
   repo: RepoView;
 }) {
   const merged = useMemo(() => oneChangePerPath(files), [files]);
+  const badges = useMemo(
+    () => (working ? withStaged(repo.badges, files) : repo.badges),
+    [working, repo.badges, files],
+  );
   return (
     <div className="min-h-0 flex-1">
       <RepoTree
@@ -245,94 +251,55 @@ function AllFiles({
         selectedPath={activePath ?? ''}
         onOpenFile={onOpenFile}
         canOpenToSide={canOpenToSide}
-        badgeCounts={repo.badges}
-        leading={working ? (row) => <PathsTick row={row} files={files} /> : undefined}
-        actions={working ? (row) => <ChangeActions row={row} /> : undefined}
+        badgeCounts={badges}
+        actions={working ? (row) => <ChangeActions row={row} files={files} /> : undefined}
+        spaceAction={working ? (row) => stageToggle(row, files) : undefined}
       />
     </div>
   );
 }
 
-/** Stage or unstage what a tick stands for. */
-function StageTick({
-  checked,
-  folder,
-  stage,
-  paths,
-}: {
-  checked: boolean | 'mixed';
-  folder: boolean;
-  /** Stage (else unstage) on a click. */
-  stage: boolean;
-  paths: string[];
-}) {
-  const noun = folder ? ' folder' : '';
+const runStage = ({ stage, paths }: StageAction) => {
+  const git = useGit.getState();
+  void (stage ? git.stageFiles(paths) : git.unstageFiles(paths));
+};
+
+/** Space on a changed row: stage or unstage it. */
+const stageToggle = (row: ItemRow, files: readonly FileChange[]) => {
+  const action = stageAction(row, files);
+  return action && (() => runStage(action));
+};
+
+function StageButton({ action, folder }: { action: StageAction; folder: boolean }) {
+  const Icon = action.stage ? Plus : Minus;
   return (
-    <Checkbox
-      checked={checked}
-      aria-label={stage ? `Stage${noun}` : `Unstage${noun}`}
-      onChange={() => {
-        const git = useGit.getState();
-        void (stage ? git.stageFiles(paths) : git.unstageFiles(paths));
+    <IconButton
+      title={`${action.stage ? 'Stage' : 'Unstage'}${folder ? ' folder' : ''}`}
+      size="sm"
+      onClick={(e) => {
+        e.stopPropagation();
+        runStage(action);
       }}
-    />
+    >
+      <Icon size={14} strokeWidth={1.8} />
+    </IconButton>
   );
 }
 
-/** A row of the staged or unstaged section: its section says which way. */
-function SectionTick({ row }: { row: ItemRow }) {
-  const checked: boolean | 'mixed' =
-    row.kind === 'file'
-      ? !!row.file.change?.staged
-      : row.folder.tally.staged === 0
-        ? false
-        : row.folder.tally.staged === row.folder.tally.changed
-          ? true
-          : 'mixed';
-  const paths =
-    row.kind === 'file' ? [row.file.path] : subtreeChanges(row.folder).map((c) => c.path);
-  return (
-    <StageTick
-      checked={checked}
-      folder={row.kind === 'folder'}
-      stage={row.section !== 'staged'}
-      paths={paths}
-    />
-  );
-}
-
-/** A changed file or folder of the whole tree, by where its changes stand
- *  in the index; none on an unchanged or ignored one. */
-function PathsTick({ row, files }: { row: ItemRow; files: readonly FileChange[] }) {
-  const change = row.kind === 'file' ? row.file.change : null;
-  const paths =
-    row.kind === 'folder'
-      ? subtreeChanges(row.folder).map((c) => c.path)
-      : change && change.status !== 'ignored'
-        ? [change.path]
-        : [];
-  if (paths.length === 0) return null;
-  const checked = stagedState(files, paths);
-  return (
-    <StageTick
-      checked={checked}
-      folder={row.kind === 'folder'}
-      stage={checked !== true}
-      paths={paths}
-    />
-  );
-}
-
-/** A change's hover actions: .gitignore an untracked file or folder, discard
- *  unstaged changes (a folder's after a confirm). None: the tree's default. */
-function ChangeActions({ row }: { row: ItemRow }) {
+/** A change's hover actions: stage or unstage it, .gitignore an untracked
+ *  file or folder, discard unstaged changes (a folder's after a confirm).
+ *  None: the tree's default. */
+function ChangeActions({ row, files }: { row: ItemRow; files: readonly FileChange[] }) {
+  const stage = stageAction(row, files);
+  const stageButton = stage && <StageButton action={stage} folder={row.kind === 'folder'} />;
   if (row.kind === 'file') {
     const change = row.file.change;
     if (!change) return null;
     const { canDiscard, canIgnore } = fileActions(change);
-    if (!canDiscard && !canIgnore) return null;
+    if (!stage && !canDiscard && !canIgnore) return null;
     return (
       <>
+        {stageButton}
         {canIgnore && <IgnoreAction path={change.path} folder={false} />}
         {canDiscard && (
           <IconButton
@@ -351,9 +318,10 @@ function ChangeActions({ row }: { row: ItemRow }) {
     );
   }
   const { discardable, canIgnore } = folderActions(row.folder);
-  if (discardable.length === 0 && !canIgnore) return null;
+  if (!stage && discardable.length === 0 && !canIgnore) return null;
   return (
     <>
+      {stageButton}
       {canIgnore && <IgnoreAction path={`${row.folder.path}/`} folder />}
       {discardable.length > 0 && (
         <DiscardFolderAction name={row.name} folderPath={row.folder.path} paths={discardable} />
