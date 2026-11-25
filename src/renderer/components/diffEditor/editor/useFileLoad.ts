@@ -54,12 +54,13 @@ export function useFileLoad(
         return;
       }
       setState({ kind: 'loading' });
-      if (view.kind === 'working') {
-        const resp = await window.electronAPI.editorReadWorking({
-          cwd,
-          filePath,
-          ref: view.ref,
-        });
+      if (view.kind === 'working' || (view.kind === 'pr' && view.live)) {
+        // The working file on disk, against HEAD or the index, or against a
+        // PR's base when the checkout is at its head (a live PR view).
+        const resp =
+          view.kind === 'working'
+            ? await window.electronAPI.editorReadWorking({ cwd, filePath, ref: view.ref })
+            : await window.electronAPI.editorReadAgainstBase({ cwd, filePath, base: view.base });
         if (cancelled) return;
         if (!resp.success || !resp.data) {
           setState({

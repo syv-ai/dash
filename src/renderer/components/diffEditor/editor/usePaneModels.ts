@@ -17,7 +17,7 @@ export function viewRevisions(view: EditorView): { original: string; modified: s
     case 'commit':
       return { original: `${view.hash}^`, modified: view.hash };
     case 'pr':
-      return { original: view.base, modified: view.head };
+      return { original: view.base, modified: view.live ? null : view.head };
   }
 }
 

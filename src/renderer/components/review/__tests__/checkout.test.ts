@@ -1,0 +1,61 @@
+import { describe, expect, it } from 'vitest';
+import { checkoutNotice, reviewCheckout } from '../checkout';
+
+const at = { atHead: true, ahead: 0, behind: 0 };
+const rule = (over: Partial<Parameters<typeof reviewCheckout>[0]> = {}) =>
+  reviewCheckout({
+    facts: at,
+    branch: 'feat',
+    headRef: 'feat',
+    uncommitted: false,
+    wasLive: false,
+    ...over,
+  });
+
+describe('reviewCheckout', () => {
+  it('is live at the PR head with a clean tree', () => {
+    expect(rule()).toEqual({ live: true, differences: [] });
+  });
+
+  it('is the read-only PR head with uncommitted changes, and says so', () => {
+    expect(rule({ uncommitted: true })).toEqual({
+      live: false,
+      differences: ['uncommitted changes'],
+    });
+  });
+
+  it('stays live once edited there, the notice appearing', () => {
+    expect(rule({ uncommitted: true, wasLive: true })).toEqual({
+      live: true,
+      differences: ['uncommitted changes'],
+    });
+  });
+
+  it('counts local commits and commits behind on the head branch', () => {
+    const facts = { atHead: false, ahead: 2, behind: 1 };
+    expect(rule({ facts })).toEqual({
+      live: false,
+      differences: ['2 local commits', '1 commit behind'],
+    });
+    expect(rule({ facts, wasLive: true }).live).toBe(false);
+  });
+
+  it('names the branch when the checkout is on another one', () => {
+    const facts = { atHead: false, ahead: 9, behind: 3 };
+    expect(rule({ facts, branch: 'main' }).differences).toEqual(['on main']);
+    expect(rule({ facts, branch: null }).differences).toEqual(['a detached HEAD']);
+  });
+
+  it('is read-only without facts (not known yet, or the head never fetched)', () => {
+    expect(rule({ facts: null })).toEqual({ live: false, differences: [] });
+  });
+});
+
+describe('checkoutNotice', () => {
+  it('lists the differences in one line; none, no notice', () => {
+    expect(checkoutNotice(['1 local commit', 'uncommitted changes'])).toBe(
+      'Your checkout differs from the PR: 1 local commit · uncommitted changes. Exit review to see them.',
+    );
+    expect(checkoutNotice([])).toBeNull();
+  });
+});

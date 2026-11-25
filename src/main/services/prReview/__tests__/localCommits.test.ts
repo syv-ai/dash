@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import {
-  commitsPastHead,
+  checkoutVsHead,
   ensureCommits,
   filesAtCommit,
   parseRawNumstat,
@@ -58,14 +58,19 @@ describe('ensureCommits', () => {
   });
 });
 
-describe('commitsPastHead', () => {
-  it("counts HEAD's commits the PR head lacks; null for a head not in the checkout", async () => {
-    expect(await commitsPastHead(repo, head)).toBe(0);
+describe('checkoutVsHead', () => {
+  it('says whether HEAD is the PR head, and counts the commits either side lacks', async () => {
+    expect(await checkoutVsHead(repo, head)).toEqual({ atHead: true, ahead: 0, behind: 0 });
     git('commit', '-q', '--allow-empty', '-m', 'local 1');
     git('commit', '-q', '--allow-empty', '-m', 'local 2');
-    expect(await commitsPastHead(repo, head)).toBe(2);
-    expect(await commitsPastHead(repo, 'f'.repeat(40))).toBeNull();
+    expect(await checkoutVsHead(repo, head)).toEqual({ atHead: false, ahead: 2, behind: 0 });
+    const tip = git('rev-parse', 'HEAD');
     git('reset', '-q', '--hard', head);
+    expect(await checkoutVsHead(repo, tip)).toEqual({ atHead: false, ahead: 0, behind: 2 });
+  });
+
+  it('is null for a head not in the checkout', async () => {
+    expect(await checkoutVsHead(repo, 'f'.repeat(40))).toBeNull();
   });
 });
 

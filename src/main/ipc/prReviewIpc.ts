@@ -8,7 +8,7 @@ import {
   appTaskPrs,
 } from '../services/prReview/appDeps';
 import { loadPrReview } from '../services/prReview/loadReview';
-import { commitsPastHead } from '../services/prReview/localCommits';
+import { checkoutVsHead } from '../services/prReview/localCommits';
 import { taskReviews } from '../services/prReview/taskReview';
 import { prViewedFilesRepo } from '../services/prViewedFilesRepo';
 import type { PrProvider, PrRef, PrVerdict } from '@shared/types';
@@ -81,12 +81,12 @@ export function registerPrReviewIpc(): void {
     },
   );
 
-  /** HEAD's commits at `cwd` that PR head `head` lacks; null when `head`
-   *  isn't in the checkout (see `commitsPastHead`). */
-  ipcMain.handle('prReview:localAhead', async (_e, args: { cwd: string; head: string }) => {
+  /** Where the checkout at `cwd` stands against PR head `head`; null when
+   *  `head` isn't in the checkout (see `checkoutVsHead`). */
+  ipcMain.handle('prReview:checkout', async (_e, args: { cwd: string; head: string }) => {
     try {
-      parseArgs('prReview:localAhead', z.looseObject({ cwd: z.string(), head: z.string() }), args);
-      return { success: true, data: await commitsPastHead(args.cwd, args.head) };
+      parseArgs('prReview:checkout', z.looseObject({ cwd: z.string(), head: z.string() }), args);
+      return { success: true, data: await checkoutVsHead(args.cwd, args.head) };
     } catch (err) {
       return errorResponse(err);
     }

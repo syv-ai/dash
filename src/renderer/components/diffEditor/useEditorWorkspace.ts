@@ -53,6 +53,9 @@ interface Args {
   historyShown: boolean;
   /** Each new target (by identity) opens its file and view. */
   target: EditorTarget | null;
+  /** A PR's view shows the live working file on its right (review mode, the
+   *  checkout at the PR's head; see `reviewCheckout`). */
+  prLive?: boolean;
 }
 
 export interface EditorWorkspace {
@@ -112,6 +115,7 @@ export function useEditorWorkspace({
   treeShown = false,
   historyShown,
   target,
+  prLive = false,
 }: Args): EditorWorkspace {
   // Git belongs to a task's worktree, and the task's comments to the active
   // task's. Any other folder (Claude's memory, opened from the memory modal)
@@ -154,12 +158,17 @@ export function useEditorWorkspace({
 
   // ── View ──
   // Restores the folder's last view; an explicit target view overrides it.
-  const [view, setView] = useState<EditorView>(
+  // A PR's view is picked at its head and shown live or not as `prLive` says.
+  const [picked, setView] = useState<EditorView>(
     () => target?.initialView ?? readStoredView(cwd) ?? { kind: 'working', ref: 'HEAD' },
   );
+  const view = useMemo<EditorView>(
+    () => (picked.kind === 'pr' && !!picked.live !== prLive ? { ...picked, live: prLive } : picked),
+    [picked, prLive],
+  );
   useEffect(() => {
-    writeStoredView(cwd, view);
-  }, [cwd, view]);
+    writeStoredView(cwd, picked);
+  }, [cwd, picked]);
 
   // Picking a view (a commit, a PR, or back to the working tree) acts once
   // that view's files have loaded: see the effect below.
@@ -190,7 +199,7 @@ export function useEditorWorkspace({
   const { settled } = data;
   useEffect(() => {
     // Closed, the editor loads no files: wait for it to open.
-    if (switchedTo.current !== view || !editorOpen || !settled) return;
+    if (switchedTo.current !== picked || !editorOpen || !settled) return;
     switchedTo.current = null;
     const changed = new Set(changedFiles.map((f) => f.path));
     const present = new Set(repoPaths);
@@ -210,7 +219,7 @@ export function useEditorWorkspace({
     if (shown && changed.has(shown)) return;
     const first = pickFirstChangedFile(changedFiles);
     if (first) openFile(first, { preview: true });
-  }, [view, editorOpen, settled, changedFiles, repoPaths, tabsKey, cwd, openFile]);
+  }, [view, picked, editorOpen, settled, changedFiles, repoPaths, tabsKey, cwd, openFile]);
 
   // ── Targets (a file clicked in the changes list, "Files", a comment) ──
   const wantReadme = useRef(false);

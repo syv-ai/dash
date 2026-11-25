@@ -1,6 +1,6 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import type { PrFile } from '@shared/types';
+import type { CheckoutVsHead, PrFile } from '@shared/types';
 
 const execFileAsync = promisify(execFile);
 
@@ -117,18 +117,25 @@ export async function prLocalStats(
 }
 
 /**
- * How many commits HEAD at `cwd` has that PR head `head` lacks: the local
- * commits not pushed to the PR yet. Null when `head` isn't in the checkout
- * (never fetched; nothing to count against) or git can't say.
+ * Where the checkout at `cwd` stands against PR head `head`: whether HEAD is
+ * that commit, and how many commits HEAD has that the head lacks (`ahead`:
+ * local commits not pushed to the PR) and the other way round (`behind`).
+ * Null when `head` isn't in the checkout (never fetched) or git can't say.
  */
-export async function commitsPastHead(
+export async function checkoutVsHead(
   cwd: string,
   head: string,
   run: RunGit = runGit,
-): Promise<number | null> {
+): Promise<CheckoutVsHead | null> {
   if (!head || !(await has(cwd, head, run))) return null;
-  return run(cwd, ['rev-list', '--count', `${head}..HEAD`], 15_000).then(
-    (out) => Number(out.trim()) || 0,
-    () => null,
-  );
+  try {
+    const [sha, counts] = await Promise.all([
+      run(cwd, ['rev-parse', 'HEAD'], 15_000),
+      run(cwd, ['rev-list', '--left-right', '--count', `${head}...HEAD`], 15_000),
+    ]);
+    const [behind = 0, ahead = 0] = counts.trim().split(/\s+/).map(Number);
+    return { atHead: sha.trim() === head, ahead, behind };
+  } catch {
+    return null;
+  }
 }

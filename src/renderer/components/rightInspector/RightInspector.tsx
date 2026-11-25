@@ -56,6 +56,7 @@ import {
 import { prScope } from '../../../shared/prScope';
 import { PrButton } from '../review/PrButton';
 import { ReviewView } from '../review/ReviewView';
+import { useReviewCheckout } from '../review/useReviewCheckout';
 import { useTaskPrs } from '../review/useTaskPrs';
 import { usePrCommits } from '../diffEditor/data/usePrCommits';
 import { useUnpushedCommits } from './useUnpushedCommits';
@@ -180,6 +181,10 @@ export function RightInspector({
   const mode = taskPrs.mode ?? null;
   const reviewing = mode !== null;
   const modeKey = mode ? prKey(mode.provider, mode.number) : null;
+  const modeReview = usePrReviews((s) => (modeKey ? (s.byPr[modeKey] ?? null) : null));
+  // The diff's right side: the live file when the checkout is at the PR's
+  // head and clean, else the head read-only, with a notice saying why.
+  const checkout = useReviewCheckout(task, reviewing ? modeReview : null);
   // The branch's own PR's unresolved threads, for the PR button's badge;
   // its review is fetched once if nothing has yet.
   const ownPr = taskPrs.relevant?.from[0];
@@ -217,6 +222,7 @@ export function RightInspector({
     treeShown: segment === 'files',
     historyShown: segment === 'history',
     target,
+    prLive: checkout.live,
   });
   const { view, selectView } = ws;
   // The working tree's changes, as Changes lists them (null: not loaded,
@@ -247,7 +253,6 @@ export function RightInspector({
   };
   // The editor follows review mode: the PR's view at its loaded head while
   // in it (a push re-points it), the working tree once it ends.
-  const modeReview = usePrReviews((s) => (modeKey ? (s.byPr[modeKey] ?? null) : null));
   const follow = viewForMode({ mode, view, review: modeReview });
   const showViewRef = useRef(showView);
   showViewRef.current = showView;
@@ -629,6 +634,7 @@ export function RightInspector({
       onOpenFile={openReviewFile}
       canOpenToSide={ws.layout.groups.length < 2}
       onShowCommits={showPrCommits}
+      notice={checkout.notice}
       onNavigate={(scope, path, id) => {
         // Review mode shows its PR only: a note written elsewhere (the
         // working tree, a commit) is shown outside it.

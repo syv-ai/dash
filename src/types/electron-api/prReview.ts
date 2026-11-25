@@ -1,4 +1,5 @@
 import type {
+  CheckoutVsHead,
   IpcResponse,
   PrProvider,
   PrRef,
@@ -49,9 +50,12 @@ export interface PrReviewApi {
     body: string;
     draftId?: string;
   }) => Promise<IpcResponse<PrReviewComment>>;
-  /** How many commits HEAD at `cwd` has that PR head `head` lacks (local
-   *  commits not pushed to the PR yet); null when `head` isn't in the checkout. */
-  prReviewLocalAhead: (args: { cwd: string; head: string }) => Promise<IpcResponse<number | null>>;
+  /** Where the checkout at `cwd` stands against PR head `head`; null when
+   *  `head` isn't in the checkout. */
+  prReviewCheckout: (args: {
+    cwd: string;
+    head: string;
+  }) => Promise<IpcResponse<CheckoutVsHead | null>>;
   /** Enter review mode for a PR (null exits it). */
   prReviewSetMode: (args: { taskId: string; pr: PrRef | null }) => Promise<IpcResponse<void>>;
   /** The PR's files the task marked viewed: path → the head blob they were viewed at. */

@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { GitPullRequestArrow } from 'lucide-react';
+import { GitCompareArrows, GitPullRequestArrow } from 'lucide-react';
 import { prScope } from '../../../shared/prScope';
 import type { PrRef, Task } from '../../../shared/types';
 import { useCommentsStore } from '../../stores/commentsStore';
@@ -40,6 +40,9 @@ interface ReviewViewProps {
   canOpenToSide: boolean;
   /** Show the PR's commits (History). */
   onShowCommits: () => void;
+  /** How the task's checkout differs from the PR, when it does (the diff
+   *  then shows the PR's head read-only). */
+  notice: string | null;
   /** Show a draft or note where it was written. */
   onNavigate: (scope: string, path: string, commentId: string) => void;
   /** Leave review mode. */
@@ -67,6 +70,7 @@ function Review({
   onOpenFile,
   canOpenToSide,
   onShowCommits,
+  notice,
   onNavigate,
   onExit,
 }: ReviewViewProps) {
@@ -122,6 +126,15 @@ function Review({
           onFinish={canFinish ? () => setFinishing(true) : undefined}
           onExit={onExit}
         />
+        {notice && (
+          <p
+            className="type-caption mx-2.5 my-1 flex items-start gap-2 rounded-lg border border-line bg-well px-2.5 py-1.5"
+            role="status"
+          >
+            <GitCompareArrows size={14} strokeWidth={1.8} className="shrink-0" />
+            <span className="min-w-0 flex-1 tabular-nums">{notice}</span>
+          </p>
+        )}
         <div className="min-h-0 flex-1">
           {tab === 'overview' ? (
             <ReviewOverview review={review} remote={remote} />

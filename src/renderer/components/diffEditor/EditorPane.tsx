@@ -11,7 +11,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import type { ITheme as XtermTheme } from '@xterm/xterm';
-import type { EditorView } from './types';
+import { readOnlyView, type EditorView } from './types';
 import type { LiveComment } from './comments/types';
 import type { DiffComment } from '../../../shared/types';
 import { useCommentsStore } from '../../stores/commentsStore';
@@ -161,8 +161,8 @@ export function EditorPane({
   // hover-highlight).
   const [hoveredCommentId, setHoveredCommentId] = useState<string | null>(null);
 
-  // Commit and PR views show frozen, read-only content.
-  const isCommitView = view.kind === 'commit' || view.kind === 'pr';
+  // Commit views, and a PR's head that isn't the live file, are read-only.
+  const isCommitView = readOnlyView(view);
   // A PR view shows the PR's review threads beside your notes and comments.
   const isPrView = view.kind === 'pr';
   // Comments anchor to the view's content state: 'live' (working/branch share

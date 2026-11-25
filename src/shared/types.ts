@@ -808,6 +808,14 @@ export interface RelevantPrs {
   into: PullRequest[];
 }
 
+/** Where a checkout stands against a PR's head: HEAD is it, and the commits
+ *  HEAD has that it lacks (`ahead`) and the other way round (`behind`). */
+export interface CheckoutVsHead {
+  atHead: boolean;
+  ahead: number;
+  behind: number;
+}
+
 /** A task's relevant PRs (null when the forge couldn't be asked) and the PR
  *  it is in review mode for (`task_review_targets`), or null. */
 export interface TaskPrs {
