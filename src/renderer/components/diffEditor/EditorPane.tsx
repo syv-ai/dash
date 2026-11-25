@@ -602,6 +602,7 @@ export function EditorPane({
               />
             )}
             <ReviewRail
+              diffEditor={editor}
               modifiedEditor={modifiedEditor}
               monaco={monaco}
               threads={pr.inlineThreads}

@@ -54,7 +54,7 @@ import { ListRow } from '../components/ui/ListRow';
 import { MainRepoBadge } from '../components/ui/MainRepoBadge';
 import { Meter, usageTone } from '../components/ui/Meter';
 import { ProgressRing } from '../components/ui/ProgressRing';
-import { ScrollRail, type RailTick } from '../components/ui/ScrollRail';
+import { ScrollRail, type RailSpanTone, type RailTick } from '../components/ui/ScrollRail';
 import { usageColor } from '../lib/usageColor';
 import { PanelHeader } from '../components/ui/PanelHeader';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/Popover';
@@ -396,6 +396,13 @@ const RAIL_TICKS: [RailTick, number, string][] = [
   ['solid', 0.85, 'L110 · Comment: Rename this'],
 ];
 
+const RAIL_SPANS: [RailSpanTone, number, number, string][] = [
+  ['add', 0.1, 0.12, 'Added L10–24'],
+  ['del', 0.3, 0, 'Removed after L36'],
+  ['mod', 0.38, 0.06, 'Changed L44–50'],
+  ['add', 0.8, 0.08, 'Added L102–112'],
+];
+
 function Rails() {
   return (
     <Section title="ScrollRail">
@@ -408,6 +415,14 @@ function Rails() {
             key: label,
             tick,
             at,
+            label,
+            onSelect: () => toast(label),
+          }))}
+          spans={RAIL_SPANS.map(([tone, at, size, label]) => ({
+            key: label,
+            tone,
+            at,
+            size,
             label,
             onSelect: () => toast(label),
           }))}

@@ -104,3 +104,67 @@ export function railMarks(
     (a, b) => PAINT_ORDER.indexOf(a.kind) - PAINT_ORDER.indexOf(b.kind) || a.line - b.line,
   );
 }
+
+/** A diff change, as Monaco's `ILineChange` reports it (an end of 0 marks an
+ *  empty side: nothing removed, or nothing added after the start line). */
+export interface RailLineChange {
+  originalStartLineNumber: number;
+  originalEndLineNumber: number;
+  modifiedStartLineNumber: number;
+  modifiedEndLineNumber: number;
+}
+
+/** What a change did: lines added, removed, or replaced by others. */
+export type RailChangeKind = 'add' | 'del' | 'mod';
+
+export interface RailChange {
+  kind: RailChangeKind;
+  /** The modified file's lines it spans; a deletion is the line it follows
+   *  (0 at the top of the file), with `endLine` equal to it. */
+  startLine: number;
+  endLine: number;
+  /** Its top and height as fractions of the rail's height; a deletion is a
+   *  point (size 0) the rail draws at its least height. */
+  at: number;
+  size: number;
+}
+
+/**
+ * The open diff's changes as segments on the review rail, under its ticks:
+ * each spans its lines in the modified file, placed through the editor's
+ * geometry as `railMarks` places ticks; a deletion sits at the point the lines
+ * left. Changes of one kind closer than a rail pixel merge, so a long file
+ * draws at most a segment per pixel.
+ */
+export function railChanges(
+  changes: readonly RailLineChange[],
+  geometry: RailGeometry,
+): RailChange[] {
+  const { topFor, lineHeight, contentHeight, railHeight } = geometry;
+  const span = Math.max(contentHeight, railHeight);
+  if (span <= 0 || railHeight <= 0) return [];
+  const frac = (px: number) => Math.min(1, Math.max(0, px / span));
+  const pixel = 1 / railHeight;
+
+  const out: RailChange[] = [];
+  for (const c of changes) {
+    const kind: RailChangeKind =
+      c.modifiedEndLineNumber === 0 ? 'del' : c.originalEndLineNumber === 0 ? 'add' : 'mod';
+    const startLine = c.modifiedStartLineNumber;
+    const endLine = kind === 'del' ? startLine : Math.max(startLine, c.modifiedEndLineNumber);
+    const top =
+      kind === 'del' ? (startLine > 0 ? topFor(startLine) + lineHeight : 0) : topFor(startLine);
+    const bottom = kind === 'del' ? top : topFor(endLine) + lineHeight;
+    const at = frac(top);
+    const size = frac(bottom) - at;
+    let prev: RailChange | undefined;
+    for (let i = out.length - 1; i >= 0 && !prev; i--) if (out[i]!.kind === kind) prev = out[i];
+    if (prev && at - (prev.at + prev.size) < pixel) {
+      prev.endLine = Math.max(prev.endLine, endLine);
+      prev.size = Math.max(prev.size, at + size - prev.at);
+      continue;
+    }
+    out.push({ kind, startLine, endLine, at, size });
+  }
+  return out;
+}
