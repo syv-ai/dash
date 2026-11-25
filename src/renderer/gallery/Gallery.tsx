@@ -525,7 +525,7 @@ function Rows() {
               fix/header
             </DetailItem>
             <DetailItem label="Tokens" title="184,000 tokens">
-              184.0k
+              184k
             </DetailItem>
           </DetailList>
         </DetailSection>
