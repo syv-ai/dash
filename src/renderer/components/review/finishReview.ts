@@ -31,7 +31,7 @@ export const canPost = ({ comments, summary, verdict }: ReviewToPost): boolean =
   comments > 0 || summary.trim() !== '' || verdict !== 'comment';
 
 /**
- * Whether the header offers Finish review…: always on someone else's PR; on
+ * Whether Overview offers Finish review…: always on someone else's PR; on
  * the own PR only with something a review would post beyond the replies,
  * which post one by one (a line comment, or a summary).
  */

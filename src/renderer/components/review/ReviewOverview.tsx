@@ -1,12 +1,12 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import {
   CalendarClock,
+  CalendarPlus,
   CircleCheck,
   CircleDashed,
   CircleMinus,
   CircleX,
   ExternalLink,
-  FileDiff,
   GitCompareArrows,
   MessagesSquare,
   UserCheck,
@@ -14,24 +14,31 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { formatTimeAgo } from '../../../shared/relativeTime';
-import type { PrCheck, PrReview, PrReviewComment } from '../../../shared/types';
+import type {
+  CiState,
+  PrCheck,
+  PrReview,
+  PrReviewComment,
+  PrReviewer,
+} from '../../../shared/types';
 import { branchUrl } from '../../../shared/urls';
 import { cn } from '../../lib/cn';
+import { Button } from '../ui/Button';
 import { DetailSection } from '../ui/DetailList';
 import { IconButton } from '../ui/IconButton';
 import { ListRow } from '../ui/ListRow';
 import { Markdown } from '../ui/Markdown';
 import { TextLink } from '../ui/TextLink';
-import { ciPulse } from '../ui/prStatusColors';
+import { ciLabel, ciPulse, ciText } from '../ui/prStatusColors';
 import {
   CHECK_LABELS,
-  changedFilesLine,
+  plural,
   prDateTime,
   providerName,
-  REVIEWER_LABELS,
+  reviewerGroups,
   threadsLine,
 } from './labels';
-import { checksSummary } from './outline';
+import { checksRollup, checksSummary } from './outline';
 
 /** One fact about the PR: an icon naming what it is, then the value, which
  *  wraps rather than truncates (the column can be narrow, D85). */
@@ -54,13 +61,54 @@ function Fact({
   );
 }
 
+/** A person, linked to their page on the forge when it has one. */
+function Person({ name, url }: { name: string; url: string | null }) {
+  return url ? (
+    <TextLink href={url} quiet title={`${name}'s profile`}>
+      {name}
+    </TextLink>
+  ) : (
+    <span>{name}</span>
+  );
+}
+
+/** "Approved by A, B" / "Changes requested by C" / "Review requested from D",
+ *  one line per group. */
+function Reviewers({ reviewers }: { reviewers: PrReviewer[] }) {
+  return (
+    <div className="grid gap-0.5">
+      {reviewerGroups(reviewers).map((g) => (
+        <p key={g.lead}>
+          <span className="text-ink-2">{g.lead}</span>{' '}
+          {g.reviewers.map((r, i) => (
+            <Fragment key={r.name}>
+              {i > 0 && ', '}
+              <Person name={r.name} url={r.url} />
+            </Fragment>
+          ))}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 /**
- * The Review view's Overview tab: how far the PR is behind its base, what it
- * changes, when it was opened and last moved, its threads, reviewers and
- * assignees; then its checks, its description and the general conversation
- * (read-only, oldest first).
+ * The Review view's Overview tab: how far the PR is behind its base (when it
+ * is), when it was opened and last moved, its threads, reviewers and
+ * assignees, and Finish review… when there is one to give; then its checks
+ * (folded), its description and the general conversation (read-only, oldest
+ * first).
  */
-export function ReviewOverview({ review, remote }: { review: PrReview; remote: string | null }) {
+export function ReviewOverview({
+  review,
+  remote,
+  onFinish,
+}: {
+  review: PrReview;
+  remote: string | null;
+  /** Open the Finish-review sheet; absent while there is nothing to finish. */
+  onFinish?: () => void;
+}) {
   const baseHref = remote ? branchUrl(remote, review.baseRef) : null;
   const threads = threadsLine(review.threads);
   const created = prDateTime(review.createdAt);
@@ -68,7 +116,7 @@ export function ReviewOverview({ review, remote }: { review: PrReview; remote: s
   return (
     <div className="grid gap-1 pb-2">
       <div className="grid gap-1.5 px-2.5 pt-2">
-        {review.behindBase !== null && (
+        {!!review.behindBase && (
           <Fact icon={GitCompareArrows} name="Behind base">
             <span className="tabular-nums">{review.behindBase}</span> behind{' '}
             {baseHref ? (
@@ -80,14 +128,14 @@ export function ReviewOverview({ review, remote }: { review: PrReview; remote: s
             )}
           </Fact>
         )}
-        <Fact icon={FileDiff} name="Changes">
-          <span className="tabular-nums">{changedFilesLine(review.files)}</span>
-        </Fact>
-        {(created || active) && (
-          <Fact icon={CalendarClock} name="Dates">
-            {created && <span className="tabular-nums">Created {created}</span>}
-            {created && active && <span className="text-ink-3"> · </span>}
-            {active && <span className="tabular-nums">Last activity {active}</span>}
+        {created && (
+          <Fact icon={CalendarPlus} name="Created">
+            <span className="tabular-nums">Created {created}</span>
+          </Fact>
+        )}
+        {active && (
+          <Fact icon={CalendarClock} name="Last activity">
+            <span className="tabular-nums">Last activity {active}</span>
           </Fact>
         )}
         {threads && (
@@ -97,12 +145,7 @@ export function ReviewOverview({ review, remote }: { review: PrReview; remote: s
         )}
         {review.reviewers.length > 0 && (
           <Fact icon={UserCheck} name="Reviewers">
-            {review.reviewers.map((r, i) => (
-              <span key={r.name}>
-                {i > 0 && ', '}
-                {r.name} <span className="type-caption">{REVIEWER_LABELS[r.state]}</span>
-              </span>
-            ))}
+            <Reviewers reviewers={review.reviewers} />
           </Fact>
         )}
         {review.assignees.length > 0 && (
@@ -110,19 +153,39 @@ export function ReviewOverview({ review, remote }: { review: PrReview; remote: s
             {review.assignees.join(', ')}
           </Fact>
         )}
+        {onFinish && (
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={onFinish}
+            className="mt-1 justify-self-start"
+          >
+            Finish review…
+          </Button>
+        )}
       </div>
       <Checks checks={review.checks} />
-      <DetailSection title="Description">
+      <div className="type-body px-2.5 pt-4">
         {review.body.trim() ? (
-          <div className="type-body px-2.5">
-            <Markdown text={review.body} />
-          </div>
+          <Markdown text={review.body} />
         ) : (
-          <p className="type-caption px-2.5">No description.</p>
+          <p className="type-caption">No description.</p>
         )}
-      </DetailSection>
+      </div>
       <Conversation comments={review.conversation} forge={providerName(review.provider)} />
     </div>
+  );
+}
+
+/** The checks rolled up, while their list is folded: a tick when all pass (or
+ *  skip), a cross when any fails, an amber pulse while any runs, coloured as
+ *  the PR badge colours an open PR's checks. */
+function ChecksRollupIcon({ ci }: { ci: CiState }) {
+  const Icon = ci === 'failing' ? CircleX : ci === 'pending' ? CircleDashed : CircleCheck;
+  return (
+    <span className={cn('flex', ciText(ci), ciPulse(ci))} title={ciLabel(ci)}>
+      <Icon size={14} strokeWidth={1.8} aria-label={ciLabel(ci)} />
+    </span>
   );
 }
 
@@ -143,9 +206,16 @@ function CheckIcon({ state }: { state: PrCheck['state'] }) {
 }
 
 function Checks({ checks }: { checks: PrCheck[] }) {
-  if (checks.length === 0) return null;
+  const ci = checksRollup(checks);
+  if (!ci) return null;
   return (
-    <DetailSection title={`Checks · ${checksSummary(checks)}`} collapsible>
+    <DetailSection
+      title="Checks"
+      summary={checksSummary(checks)}
+      closedHint={<ChecksRollupIcon ci={ci} />}
+      collapsible
+      defaultOpen={false}
+    >
       <div className="grid gap-px">
         {checks.map((c, i) => {
           const url = c.url;
@@ -177,7 +247,7 @@ function Conversation({ comments, forge }: { comments: PrReviewComment[]; forge:
   if (comments.length === 0) return null;
   const now = Date.now() / 1000;
   return (
-    <DetailSection title={`Conversation · ${comments.length}`} collapsible>
+    <DetailSection title="Conversation" summary={plural(comments.length, 'comment')} collapsible>
       <ol className="grid gap-2 px-2.5">
         {comments.map((c) => (
           <li key={c.id} className="grid gap-1 rounded-lg border border-line px-3 py-2">

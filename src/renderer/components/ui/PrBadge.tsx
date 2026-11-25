@@ -1,8 +1,8 @@
-import { GitMerge, GitPullRequestArrow, GitPullRequestClosed, Wrench } from 'lucide-react';
+import { Wrench } from 'lucide-react';
 import { Tooltip } from './Tooltip';
 import { IconButton } from './IconButton';
 import { Popover, PopoverContent, PopoverTrigger } from './Popover';
-import { ciLabel, ciPulse, prStatusText } from './prStatusColors';
+import { ciLabel, ciPulse, ciText, prStateIcon, prStatusText } from './prStatusColors';
 import { badgeVariants } from './Badge';
 import { buttonVariants } from './Button';
 import { menuItem, menuLabel } from './styles';
@@ -41,19 +41,14 @@ function describe(pr: PullRequestInfo): string {
 /** The icon's colour: an open PR's red while its checks fail, amber while they
  *  run, else its state's. */
 function iconColor(pr: PullRequestInfo): string {
-  if (pr.state === 'open' && pr.ci === 'failing') return 'text-state-fail';
-  if (pr.state === 'open' && pr.ci === 'pending') return 'text-state-needs';
+  if (pr.state === 'open' && pr.ci && pr.ci !== 'passing') return ciText(pr.ci);
   return prStatusText(pr.state);
 }
 
 /** The state label's colour: an open PR's checks when it has any, else its state. */
 function stateTextColor(pr: PullRequestInfo): string {
   if (pr.state !== 'open' || !pr.ci) return prStatusText(pr.state);
-  return pr.ci === 'failing'
-    ? 'text-state-fail'
-    : pr.ci === 'pending'
-      ? 'text-state-needs'
-      : 'text-state-done';
+  return ciText(pr.ci);
 }
 
 /** The pulse while an open PR's checks run, else nothing. */
@@ -63,12 +58,7 @@ function pulse(pr: PullRequestInfo): string {
 
 /** The PR's state icon; pulses while its checks run unless `still`. */
 function StateIcon({ pr, size, still }: { pr: PullRequestInfo; size: number; still?: boolean }) {
-  const Icon =
-    pr.state === 'merged'
-      ? GitMerge
-      : pr.state === 'closed'
-        ? GitPullRequestClosed
-        : GitPullRequestArrow;
+  const Icon = prStateIcon(pr.state);
   return <Icon size={size} strokeWidth={size < 14 ? 2 : 1.8} className={still ? '' : pulse(pr)} />;
 }
 

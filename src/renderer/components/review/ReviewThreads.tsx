@@ -68,7 +68,8 @@ export function ReviewThreads({
   };
   return (
     <DetailSection
-      title={`Threads · ${groups.unresolved.length + groups.offCode.length} open`}
+      title="Threads"
+      summary={`${groups.unresolved.length + groups.offCode.length} open`}
       collapsible
     >
       <ThreadGroup title="Unresolved" threads={groups.unresolved} {...actions} />

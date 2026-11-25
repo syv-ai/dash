@@ -51,8 +51,8 @@ interface ReviewViewProps {
 }
 
 /**
- * The task sidebar's list column in review mode (spec Revision 3): the PR's
- * header and its actions, then the picked view (Overview, the PR's Changes,
+ * The task sidebar's list column in review mode (spec Revision 3), under the
+ * mode's banner and views: the PR's header, then the picked view (Overview, the PR's Changes,
  * Files at its head, its History), then the Communication bar docked at the
  * bottom (threads, the person's drafts, the notes to the agent). Narrow it is
  * the whole column; expanded, the list column beside the editor's PR view.
@@ -129,8 +129,6 @@ function Review({
           error={error}
           onRefresh={refresh}
           onShowCommits={onShowCommits}
-          onFinish={canFinish ? () => setFinishing(true) : undefined}
-          onExit={onExit}
         />
         {notice && (
           <p
@@ -143,7 +141,11 @@ function Review({
         )}
         <div className="min-h-0 flex-1">
           {tab === 'overview' ? (
-            <ReviewOverview review={review} remote={remote} />
+            <ReviewOverview
+              review={review}
+              remote={remote}
+              onFinish={canFinish ? () => setFinishing(true) : undefined}
+            />
           ) : tab === 'changes' ? (
             <ReviewChanges
               review={review}

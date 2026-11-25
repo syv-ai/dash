@@ -33,6 +33,8 @@
   /* Lines added / deleted (diffstats, diff gutters, history): one pair app-wide. */
   --color-loc-add: hsl(var(--loc-add));
   --color-loc-del: hsl(var(--loc-del));
+  /* A merged PR (GitHub's purple): PR state colours, prStatusColors.ts. */
+  --color-pr-merged: hsl(var(--pr-merged));
   /* Service ("port") terminals' tab tint. */
   --color-terminal-service: hsl(var(--terminal-service));
 

@@ -55,6 +55,7 @@ import {
 } from './sidebarState';
 import { prScope } from '../../../shared/prScope';
 import { PrButton } from '../review/PrButton';
+import { ReviewBanner } from '../review/ReviewBanner';
 import { ReviewView } from '../review/ReviewView';
 import { useReviewCheckout } from '../review/useReviewCheckout';
 import { useTaskPrs } from '../review/useTaskPrs';
@@ -481,7 +482,7 @@ export function RightInspector({
           padding tightens, their labels truncate, never below a floor), then
           Details and ✕ (never), Commit (its label goes below 24rem), the bulk
           actions (into a menu below 24rem), the PR button (normal mode only;
-          review mode's pill is in the PR's header).
+          review mode's banner sits above the row).
           Past all that the middle clips at its end, short of Details and ✕.
           The padding keeps focus outlines inside the clip. */}
       <div className="flex min-w-0 flex-1 items-center gap-0.5 self-stretch overflow-hidden px-1">
@@ -570,6 +571,13 @@ export function RightInspector({
           </IconButton>
         )}
       </div>
+    </div>
+  );
+
+  // Review mode's band, above the views it scopes.
+  const banner = mode && (
+    <div className="shrink-0 px-1 pt-1">
+      <ReviewBanner mode={mode} state={modeReview?.state ?? null} onExit={exitReview} />
     </div>
   );
 
@@ -704,6 +712,7 @@ export function RightInspector({
               >
                 <div className="flex h-full min-h-0 flex-col pr-2">
                   {usage}
+                  {banner}
                   {header}
                   <div className="min-h-0 flex-1">{withPorts(tree)}</div>
                 </div>
@@ -717,6 +726,7 @@ export function RightInspector({
                 ahead of the terminals, which keep their place either way. */}
             <div className="flex h-full min-h-0 flex-col">
               {!split && usage}
+              {!split && banner}
               {!split && header}
               <div className="min-h-0 flex-1">
                 <ShellDrawerWrapper

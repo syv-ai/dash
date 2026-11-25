@@ -1,17 +1,43 @@
 import { describe, expect, it } from 'vitest';
+import type { PrReviewer } from '../../../../shared/types';
 import {
-  changedFilesLine,
   communicationCounts,
+  diffTotals,
   mergeVerb,
   prDateTime,
+  reviewerGroups,
   threadsLine,
 } from '../labels';
 
-describe('changedFilesLine', () => {
+describe('diffTotals', () => {
   it('counts the files and totals their lines', () => {
     const f = (additions: number, deletions: number) => ({ additions, deletions });
-    expect(changedFilesLine([f(3, 1), f(10, 0)])).toBe('2 changed files, +13 −1 total');
-    expect(changedFilesLine([f(1, 1)])).toBe('1 changed file, +1 −1 total');
+    expect(diffTotals([f(3, 1), f(10, 0)])).toEqual({ files: 2, additions: 13, deletions: 1 });
+    expect(diffTotals([])).toEqual({ files: 0, additions: 0, deletions: 0 });
+  });
+});
+
+describe('reviewerGroups', () => {
+  const r = (name: string, state: PrReviewer['state']): PrReviewer => ({ name, url: null, state });
+
+  it('groups reviewers by where they stand, verdicts first, requests last', () => {
+    const groups = reviewerGroups([
+      r('dee', 'pending'),
+      r('ann', 'approved'),
+      r('cy', 'changes_requested'),
+      r('bo', 'approved'),
+      r('eve', 'commented'),
+    ]);
+    expect(groups.map((g) => [g.lead, g.reviewers.map((x) => x.name)])).toEqual([
+      ['Approved by', ['ann', 'bo']],
+      ['Changes requested by', ['cy']],
+      ['Commented by', ['eve']],
+      ['Review requested from', ['dee']],
+    ]);
+  });
+
+  it('says nothing without reviewers', () => {
+    expect(reviewerGroups([])).toEqual([]);
   });
 });
 

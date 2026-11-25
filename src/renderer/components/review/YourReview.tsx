@@ -15,7 +15,7 @@ import { rowKeys } from './rowAction';
  * The person's drafts for the PR — comments and replies — by file: each can
  * be edited, deleted or turned into a note for the agent; on the own PR a
  * reply posts on its own. Then the review's summary, if written. Hidden with
- * neither; the review itself posts from the header's Finish review….
+ * neither; the review itself posts from Overview's Finish review….
  */
 export function YourReview({
   review,
@@ -41,7 +41,7 @@ export function YourReview({
     : null;
 
   return (
-    <DetailSection title={`Your drafts · ${comments.length}`} collapsible>
+    <DetailSection title="Your drafts" summary={`${comments.length}`} collapsible>
       {groupByPath(comments).map(([path, list]) => (
         <div key={path} className="grid gap-px">
           <h4 className="type-subheading truncate px-2.5 pt-1" title={path}>

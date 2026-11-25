@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DiffComment, PrFile, PrReviewThread } from '../../../../shared/types';
 import {
   DELETED_BLOB,
+  checksRollup,
   checksSummary,
   communicationTally,
   fileRows,
@@ -181,6 +182,19 @@ describe('checksSummary', () => {
   });
   it('is null without checks', () => {
     expect(checksSummary([])).toBeNull();
+  });
+});
+
+describe('checksRollup', () => {
+  const c = (state: 'passing' | 'failing' | 'pending' | 'skipped') => ({ state });
+  it('fails on any failure, then runs while any runs, else passes', () => {
+    expect(checksRollup([c('passing'), c('pending'), c('failing')])).toBe('failing');
+    expect(checksRollup([c('passing'), c('pending'), c('skipped')])).toBe('pending');
+    expect(checksRollup([c('passing'), c('skipped')])).toBe('passing');
+    expect(checksRollup([c('skipped')])).toBe('passing');
+  });
+  it('is null without checks', () => {
+    expect(checksRollup([])).toBeNull();
   });
 });
 

@@ -1,5 +1,6 @@
 import { isPrComment } from '../../../shared/diffComments';
 import type {
+  CiState,
   DiffComment,
   FileChange,
   PrCheck,
@@ -262,4 +263,14 @@ export function checksSummary(checks: readonly PrCheck[]): string | null {
   for (const c of checks) n[c.state]++;
   const parts = CHECK_ORDER.filter((k) => n[k] > 0).map((k) => `${n[k]} ${k}`);
   return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+/** The checks as one state, as a PR's CI is rolled up: failing if any fails,
+ *  else pending if any still runs, else passing (skipped ones pass); null with
+ *  no checks. */
+export function checksRollup(checks: readonly Pick<PrCheck, 'state'>[]): CiState | null {
+  if (checks.length === 0) return null;
+  if (checks.some((c) => c.state === 'failing')) return 'failing';
+  if (checks.some((c) => c.state === 'pending')) return 'pending';
+  return 'passing';
 }

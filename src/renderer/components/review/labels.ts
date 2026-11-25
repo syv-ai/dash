@@ -11,24 +11,32 @@ import { formatResetAt, type ClockOptions } from '../../utils/format';
 /** The forge's name, as people say it. */
 export const providerName = (p: PrProvider): string => (p === 'ado' ? 'Azure DevOps' : 'GitHub');
 
-/** Words for a PR's state, its reviewers' states and its checks' states:
- *  the Review header's and the PR overview's. */
-export const STATE_LABELS: Record<PrState, string> = {
-  open: 'Open',
-  draft: 'Draft',
-  merged: 'Merged',
-  closed: 'Closed',
+/** Who stands where on the PR, said as GitHub's sidebar does: "Approved by",
+ *  "Changes requested by", "Review requested from"; ADO's votes add theirs. */
+const REVIEWER_LEADS: Record<PrReviewer['state'], string> = {
+  approved: 'Approved by',
+  approved_with_suggestions: 'Approved with suggestions by',
+  changes_requested: 'Changes requested by',
+  rejected: 'Rejected by',
+  waiting: 'Waiting for the author:',
+  commented: 'Commented by',
+  pending: 'Review requested from',
 };
 
-export const REVIEWER_LABELS: Record<PrReviewer['state'], string> = {
-  approved: 'approved',
-  changes_requested: 'changes requested',
-  commented: 'commented',
-  pending: 'pending',
-  approved_with_suggestions: 'approved with suggestions',
-  waiting: 'waiting for author',
-  rejected: 'rejected',
-};
+/** The order the groups read in: the verdicts, then comments, then requests. */
+const REVIEWER_ORDER = Object.keys(REVIEWER_LEADS) as PrReviewer['state'][];
+
+/** The PR's reviewers grouped by where they stand, each group led by its
+ *  words ("Approved by") and keeping the forge's order of people; groups
+ *  without anyone are left out. */
+export function reviewerGroups(
+  reviewers: readonly PrReviewer[],
+): { lead: string; reviewers: PrReviewer[] }[] {
+  return REVIEWER_ORDER.map((state) => ({
+    lead: REVIEWER_LEADS[state],
+    reviewers: reviewers.filter((r) => r.state === state),
+  })).filter((g) => g.reviewers.length > 0);
+}
 
 export const CHECK_LABELS: Record<PrCheck['state'], string> = {
   passing: 'Passing',
@@ -39,17 +47,19 @@ export const CHECK_LABELS: Record<PrCheck['state'], string> = {
 
 export const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-/** "12 changed files, +340 −27 total". */
-export function changedFilesLine(
-  files: readonly Pick<PrFile, 'additions' | 'deletions'>[],
-): string {
-  let add = 0;
-  let del = 0;
+/** What the PR's diff adds up to: its files and their lines added and deleted. */
+export function diffTotals(files: readonly Pick<PrFile, 'additions' | 'deletions'>[]): {
+  files: number;
+  additions: number;
+  deletions: number;
+} {
+  let additions = 0;
+  let deletions = 0;
   for (const f of files) {
-    add += f.additions;
-    del += f.deletions;
+    additions += f.additions;
+    deletions += f.deletions;
   }
-  return `${files.length} changed file${files.length === 1 ? '' : 's'}, +${add} −${del} total`;
+  return { files: files.length, additions, deletions };
 }
 
 /** "4 comment threads (1 of 4 resolved)"; null with none. */

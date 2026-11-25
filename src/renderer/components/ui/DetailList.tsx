@@ -9,15 +9,24 @@ import { focusRing } from './styles';
  * at its end; the action wraps under a long title, which never truncates),
  * then its rows. Sections stack with their own spacing.
  * `collapsible` makes the heading a disclosure that folds the rows away.
+ * A `summary` follows the title quietly ("Checks · 1 passing"), as
+ * `DockedPanel`'s does, so every titled section counts the same way.
  */
 export function DetailSection({
   title,
+  summary,
+  closedHint,
   action,
   collapsible = false,
   defaultOpen = true,
   children,
 }: {
   title: React.ReactNode;
+  /** Beside the title, quieter ("· 3 comments"); omitted when empty. */
+  summary?: string | null;
+  /** Collapsible only: shown after the title while the section is folded
+   *  (an aggregate the rows would otherwise say). */
+  closedHint?: React.ReactNode;
   /** A small control at the label's end ("Edit"). */
   action?: React.ReactNode;
   collapsible?: boolean;
@@ -30,7 +39,10 @@ export function DetailSection({
     return (
       <section className="grid gap-1 px-2.5 pt-4 pb-1">
         <div className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1">
-          <h3 className="type-heading min-w-0 flex-1">{title}</h3>
+          <h3 className="type-heading min-w-0 flex-1">
+            {title}
+            <Summary text={summary} />
+          </h3>
           {action}
         </div>
         {children}
@@ -52,7 +64,11 @@ export function DetailSection({
               strokeWidth={1.8}
               className={cn('shrink-0 text-icon transition-transform', open && 'rotate-90')}
             />
-            <span>{title}</span>
+            <span>
+              {title}
+              <Summary text={summary} />
+            </span>
+            {!open && closedHint}
           </button>
         </h3>
         {action}
@@ -62,6 +78,10 @@ export function DetailSection({
       </div>
     </section>
   );
+}
+
+function Summary({ text }: { text?: string | null }) {
+  return text ? <span className="type-caption tabular-nums"> · {text}</span> : null;
 }
 
 /**

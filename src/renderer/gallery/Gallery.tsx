@@ -4,6 +4,7 @@ import {
   Copy,
   FileText,
   Folder,
+  GitPullRequestArrow,
   Inbox,
   MoreHorizontal,
   Moon,
@@ -33,7 +34,7 @@ import {
   ContextMenuTrigger,
 } from '../components/ui/ContextMenu';
 import { CountBadge } from '../components/ui/CountBadge';
-import { Pill } from '../components/ui/Pill';
+import { Banner } from '../components/ui/Banner';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -330,9 +331,15 @@ function Badges() {
         </span>
       </Line>
       <Line>
-        <Pill dismissLabel="Exit review" onDismiss={() => {}}>
-          Reviewing pull request
-        </Pill>
+        <Banner
+          icon={<GitPullRequestArrow size={14} strokeWidth={1.8} />}
+          dismissLabel="Exit review"
+          onDismiss={() => {}}
+          tone="open"
+          className="w-80"
+        >
+          Reviewing PR #412
+        </Banner>
       </Line>
       <Line>
         <PrBadge prs={[PR_PASSING]} allPrs={PRS} />
