@@ -80,7 +80,12 @@ describe('dashSessionAccess', () => {
   });
 });
 
-describe('the dashctl script, against a running Dash', () => {
+/** A spawned dashctl is slow to print under CPU load (parallel suites): wait
+ *  for its output well past `waitFor`'s 1 s default, inside a test timeout
+ *  that leaves room for it. */
+const OUTPUT = { timeout: 5000, interval: 20 };
+
+describe('the dashctl script, against a running Dash', { timeout: 20_000 }, () => {
   const taskId = 't1';
   let server: ControlServer;
   let feed: StreamSink | null;
@@ -178,13 +183,13 @@ describe('the dashctl script, against a running Dash', () => {
     const child = spawn(controlPaths(userData).dashctl, ['feed', 'follow'], { env: env() });
     let stdout = '';
     child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
-    await vi.waitFor(() => expect(stdout).toBe('{"n":0}\n'));
+    await vi.waitFor(() => expect(stdout).toBe('{"n":0}\n'), OUTPUT);
     let aborted = false;
     feed!.signal.addEventListener('abort', () => (aborted = true));
     const exited = new Promise((resolve) => child.on('exit', resolve));
     child.kill('SIGTERM');
     expect(await exited).toBe(143);
-    await vi.waitFor(() => expect(aborted).toBe(true));
+    await vi.waitFor(() => expect(aborted).toBe(true), OUTPUT);
   });
 
   it('prints a stream line by line as it comes, and exits 0 when it ends', async () => {
@@ -192,9 +197,9 @@ describe('the dashctl script, against a running Dash', () => {
     let stdout = '';
     child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
     const exited = new Promise<number | null>((resolve) => child.on('exit', resolve));
-    await vi.waitFor(() => expect(stdout).toBe('{"n":0}\n'));
+    await vi.waitFor(() => expect(stdout).toBe('{"n":0}\n'), OUTPUT);
     feed!.emit({ n: 1 });
-    await vi.waitFor(() => expect(stdout).toBe('{"n":0}\n{"n":1}\n'));
+    await vi.waitFor(() => expect(stdout).toBe('{"n":0}\n{"n":1}\n'), OUTPUT);
     endFeed();
     expect(await exited).toBe(0);
     expect(stdout).toBe('{"n":0}\n{"n":1}\n');
@@ -208,7 +213,7 @@ describe('the dashctl script, against a running Dash', () => {
     child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
     child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
     const exited = new Promise<number | null>((resolve) => child.on('exit', resolve));
-    await vi.waitFor(() => expect(stdout).toBe('{"n":0}\n'));
+    await vi.waitFor(() => expect(stdout).toBe('{"n":0}\n'), OUTPUT);
     return { exited, out: () => ({ stdout, stderr }) };
   }
 
