@@ -10,6 +10,7 @@ import {
   ContextMenuTrigger,
 } from '../../ui/ContextMenu';
 import { absolutePath, fileRef, type LineRange } from './fileRef';
+import { IS_MAC, pressKind } from '../../../lib/mousePress';
 import { copyText as copy } from '../fileActions';
 
 interface Props {
@@ -68,7 +69,7 @@ export function EditorContextMenu({ cwd, filePath, editor, compose, children }: 
     const subs = (['original', 'modified'] as const).map((side) => {
       const ed = side === 'original' ? editor.getOriginalEditor() : editor.getModifiedEditor();
       return ed.onMouseDown((e) => {
-        if (e.event.rightButton) {
+        if (pressKind(e.event.browserEvent, IS_MAC) === 'context') {
           lastClick.current = { side, line: e.target.position?.lineNumber ?? null };
         }
       });

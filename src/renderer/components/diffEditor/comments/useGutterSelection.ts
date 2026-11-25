@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
+import { IS_MAC, pressKind } from '../../../lib/mousePress';
 import type { LineRange } from './types';
 
-/** Owns the click-and-drag-on-line-numbers selection mechanic. Returns the
+/** Owns the click-and-drag-on-line-numbers selection mechanic (primary button only). Returns the
  *  pending range and a `dragging` flag (used by the popover open gate so it
  *  doesn't steal focus mid-drag). */
 export function useGutterSelection(
@@ -18,6 +19,10 @@ export function useGutterSelection(
     if (!editor || !monaco || !enabled) return;
 
     const onMouseDown = editor.onMouseDown((e) => {
+      // Only the primary button selects: a right-click (or a Mac's
+      // Control-click) opens the context menu, whose Add comment / Add note
+      // open the composer.
+      if (pressKind(e.event.browserEvent, IS_MAC) !== 'primary') return;
       const t = e.target;
       if (
         t.type !== monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS &&
