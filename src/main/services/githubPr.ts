@@ -1,6 +1,6 @@
 import type { PrListFilter, PullRequest, PullRequestState } from '@shared/types';
 
-/** Raw entry from `gh pr list --json number,title,url,state,headRefName,baseRefName,author`. */
+/** Raw entry from `gh pr list --json` (`GITHUB_PR_FIELDS`). */
 interface RawGithubPr {
   number?: number;
   title?: string;
@@ -9,7 +9,12 @@ interface RawGithubPr {
   headRefName?: string;
   baseRefName?: string;
   author?: { login?: string; name?: string } | null;
+  /** The head is in another repository (a fork). */
+  isCrossRepository?: boolean;
 }
+
+/** The fields `gh pr list` is asked for. */
+const GITHUB_PR_FIELDS = 'number,title,url,state,headRefName,baseRefName,author,isCrossRepository';
 
 function mapState(state: string | undefined): PullRequestState {
   if (state === 'MERGED') return 'merged';
@@ -30,6 +35,7 @@ export function mapGithubPrList(raw: unknown): PullRequest[] {
       headRefName: r.headRefName ?? '',
       baseRefName: r.baseRefName ?? '',
       provider: 'github' as const,
+      fromFork: r.isCrossRepository === true,
     };
   });
 }
@@ -53,7 +59,7 @@ export function githubPrListArgs(filter: PrListFilter = {}): string[] {
     ...(filter.head ? ['--head', filter.head] : []),
     ...(filter.base ? ['--base', filter.base] : []),
     '--json',
-    'number,title,url,state,headRefName,baseRefName,author',
+    GITHUB_PR_FIELDS,
     '--limit',
     '50',
   ];

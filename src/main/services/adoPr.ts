@@ -8,6 +8,8 @@ interface RawAdoPr {
   targetRefName?: string; // refs/heads/<branch> — the "against" branch
   status?: string; // active | completed | abandoned
   createdBy?: { displayName?: string } | null;
+  /** Set when the source branch is in a fork. */
+  forkSource?: { name?: string } | null;
 }
 
 interface AdoPrContext {
@@ -37,6 +39,7 @@ export function mapAdoPrList(raw: unknown, ctx: AdoPrContext): PullRequest[] {
       headRefName: r.sourceRefName ? adoSourceBranchName(r.sourceRefName) : '',
       baseRefName: r.targetRefName ? adoSourceBranchName(r.targetRefName) : '',
       provider: 'ado' as const,
+      fromFork: !!r.forkSource,
     };
   });
 }

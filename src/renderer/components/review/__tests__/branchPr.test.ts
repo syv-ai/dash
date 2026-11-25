@@ -11,6 +11,7 @@ const listed = (number: number): PullRequest => ({
   headRefName: 'feat',
   baseRefName: 'main',
   provider: 'github',
+  fromFork: false,
 });
 const detected = (number: number, state: PullRequestInfo['state'] = 'open'): PullRequestInfo => ({
   number,

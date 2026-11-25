@@ -12,6 +12,7 @@ describe('mapGithubPrList', () => {
         headRefName: 'fix/auth',
         baseRefName: 'main',
         author: { login: 'alice', name: 'Alice' },
+        isCrossRepository: false,
       },
     ];
     expect(mapGithubPrList(raw)).toEqual([
@@ -24,8 +25,15 @@ describe('mapGithubPrList', () => {
         headRefName: 'fix/auth',
         baseRefName: 'main',
         provider: 'github',
+        fromFork: false,
       },
     ]);
+  });
+
+  it('marks a PR whose head is in a fork, and asks gh whether it is', () => {
+    const raw = [{ number: 7, state: 'OPEN', headRefName: 'feat', isCrossRepository: true }];
+    expect(mapGithubPrList(raw)[0]!.fromFork).toBe(true);
+    expect(githubPrListArgs().join(' ')).toContain('isCrossRepository');
   });
 
   it('maps MERGED/CLOSED states and tolerates a missing author', () => {

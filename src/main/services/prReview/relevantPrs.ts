@@ -5,8 +5,9 @@ const newestFirst = (a: PullRequest, b: PullRequest) => b.number - a.number;
 /**
  * The open PRs a branch can review (spec Revision 3): `from` it (its head)
  * and `into` it (its base), newest first. The forge already filtered by
- * branch; this keeps exact, open matches only (a fork's same-named branch,
- * a state the filter didn't apply).
+ * branch name; this keeps exact, open matches only. A head filter matches a
+ * fork's same-named branch too, which isn't this branch: such a PR is never
+ * `from` it, though one into it still is.
  */
 export function groupRelevantPrs(
   branch: string,
@@ -15,7 +16,11 @@ export function groupRelevantPrs(
 ): RelevantPrs {
   const open = (prs: readonly PullRequest[], ref: (p: PullRequest) => string) =>
     prs.filter((p) => p.state === 'open' && ref(p) === branch).sort(newestFirst);
-  return { branch, from: open(from, (p) => p.headRefName), into: open(into, (p) => p.baseRefName) };
+  return {
+    branch,
+    from: open(from, (p) => p.headRefName).filter((p) => !p.fromFork),
+    into: open(into, (p) => p.baseRefName),
+  };
 }
 
 /** The open PRs from and into `branch`, asked of the forge as two listings;

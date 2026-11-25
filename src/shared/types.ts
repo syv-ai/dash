@@ -794,6 +794,8 @@ export interface PullRequest {
   headRefName: string;
   baseRefName: string;
   provider: 'github' | 'ado';
+  /** Its head is in a fork: a same-named branch there isn't this repo's. */
+  fromFork: boolean;
 }
 
 /** Narrows a PR listing to those from (`head`) or into (`base`) a branch. */

@@ -2,8 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PullRequest } from '../../../../shared/types';
 import { groupRelevantPrs, listRelevantPrs } from '../relevantPrs';
 
-const pr = (number: number, headRefName: string, baseRefName: string, state = 'open') =>
-  ({ number, headRefName, baseRefName, state }) as PullRequest;
+const pr = (
+  number: number,
+  headRefName: string,
+  baseRefName: string,
+  state = 'open',
+  fromFork = false,
+) => ({ number, headRefName, baseRefName, state, fromFork }) as PullRequest;
 
 describe('groupRelevantPrs', () => {
   it('keeps open PRs whose head or base is the branch, newest first', () => {
@@ -17,8 +22,18 @@ describe('groupRelevantPrs', () => {
     expect(got.into.map((p) => p.number)).toEqual([7]);
   });
 
-  it("drops a match on a different branch (a fork's same-named head is the forge's)", () => {
+  it('drops a match on a different branch', () => {
     expect(groupRelevantPrs('feat', [pr(1, 'feature', 'main')], []).from).toEqual([]);
+  });
+
+  it("never counts a fork's same-named branch as from this one; a fork's PR into it stays", () => {
+    const got = groupRelevantPrs(
+      'feat',
+      [pr(5, 'feat', 'main', 'open', true), pr(2, 'feat', 'main')],
+      [pr(6, 'feat', 'feat', 'open', true)],
+    );
+    expect(got.from.map((p) => p.number)).toEqual([2]);
+    expect(got.into.map((p) => p.number)).toEqual([6]);
   });
 });
 

@@ -6,6 +6,7 @@ import {
   settleReviewMode,
   type ReviewModeDeps,
 } from '../reviewTarget';
+import { listRelevantPrs } from '../relevantPrs';
 
 const pr = (number: number, provider: PullRequest['provider'] = 'github') =>
   ({ number, provider }) as PullRequest;
@@ -70,6 +71,25 @@ describe('defaultReviewPr', () => {
     const { d, mode } = deps(gh(9), relevant([3]));
     expect(await defaultReviewPr('t', d)).toEqual(gh(3));
     expect(mode()).toBeNull();
+  });
+
+  it("never picks a fork's PR from a same-named branch", async () => {
+    const listed = (number: number, fromFork: boolean) =>
+      ({
+        number,
+        provider: 'github',
+        state: 'open',
+        headRefName: 'feat',
+        baseRefName: 'main',
+        fromFork,
+      }) as PullRequest;
+    const d: ReviewModeDeps = {
+      storedMode: () => null,
+      storeMode: () => undefined,
+      relevantPrs: () =>
+        listRelevantPrs(async (f) => (f.head ? [listed(8, true), listed(4, false)] : []), 'feat'),
+    };
+    expect(await defaultReviewPr('t', d)).toEqual(gh(4));
   });
 
   it("answers the stored mode offline, else the forge's error", async () => {

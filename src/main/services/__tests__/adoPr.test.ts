@@ -38,8 +38,16 @@ describe('mapAdoPrList', () => {
         headRefName: 'feature/widget',
         baseRefName: 'main',
         provider: 'ado',
+        fromFork: false,
       },
     ]);
+  });
+
+  it('marks a PR whose source branch is in a fork', () => {
+    const value = [
+      { pullRequestId: 3, sourceRefName: 'refs/heads/b', forkSource: { name: 'refs/heads/b' } },
+    ];
+    expect(mapAdoPrList(value, ctx)[0]!.fromFork).toBe(true);
   });
 
   it('tolerates a trailing slash on organizationUrl and a missing author', () => {
