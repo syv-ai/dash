@@ -2,7 +2,6 @@ import type {
   AzureDevOpsConfig,
   AzureDevOpsWorkItem,
   AzureDevOpsWorkItemRef,
-  PrListFilter,
   PullRequest,
   CiState,
   PrCheck,
@@ -282,13 +281,12 @@ export class AzureDevOpsService {
   static async listPullRequests(
     config: AzureDevOpsConfig,
     repositoryName: string,
-    filter?: PrListFilter,
   ): Promise<PullRequest[]> {
     const result = (await this.request(
       config,
       `${this.proj(config)}/_apis/git/repositories/${encodeURIComponent(
         repositoryName,
-      )}/pullrequests?${adoPrListQuery(filter)}`,
+      )}/pullrequests?${adoPrListQuery()}`,
     )) as { value?: unknown };
 
     return mapAdoPrList(result.value, {

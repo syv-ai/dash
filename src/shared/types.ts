@@ -806,12 +806,26 @@ export interface PrListFilter {
   base?: string;
 }
 
+/** A relevant PR as the PR button lists it: the listing's PR, plus what the
+ *  forge answers in the same call. A fact the forge's listing doesn't carry
+ *  is null (ADO lists no update time, line counts, threads or checks). */
+export interface RelevantPr extends PullRequest {
+  draft: boolean;
+  /** ISO 8601. */
+  updatedAt: string | null;
+  additions: number | null;
+  deletions: number | null;
+  /** Its review threads: unresolved, and all. */
+  threads: { open: number; total: number } | null;
+  ci: CiState | null;
+}
+
 /** The open PRs that matter to a task's branch: opened from it, or into it.
  *  Newest first; both empty on a detached HEAD (`branch` null). */
 export interface RelevantPrs {
   branch: string | null;
-  from: PullRequest[];
-  into: PullRequest[];
+  from: RelevantPr[];
+  into: RelevantPr[];
 }
 
 /** Where a checkout stands against a PR's head: HEAD is it, and the commits

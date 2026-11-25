@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import type { PrSubmission } from '../../../../shared/types';
 import prFixture from './fixtures/github-pr.json';
+import relevantFixture from './fixtures/github-relevant-prs.json';
 import {
+  githubRelevantPrsFrom,
   githubReplyRequest,
   githubReviewFrom,
   githubWriteError,
@@ -300,6 +302,54 @@ describe('githubProvider.submit', () => {
     const approve: PrSubmission = { verdict: 'approve', body: '', comments: [], replies: [] };
     expect(await makeGithubProvider(gql).submit(ctx, 4, approve)).toEqual({ postedDraftIds: [] });
     expect(calls.at(-1)!.vars).toMatchObject({ event: 'APPROVE' });
+  });
+});
+
+describe('githubRelevantPrsFrom', () => {
+  it('maps each listed PR with its counts, threads and rolled-up checks', () => {
+    const [own, draft] = githubRelevantPrsFrom(relevantFixture);
+    expect(own).toEqual({
+      number: 215,
+      title: 'Review mode tabs',
+      url: 'https://github.com/o/r/pull/215',
+      state: 'open',
+      draft: false,
+      author: 'alice',
+      headRefName: 'feat/tabs',
+      baseRefName: 'main',
+      provider: 'github',
+      fromFork: false,
+      updatedAt: '2026-11-24T09:00:00Z',
+      additions: 120,
+      deletions: 14,
+      threads: { open: 2, total: 3 },
+      ci: 'failing',
+    });
+    expect(draft).toMatchObject({
+      state: 'open',
+      draft: true,
+      author: '',
+      fromFork: true,
+      threads: { open: 0, total: 0 },
+      ci: null,
+    });
+  });
+
+  it('is empty for an answer without the repository', () => {
+    expect(githubRelevantPrsFrom({})).toEqual([]);
+  });
+});
+
+describe('githubProvider.list', () => {
+  it('asks for one side of the branch, leaving the other unset', async () => {
+    const calls: Record<string, unknown>[] = [];
+    const gql: Gql = async (_cwd, _query, vars) => {
+      calls.push(vars);
+      return relevantFixture;
+    };
+    const prs = await makeGithubProvider(gql).list(ctx, { base: 'feat/tabs' });
+    expect(prs.map((p) => p.number)).toEqual([215, 210]);
+    expect(calls).toEqual([{ owner: '{owner}', name: '{repo}', base: 'feat/tabs' }]);
   });
 });
 

@@ -12,7 +12,8 @@ import { menuItem, menuSeparator } from './styles';
 export function Command({ className, ...props }: React.ComponentProps<typeof CommandPrimitive>) {
   return (
     <CommandPrimitive
-      className={cn('flex h-full w-full flex-col overflow-hidden text-ink', className)}
+      // The root takes focus only to steer the list's keys (tabIndex -1): no ring.
+      className={cn('flex h-full w-full flex-col overflow-hidden text-ink outline-none', className)}
       {...props}
     />
   );
@@ -75,19 +76,27 @@ export function CommandSeparator({
 }
 
 /** cmdk marks the active row with data-selected (Radix menus use data-highlighted).
- *  With a `description` the row takes a second, caption line under its label. */
+ *  With a `description` the row takes a second, caption line under its label.
+ *  An `entry` row lays out several lines of its own (a PR in the PR list):
+ *  taller, roomier, top-aligned, and its icons keep the colour they set (a PR
+ *  state icon's, D133), so a resting icon in it takes `text-icon` itself. */
 export function CommandItem({
   className,
   description,
+  entry = false,
   children,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Item> & { description?: React.ReactNode }) {
+}: React.ComponentProps<typeof CommandPrimitive.Item> & {
+  description?: React.ReactNode;
+  entry?: boolean;
+}) {
   return (
     <CommandPrimitive.Item
       className={cn(
         menuItem,
         'data-[selected=true]:bg-select data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-40',
         description && 'h-auto flex-col items-stretch gap-0 py-1.5',
+        entry && 'h-auto items-start gap-2.5 py-2 [&_svg]:text-current',
         className,
       )}
       {...props}

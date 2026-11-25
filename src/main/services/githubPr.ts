@@ -1,4 +1,4 @@
-import type { PrListFilter, PullRequest, PullRequestState } from '@shared/types';
+import type { PullRequest, PullRequestState } from '@shared/types';
 
 /** Raw entry from `gh pr list --json` (`GITHUB_PR_FIELDS`). */
 interface RawGithubPr {
@@ -49,18 +49,7 @@ export function buildPrHeadRefspec(prNumber: number, headRefName: string): strin
   return `pull/${prNumber}/head:${headRefName}`;
 }
 
-/** `gh pr list`'s arguments for the open PRs, narrowed by `filter`. */
-export function githubPrListArgs(filter: PrListFilter = {}): string[] {
-  return [
-    'pr',
-    'list',
-    '--state',
-    'open',
-    ...(filter.head ? ['--head', filter.head] : []),
-    ...(filter.base ? ['--base', filter.base] : []),
-    '--json',
-    GITHUB_PR_FIELDS,
-    '--limit',
-    '50',
-  ];
+/** `gh pr list`'s arguments for the repo's open PRs (the new-task PR picker). */
+export function githubPrListArgs(): string[] {
+  return ['pr', 'list', '--state', 'open', '--json', GITHUB_PR_FIELDS, '--limit', '50'];
 }

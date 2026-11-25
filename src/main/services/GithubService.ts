@@ -2,7 +2,7 @@ import { execFile } from 'child_process';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { promisify } from 'util';
-import type { GithubIssue, PrListFilter, PullRequest, PullRequestInfo } from '@shared/types';
+import type { GithubIssue, PullRequest, PullRequestInfo } from '@shared/types';
 import { mapGithubPrList, buildPrHeadRefspec, githubPrListArgs } from './githubPr';
 import { GitService } from './GitService';
 import { ciFromRollup, relevantPrs } from './prRelevance';
@@ -193,8 +193,8 @@ export class GithubService {
   }
 
   /** Open PRs for the repo at `cwd`, newest first (gh's default order). */
-  static async listPullRequests(cwd: string, filter?: PrListFilter): Promise<PullRequest[]> {
-    const { stdout } = await execFileAsync('gh', githubPrListArgs(filter), {
+  static async listPullRequests(cwd: string): Promise<PullRequest[]> {
+    const { stdout } = await execFileAsync('gh', githubPrListArgs(), {
       cwd,
       timeout: TIMEOUT_MS,
       env: process.env as Record<string, string>,

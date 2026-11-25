@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { adoPrListQuery, mapAdoPrList, adoSourceBranchName } from '../adoPr';
+import { adoPrListQuery, mapAdoPrList, mapAdoRelevantPrs, adoSourceBranchName } from '../adoPr';
 
 const ctx = {
   organizationUrl: 'https://dev.azure.com/myorg',
@@ -71,5 +71,35 @@ describe('adoPrListQuery', () => {
       'searchCriteria.status=active&searchCriteria.sourceRefName=refs%2Fheads%2Ffeat%2Fx' +
         '&searchCriteria.targetRefName=refs%2Fheads%2Fmain&$top=50',
     );
+  });
+});
+
+describe('mapAdoRelevantPrs', () => {
+  it('adds the draft flag and leaves what the listing lacks null', () => {
+    const value = [
+      {
+        pullRequestId: 7,
+        title: 'Add widget',
+        sourceRefName: 'refs/heads/feature/widget',
+        targetRefName: 'refs/heads/main',
+        createdBy: { displayName: 'Bob' },
+        isDraft: true,
+      },
+    ];
+    expect(mapAdoRelevantPrs(value, ctx)).toEqual([
+      {
+        ...mapAdoPrList(value, ctx)[0],
+        draft: true,
+        updatedAt: null,
+        additions: null,
+        deletions: null,
+        threads: null,
+        ci: null,
+      },
+    ]);
+  });
+
+  it('is empty for a missing value', () => {
+    expect(mapAdoRelevantPrs(undefined, ctx)).toEqual([]);
   });
 });

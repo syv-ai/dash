@@ -1,6 +1,6 @@
-import type { PrListFilter, PullRequest, RelevantPrs } from '@shared/types';
+import type { PrListFilter, RelevantPr, RelevantPrs } from '@shared/types';
 
-const newestFirst = (a: PullRequest, b: PullRequest) => b.number - a.number;
+const newestFirst = (a: RelevantPr, b: RelevantPr) => b.number - a.number;
 
 /**
  * The open PRs a branch can review (spec Revision 3): `from` it (its head)
@@ -11,10 +11,10 @@ const newestFirst = (a: PullRequest, b: PullRequest) => b.number - a.number;
  */
 export function groupRelevantPrs(
   branch: string,
-  from: readonly PullRequest[],
-  into: readonly PullRequest[],
+  from: readonly RelevantPr[],
+  into: readonly RelevantPr[],
 ): RelevantPrs {
-  const open = (prs: readonly PullRequest[], ref: (p: PullRequest) => string) =>
+  const open = (prs: readonly RelevantPr[], ref: (p: RelevantPr) => string) =>
     prs.filter((p) => p.state === 'open' && ref(p) === branch).sort(newestFirst);
   return {
     branch,
@@ -26,7 +26,7 @@ export function groupRelevantPrs(
 /** The open PRs from and into `branch`, asked of the forge as two listings;
  *  none on a detached HEAD (null). Rejects when the forge can't be asked. */
 export async function listRelevantPrs(
-  list: (filter: PrListFilter) => Promise<PullRequest[]>,
+  list: (filter: PrListFilter) => Promise<RelevantPr[]>,
   branch: string | null,
 ): Promise<RelevantPrs> {
   if (!branch) return { branch: null, from: [], into: [] };

@@ -60,10 +60,7 @@ describe('buildPrHeadRefspec', () => {
 });
 
 describe('githubPrListArgs', () => {
-  it('lists open PRs, narrowed to a head or base branch when asked', () => {
-    expect(githubPrListArgs()).not.toContain('--head');
-    const args = githubPrListArgs({ head: 'feat/x', base: 'main' });
-    expect(args.slice(0, 4)).toEqual(['pr', 'list', '--state', 'open']);
-    expect(args.join(' ')).toContain('--head feat/x --base main');
+  it('lists the open PRs', () => {
+    expect(githubPrListArgs().slice(0, 4)).toEqual(['pr', 'list', '--state', 'open']);
   });
 });

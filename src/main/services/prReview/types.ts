@@ -4,7 +4,7 @@ import type {
   PrReviewComment,
   PrListFilter,
   PrSubmission,
-  PullRequest,
+  RelevantPr,
   SubmitResult,
 } from '@shared/types';
 
@@ -30,7 +30,7 @@ export type ForgeLoad = ForgeReview & { baseTip: string | null };
 /** One provider's PR review operations, behind the shared model. */
 export interface PrReviewProvider {
   /** Open PRs, newest first; only those from or into a branch with `filter`. */
-  list(ctx: PrContext, filter?: PrListFilter): Promise<PullRequest[]>;
+  list(ctx: PrContext, filter?: PrListFilter): Promise<RelevantPr[]>;
   /** The PR's review, with its base, head and base tip present in the checkout. */
   load(ctx: PrContext, number: number): Promise<ForgeLoad>;
   setResolved(ctx: PrContext, number: number, threadId: string, resolved: boolean): Promise<void>;

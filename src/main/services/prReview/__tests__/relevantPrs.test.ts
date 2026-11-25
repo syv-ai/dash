@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { PullRequest } from '../../../../shared/types';
+import type { RelevantPr } from '../../../../shared/types';
 import { groupRelevantPrs, listRelevantPrs } from '../relevantPrs';
 
 const pr = (
@@ -8,7 +8,7 @@ const pr = (
   baseRefName: string,
   state = 'open',
   fromFork = false,
-) => ({ number, headRefName, baseRefName, state, fromFork }) as PullRequest;
+) => ({ number, headRefName, baseRefName, state, fromFork }) as RelevantPr;
 
 describe('groupRelevantPrs', () => {
   it('keeps open PRs whose head or base is the branch, newest first', () => {

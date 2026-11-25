@@ -15,6 +15,7 @@ import {
   adoProjectSegment,
   adoRequest,
 } from '../AzureDevOpsService';
+import { adoPrListQuery, mapAdoRelevantPrs } from '../adoPr';
 import { ensureCommits, filesAtCommit } from './localCommits';
 import type { ForgeReview, PrContext, PrReviewProvider } from './types';
 
@@ -420,8 +421,16 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): PrReviewProvider {
   const prPath = (ctx: PrContext, n: number) => `${repoPath(adoOf(ctx))}/pullRequests/${n}`;
 
   return {
-    list: (ctx, filter) =>
-      AzureDevOpsService.listPullRequests(adoOf(ctx), adoOf(ctx).repository, filter),
+    async list(ctx, filter) {
+      const ado = adoOf(ctx);
+      const res = (await deps.request(
+        ado,
+        `${repoPath(ado)}/pullrequests?${adoPrListQuery(filter)}`,
+      )) as {
+        value?: unknown;
+      } | null;
+      return mapAdoRelevantPrs(res?.value, repoContext(ado));
+    },
 
     async load(ctx, number) {
       const ado = adoOf(ctx);

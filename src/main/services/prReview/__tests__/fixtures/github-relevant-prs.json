@@ -1,0 +1,43 @@
+{
+  "repository": {
+    "pullRequests": {
+      "nodes": [
+        {
+          "number": 215,
+          "title": "Review mode tabs",
+          "url": "https://github.com/o/r/pull/215",
+          "state": "OPEN",
+          "isDraft": false,
+          "isCrossRepository": false,
+          "headRefName": "feat/tabs",
+          "baseRefName": "main",
+          "updatedAt": "2026-11-24T09:00:00Z",
+          "additions": 120,
+          "deletions": 14,
+          "author": { "login": "alice" },
+          "reviewThreads": {
+            "totalCount": 3,
+            "nodes": [{ "isResolved": true }, { "isResolved": false }, { "isResolved": false }]
+          },
+          "commits": { "nodes": [{ "commit": { "statusCheckRollup": { "state": "FAILURE" } } }] }
+        },
+        {
+          "number": 210,
+          "title": "Spike",
+          "url": "https://github.com/o/r/pull/210",
+          "state": "OPEN",
+          "isDraft": true,
+          "isCrossRepository": true,
+          "headRefName": "spike",
+          "baseRefName": "main",
+          "updatedAt": "2026-11-20T09:00:00Z",
+          "additions": 0,
+          "deletions": 0,
+          "author": null,
+          "reviewThreads": { "totalCount": 0, "nodes": [] },
+          "commits": { "nodes": [{ "commit": { "statusCheckRollup": null } }] }
+        }
+      ]
+    }
+  }
+}

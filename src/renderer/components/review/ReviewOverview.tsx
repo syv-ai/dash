@@ -1,6 +1,6 @@
 import { Fragment } from 'react';
 import { CircleCheck, CircleDashed, CircleMinus, CircleX, ExternalLink } from 'lucide-react';
-import type { CiState, PrCheck, PrReview, PrReviewer } from '../../../shared/types';
+import type { PrCheck, PrReview, PrReviewer } from '../../../shared/types';
 import { branchUrl } from '../../../shared/urls';
 import { cn } from '../../lib/cn';
 import { DetailSection } from '../ui/DetailList';
@@ -8,7 +8,7 @@ import { LineStats } from '../ui/LineStats';
 import { ListRow } from '../ui/ListRow';
 import { Markdown } from '../ui/Markdown';
 import { TextLink } from '../ui/TextLink';
-import { ciLabel, ciPulse, ciText } from '../ui/prStatusColors';
+import { ciPulse } from '../ui/prStatusColors';
 import {
   CHECK_LABELS,
   diffTotals,
@@ -17,6 +17,7 @@ import {
   reviewerGroups,
   threadsLine,
 } from './labels';
+import { ChecksRollupIcon } from './ChecksRollupIcon';
 import { checksRollup, checksSummary } from './outline';
 import { useSectionOpen } from './useSectionOpen';
 
@@ -123,18 +124,6 @@ export function ReviewOverview({
         </div>
       </DetailSection>
     </div>
-  );
-}
-
-/** The checks rolled up, while their list is folded: a tick when all pass (or
- *  skip), a cross when any fails, an amber pulse while any runs, coloured as
- *  the PR badge colours an open PR's checks. */
-function ChecksRollupIcon({ ci }: { ci: CiState }) {
-  const Icon = ci === 'failing' ? CircleX : ci === 'pending' ? CircleDashed : CircleCheck;
-  return (
-    <span className={cn('flex', ciText(ci), ciPulse(ci))} title={ciLabel(ci)}>
-      <Icon size={14} strokeWidth={1.8} aria-label={ciLabel(ci)} />
-    </span>
   );
 }
 

@@ -1,15 +1,17 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type {
+  CiState,
   PrCheck,
+  PrListFilter,
   PrReviewComment,
   PrReviewer,
   PrReviewThread,
   PrState,
   PrVerdict,
   PrWriteError,
+  RelevantPr,
 } from '@shared/types';
-import { GithubService } from '../GithubService';
 import { githubChecks } from '../prRelevance';
 import { ensureCommits, runGit } from './localCommits';
 import type { ForgeReview, PrReviewProvider } from './types';
@@ -71,6 +73,29 @@ export const PR_REVIEW_QUERY = `query($owner: String!, $name: String!, $number: 
 
 type Node = Record<string, unknown>;
 
+/** The open PRs from (`$head`) or into (`$base`) a branch, newest first, with
+ *  what the PR button shows of each. One call per listing, like `gh pr list`,
+ *  which can't count review threads. */
+export const RELEVANT_PRS_QUERY = `query($owner: String!, $name: String!, $head: String, $base: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequests(
+      states: OPEN
+      headRefName: $head
+      baseRefName: $base
+      first: 50
+      orderBy: { field: CREATED_AT, direction: DESC }
+    ) {
+      nodes {
+        number title url state isDraft isCrossRepository
+        headRefName baseRefName updatedAt additions deletions
+        author { login }
+        reviewThreads(first: 100) { totalCount nodes { isResolved } }
+        commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+      }
+    }
+  }
+}`;
+
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const login = (v: unknown): string => str((v as { login?: unknown } | null)?.login);
 /** A user's or team's page on GitHub; null when the node has none. */
@@ -80,6 +105,9 @@ const nodes = (v: unknown): Node[] => {
   const list = (v as { nodes?: unknown } | null)?.nodes;
   return Array.isArray(list) ? list.filter((n): n is Node => !!n && typeof n === 'object') : [];
 };
+
+const pick = (data: Node, ...path: string[]): unknown =>
+  path.reduce<unknown>((v, k) => (v && typeof v === 'object' ? (v as Node)[k] : undefined), data);
 
 function commentFrom(c: Node): PrReviewComment {
   return {
@@ -111,6 +139,52 @@ function stateFrom(p: Node): PrState {
   if (p.state === 'MERGED') return 'merged';
   if (p.state === 'CLOSED') return 'closed';
   return p.isDraft === true ? 'draft' : 'open';
+}
+
+/** A status check rollup's state as one CI state; null without checks. */
+const ROLLUP_CI: Record<string, CiState> = {
+  SUCCESS: 'passing',
+  FAILURE: 'failing',
+  ERROR: 'failing',
+  PENDING: 'pending',
+  EXPECTED: 'pending',
+};
+
+/** The listed PRs of a RELEVANT_PRS_QUERY answer. */
+export function githubRelevantPrsFrom(data: Node): RelevantPr[] {
+  return nodes(pick(data, 'repository', 'pullRequests')).map((p) => {
+    const threads = nodes(p.reviewThreads);
+    const total = num(pick(p, 'reviewThreads', 'totalCount')) ?? threads.length;
+    const rollup = nodes(p.commits)[0];
+    const state = stateFrom(p);
+    return {
+      number: num(p.number) ?? 0,
+      title: str(p.title),
+      url: str(p.url),
+      state: state === 'draft' ? 'open' : state,
+      draft: state === 'draft',
+      author: login(p.author),
+      headRefName: str(p.headRefName),
+      baseRefName: str(p.baseRefName),
+      provider: 'github' as const,
+      fromFork: p.isCrossRepository === true,
+      updatedAt: str(p.updatedAt) || null,
+      additions: num(p.additions),
+      deletions: num(p.deletions),
+      threads: { open: threads.filter((t) => t.isResolved !== true).length, total },
+      ci: ROLLUP_CI[str(pick(rollup ?? {}, 'commit', 'statusCheckRollup', 'state'))] ?? null,
+    };
+  });
+}
+
+/** RELEVANT_PRS_QUERY's variables for `filter`; an unset side isn't sent. */
+function listVars(filter: PrListFilter = {}): Record<string, string> {
+  return {
+    owner: '{owner}',
+    name: '{repo}',
+    ...(filter.head ? { head: filter.head } : {}),
+    ...(filter.base ? { base: filter.base } : {}),
+  };
 }
 
 const REVIEW_STATES: Record<string, PrReviewer['state']> = {
@@ -332,13 +406,11 @@ export function restCommentFrom(c: unknown): PrReviewComment {
   };
 }
 
-const pick = (data: Node, ...path: string[]): unknown =>
-  path.reduce<unknown>((v, k) => (v && typeof v === 'object' ? (v as Node)[k] : undefined), data);
-
 /** The GitHub adapter, over a GraphQL transport (the real one runs `gh`). */
 export function makeGithubProvider(gql: Gql = ghGql, rest: Rest = ghRest): PrReviewProvider {
   return {
-    list: (ctx, filter) => GithubService.listPullRequests(ctx.cwd, filter),
+    list: async (ctx, filter) =>
+      githubRelevantPrsFrom(await gql(ctx.cwd, RELEVANT_PRS_QUERY, listVars(filter))),
 
     async load(ctx, number) {
       const data = await gql(ctx.cwd, PR_REVIEW_QUERY, repoVars(number));

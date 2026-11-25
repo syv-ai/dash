@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { PullRequest, PullRequestInfo } from '../../../../shared/types';
+import type { PullRequestInfo, RelevantPr } from '../../../../shared/types';
 import { branchPr } from '../branchPr';
 
-const listed = (number: number): PullRequest => ({
+const listed = (number: number): RelevantPr => ({
   number,
   title: `PR ${number}`,
   url: '',
@@ -12,6 +12,12 @@ const listed = (number: number): PullRequest => ({
   baseRefName: 'main',
   provider: 'github',
   fromFork: false,
+  draft: false,
+  updatedAt: null,
+  additions: null,
+  deletions: null,
+  threads: null,
+  ci: null,
 });
 const detected = (number: number, state: PullRequestInfo['state'] = 'open'): PullRequestInfo => ({
   number,

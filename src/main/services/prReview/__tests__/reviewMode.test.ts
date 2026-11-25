@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PrRef, PullRequest, RelevantPrs } from '../../../../shared/types';
+import type { PrRef, RelevantPr, RelevantPrs } from '../../../../shared/types';
 import {
   defaultReviewPr,
   reviewModeHolds,
@@ -8,8 +8,8 @@ import {
 } from '../reviewMode';
 import { listRelevantPrs } from '../relevantPrs';
 
-const pr = (number: number, provider: PullRequest['provider'] = 'github') =>
-  ({ number, provider }) as PullRequest;
+const pr = (number: number, provider: RelevantPr['provider'] = 'github') =>
+  ({ number, provider }) as RelevantPr;
 const relevant = (from: number[], into: number[] = []): RelevantPrs => ({
   branch: 'feat',
   from: from.map((n) => pr(n)),
@@ -82,7 +82,7 @@ describe('defaultReviewPr', () => {
         headRefName: 'feat',
         baseRefName: 'main',
         fromFork,
-      }) as PullRequest;
+      }) as RelevantPr;
     const d: ReviewModeDeps = {
       storedMode: () => null,
       storeMode: () => undefined,

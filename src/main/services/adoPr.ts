@@ -1,4 +1,4 @@
-import type { PrListFilter, PullRequest } from '@shared/types';
+import type { PrListFilter, PullRequest, RelevantPr } from '@shared/types';
 
 /** Raw entry from the ADO `git/pullrequests` REST `value[]`. */
 interface RawAdoPr {
@@ -10,6 +10,7 @@ interface RawAdoPr {
   createdBy?: { displayName?: string } | null;
   /** Set when the source branch is in a fork. */
   forkSource?: { name?: string } | null;
+  isDraft?: boolean;
 }
 
 interface AdoPrContext {
@@ -42,6 +43,24 @@ export function mapAdoPrList(raw: unknown, ctx: AdoPrContext): PullRequest[] {
       fromFork: !!r.forkSource,
     };
   });
+}
+
+/**
+ * The relevant-PR rows of the same listing. ADO's list carries a draft flag
+ * but no update time, line counts, threads or checks; each is a call per PR,
+ * so the row goes without them (null).
+ */
+export function mapAdoRelevantPrs(raw: unknown, ctx: AdoPrContext): RelevantPr[] {
+  const entries = Array.isArray(raw) ? (raw as RawAdoPr[]) : [];
+  return mapAdoPrList(entries, ctx).map((pr, i) => ({
+    ...pr,
+    draft: entries[i]?.isDraft === true,
+    updatedAt: null,
+    additions: null,
+    deletions: null,
+    threads: null,
+    ci: null,
+  }));
 }
 
 /** The `git/pullrequests` query for the active PRs, narrowed by `filter`. */
