@@ -414,10 +414,10 @@ export function RightInspector({
       {/* Who gives way as the row narrows, last first: the views (their
           counts go, then their padding tightens, then their labels truncate,
           never below a floor; `Segmented` fits itself), then
-          Details and ✕ (never), Commit (its label goes below 24rem), the bulk
+          Details (never), Commit (its label goes below 24rem), the bulk
           actions (into a menu below 24rem), the PR button (normal mode only;
           review mode's banner sits above the row).
-          Past all that the middle clips at its end, short of Details and ✕.
+          Past all that the middle clips at its end, short of Details.
           The padding keeps focus outlines inside the clip. */}
       <div className="flex min-w-0 flex-1 items-center gap-0.5 self-stretch overflow-hidden px-1">
         <div className={cn('-m-1 min-w-18 overflow-hidden p-1', !expanded && 'flex-auto')}>
@@ -503,15 +503,6 @@ export function RightInspector({
         >
           <Info size={14} strokeWidth={1.8} />
         </IconButton>
-        {expanded && (
-          <IconButton
-            size="sm"
-            title={withShortcut('Close editor', keybindings.closeDiff)}
-            onClick={onCloseDiff}
-          >
-            <X size={14} strokeWidth={1.8} />
-          </IconButton>
-        )}
       </div>
     </div>
   );
@@ -688,7 +679,20 @@ export function RightInspector({
                     <div className={split ? 'h-full' : 'hidden'}>
                       <EditorSheet closeBinding={keybindings.closeDiff} onClose={onCloseDiff}>
                         <Suspense fallback={null}>
-                          <EditorGroups ws={ws} terminalTheme={terminalTheme} isDark={isDark} />
+                          <EditorGroups
+                            ws={ws}
+                            terminalTheme={terminalTheme}
+                            isDark={isDark}
+                            actions={
+                              <IconButton
+                                size="sm"
+                                title={withShortcut('Close editor', keybindings.closeDiff)}
+                                onClick={onCloseDiff}
+                              >
+                                <X size={14} strokeWidth={1.8} />
+                              </IconButton>
+                            }
+                          />
                         </Suspense>
                       </EditorSheet>
                     </div>

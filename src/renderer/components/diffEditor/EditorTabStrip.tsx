@@ -29,7 +29,7 @@ interface Props {
   onPin(path: string): void;
   /** Before the tabs (the file tree's toggle). */
   leading?: ReactNode;
-  /** Shown before the actions (the language-server status). */
+  /** At the strip's end, right-aligned: the editor's actions. */
   trailing?: ReactNode;
 }
 

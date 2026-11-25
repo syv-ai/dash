@@ -1,4 +1,11 @@
-import { Fragment, useCallback, useEffect, useSyncExternalStore, type CSSProperties } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useSyncExternalStore,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import { FileText } from 'lucide-react';
 import type { ITheme as XtermTheme } from '@xterm/xterm';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/Resizable';
@@ -35,6 +42,9 @@ interface Props {
   ws: EditorWorkspace;
   terminalTheme: XtermTheme;
   isDark: boolean;
+  /** The host's editor-wide actions (closing the editor), at the editor's
+   *  top-right corner. */
+  actions?: ReactNode;
 }
 
 function useDirtyVersion(): number {
@@ -49,7 +59,7 @@ function useDirtyVersion(): number {
  * and swap models as tabs change; files open in a tab stay loaded (unsaved
  * edits included) until their last tab closes.
  */
-export function EditorGroups({ ws, terminalTheme, isDark }: Props) {
+export function EditorGroups({ ws, terminalTheme, isDark, actions }: Props) {
   const { layout, tabsKey, cwd } = ws;
   const closeBinding = useSettings((s) => s.keybindings.closeEditorTab);
   useEffect(installLsp, []);
@@ -163,8 +173,14 @@ export function EditorGroups({ ws, terminalTheme, isDark }: Props) {
   });
   // Editor-wide, so once: at the end of the last group's tab row, the
   // editor's top-right corner however it splits (the tree toggle holds the
-  // first group's start). Language servers show here only when unwell.
-  const editorActions = <LspStatusIndicator worktree={cwd} />;
+  // first group's start). Language servers show here only when unwell, ahead
+  // of the host's actions.
+  const editorActions = (
+    <>
+      {ws.git && <LspStatusIndicator worktree={cwd} />}
+      {actions}
+    </>
+  );
 
   return (
     <div
@@ -206,7 +222,7 @@ export function EditorGroups({ ws, terminalTheme, isDark }: Props) {
                     onClose={(paths) => void closeTabs(index, paths)}
                     onPin={(path) => ws.pinTab(index, path)}
                     leading={i === 0 ? <TreeToggle /> : undefined}
-                    trailing={isLast && ws.git ? editorActions : null}
+                    trailing={isLast ? editorActions : null}
                   />
                   <div
                     className={cn(
