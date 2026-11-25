@@ -28,6 +28,8 @@ import { type TuiFeatureId } from '../../../shared/tuiProtocol';
 import type { Tab } from '../../../shared/drawerTabs';
 import { useSetup } from '../../stores/setupStore';
 import { SetupLogPane } from './SetupLogPane';
+import { TerminalResizeVeil } from './TerminalResizeVeil';
+import { cn } from '../../lib/cn';
 
 /** Minimum drawer height (px) for a side-car TUI's CTA start screen. */
 const MIN_TUI_DRAWER_PX = 300;
@@ -605,19 +607,22 @@ export function TerminalTabs({
       {/* Terminal container always in DOM to avoid re-attach on expand.
           TUI tabs render on a fixed-size xterm canvas — center it so the
           pinned 80-col frame reads as a dialog, not mispadded output. */}
-      <div
-        ref={containerRef}
-        className={`terminal-container terminal-drawer flex-1 min-h-0 ${
-          activeTabIsTui ? 'tui-canvas-host' : ''
-        } ${collapsed ? '' : 'px-2 pb-1.5'}`}
-        style={
-          setupActive
-            ? { display: 'none' }
-            : collapsed
-              ? { height: 0, overflow: 'hidden' }
-              : undefined
-        }
-      />
+      <div className={cn('relative min-h-0 flex-1', setupActive && 'hidden')}>
+        <div
+          ref={containerRef}
+          className={`terminal-container terminal-drawer h-full ${
+            activeTabIsTui ? 'tui-canvas-host' : ''
+          } ${collapsed ? '' : 'px-2 pb-1.5'}`}
+          style={
+            setupActive
+              ? { display: 'none' }
+              : collapsed
+                ? { height: 0, overflow: 'hidden' }
+                : undefined
+          }
+        />
+        <TerminalResizeVeil id={setupActive ? null : activeTabId} />
+      </div>
       {setupActive && !collapsed && (
         <div className="flex-1 min-h-0 px-2 pb-1.5">
           <SetupLogPane taskId={taskId} worktreePath={cwd} />

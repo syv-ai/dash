@@ -1,4 +1,5 @@
 import { TerminalSessionManager } from './TerminalSessionManager';
+import type { TerminalActivity } from './resizeVeil';
 import type { PermissionMode } from '../../shared/types';
 
 interface AttachOptions {
@@ -13,6 +14,7 @@ interface AttachOptions {
 
 class SessionRegistryImpl {
   private sessions = new Map<string, TerminalSessionManager>();
+  private activityListeners = new Map<string, Set<(activity: TerminalActivity) => void>>();
   private _isDark = true;
   private _themeId = 'default';
 
@@ -27,6 +29,9 @@ class SessionRegistryImpl {
         shellOnly: opts.shellOnly,
         isTui: opts.isTui,
         themeId: opts.themeId ?? this._themeId,
+        onActivity: (activity) => {
+          for (const listener of this.activityListeners.get(opts.id) ?? []) listener(activity);
+        },
       });
       this.sessions.set(opts.id, session);
     }
@@ -44,6 +49,19 @@ class SessionRegistryImpl {
     if (session) {
       session.detach();
     }
+  }
+
+  /** Hear session `id`'s resizes, fits and output, whether or not it exists
+   *  yet (a pane's veil mounts before the pane attaches). Returns the
+   *  unsubscribe. */
+  onActivity(id: string, listener: (activity: TerminalActivity) => void): () => void {
+    let listeners = this.activityListeners.get(id);
+    if (!listeners) this.activityListeners.set(id, (listeners = new Set()));
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) this.activityListeners.delete(id);
+    };
   }
 
   get(id: string): TerminalSessionManager | undefined {

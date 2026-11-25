@@ -19,6 +19,7 @@ import {
 } from './ptyExitFallback';
 import { clackBlock, clackExitBlock } from './clackLines';
 import { isPromptOnlySnapshot } from './snapshotFilter';
+import type { TerminalActivity } from './resizeVeil';
 import { FitScheduler } from './FitScheduler';
 import { WebglLifecycle, type LosableContext } from './WebglLifecycle';
 import { MouseModeTracker } from './mouseModeFilter';
@@ -72,6 +73,7 @@ export class TerminalSessionManager {
   private _currentCwd: string;
   private onCwdChangeCallback: ((cwd: string) => void) | null = null;
   private onFindKey: (() => void) | null = null;
+  private readonly onActivity: ((activity: TerminalActivity) => void) | null;
   // A trailing 250ms debounce: a panel ease (PANEL_EASE_MS) resizes every
   // frame, so the fit lands once, at the final size; cancels itself when the
   // container hides
@@ -129,8 +131,11 @@ export class TerminalSessionManager {
      */
     isTui?: boolean;
     themeId?: string;
+    /** Hears its resizes, fits and output (see `ResizeVeil`). */
+    onActivity?: (activity: TerminalActivity) => void;
   }) {
     this.id = opts.id;
+    this.onActivity = opts.onActivity ?? null;
     this.cwd = opts.cwd;
     this._currentCwd = opts.cwd;
     this.permissionMode = opts.permissionMode ?? 'default';
@@ -441,7 +446,9 @@ export class TerminalSessionManager {
       this.resizeObserver.disconnect();
     }
     this.resizeObserver = new ResizeObserver((entries) => {
-      this.fitScheduler.onResize(entries[0]?.contentRect?.height ?? 0);
+      const height = entries[0]?.contentRect?.height ?? 0;
+      this.fitScheduler.onResize(height);
+      if (this.gridWillChange(height)) this.onActivity?.('resize');
     });
     this.resizeObserver.observe(container);
 
@@ -1124,6 +1131,14 @@ export class TerminalSessionManager {
     window.electronAPI.ptyResize({ id: this.id, cols, rows: dims.rows });
   }
 
+  /** Whether a box `height` px tall (visible) fits a different grid than
+   *  the one shown: the fit to come will resize it (and the PTY). */
+  private gridWillChange(height: number): boolean {
+    if (this.pinnedTui || !this.onActivity || height < 10) return false;
+    const dims = this.proposeDims();
+    return !!dims && (dims.cols !== this.terminal.cols || dims.rows !== this.terminal.rows);
+  }
+
   private fit() {
     // TUI sessions are pinned to TUI_COLS×TUI_ROWS — never fit or resize.
     if (this.pinnedTui) return;
@@ -1133,6 +1148,7 @@ export class TerminalSessionManager {
       const containerEl = this.terminal.element?.parentElement;
       if (containerEl && containerEl.clientHeight < 10) return;
       this.fitTerminal();
+      this.onActivity?.('fit');
     } catch {
       // Ignore fit errors during transitions
     }
@@ -1297,6 +1313,7 @@ export class TerminalSessionManager {
       }
 
       this.terminal.write(data);
+      this.onActivity?.('output');
       this.checkMemory();
     });
 

@@ -6,6 +6,7 @@ import { droppedPathsText } from '../../terminal/dropPaths';
 import type { DetachedInfo } from '../../terminal/TerminalSessionManager';
 import type { PermissionMode } from '../../../shared/types';
 import { TerminalSearch } from './TerminalSearch';
+import { TerminalResizeVeil } from './TerminalResizeVeil';
 import { Button } from '../ui/Button';
 
 const OVERLAY_MIN_MS = 2000;
@@ -101,6 +102,7 @@ export function TerminalPane({ id, cwd, permissionMode, terminalBg }: TerminalPa
       }}
     >
       <div ref={containerRef} className="terminal-container w-full h-full" />
+      <TerminalResizeVeil id={id} />
       {showSearch && searchAddon && (
         <TerminalSearch searchAddon={searchAddon} onClose={() => setShowSearch(false)} />
       )}
