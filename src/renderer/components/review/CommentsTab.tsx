@@ -40,7 +40,6 @@ export function CommentsTab({
   draftScope,
   comments,
   summary,
-  onFinish,
   onNavigate,
 }: {
   review: PrReview;
@@ -52,8 +51,6 @@ export function CommentsTab({
   comments: DiffComment[];
   /** The review's summary as drafted; '' with none. */
   summary: string;
-  /** Open the Finish-review sheet, where the summary is edited. */
-  onFinish?: () => void;
   onNavigate: Navigate;
 }) {
   const groups = useMemo(() => commentGroups(review.threads, comments), [review, comments]);
@@ -71,7 +68,7 @@ export function CommentsTab({
       {generalCount > 0 && (
         <DetailSection title="General" summary={String(generalCount)} collapsible {...general}>
           <Cards>
-            {summary && <SummaryCard text={summary} onFinish={onFinish} />}
+            {summary && <SummaryCard text={summary} />}
             {review.conversation.map((c) => (
               <Card key={c.id}>
                 <PostedComment comment={c} context={context} />
@@ -188,8 +185,8 @@ function DraftCard({
 }
 
 /** The review's summary while it is a draft: it posts with the review, as a
- *  general comment. Written in Finish review…, which it opens. */
-function SummaryCard({ text, onFinish }: { text: string; onFinish?: () => void }) {
+ *  general comment. Written in Finish review… (the column's footer). */
+function SummaryCard({ text }: { text: string }) {
   return (
     <Card>
       <CommentFrame
@@ -200,13 +197,7 @@ function SummaryCard({ text, onFinish }: { text: string; onFinish?: () => void }
             <DraftBadge />
           </>
         }
-        footer={
-          onFinish ? (
-            <TextLink onClick={onFinish}>Edit in Finish review…</TextLink>
-          ) : (
-            <p className="type-caption">Posts when you finish the review.</p>
-          )
-        }
+        footer={<p className="type-caption">Posts when you finish the review.</p>}
       >
         <Markdown text={text} />
       </CommentFrame>

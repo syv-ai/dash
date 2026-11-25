@@ -56,7 +56,8 @@ interface ReviewViewProps {
  * mode's banner and views: the PR's header, then the picked view: Overview,
  * Files (the PR's changed files, or all at its head), Comments (a switch
  * between every exchange with the author, the person's drafts among them,
- * and the notes to the agent; Finish review… its sticky footer) or History.
+ * and the notes to the agent) or History; Finish review… is the column's
+ * sticky footer on every view, the one way to it.
  * Narrow it is the whole column; expanded, the list column beside the
  * editor's PR view.
  */
@@ -140,11 +141,7 @@ function Review({
         )}
         <div className="min-h-0 flex-1">
           {tab === 'overview' ? (
-            <ReviewOverview
-              review={review}
-              remote={remote}
-              finish={onFinish && { drafts: comments.length, onOpen: onFinish }}
-            />
+            <ReviewOverview review={review} remote={remote} />
           ) : tab === 'files' ? (
             <ReviewFiles
               review={review}
@@ -189,7 +186,6 @@ function Review({
                   draftScope={commentsReady ? scope : null}
                   comments={commentsReady ? comments : []}
                   summary={summary?.body.trim() ?? ''}
-                  onFinish={onFinish}
                   onNavigate={onNavigate}
                 />
               ) : (
@@ -201,8 +197,9 @@ function Review({
           )}
         </div>
       </div>
-      {/* Comments' footer, in reach however far the threads scroll. */}
-      {tab === 'comments' && onFinish && (
+      {/* The one way to Finish review…, on every view, in reach however far
+          the column scrolls. */}
+      {onFinish && (
         <div className="grid shrink-0 border-t border-line px-2.5 py-2">
           <Button size="sm" variant="primary" onClick={onFinish}>
             Finish review…

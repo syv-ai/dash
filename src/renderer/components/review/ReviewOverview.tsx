@@ -49,25 +49,13 @@ function Reviewers({ reviewers }: { reviewers: PrReviewer[] }) {
 }
 
 /**
- * The Review view's Overview tab, under the PR's header: a line leading to
- * Finish review… when there is one to give ("2 drafts · Finish review…"),
- * then About (a bulleted list: how far the PR is behind its base, when it was
+ * The Review view's Overview tab, under the PR's header: About (a bulleted list: how far the PR is behind its base, when it was
  * opened and last moved, its files and lines changed, threads, reviewers and
  * assignees), its checks and its description, each a band that folds; the
  * open ones are remembered for the session. The general conversation lives
  * in the Comments tab.
  */
-export function ReviewOverview({
-  review,
-  remote,
-  finish,
-}: {
-  review: PrReview;
-  remote: string | null;
-  /** The person's drafts (comments and replies) and opening the
-   *  Finish-review sheet; absent while there is nothing to finish. */
-  finish?: { drafts: number; onOpen: () => void };
-}) {
+export function ReviewOverview({ review, remote }: { review: PrReview; remote: string | null }) {
   const about = useSectionOpen('overview.about', true);
   const description = useSectionOpen('overview.description', true);
   const baseHref = remote ? branchUrl(remote, review.baseRef) : null;
@@ -77,12 +65,6 @@ export function ReviewOverview({
   const active = prDateTime(review.lastActivityAt);
   return (
     <div className="pt-2 pb-2">
-      {finish && (
-        <p className="type-body px-3 pb-2 tabular-nums">
-          {finish.drafts > 0 && `${plural(finish.drafts, 'draft')} · `}
-          <TextLink onClick={finish.onOpen}>Finish review…</TextLink>
-        </p>
-      )}
       <DetailSection title="About" collapsible {...about}>
         {/* Plain facts, one bullet each; values wrap rather than truncate (the
             column can be narrow, D85). */}
