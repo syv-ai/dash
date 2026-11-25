@@ -21,6 +21,8 @@ export interface ReviewCheckout {
  * Differences are only told on the PR's head branch: off it (reviewing a PR
  * into this branch) the checkout is expected to differ, and saying so is
  * noise. `facts` null: not known yet, or the head isn't in the checkout.
+ * `uncommitted` null: the tree's status isn't known yet, so it may be dirty
+ * (D124: a dirty tree starts read-only).
  */
 export function reviewCheckout({
   facts,
@@ -34,11 +36,11 @@ export function reviewCheckout({
   branch: string | null;
   /** The PR's head branch. */
   headRef: string;
-  /** The tree has changes, saved or not. */
-  uncommitted: boolean;
+  /** The tree has changes, saved or not; null until its status is known. */
+  uncommitted: boolean | null;
   wasLive: boolean;
 }): ReviewCheckout {
-  const live = !!facts?.atHead && (!uncommitted || wasLive);
+  const live = !!facts?.atHead && (uncommitted === false || wasLive);
   const differences: string[] = [];
   if (branch !== headRef) return { live, differences };
   if (facts && !facts.atHead) {
@@ -47,6 +49,27 @@ export function reviewCheckout({
   }
   if (uncommitted) differences.push('uncommitted changes');
   return { live, differences };
+}
+
+/**
+ * The head the right side was last live at, after this render: where it is
+ * live now; kept until the checkout is known to have left the head (facts
+ * not in yet say nothing), so edits made there keep it live (`wasLive`).
+ */
+export function nextLiveAt({
+  live,
+  head,
+  facts,
+  liveAt,
+}: {
+  live: boolean;
+  head: string | null;
+  /** The checkout measured against `head`; null: not known yet. */
+  facts: CheckoutVsHead | null;
+  liveAt: string | null;
+}): string | null {
+  if (live) return head;
+  return facts && !facts.atHead ? null : liveAt;
 }
 
 /** "Your checkout differs from the PR: 2 local commits · uncommitted

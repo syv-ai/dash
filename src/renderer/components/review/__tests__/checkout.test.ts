@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkoutNotice, reviewCheckout } from '../checkout';
+import { checkoutNotice, nextLiveAt, reviewCheckout } from '../checkout';
 
 const at = { atHead: true, ahead: 0, behind: 0 };
 const rule = (over: Partial<Parameters<typeof reviewCheckout>[0]> = {}) =>
@@ -51,6 +51,25 @@ describe('reviewCheckout', () => {
 
   it('is read-only without facts (not known yet, or the head never fetched)', () => {
     expect(rule({ facts: null })).toEqual({ live: false, differences: [] });
+  });
+
+  it("starts read-only while the tree's status is unknown (it may be dirty, D124)", () => {
+    expect(rule({ uncommitted: null })).toEqual({ live: false, differences: [] });
+    expect(rule({ uncommitted: null, wasLive: true }).live).toBe(true);
+  });
+});
+
+describe('nextLiveAt', () => {
+  const head = 'h1';
+  it('records the head it is live at', () => {
+    expect(nextLiveAt({ live: true, head, facts: at, liveAt: null })).toBe(head);
+  });
+
+  it('keeps it until the checkout is known to have left the head', () => {
+    expect(nextLiveAt({ live: false, head, facts: null, liveAt: head })).toBe(head);
+    expect(nextLiveAt({ live: false, head, facts: at, liveAt: head })).toBe(head);
+    const left = { atHead: false, ahead: 1, behind: 0 };
+    expect(nextLiveAt({ live: false, head, facts: left, liveAt: head })).toBeNull();
   });
 });
 

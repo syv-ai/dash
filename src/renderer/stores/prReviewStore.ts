@@ -52,6 +52,10 @@ interface PrReviewState {
    *  blob they were viewed at (`isViewed` says whether a mark still holds).
    *  Absent until loaded. */
   viewed: Record<string, Record<string, string>>;
+  /** Per task: the PR head its review mode's right side was last live at
+   *  (`nextLiveAt`), kept across task switches so edits made there stay live. */
+  liveHeads: Record<string, string>;
+  setLiveHead: (taskId: string, head: string | null) => void;
   /** Per PR (`prKey`): what the person last picked in the composer there,
    *  kept for the session (in memory only). */
   kindPicks: Record<string, DiffCommentKind>;
@@ -180,6 +184,15 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
     kindPicks: {},
     summaries: {},
     posting: {},
+    liveHeads: {},
+
+    setLiveHead: (taskId, head) => {
+      if ((get().liveHeads[taskId] ?? null) === head) return;
+      const liveHeads = { ...get().liveHeads };
+      if (head === null) delete liveHeads[taskId];
+      else liveHeads[taskId] = head;
+      set({ liveHeads });
+    },
 
     pickKind: (provider, number, kind) =>
       set({ kindPicks: { ...get().kindPicks, [prKey(provider, number)]: kind } }),

@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { CheckoutVsHead, Task } from '../../../shared/types';
 import { useGit, useTaskBranch } from '../../stores/gitStore';
 import { modeReviewOf, usePrReviews } from '../../stores/prReviewStore';
 import { anyDirtyUnder, dirtyVersion, subscribeDirty } from '../diffEditor/models';
-import { checkoutNotice, reviewCheckout, type ReviewCheckout } from './checkout';
+import { checkoutNotice, nextLiveAt, reviewCheckout, type ReviewCheckout } from './checkout';
 
 /**
  * What the diff's right side is in the task's review mode (see
@@ -38,9 +38,12 @@ export function useReviewCheckout(
   }, [task.path, head, status]);
 
   useSyncExternalStore(subscribeDirty, dirtyVersion);
-  const uncommitted = (status?.files.length ?? 0) > 0 || anyDirtyUnder(task.path);
-  // The head the right side was last live at: edits made there keep it live.
-  const liveAt = useRef<string | null>(null);
+  // Unknown (null) until the task's own status is in: a task switched to
+  // still shows the last one's.
+  const uncommitted = anyDirtyUnder(task.path) || (status ? status.files.length > 0 : null);
+  // The head the right side was last live at: edits made there keep it live,
+  // across a task switch too (the store's, not this mount's).
+  const liveAt = usePrReviews((s) => s.liveHeads[task.id] ?? null);
   const at = facts && facts.head === head ? facts.at : null;
   const result = review
     ? reviewCheckout({
@@ -48,12 +51,13 @@ export function useReviewCheckout(
         branch,
         headRef: review.headRef,
         uncommitted,
-        wasLive: liveAt.current === head,
+        wasLive: liveAt !== null && liveAt === head,
       })
     : { live: false, differences: [] };
+  // Out of review mode it is forgotten: entering again starts afresh (D124).
+  const next = review ? nextLiveAt({ live: result.live, head, facts: at, liveAt }) : null;
   useEffect(() => {
-    if (result.live) liveAt.current = head;
-    else if (!at?.atHead) liveAt.current = null;
-  });
+    usePrReviews.getState().setLiveHead(task.id, next);
+  }, [task.id, next]);
   return { ...result, notice: checkoutNotice(result.differences) };
 }
