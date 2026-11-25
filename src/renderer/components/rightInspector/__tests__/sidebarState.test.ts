@@ -8,6 +8,7 @@ import {
   segmentForMode,
   segmentOnExpand,
   viewForMode,
+  viewOnExit,
   viewOnSegment,
 } from '../sidebarState';
 
@@ -200,5 +201,13 @@ describe('viewForMode', () => {
     expect(viewForMode({ mode: null, view: pr(4), review: null })).toBe('working');
     expect(viewForMode({ mode: null, view: { kind: 'commit' }, review: null })).toBeNull();
     expect(viewForMode({ mode: null, view: { kind: 'working' }, review: null })).toBeNull();
+  });
+});
+
+describe('viewOnExit', () => {
+  it('returns to the working tree from the PR and from a PR commit', () => {
+    expect(viewOnExit('pr')).toBe('working');
+    expect(viewOnExit('commit')).toBe('working');
+    expect(viewOnExit('working')).toBeNull();
   });
 });

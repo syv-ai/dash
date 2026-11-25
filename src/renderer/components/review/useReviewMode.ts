@@ -13,6 +13,7 @@ import {
   firstChangedTreeFile,
   segmentForMode,
   viewForMode,
+  viewOnExit,
   viewOnSegment,
   type CodeSegment,
 } from '../rightInspector/sidebarState';
@@ -119,7 +120,13 @@ export function useReviewMode(
     usePrReviews.getState().setMode(task.id, { provider: pr.provider, number: pr.number });
     showSegment('overview');
   };
-  const exit = () => usePrReviews.getState().setMode(task.id, null);
+  const endMode = () => usePrReviews.getState().setMode(task.id, null);
+  // Out of the mode the editor returns to the working tree, from a PR
+  // commit too (the follow effect only knows the PR's view).
+  const exit = () => {
+    endMode();
+    showView(viewOnExit(view.kind));
+  };
   const openFile = (path: string, opts?: OpenOptions) => {
     if (mode && view.kind !== 'pr') void showPr(mode);
     sidebar.openFile(path, opts ?? { preview: true });
@@ -169,7 +176,7 @@ export function useReviewMode(
     navigate: (scope, path, commentId) => {
       // Review mode shows its PR only: a note written elsewhere (the working
       // tree, a commit) is shown outside it.
-      if (mode && scope !== prScope(mode.provider, mode.number)) exit();
+      if (mode && scope !== prScope(mode.provider, mode.number)) endMode();
       ws.navigateToComment(scope, path, commentId);
       sidebar.openEditor();
     },

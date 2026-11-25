@@ -175,6 +175,15 @@ export function viewOnSegment({
   return reviewing ? 'pr' : 'working';
 }
 
+/**
+ * What leaving review mode does to the editor's view: back to the working
+ * tree from the PR's view and from a commit, which in review mode is always
+ * one of the PR's (History lists those alone). Null: it stays.
+ */
+export function viewOnExit(viewKind: 'working' | 'commit' | 'pr'): 'working' | null {
+  return viewKind === 'working' ? null : 'working';
+}
+
 /** The editor's view, as far as following review mode goes. */
 type ViewOfPr =
   | { kind: 'pr'; provider: string; number: number; base: string; head: string }
