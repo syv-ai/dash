@@ -97,7 +97,7 @@ describe('taskDetailSections', () => {
     ]);
     expect(s.session.find((r) => r.label === 'State')?.value).toBe('Working');
     expect(s.usage.map((r) => [r.label, r.value])).toEqual([
-      ['Tokens', '184.0k'],
+      ['Tokens', '184k'],
       ['Cost', '$1.42'],
       ['Context', '42%'],
     ]);

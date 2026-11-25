@@ -14,15 +14,38 @@ describe('formatTokens', () => {
     expect(formatTokens(999)).toBe('999');
   });
 
-  it('formats thousands with one decimal + k suffix', () => {
-    expect(formatTokens(1_000)).toBe('1.0k');
-    expect(formatTokens(12_345)).toBe('12.3k');
+  it('keeps one decimal below 10 of a unit, dropping a trailing .0', () => {
+    expect(formatTokens(1_000)).toBe('1k');
+    expect(formatTokens(1_500)).toBe('1.5k');
+    expect(formatTokens(2_400_000)).toBe('2.4M');
+    expect(formatTokens(1_200_000_000)).toBe('1.2B');
+    expect(formatTokens(3_450_000_000_000)).toBe('3.5T');
   });
 
-  it('formats millions with one decimal + M suffix', () => {
-    expect(formatTokens(1_000_000)).toBe('1.0M');
-    expect(formatTokens(2_400_000)).toBe('2.4M');
-    expect(formatTokens(18_000_000)).toBe('18.0M');
+  it('rounds to whole units from 10 up', () => {
+    expect(formatTokens(12_345)).toBe('12k');
+    expect(formatTokens(18_000_000)).toBe('18M');
+    expect(formatTokens(12_000_000_000)).toBe('12B');
+    expect(formatTokens(120_400_000_000)).toBe('120B');
+  });
+
+  it('moves to the next unit when rounding reaches 1000, never 1000k', () => {
+    expect(formatTokens(999.6)).toBe('1k');
+    expect(formatTokens(9_960)).toBe('10k');
+    expect(formatTokens(999_499)).toBe('999k');
+    expect(formatTokens(999_500)).toBe('1M');
+    expect(formatTokens(999_999)).toBe('1M');
+    expect(formatTokens(999_999_999)).toBe('1B');
+    expect(formatTokens(999_999_999_999)).toBe('1T');
+  });
+
+  it('switches from M to B at a billion', () => {
+    expect(formatTokens(999_400_000)).toBe('999M');
+    expect(formatTokens(1_000_000_000)).toBe('1B');
+  });
+
+  it('stays in T past a thousand trillion', () => {
+    expect(formatTokens(1_500_000_000_000_000)).toBe('1500T');
   });
 });
 
