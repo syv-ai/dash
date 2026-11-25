@@ -50,7 +50,11 @@ export function ReviewHeader({
           <StateIcon size={14} strokeWidth={1.8} aria-label={`${review.state} pull request`} />
         </span>
         <h2 className="type-heading min-w-0 flex-1 wrap-break-word">
-          <TextLink href={review.url} quiet title={`Open on ${providerName(review.provider)}`}>
+          <TextLink
+            href={review.url}
+            look="quiet"
+            title={`Open on ${providerName(review.provider)}`}
+          >
             {review.title}
           </TextLink>{' '}
           <span className="type-label tabular-nums">#{review.number}</span>

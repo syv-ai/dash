@@ -82,7 +82,11 @@ export function PostedComment({
       avatar={<Avatar name={c.author} />}
       name={
         c.authorUrl ? (
-          <TextLink quiet href={c.authorUrl} title={`${c.author} on ${providerName(provider)}`}>
+          <TextLink
+            look="quiet"
+            href={c.authorUrl}
+            title={`${c.author} on ${providerName(provider)}`}
+          >
             {c.author}
           </TextLink>
         ) : (

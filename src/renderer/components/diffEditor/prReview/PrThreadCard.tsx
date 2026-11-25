@@ -110,7 +110,7 @@ export function PrThreadCard({
         {open && place && (
           <span className="type-caption flex h-8 min-w-0 items-center truncate" title={thread.path}>
             {onOpenLocation ? (
-              <TextLink quiet title={`Open ${thread.path} there`} onClick={onOpenLocation}>
+              <TextLink look="quiet" title={`Open ${thread.path} there`} onClick={onOpenLocation}>
                 {place}
               </TextLink>
             ) : (

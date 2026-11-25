@@ -49,7 +49,7 @@ export function CommitHash({ hash, url }: { hash: string; url: string | null }) 
   return (
     <span className="tabular-nums">
       {url ? (
-        <TextLink quiet href={url} title="Open the commit on the remote">
+        <TextLink look="quiet" href={url} title="Open the commit on the remote">
           {hash}
         </TextLink>
       ) : (
@@ -72,7 +72,7 @@ export function CommitAuthor({
   return (
     <span className={className}>
       {url ? (
-        <TextLink quiet href={url} title="Open the author's profile">
+        <TextLink look="quiet" href={url} title="Open the author's profile">
           {name}
         </TextLink>
       ) : (

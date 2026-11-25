@@ -180,7 +180,7 @@ export function TaskDetails({
                 side="left"
                 trigger={(hover) => (
                   <span {...hover}>
-                    <TextLink quiet onClick={() => onOpenCommit(lastCommit.hash)}>
+                    <TextLink look="quiet" onClick={() => onOpenCommit(lastCommit.hash)}>
                       {lastCommit.subject || '(no subject)'}
                     </TextLink>
                   </span>
@@ -222,7 +222,7 @@ export function TaskDetails({
                   title={item.title}
                 >
                   {url ? (
-                    <TextLink quiet href={url}>
+                    <TextLink look="quiet" href={url}>
                       {item.title}
                     </TextLink>
                   ) : (
@@ -288,7 +288,7 @@ function UpstreamRows({
     <>
       <DetailItem label="Upstream" title={name} copy={name}>
         {repo ? (
-          <TextLink quiet href={forgeBranchUrl(repo, upstream.branch)}>
+          <TextLink look="quiet" href={forgeBranchUrl(repo, upstream.branch)}>
             {name}
           </TextLink>
         ) : (
@@ -296,7 +296,7 @@ function UpstreamRows({
         )}
       </DetailItem>
       <DetailItem label="Sync">
-        <SyncStatus status={status} links={links} quiet />
+        <SyncStatus status={status} links={links} look="quiet" />
       </DetailItem>
     </>
   );

@@ -173,7 +173,7 @@ function DraftCard({
         place={
           <span className="min-w-0 truncate">
             <TextLink
-              quiet
+              look="quiet"
               title={c.filePath}
               onClick={() => onNavigate(c.viewScope, c.filePath, c.id)}
             >

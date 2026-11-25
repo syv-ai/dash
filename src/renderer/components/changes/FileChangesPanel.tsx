@@ -89,9 +89,9 @@ export function FileChangesPanel({
   if (gitStatus.files.length === 0) {
     return (
       <EmptyState
-        icon={<FileDiff size={14} strokeWidth={1.8} />}
+        illustration={FileDiff}
         title="No changes"
-        description={<SyncStatus status={gitStatus} links={syncLinks} />}
+        description={<SyncStatus status={gitStatus} links={syncLinks} look="muted" />}
       />
     );
   }

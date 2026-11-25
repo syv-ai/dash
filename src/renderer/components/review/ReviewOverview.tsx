@@ -23,7 +23,7 @@ import { useSectionOpen } from './useSectionOpen';
 /** A person, linked to their page on the forge when it has one. */
 function Person({ name, url }: { name: string; url: string | null }) {
   return url ? (
-    <TextLink href={url} quiet title={`${name}'s profile`}>
+    <TextLink href={url} look="quiet" title={`${name}'s profile`}>
       {name}
     </TextLink>
   ) : (
@@ -73,7 +73,11 @@ export function ReviewOverview({ review, remote }: { review: PrReview; remote: s
               <li>
                 <span className="tabular-nums">{review.behindBase}</span> behind{' '}
                 {baseHref ? (
-                  <TextLink href={baseHref} quiet title={`Open ${review.baseRef} on the forge`}>
+                  <TextLink
+                    href={baseHref}
+                    look="quiet"
+                    title={`Open ${review.baseRef} on the forge`}
+                  >
                     <span className="wrap-anywhere">{review.baseRef}</span>
                   </TextLink>
                 ) : (

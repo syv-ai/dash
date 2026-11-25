@@ -12,31 +12,36 @@ const looks = {
   prose: 'text-link',
   /** A value in a row, a name in a meta line: ink, underlined on hover. */
   quiet: 'text-ink decoration-ink-3 hover:decoration-ink',
+  /** Secondary text that leads somewhere (an empty state's status): ink-2,
+   *  underlined on hover. */
+  muted: 'text-ink-2 decoration-ink-3 hover:text-ink hover:decoration-ink',
 } as const;
+
+export type TextLinkLook = keyof typeof looks;
 
 /**
  * A link inside text. `href` opens in the browser; `onClick` acts in the app
  * (rendered as a button). In running text it takes the `link` colour (a soft
  * blue, D191) and no underline until hovered; `quiet` (a value in a row, a
- * name in a meta line, a title) stays ink and underlines on hover. It
- * inherits size and weight.
+ * name in a meta line, a title) stays ink and `muted` (secondary text) ink-2,
+ * both underlining on hover. It inherits size and weight.
  */
 export function TextLink({
   href,
   onClick,
-  quiet = false,
+  look = 'prose',
   title,
   children,
 }: {
   /** An http(s) URL, opened with the system browser. */
   href?: string;
   onClick?: () => void;
-  quiet?: boolean;
+  look?: TextLinkLook;
   /** Hover text. */
   title?: string;
   children: React.ReactNode;
 }) {
-  const classes = cn(base, quiet ? looks.quiet : looks.prose);
+  const classes = cn(base, looks[look]);
   if (href) {
     return (
       <a
