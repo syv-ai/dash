@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { EyeOff, FileDiff, Minus, Plus, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { EmptyState } from '../ui/EmptyState';
@@ -93,13 +93,12 @@ export function WorkingFiles({
   }
   const changedOnly = scope === 'changed';
   const showingRun = changedOnly && isShowingRun(run.state);
-  const empty = changedOnly && !showingRun && gitStatus.files.length === 0;
   const sync = isOutOfSync(gitStatus) && <SyncText status={gitStatus} links={syncLinks} />;
   const working = repo.git && view.kind === 'working';
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <FilesTopRow
-        start={!empty && sync}
+        start={sync}
         end={
           !showingRun && (
             <AllFilesSwitch
@@ -114,7 +113,6 @@ export function WorkingFiles({
           files={gitStatus.files}
           cwd={cwd}
           run={run}
-          emptyNote={sync}
           onOpenChange={onOpenChange}
           activePath={activePath}
           view={view}
@@ -147,7 +145,6 @@ function ChangedFiles({
   files,
   cwd,
   run,
-  emptyNote,
   onOpenChange,
   activePath,
   view,
@@ -156,8 +153,6 @@ function ChangedFiles({
   files: readonly FileChange[];
   cwd: string;
   run: CommitRun;
-  /** Under "No changes". */
-  emptyNote: ReactNode;
   onOpenChange: WorkingFilesProps['onOpenChange'];
   activePath: string | null;
   view: EditorView;
@@ -192,7 +187,7 @@ function ChangedFiles({
   }
 
   if (files.length === 0) {
-    return <EmptyState illustration={FileDiff} title="No changes" description={emptyNote} />;
+    return <EmptyState illustration={FileDiff} title="No changes" />;
   }
 
   return (

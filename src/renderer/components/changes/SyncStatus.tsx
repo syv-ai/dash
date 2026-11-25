@@ -61,7 +61,7 @@ export function syncWords(ahead: number, behind: number): { ahead: string; behin
 
 /**
  * "3 commits ahead, 1 behind", for a branch and upstream that have moved apart
- * (`isOutOfSync`): Files' top row, or under its "No changes". Secondary ink,
+ * (`isOutOfSync`): Files' top row, always. Secondary ink,
  * the counts green and red, each part a link to those commits; it inherits
  * size.
  */
