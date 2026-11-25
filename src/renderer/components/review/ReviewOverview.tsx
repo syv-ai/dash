@@ -1,14 +1,13 @@
 import { Fragment } from 'react';
-import { CircleCheck, CircleDashed, CircleMinus, CircleX, ExternalLink } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import type { PrCheck, PrReview, PrReviewer } from '../../../shared/types';
 import { branchUrl } from '../../../shared/urls';
-import { cn } from '../../lib/cn';
 import { DetailSection } from '../ui/DetailList';
 import { LineStats } from '../ui/LineStats';
 import { ListRow } from '../ui/ListRow';
 import { Markdown } from '../ui/Markdown';
 import { TextLink } from '../ui/TextLink';
-import { ciPulse } from '../ui/prStatusColors';
+import { CheckStateIcon } from '../ui/CheckStateIcon';
 import {
   CHECK_LABELS,
   diffTotals,
@@ -109,22 +108,6 @@ export function ReviewOverview({ review, remote }: { review: PrReview; remote: s
   );
 }
 
-/** A check's state as a neutral icon: CI state isn't agent state, so no colour;
- *  a running check pulses, as the PR icons do. */
-function CheckIcon({ state }: { state: PrCheck['state'] }) {
-  const props = { size: 14, strokeWidth: 1.8, className: 'text-icon' };
-  switch (state) {
-    case 'passing':
-      return <CircleCheck {...props} />;
-    case 'failing':
-      return <CircleX {...props} />;
-    case 'pending':
-      return <CircleDashed {...props} className={cn(props.className, ciPulse('pending'))} />;
-    case 'skipped':
-      return <CircleMinus {...props} />;
-  }
-}
-
 function Checks({ checks }: { checks: PrCheck[] }) {
   const section = useSectionOpen('overview.checks', false);
   const ci = checksRollup(checks);
@@ -144,7 +127,7 @@ function Checks({ checks }: { checks: PrCheck[] }) {
             <ListRow
               key={`${c.name}:${i}`}
               size="sm"
-              leading={<CheckIcon state={c.state} />}
+              leading={<CheckStateIcon state={c.state} />}
               trailing={
                 <>
                   <span className="type-caption">{CHECK_LABELS[c.state]}</span>

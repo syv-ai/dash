@@ -1,11 +1,15 @@
 import {
+  CircleCheck,
+  CircleEllipsis,
+  CircleMinus,
+  CircleX,
   GitMerge,
   GitPullRequestArrow,
   GitPullRequestClosed,
   GitPullRequestDraft,
   type LucideIcon,
 } from 'lucide-react';
-import type { CiState, PrState } from '../../../shared/types';
+import type { CiState, PrCheck, PrState } from '../../../shared/types';
 
 /*
  * A PR's state as GitHub shows it, for every PR surface (header badge, picker,
@@ -94,4 +98,18 @@ export function ciLabel(ci: CiState): string {
     : ci === 'pending'
       ? 'checks running'
       : 'checks passing';
+}
+
+/** How one check state (or a PR's rolled-up checks) looks: a circle icon whose
+ *  glyph says the state, coloured as `ciText` colours the rollup (skipped stays
+ *  the neutral `icon`), pulsing while it runs. One mapping for the rollup and
+ *  every check row; `CheckStateIcon` draws it solid. */
+export function checkLook(state: PrCheck['state']): {
+  icon: LucideIcon;
+  tone: string;
+  pulse: string;
+} {
+  if (state === 'skipped') return { icon: CircleMinus, tone: 'text-icon', pulse: '' };
+  const icon = state === 'failing' ? CircleX : state === 'pending' ? CircleEllipsis : CircleCheck;
+  return { icon, tone: ciText(state), pulse: ciPulse(state) };
 }
