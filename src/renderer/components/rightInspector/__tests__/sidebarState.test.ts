@@ -10,16 +10,18 @@ import {
   viewForMode,
   viewOnExit,
   viewOnSegment,
+  type CodeSegment,
 } from '../sidebarState';
 
 describe('pickSegment', () => {
   const pick = (
-    current: 'overview' | 'changes' | 'files' | 'history' | 'details',
-    next: 'overview' | 'changes' | 'files' | 'history',
+    current: CodeSegment | 'details',
+    next: CodeSegment,
     expanded: boolean,
     changeCount: number | null = 3,
     listedChanges = 3,
-  ) => pickSegment({ current, next, expanded, changeCount, listedChanges });
+    openThread = true,
+  ) => pickSegment({ current, next, expanded, changeCount, listedChanges, openThread });
 
   it('goes narrow when the expanded view is picked again', () => {
     expect(pick('files', 'files', true)).toBe('narrow');
@@ -31,26 +33,33 @@ describe('pickSegment', () => {
     expect(pick('history', 'history', false)).toBe('expand');
     expect(pick('overview', 'overview', false)).toBe('expand');
     expect(pick('changes', 'changes', false)).toBe('expand');
+    expect(pick('comments', 'comments', false)).toBe('expand');
   });
 
   it('does nothing when a narrow Changes listing nothing is picked again', () => {
     expect(pick('changes', 'changes', false, 0, 0)).toBe('none');
   });
 
+  it('does nothing when a narrow Comments without an open thread is picked again', () => {
+    expect(pick('comments', 'comments', false, 3, 3, false)).toBe('none');
+    expect(pick('comments', 'comments', true, 3, 3, false)).toBe('narrow');
+  });
+
   it('expands on the listed changes, not the editor view’s', () => {
-    // A PR view (no working count) lists what Changes shows (review mode: the PR's).
+    // A PR view (no working count) lists what Changes shows.
     expect(pick('changes', 'changes', false, null, 2)).toBe('expand');
   });
 
-  it('expands Files and History whatever Changes lists', () => {
-    expect(pick('files', 'files', false, 0, 0)).toBe('expand');
-    expect(pick('history', 'history', false, 0, 0)).toBe('expand');
+  it('expands Files and History whatever Changes lists, or Comments holds', () => {
+    expect(pick('files', 'files', false, 0, 0, false)).toBe('expand');
+    expect(pick('history', 'history', false, 0, 0, false)).toBe('expand');
   });
 
   it('shows another view without changing the state', () => {
     expect(pick('changes', 'files', false)).toBe('select');
     expect(pick('files', 'history', true)).toBe('select');
     expect(pick('files', 'changes', true)).toBe('select');
+    expect(pick('files', 'comments', true, 3, 3, false)).toBe('select');
   });
 
   it('shows the view picked from the details', () => {
@@ -156,11 +165,8 @@ describe('segmentOnExpand', () => {
 });
 
 describe('segmentOnMode', () => {
-  const on = (
-    segment: 'overview' | 'changes' | 'files' | 'history' | 'details',
-    was?: boolean,
-    now?: boolean,
-  ) => segmentOnMode({ segment, was, now });
+  const on = (segment: CodeSegment | 'details', was?: boolean, now?: boolean) =>
+    segmentOnMode({ segment, was, now });
 
   it('shows Overview for a task found in review mode, or one entering it', () => {
     expect(on('changes', undefined, true)).toBe('overview');
@@ -174,8 +180,9 @@ describe('segmentOnMode', () => {
     expect(on('history', undefined, false)).toBe('history');
   });
 
-  it("leaves Overview for Changes once review mode ends; it is review mode's alone", () => {
+  it('leaves Overview and Comments for Changes once review mode ends; they are its alone', () => {
     expect(on('overview', true, false)).toBe('changes');
+    expect(on('comments', true, false)).toBe('changes');
     expect(on('files', true, false)).toBe('files');
     expect(on('details', true, false)).toBe('details');
   });

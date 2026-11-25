@@ -17,7 +17,7 @@ import { useSectionOpen } from './useSectionOpen';
  * The task's notes to the agent from every view, by file: To send, each sent
  * on its own or all at once (typed into the task's Claude prompt, never
  * submitted), then Sent, folded, with "Clear sent". A PR's note can become a
- * comment for the author, as its bubble can. The docked bar's Notes and the
+ * comment for the author, as its bubble can. The Comments tab's Notes and the
  * editor's "n to send" both show it.
  */
 export function NotesTray({

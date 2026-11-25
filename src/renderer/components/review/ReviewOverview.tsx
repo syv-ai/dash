@@ -3,7 +3,6 @@ import { CircleCheck, CircleDashed, CircleMinus, CircleX, ExternalLink } from 'l
 import type { CiState, PrCheck, PrReview, PrReviewer } from '../../../shared/types';
 import { branchUrl } from '../../../shared/urls';
 import { cn } from '../../lib/cn';
-import { Button } from '../ui/Button';
 import { DetailSection } from '../ui/DetailList';
 import { LineStats } from '../ui/LineStats';
 import { ListRow } from '../ui/ListRow';
@@ -49,23 +48,24 @@ function Reviewers({ reviewers }: { reviewers: PrReviewer[] }) {
 }
 
 /**
- * The Review view's Overview tab, under the PR's header: About (a bulleted
- * list: how far the PR is behind its base, when it was opened and last moved,
- * its files and lines changed, threads, reviewers and assignees; then Finish
- * review… when there is one to give),
- * its checks and its description, each a band that folds; the open ones are
- * remembered for the session. The general conversation lives in the docked
- * bar's Comments.
+ * The Review view's Overview tab, under the PR's header: a line leading to
+ * Finish review… when there is one to give ("2 drafts · Finish review…"),
+ * then About (a bulleted list: how far the PR is behind its base, when it was
+ * opened and last moved, its files and lines changed, threads, reviewers and
+ * assignees), its checks and its description, each a band that folds; the
+ * open ones are remembered for the session. The general conversation lives
+ * in the Comments tab.
  */
 export function ReviewOverview({
   review,
   remote,
-  onFinish,
+  finish,
 }: {
   review: PrReview;
   remote: string | null;
-  /** Open the Finish-review sheet; absent while there is nothing to finish. */
-  onFinish?: () => void;
+  /** The person's drafts (comments and replies) and opening the
+   *  Finish-review sheet; absent while there is nothing to finish. */
+  finish?: { drafts: number; onOpen: () => void };
 }) {
   const about = useSectionOpen('overview.about', true);
   const description = useSectionOpen('overview.description', true);
@@ -74,18 +74,18 @@ export function ReviewOverview({
   const totals = diffTotals(review.files);
   const created = prDateTime(review.createdAt);
   const active = prDateTime(review.lastActivityAt);
-  const finish = onFinish && (
-    <Button size="sm" variant="primary" onClick={onFinish} className="justify-self-start">
-      Finish review…
-    </Button>
-  );
   return (
     <div className="pt-2 pb-2">
-      {/* Folded, About keeps Finish review… in reach on its band. */}
-      <DetailSection title="About" collapsible {...about} action={!about.open && finish}>
+      {finish && (
+        <p className="type-body px-3 pb-2 tabular-nums">
+          {finish.drafts > 0 && `${plural(finish.drafts, 'draft')} · `}
+          <TextLink onClick={finish.onOpen}>Finish review…</TextLink>
+        </p>
+      )}
+      <DetailSection title="About" collapsible {...about}>
         {/* Plain facts, one bullet each; values wrap rather than truncate (the
             column can be narrow, D85). */}
-        <div className="grid gap-1.5 pt-0.5">
+        <div className="pt-0.5">
           <ul className="type-body grid list-disc gap-1 pl-4 wrap-break-word marker:text-ink-3">
             {!!review.behindBase && (
               <li>
@@ -110,7 +110,6 @@ export function ReviewOverview({
             <Reviewers reviewers={review.reviewers} />
             {review.assignees.length > 0 && <li>Assigned to {review.assignees.join(', ')}</li>}
           </ul>
-          {finish && <div className="mt-1 grid">{finish}</div>}
         </div>
       </DetailSection>
       <Checks checks={review.checks} />

@@ -54,6 +54,8 @@ import { ReviewBanner } from '../review/ReviewBanner';
 import { ReviewView } from '../review/ReviewView';
 import { useReviewCheckout } from '../review/useReviewCheckout';
 import { initialSegment, useReviewMode } from '../review/useReviewMode';
+import { useReviewTally } from '../review/useReviewTally';
+import { firstOpenThread } from '../review/outline';
 import { useUnpushedCommits } from './useUnpushedCommits';
 import type { SyncLinks } from '../changes/SyncStatus';
 import { useGit } from '../../stores/gitStore';
@@ -71,9 +73,10 @@ const EditorGroups = lazy(() =>
   import('../diffEditor/EditorGroups').then((m) => ({ default: m.EditorGroups })),
 );
 
-/** What the sidebar's list shows: the changes, the whole repo, the commits
- *  and in review mode the PR's overview (the view switch, always in words),
- *  or the task's details (an icon toggle at the row's end, read least often). */
+/** What the sidebar's list shows: the changes, the whole repo and the
+ *  commits, or in review mode the PR's overview, files, comments and commits
+ *  (the view switch, always in words), or the task's details (an icon toggle
+ *  at the row's end, read least often). */
 type Segment = CodeSegment | 'details';
 
 interface RightInspectorProps {
@@ -225,6 +228,7 @@ export function RightInspector({
   const review = useReviewMode(task, ws, { segment, showSegment, openFile, openEditor });
   const { mode } = review;
   const reviewing = mode !== null;
+  const tally = useReviewTally(task.id, review.review);
 
   // Leaving History drops the commit it showed (D2): for the PR's view in
   // review mode, the working tree otherwise.
@@ -243,7 +247,8 @@ export function RightInspector({
       next,
       expanded,
       changeCount,
-      listedChanges: reviewing ? (review.review?.files.length ?? 0) : files.length,
+      listedChanges: files.length,
+      openThread: !!review.review && firstOpenThread(review.review.threads) !== null,
     });
     if (pick === 'none') return;
     if (pick === 'expand') {
@@ -261,7 +266,7 @@ export function RightInspector({
   // Expanding on a narrow view, as clicking its first row does: Changes'
   // first change; Files' last open file, else the tree's first; History's
   // commit (the one picked, else the newest), the editor then opening its
-  // first file. Review mode decides for its Overview and Changes.
+  // first file. Review mode decides for its Overview, Files and Comments.
   const expandOn = (on: CodeSegment) => {
     if (review.expandOn(on)) return;
     if (on === 'changes') {
@@ -280,7 +285,7 @@ export function RightInspector({
       return;
     }
     const path = firstTreeFile(ws.data.repoPaths);
-    if (path) (reviewing ? review.openFile : openFile)(path, { preview: true });
+    if (path) openFile(path, { preview: true });
     else openEditor();
   };
   const toggleDetails = () => {
@@ -391,14 +396,16 @@ export function RightInspector({
         icon: <Minus size={14} strokeWidth={1.8} />,
         run: () => void unstageAll(),
       },
-    // The editor holds the comments; this opens it.
-    commentCount > 0 && {
-      label: `Comments: ${commentCount} to send`,
-      binding: undefined,
-      icon: <MessageSquareCode size={14} strokeWidth={1.8} />,
-      run: onOpenEditor,
-      count: commentCount,
-    },
+    // The editor holds the comments; this opens it. Review mode's Comments
+    // tab counts and lists them itself.
+    !reviewing &&
+      commentCount > 0 && {
+        label: `Comments: ${commentCount} to send`,
+        binding: undefined,
+        icon: <MessageSquareCode size={14} strokeWidth={1.8} />,
+        run: onOpenEditor,
+        count: commentCount,
+      },
   ].filter((a) => a !== false);
 
   const header = (
@@ -419,16 +426,24 @@ export function RightInspector({
             value={segment}
             onChange={(next) => next !== 'details' && onPickSegment(next)}
             segmentClassName="@max-[20rem]/sidehead:px-1.5"
-            options={[
-              ...(reviewing ? [{ value: 'overview' as const, label: 'Overview' }] : []),
-              {
-                value: 'changes',
-                label: 'Changes',
-                count: (reviewing ? review.review?.files.length : files.length) || undefined,
-              },
-              { value: 'files', label: 'Files' },
-              { value: 'history', label: 'History' },
-            ]}
+            options={
+              reviewing
+                ? [
+                    { value: 'overview', label: 'Overview' },
+                    {
+                      value: 'files',
+                      label: 'Files',
+                      count: review.review?.files.length || undefined,
+                    },
+                    { value: 'comments', label: 'Comments', count: tally?.comments || undefined },
+                    { value: 'history', label: 'History' },
+                  ]
+                : [
+                    { value: 'changes', label: 'Changes', count: files.length || undefined },
+                    { value: 'files', label: 'Files' },
+                    { value: 'history', label: 'History' },
+                  ]
+            }
           />
         </div>
         {bulkActions.map((a) => (
@@ -535,8 +550,7 @@ export function RightInspector({
     />
   );
 
-  // The editor's tree: the changes or the whole repo (in review mode at the
-  // PR's head, the editor's view being the PR's).
+  // The editor's tree: the changes or the whole repo (review mode has its own).
   const editorTree = (
     <EditorTree
       cwd={task.path}
@@ -548,21 +562,26 @@ export function RightInspector({
       changedOnly={segment === 'changes'}
       filesLoading={ws.data.repoPathsLoading || ws.data.changedFilesLoading}
       selectedPath={activePath(ws.layout) ?? ''}
-      onOpenFile={reviewing ? review.openFile : openFile}
+      onOpenFile={openFile}
       canOpenToSide={ws.layout.groups.length < 2}
       badgeCounts={ws.badgeCounts}
     />
   );
 
-  // Review mode's column: the PR's header over the picked view, with
-  // the Comments / Notes bar docked under it.
+  // Review mode's column: the PR's header over the picked view; its Files
+  // list every file at the PR's head (the editor's view) on "All files".
   const reviewColumn = mode && segment !== 'details' && (
     <ReviewView
       task={task}
       mode={mode}
       tab={segment}
-      files={editorTree}
+      repo={{
+        paths: ws.data.repoPaths,
+        dirs: ws.data.repoDirs,
+        loading: ws.data.repoPathsLoading,
+      }}
       history={history}
+      tally={tally}
       activePath={activePath(ws.layout)}
       onOpenFile={review.openFile}
       canOpenToSide={ws.layout.groups.length < 2}

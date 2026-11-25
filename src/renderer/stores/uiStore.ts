@@ -48,18 +48,20 @@ export interface UiState {
   // The update the sidebar banner was closed for. Session-only: a ready
   // update installs on quit, and a newer version brings the banner back.
   dismissedUpdateVersion: string | null;
-  /** Review mode's docked bar: open or not, and its tab. Session-only, the
-   *  same for every task. */
-  reviewDockOpen: boolean;
-  reviewDockTab: ReviewDockTab;
+  /** Review mode's Comments tab: which side of its switch shows.
+   *  Session-only, the same for every task. */
+  reviewCommentsPane: ReviewCommentsPane;
+  /** Review mode's Files lists every file at the PR's head, not only the
+   *  changed ones. Session-only, the same for every task. */
+  reviewAllFiles: boolean;
   /** Review mode's collapsible sections, open or not, by id
    *  (`useSectionOpen`); a section not in it keeps its default. Session-only. */
   reviewSections: Readonly<Record<string, boolean>>;
 }
 
-/** The review dock's tabs: every exchange with the author, and the notes to
- *  the agent. */
-export type ReviewDockTab = 'comments' | 'notes';
+/** The Comments tab's switch: every exchange with the author, and the notes
+ *  to the agent. */
+export type ReviewCommentsPane = 'comments' | 'notes';
 
 export interface UiActions {
   setShowTaskModal: (v: boolean) => void;
@@ -82,8 +84,8 @@ export interface UiActions {
   setChangesAnimating: (v: boolean) => void;
   setShellDrawerAnimating: (v: boolean) => void;
   setDismissedUpdateVersion: (v: string | null) => void;
-  setReviewDockOpen: (v: boolean) => void;
-  setReviewDockTab: (v: ReviewDockTab) => void;
+  setReviewCommentsPane: (v: ReviewCommentsPane) => void;
+  setReviewAllFiles: (v: boolean) => void;
   setReviewSectionOpen: (id: string, open: boolean) => void;
   // Data-mutating UI flows (own their modal state; delegate domain ops to projectsStore)
   finishProjectCreation: (projectId: string) => Promise<void>;
@@ -112,8 +114,8 @@ const initialState: UiState = {
   changesAnimating: false,
   shellDrawerAnimating: false,
   dismissedUpdateVersion: null,
-  reviewDockOpen: false,
-  reviewDockTab: 'comments',
+  reviewCommentsPane: 'comments',
+  reviewAllFiles: false,
   reviewSections: {},
 };
 
@@ -145,8 +147,8 @@ export const useUi = create<UiStore>((set, get) => ({
   setChangesAnimating: (v) => set({ changesAnimating: v }),
   setShellDrawerAnimating: (v) => set({ shellDrawerAnimating: v }),
   setDismissedUpdateVersion: (v) => set({ dismissedUpdateVersion: v }),
-  setReviewDockOpen: (v) => set({ reviewDockOpen: v }),
-  setReviewDockTab: (v) => set({ reviewDockTab: v }),
+  setReviewCommentsPane: (v) => set({ reviewCommentsPane: v }),
+  setReviewAllFiles: (v) => set({ reviewAllFiles: v }),
   setReviewSectionOpen: (id, open) =>
     set((s) => ({ reviewSections: { ...s.reviewSections, [id]: open } })),
 

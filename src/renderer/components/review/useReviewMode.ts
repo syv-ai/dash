@@ -7,6 +7,7 @@ import { unresolvedThreads } from '../../utils/prReviewNotices';
 import type { PrEntry } from '../diffEditor/HistoryList';
 import type { CommitSummary } from '../diffEditor/types';
 import { usePrCommits } from '../diffEditor/data/usePrCommits';
+import { openFileAt } from '../diffEditor/openFileAt';
 import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
 import type { EditorWorkspace } from '../diffEditor/useEditorWorkspace';
 import {
@@ -17,6 +18,7 @@ import {
   type CodeSegment,
 } from '../rightInspector/sidebarState';
 import { branchPr, type BranchPr } from './branchPr';
+import { firstOpenThread, threadRange } from './outline';
 import { useTaskPrs } from './useTaskPrs';
 
 /** What review mode needs of the task sidebar it runs in. */
@@ -52,7 +54,8 @@ export interface ReviewMode {
   /** Open a file of the PR in the PR's view. */
   openFile: (path: string, opts?: OpenOptions) => void;
   /** Expand on a re-picked narrow view, when review mode decides what opens
-   *  (Overview and Changes: the PR's first changed file). False: it doesn't. */
+   *  (Overview and Files: the PR's first changed file; Comments: the first
+   *  open thread's, at its line). False: it doesn't. */
   expandOn: (on: CodeSegment) => boolean;
   /** What picking a view does to the editor's view (leaving History). */
   onSegment: (to: CodeSegment) => void;
@@ -120,7 +123,8 @@ export function useReviewMode(
     then?.();
   }, [follow, modeKey, review?.head]);
   // A task found in review mode, or entering it, shows Overview; Overview
-  // is the mode's alone, so ending the mode leaves it for Changes. Read off
+  // and Comments are the mode's alone, so ending the mode leaves them for
+  // Changes. Read off
   // the mode before (the sidebar starts on `initialSegment`'s).
   const known = taskPrs.mode === undefined ? undefined : reviewing;
   const knownBefore = useRef(known);
@@ -174,7 +178,14 @@ export function useReviewMode(
     exit,
     openFile,
     expandOn: (on) => {
-      if (!reviewing || (on !== 'overview' && on !== 'changes')) return false;
+      if (!mode || on === 'history' || on === 'changes') return false;
+      if (on === 'comments') {
+        const thread = review && firstOpenThread(review.threads);
+        if (!thread) return true;
+        if (view.kind !== 'pr') void showPr(mode);
+        openFileAt(thread.path, threadRange(thread));
+        return true;
+      }
       const path = firstChangedTreeFile(review?.files.map((f) => f.path) ?? []);
       if (path) openFile(path);
       else sidebar.openEditor();

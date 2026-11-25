@@ -12,32 +12,35 @@
  * `changeCount` is the working tree's, or null until its status has loaded
  * (and in review mode, whose Changes are the PR's).
  *
- * Review mode (spec Revision 3) scopes the views to a PR and adds Overview
- * ahead of them; the editor shows the PR's view, except a commit picked in
- * History.
+ * Review mode (spec Revision 4) has its own views, each scoped to a PR:
+ * Overview, Files (the PR's changed files, or all of them at its head),
+ * Comments and History; the editor shows the PR's view, except a commit
+ * picked in History.
  */
 
-/** The view switch's views: the changes, the whole repo, the commits, and
- *  in review mode the PR's overview. */
-export type CodeSegment = 'overview' | 'changes' | 'files' | 'history';
+/** The view switch's views: normal mode's Changes, Files and History; review
+ *  mode's Overview, Files, Comments and History. */
+export type CodeSegment = 'overview' | 'changes' | 'files' | 'comments' | 'history';
 
 /** What picking a view does to the sidebar. */
 export type SegmentPick =
   /** Go narrow, the editor kept out of sight (on the picked view). */
   | 'narrow'
   /** Expand on the narrow view's first file (`firstListedChange`,
-   *  `firstTreeFile`, the commit's, or in review mode the PR's first). */
+   *  `firstTreeFile`, the commit's; in review mode the PR's first, or the
+   *  first open thread's at its line). */
   | 'expand'
   /** Show the picked view; while expanded, unfold a folded tree column. */
   | 'select'
-  /** Nothing: re-picking a narrow Changes that lists no changes. */
+  /** Nothing: re-picking a narrow Changes that lists no changes, or a
+   *  narrow Comments with no open thread on the code. */
   | 'none';
 
 /**
  * Re-picking the view an expanded sidebar shows goes narrow; re-picking the
- * narrow one expands on its first file, except an empty Changes, which has
- * none; never collapses. Another view keeps the state, except an empty
- * Changes, which goes narrow.
+ * narrow one expands on its first file, except an empty Changes or a Comments
+ * without an open thread on the code, which have none; never collapses.
+ * Another view keeps the state, except an empty Changes, which goes narrow.
  */
 export function pickSegment({
   current,
@@ -45,6 +48,7 @@ export function pickSegment({
   expanded,
   changeCount,
   listedChanges,
+  openThread,
 }: {
   /** What shows now: a view, or the details (any view picked from them shows). */
   current: CodeSegment | 'details';
@@ -52,12 +56,16 @@ export function pickSegment({
   expanded: boolean;
   changeCount: number | null;
   /** The changes a narrow Changes lists: the working tree's, whatever the
-   *  editor's view; in review mode the PR's files. */
+   *  editor's view. */
   listedChanges: number;
+  /** Review mode's Comments has an open thread on the code to open at. */
+  openThread: boolean;
 }): SegmentPick {
   if (next === current) {
     if (expanded) return 'narrow';
-    return next === 'changes' && listedChanges === 0 ? 'none' : 'expand';
+    const empty =
+      (next === 'changes' && listedChanges === 0) || (next === 'comments' && !openThread);
+    return empty ? 'none' : 'expand';
   }
   return expanded && next === 'changes' && changeCount === 0 ? 'narrow' : 'select';
 }
@@ -151,8 +159,8 @@ export function segmentOnExpand<S extends CodeSegment | 'details'>(
 /**
  * The view to show as review mode becomes known, starts or ends (each
  * `undefined` until main has said): a task found in review mode, opened or
- * just entered, shows Overview (D118); Overview is the mode's alone, so
- * ending it there shows Changes.
+ * just entered, shows Overview (D118); Overview and Comments are the mode's
+ * alone, so ending it on either shows Changes.
  */
 export function segmentOnMode<S extends CodeSegment | 'details'>({
   segment,
@@ -164,7 +172,8 @@ export function segmentOnMode<S extends CodeSegment | 'details'>({
   now: boolean | undefined;
 }): S | 'overview' | 'changes' {
   if (now && !was) return 'overview';
-  return segment === 'overview' && !now ? 'changes' : segment;
+  const reviewOnly = segment === 'overview' || segment === 'comments';
+  return reviewOnly && !now ? 'changes' : segment;
 }
 
 /**

@@ -7,6 +7,7 @@ import type {
   PrFile,
   PrReviewThread,
 } from '../../../shared/types';
+import type { TextRange } from '../../stores/editorTabsStore';
 import type { FileBadges } from '../diffEditor/EditorTree';
 import { threadLocation } from '../../utils/prReviewNotices';
 import { isInlineThread } from '../diffEditor/prReview/prViewPolicy';
@@ -160,6 +161,27 @@ export function commentGroups(
   };
 }
 
+/** A thread drawn on a line of the code. */
+type LineThread = PrReviewThread & { line: number };
+
+/** The first open thread on the code in the Comments tab's order (by file,
+ *  then line): what re-picking a narrow Comments opens at. Null with none. */
+export function firstOpenThread(threads: readonly PrReviewThread[]): LineThread | null {
+  return (
+    threads
+      .filter((t): t is LineThread => !t.resolved && isInlineThread(t))
+      .sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line)[0] ?? null
+  );
+}
+
+/** The lines a thread on the code sits on, to reveal and select. */
+export const threadRange = (t: LineThread): TextRange => ({
+  startLineNumber: t.startLine ?? t.line,
+  startColumn: 1,
+  endLineNumber: t.line,
+  endColumn: 1,
+});
+
 /** A thread's first comment's first line of text: what its row shows. */
 export function threadHeadline(t: PrReviewThread): string {
   const body = t.comments[0]?.body ?? '';
@@ -233,16 +255,20 @@ export function trayNotes(byFile: Readonly<Record<string, DiffComment[]>>): {
   return { unsent: notes.filter((c) => !c.sent), sent: notes.filter((c) => c.sent) };
 }
 
-/** The docked bar's counts: open threads (on the code or off it), the
- *  person's comments and replies for the PR, and the task's unsent notes. */
-export function dockTally(
+/**
+ * Review mode's comment counts (D171): Comments counts the rows of its
+ * Unresolved group (open threads, on the code or off it, and the person's
+ * new draft comments; a draft reply sits in its thread's row), which the
+ * view switch's tab shows too; Notes counts the task's unsent notes, as its
+ * To send does.
+ */
+export function reviewTally(
   threads: readonly PrReviewThread[],
   comments: readonly DiffComment[],
   byFile: Readonly<Record<string, DiffComment[]>>,
-): { open: number; drafts: number; notes: number } {
+): { comments: number; notes: number } {
   return {
-    open: threads.filter((t) => !t.resolved).length,
-    drafts: comments.length,
+    comments: commentGroups(threads, comments).unresolved.length,
     notes: trayNotes(byFile).unsent.length,
   };
 }

@@ -61,6 +61,8 @@ interface EditorTreeProps {
   badgeCounts: Map<string, FileBadges>;
   /** Files read through (a PR's viewed marks): a quiet tick, the name dimmed. */
   viewed?: ReadonlySet<string>;
+  /** A control at the header's end (review mode's "All files"). */
+  headerAction?: React.ReactNode;
 }
 
 /** A file's badges in the tree. */
@@ -93,6 +95,7 @@ export function EditorTree(props: EditorTreeProps) {
         canOpenToSide={props.canOpenToSide}
         badgeCounts={props.badgeCounts}
         viewed={props.viewed ?? NONE_VIEWED}
+        headerAction={props.headerAction}
       />
     </div>
   );
@@ -386,6 +389,7 @@ interface FileTreePanelProps {
   canOpenToSide: boolean;
   badgeCounts: Map<string, FileBadges>;
   viewed: ReadonlySet<string>;
+  headerAction?: React.ReactNode;
 }
 
 /** What every row needs, passed down the tree once. */
@@ -421,6 +425,7 @@ function FileTreePanel({
   canOpenToSide,
   badgeCounts,
   viewed,
+  headerAction,
 }: FileTreePanelProps) {
   // Plain files have no changes to filter on, and nothing git ignores.
   const changedOnly = git && changedOnlyProp;
@@ -485,6 +490,7 @@ function FileTreePanel({
               <LineStats add={totals.additions} del={totals.deletions} />
             </span>
           </span>
+          {headerAction}
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1">
           {loading && paths.length === 0 ? (

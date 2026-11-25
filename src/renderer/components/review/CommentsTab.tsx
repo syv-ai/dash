@@ -22,6 +22,7 @@ import {
   draftPlace,
   threadHeadline,
   threadPlace,
+  threadRange,
   type CommentItem,
 } from './outline';
 import { rowAction, rowKeys } from './rowAction';
@@ -39,7 +40,7 @@ interface Actions {
 }
 
 /**
- * The docked bar's Comments: every exchange with the author. General (the
+ * The Comments tab's Comments: every exchange with the author. General (the
  * PR's conversation, read-only, and the review's summary while it is a
  * draft), Unresolved (open threads, on the code or off it, with the person's
  * draft comments among them by file and line) and Resolved (folded). A
@@ -152,8 +153,9 @@ function Meta({ name, rest, title }: { name: string; rest: string[]; title: stri
 }
 
 /** A thread's row: its first line, who wrote it, where, its replies, and
- *  "Ask agent"; under it, the person's draft replies. A row on a line goes
- *  there; one off the code unfolds its card in place. */
+ *  "Ask agent"; under it, the person's draft replies. A row on a line opens
+ *  its file there (expanding the sidebar); one off the code unfolds its card
+ *  in place. */
 function ThreadRow({
   thread,
   replies: drafts,
@@ -173,13 +175,7 @@ function ThreadRow({
       setUnfolded((u) => !u);
       return;
     }
-    const line = thread.line;
-    openFileAt(thread.path, {
-      startLineNumber: thread.startLine ?? line,
-      startColumn: 1,
-      endLineNumber: line,
-      endColumn: 1,
-    });
+    openFileAt(thread.path, threadRange({ ...thread, line: thread.line }));
   };
   return (
     <>

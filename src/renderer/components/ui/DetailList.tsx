@@ -11,8 +11,7 @@ import { focusRing } from './styles';
  * `collapsible` makes it a band instead: the heading on a filled `well` row
  * between hairlines, a disclosure that folds the rows away. Banded sections
  * stack flush, sharing their rules, so a column of them reads as one list.
- * A `summary` follows the title quietly ("Checks · 1 passing"), as
- * `DockedPanel`'s tabs do, so every titled section counts the same way.
+ * A `summary` follows the title quietly ("Checks · 1 passing").
  */
 export function DetailSection({
   title,

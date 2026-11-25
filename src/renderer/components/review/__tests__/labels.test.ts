@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PrReviewer } from '../../../../shared/types';
-import {
-  dockSummaries,
-  diffTotals,
-  mergeVerb,
-  prDateTime,
-  reviewerGroups,
-  threadsLine,
-} from '../labels';
+import { diffTotals, mergeVerb, prDateTime, reviewerGroups, threadsLine } from '../labels';
 
 describe('diffTotals', () => {
   it('counts the files and totals their lines', () => {
@@ -56,20 +49,6 @@ describe('prDateTime', () => {
       'Thu 26/11/2026, 09:00',
     );
     expect(prDateTime('')).toBe('');
-  });
-});
-
-describe('dockSummaries', () => {
-  it('captions each tab with the counts there are', () => {
-    expect(dockSummaries({ open: 5, drafts: 2, notes: 1 })).toEqual({
-      comments: '5 open · 2 drafts',
-      notes: '1',
-    });
-    expect(dockSummaries({ open: 0, drafts: 1, notes: 0 })).toEqual({
-      comments: '1 draft',
-      notes: '',
-    });
-    expect(dockSummaries({ open: 0, drafts: 0, notes: 0 })).toEqual({ comments: '', notes: '' });
   });
 });
 

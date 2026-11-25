@@ -5,8 +5,8 @@ import {
   checksRollup,
   checksSummary,
   commentGroups,
-  dockTally,
   draftPlace,
+  firstOpenThread,
   fileRows,
   groupByPath,
   lineLabel,
@@ -15,8 +15,10 @@ import {
   nextUnviewed,
   prFileChanges,
   reviewComments,
+  reviewTally,
   threadHeadline,
   threadPlace,
+  threadRange,
   trayNotes,
   treeBadges,
   viewedPaths,
@@ -321,8 +323,8 @@ describe('the Changes tab', () => {
   });
 });
 
-describe('dockTally', () => {
-  it('counts open threads, the person’s drafts and every unsent note of the task', () => {
+describe('reviewTally', () => {
+  it('counts Unresolved’s rows and every unsent note of the task', () => {
     const byFile = {
       'a.ts': [
         draft('n1', { kind: 'note' }),
@@ -332,11 +334,48 @@ describe('dockTally', () => {
       ],
     };
     expect(
-      dockTally(
+      reviewTally(
         [thread('1'), thread('2', { line: null }), thread('3', { resolved: true })],
-        [draft('c1')],
+        [draft('c1'), draft('r1', { replyTo: '1' }), draft('r3', { replyTo: '3' })],
         byFile,
       ),
-    ).toEqual({ open: 2, drafts: 1, notes: 2 });
+      // Threads 1 and 2 and the new draft c1; the replies sit in their threads.
+    ).toEqual({ comments: 3, notes: 2 });
+  });
+
+  it('counts a reply whose thread is gone as its own row, as Unresolved shows it', () => {
+    expect(reviewTally([], [draft('r', { replyTo: 'gone' })], {})).toEqual({
+      comments: 1,
+      notes: 0,
+    });
+  });
+});
+
+describe('firstOpenThread', () => {
+  it('takes the first open thread on the code by file, then line', () => {
+    const first = firstOpenThread([
+      thread('late', { path: 'b.ts', line: 1 }),
+      thread('done', { path: 'a.ts', line: 1, resolved: true }),
+      thread('off', { path: 'a.ts', line: null }),
+      thread('left', { path: 'a.ts', line: 2, side: 'LEFT' }),
+      thread('here', { path: 'a.ts', line: 9 }),
+    ]);
+    expect(first?.id).toBe('here');
+  });
+
+  it('is null without an open thread on the code', () => {
+    expect(firstOpenThread([thread('off', { line: null })])).toBeNull();
+  });
+});
+
+describe('threadRange', () => {
+  it('selects the thread’s lines from its first', () => {
+    expect(threadRange({ ...thread('1'), line: 7, startLine: 5 })).toEqual({
+      startLineNumber: 5,
+      startColumn: 1,
+      endLineNumber: 7,
+      endColumn: 1,
+    });
+    expect(threadRange({ ...thread('1'), line: 7 })).toMatchObject({ startLineNumber: 7 });
   });
 });
