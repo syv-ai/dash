@@ -28,7 +28,7 @@ interface ReviewViewProps {
   mode: PrRef;
   /** The sidebar's view, each scoped to the PR. */
   tab: CodeSegment;
-  /** Every file at the PR's head (Files' "All files"). */
+  /** Every file at the PR's head (Files' "Show filetree"). */
   repo: RepoFiles;
   /** History's list, scoped to the PR by the host. */
   history: ReactNode;

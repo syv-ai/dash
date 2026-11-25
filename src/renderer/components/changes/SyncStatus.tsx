@@ -49,24 +49,36 @@ export function SyncStatus({ status, links }: { status: Sync; links: SyncLinks }
   );
 }
 
+/** The words after each count: the first names the commits, "3 commits ahead,
+ *  2 behind", "1 commit behind"; a zero side has none. */
+export function syncWords(ahead: number, behind: number): { ahead: string; behind: string } {
+  const commits = (n: number) => (n === 1 ? 'commit' : 'commits');
+  return {
+    ahead: `${commits(ahead)} ahead`,
+    behind: ahead > 0 ? 'behind' : `${commits(behind)} behind`,
+  };
+}
+
 /**
- * "3 ahead · 1 behind", for a branch and upstream that have moved apart
- * (`isOutOfSync`): Files' top row, or under its "No changes". Secondary ink, the counts green and red, each part a link to
- * those commits; it inherits size.
+ * "3 commits ahead, 1 behind", for a branch and upstream that have moved apart
+ * (`isOutOfSync`): Files' top row, or under its "No changes". Secondary ink,
+ * the counts green and red, each part a link to those commits; it inherits
+ * size.
  */
 export function SyncText({ status, links }: { status: Sync; links: SyncLinks }) {
   const { ahead, behind } = status;
+  const words = syncWords(ahead, behind);
   return (
-    <span className="inline-flex items-center gap-1 text-ink-2 tabular-nums">
+    <span className="text-ink-2 tabular-nums">
       {ahead > 0 && (
         <TextLink look="muted" title="Show the unpushed commits" onClick={links.onShowUnpushed}>
-          <span className="text-loc-add">{ahead}</span> ahead
+          <span className="text-loc-add">{ahead}</span> {words.ahead}
         </TextLink>
       )}
-      {ahead > 0 && behind > 0 && <span aria-hidden>·</span>}
+      {ahead > 0 && behind > 0 && ', '}
       {behind > 0 && (
         <TextLink look="muted" title="Show the upstream's commits" onClick={links.onShowUpstream}>
-          <span className="text-loc-del">{behind}</span> behind
+          <span className="text-loc-del">{behind}</span> {words.behind}
         </TextLink>
       )}
     </span>

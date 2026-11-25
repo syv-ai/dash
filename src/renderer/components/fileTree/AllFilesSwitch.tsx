@@ -1,8 +1,9 @@
 import { useId } from 'react';
 import { Switch } from '../ui/Switch';
+import { Tooltip } from '../ui/Tooltip';
 
-/** A Files top row's "All files" switch: off, the tree lists the changed files
- *  alone; on, every file with them (Files, review mode's Files). */
+/** A Files top row's "Show filetree" switch: off, the tree lists the changed
+ *  files alone; on, every file with them (Files, review mode's Files). */
 export function AllFilesSwitch({
   checked,
   onChange,
@@ -12,9 +13,11 @@ export function AllFilesSwitch({
 }) {
   const id = useId();
   return (
-    <label htmlFor={id} className="flex cursor-pointer items-center gap-1.5">
-      All files
-      <Switch id={id} size="sm" checked={checked} onCheckedChange={onChange} />
-    </label>
+    <Tooltip content="List every file, not just the changed ones">
+      <label htmlFor={id} className="flex cursor-pointer items-center gap-1.5">
+        Show filetree
+        <Switch id={id} size="sm" checked={checked} onCheckedChange={onChange} />
+      </label>
+    </Tooltip>
   );
 }

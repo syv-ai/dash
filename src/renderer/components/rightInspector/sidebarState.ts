@@ -5,7 +5,7 @@
  * decide what the view switch does to it.
  *
  * Normal mode's views are Files and History (spec Revision 5). Files is one
- * tree scoped by its "All files" switch (`filesScope`): the changes (Staged /
+ * tree scoped by its "Show filetree" switch (`filesScope`): the changes (Staged /
  * Unstaged, the commit footer) or the whole repo with them.
  *
  * Review mode (spec Revision 4) has its own views, each scoped to a PR:
