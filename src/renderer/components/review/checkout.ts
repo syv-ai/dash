@@ -18,7 +18,9 @@ export interface ReviewCheckout {
  * text); otherwise the PR's head, read-only, and the differences say why.
  * Edits made while live keep it live (`wasLive`, until HEAD moves): the
  * person's buffer isn't swapped out under them, the notice just appears.
- * `facts` null: not known yet, or the head isn't in the checkout.
+ * Differences are only told on the PR's head branch: off it (reviewing a PR
+ * into this branch) the checkout is expected to differ, and saying so is
+ * noise. `facts` null: not known yet, or the head isn't in the checkout.
  */
 export function reviewCheckout({
   facts,
@@ -36,16 +38,14 @@ export function reviewCheckout({
   uncommitted: boolean;
   wasLive: boolean;
 }): ReviewCheckout {
+  const live = !!facts?.atHead && (!uncommitted || wasLive);
   const differences: string[] = [];
+  if (branch !== headRef) return { live, differences };
   if (facts && !facts.atHead) {
-    if (branch !== headRef) differences.push(branch ? `on ${branch}` : 'a detached HEAD');
-    else {
-      if (facts.ahead > 0) differences.push(plural(facts.ahead, 'local commit'));
-      if (facts.behind > 0) differences.push(`${plural(facts.behind, 'commit')} behind`);
-    }
+    if (facts.ahead > 0) differences.push(plural(facts.ahead, 'local commit'));
+    if (facts.behind > 0) differences.push(`${plural(facts.behind, 'commit')} behind`);
   }
   if (uncommitted) differences.push('uncommitted changes');
-  const live = !!facts?.atHead && (!uncommitted || wasLive);
   return { live, differences };
 }
 

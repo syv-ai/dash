@@ -40,10 +40,13 @@ describe('reviewCheckout', () => {
     expect(rule({ facts, wasLive: true }).live).toBe(false);
   });
 
-  it('names the branch when the checkout is on another one', () => {
+  it('tells nothing off the head branch (a PR into this branch): differing is expected', () => {
     const facts = { atHead: false, ahead: 9, behind: 3 };
-    expect(rule({ facts, branch: 'main' }).differences).toEqual(['on main']);
-    expect(rule({ facts, branch: null }).differences).toEqual(['a detached HEAD']);
+    expect(rule({ facts, branch: 'main', uncommitted: true })).toEqual({
+      live: false,
+      differences: [],
+    });
+    expect(rule({ facts, branch: null }).differences).toEqual([]);
   });
 
   it('is read-only without facts (not known yet, or the head never fetched)', () => {
