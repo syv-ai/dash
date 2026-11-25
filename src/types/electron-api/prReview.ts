@@ -6,21 +6,15 @@ import type {
   PrReviewComment,
   PrReviewSummary,
   PrVerdict,
-  PullRequest,
-  RelevantPrs,
   SubmitResult,
-  TaskReviewTarget,
+  TaskPrs,
 } from '../../shared/types';
 
 /** PR review in the diff editor, on the project's provider (GitHub or Azure DevOps). */
 export interface PrReviewApi {
-  /** The project's open PRs, and which provider they're on. */
-  prReviewList: (args: {
-    projectId: string;
-    cwd: string;
-  }) => Promise<IpcResponse<{ provider: PrProvider; prs: PullRequest[] }>>;
-  /** The open PRs from and into the task's branch, newest first. */
-  prReviewRelevant: (args: { taskId: string }) => Promise<IpcResponse<RelevantPrs>>;
+  /** The open PRs from and into the task's branch (null when the forge
+   *  couldn't be asked), and the PR it is in review mode for. */
+  prReviewRelevant: (args: { taskId: string }) => Promise<IpcResponse<TaskPrs>>;
   /** PR `number`'s threads and general comments, with its base and head fetched into `cwd`. */
   prReviewLoad: (args: {
     projectId: string;
@@ -58,13 +52,8 @@ export interface PrReviewApi {
   /** How many commits HEAD at `cwd` has that PR head `head` lacks (local
    *  commits not pushed to the PR yet); null when `head` isn't in the checkout. */
   prReviewLocalAhead: (args: { cwd: string; head: string }) => Promise<IpcResponse<number | null>>;
-  /** The PR the task reviews and why (picked, or its own open PR), or null. */
-  prReviewTarget: (args: { taskId: string }) => Promise<IpcResponse<TaskReviewTarget | null>>;
-  /** Pick the PR the task reviews (null stops reviewing); answers the target now. */
-  prReviewSetTarget: (args: {
-    taskId: string;
-    target: PrRef | null;
-  }) => Promise<IpcResponse<TaskReviewTarget | null>>;
+  /** Enter review mode for a PR (null exits it). */
+  prReviewSetMode: (args: { taskId: string; pr: PrRef | null }) => Promise<IpcResponse<void>>;
   /** The PR's files the task marked viewed: path → the head blob they were viewed at. */
   prReviewViewed: (args: {
     taskId: string;

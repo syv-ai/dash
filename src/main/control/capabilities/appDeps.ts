@@ -30,7 +30,7 @@ import type { TaskCapabilityDeps } from './tasks';
 import type { ReviewCapabilityDeps } from './review';
 import { taskReviews } from '../../services/prReview/taskReview';
 import { prContextFor, prProviderFor } from '../../services/prReview/resolve';
-import { appPrContextDeps, appReviewTarget } from '../../services/prReview/appDeps';
+import { appPrContextDeps, appDefaultReviewPr } from '../../services/prReview/appDeps';
 import { loadPrReview } from '../../services/prReview/loadReview';
 import { GithubService } from '../../services/GithubService';
 import { AzureDevOpsService } from '../../services/AzureDevOpsService';
@@ -160,10 +160,7 @@ export function reviewDeps(): ReviewCapabilityDeps {
     get reviews() {
       return taskReviews();
     },
-    async reviewTarget(taskId) {
-      const target = await appReviewTarget(taskId);
-      return target && { provider: target.provider, number: target.number };
-    },
+    reviewTarget: appDefaultReviewPr,
     async loadReview(task, pr) {
       const { provider, adapter, ctx } = prContextFor(task.projectId, task.path, appPrContextDeps);
       if (provider !== pr.provider) {

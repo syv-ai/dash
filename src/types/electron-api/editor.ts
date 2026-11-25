@@ -55,11 +55,7 @@ export interface EditorApi {
   editorListIgnoredFiles: (args: { cwd: string }) => Promise<IpcResponse<RepoListing>>;
   /** One directory's entries, for a folder the tree lists lazily. */
   editorListDir: (args: { cwd: string; dirPath: string }) => Promise<IpcResponse<DirEntry[]>>;
-  editorResolveDefaultBase: (args: { cwd: string }) => Promise<IpcResponse<string | null>>;
-  editorListFilesAgainstBase: (args: {
-    cwd: string;
-    base: string;
-  }) => Promise<IpcResponse<FileChange[]>>;
+  /** A file's text at `base` (left) and on disk (right): a live PR view. */
   editorReadAgainstBase: (args: {
     cwd: string;
     filePath: string;

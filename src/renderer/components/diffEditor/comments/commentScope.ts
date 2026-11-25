@@ -5,12 +5,10 @@ import type { EditorView } from '../types';
 
 /** The content-identity a comment is anchored to.
  *
- *  `working` and `branch` views both render the live working file as the
- *  modified side (only the base/original side differs), so a comment sits on
- *  the same line in both — they share the `'live'` scope and their comments are
- *  shown (and live-tracked) interchangeably. A `commit` view renders frozen
- *  content where that line means something else, so its comments are scoped to
- *  the commit hash and stay there. */
+ *  `working` views render the live working file as the modified side: their
+ *  comments share the `'live'` scope (index or HEAD). A `commit` view renders
+ *  frozen content where that line means something else, so its comments are
+ *  scoped to the commit hash and stay there; a PR's to the PR. */
 export function commentScope(view: EditorView): string {
   if (view.kind === 'pr') return prScope(view.provider, view.number);
   return view.kind === 'commit' ? `commit:${view.hash}` : 'live';

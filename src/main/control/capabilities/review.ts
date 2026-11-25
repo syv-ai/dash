@@ -19,7 +19,7 @@ export interface ReviewCapabilityDeps {
   providerFor(projectId: string): PrProvider;
   getTask(id: string): Task | undefined;
   reviews: TaskReviews;
-  /** The PR the task reviews: its stored target, else its own open PR, else null. */
+  /** The PR the task is in review mode for, else its branch's own open PR, else null. */
   reviewTarget(taskId: string): Promise<PrRef | null>;
   /** The PR's review as the editor loads it, from the task's checkout. Reads only. */
   loadReview(task: Task, pr: PrRef): Promise<PrReview>;
@@ -35,7 +35,7 @@ const NUMBER = z
   .positive()
   .optional()
   .describe(
-    "The PR number (ADO: the pull request id); defaults to the PR the task reviews, else the task's own open PR",
+    "The PR number (ADO: the pull request id); defaults to the PR the task is in review mode for, else the task's own open PR",
   );
 const PROVIDER = z
   .enum(['github', 'ado'])
@@ -131,7 +131,7 @@ const byLocation = (a: PrReviewThread, b: PrReviewThread) =>
  */
 export function registerReviewCapabilities(registry: Registry, deps: ReviewCapabilityDeps): void {
   /** The PR a call is about: `number` on the task's project's provider, else
-   *  the PR the task reviews. Refuses a provider it isn't on, and no PR at all. */
+   *  the task's review-mode PR, else its own. Refuses a provider it isn't on, and no PR at all. */
   const prFor = async (taskId: string, number?: number, asked?: PrProvider): Promise<PrRef> => {
     const task = deps.getTask(taskId)!;
     const pr =

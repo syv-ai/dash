@@ -614,12 +614,6 @@ export interface PrRef {
   number: number;
 }
 
-/** The PR a task reviews, and why: picked for it (`stored`, which "Stop
- *  reviewing" clears) or its own open PR (`own`). */
-export interface TaskReviewTarget extends PrRef {
-  source: 'stored' | 'own';
-}
-
 /** A review's outcome. GitHub offers comment / approve / request_changes; ADO's
  *  vote adds approve_with_suggestions / wait_for_author / reject. */
 export type PrVerdict =
@@ -812,6 +806,13 @@ export interface RelevantPrs {
   branch: string | null;
   from: PullRequest[];
   into: PullRequest[];
+}
+
+/** A task's relevant PRs (null when the forge couldn't be asked) and the PR
+ *  it is in review mode for (`task_review_targets`), or null. */
+export interface TaskPrs {
+  relevant: RelevantPrs | null;
+  mode: PrRef | null;
 }
 
 // ── Remote Control Types ────────────────────────────────────

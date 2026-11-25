@@ -18,16 +18,10 @@ describe('parseStoredView', () => {
     expect(parseStoredView(JSON.stringify(v))).toEqual(v);
   });
 
-  it('round-trips a branch view', () => {
-    const v: EditorView = { kind: 'branch', base: 'origin/main' };
-    expect(parseStoredView(JSON.stringify(v))).toEqual(v);
-  });
-
-  it('round-trips a PR view, and rejects one missing its commits', () => {
-    const v: EditorView = { kind: 'pr', provider: 'ado', number: 7, base: 'B', head: 'H' };
-    expect(parseStoredView(JSON.stringify(v))).toEqual(v);
-    expect(parseStoredView(JSON.stringify({ ...v, head: '' }))).toBeNull();
-    expect(parseStoredView(JSON.stringify({ ...v, provider: 'gitlab' }))).toBeNull();
+  it('reads a stored branch or PR view as none (the working tree): neither is restored', () => {
+    expect(parseStoredView(JSON.stringify({ kind: 'branch', base: 'origin/main' }))).toBeNull();
+    const pr = { kind: 'pr', provider: 'ado', number: 7, base: 'B', head: 'H' };
+    expect(parseStoredView(JSON.stringify(pr))).toBeNull();
   });
 
   it('rejects the unresolved HEAD commit sentinel', () => {
@@ -54,11 +48,6 @@ describe('parseStoredView', () => {
   it('rejects a commit view with an empty/missing hash', () => {
     expect(parseStoredView(JSON.stringify({ kind: 'commit', hash: '' }))).toBeNull();
     expect(parseStoredView(JSON.stringify({ kind: 'commit' }))).toBeNull();
-  });
-
-  it('rejects a branch view with an empty/missing base', () => {
-    expect(parseStoredView(JSON.stringify({ kind: 'branch', base: '' }))).toBeNull();
-    expect(parseStoredView(JSON.stringify({ kind: 'branch' }))).toBeNull();
   });
 
   it('rejects non-object JSON', () => {

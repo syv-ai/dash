@@ -1,64 +1,59 @@
-import type { PrProvider, PrRef, PullRequest, Task, TaskReviewTarget } from '@shared/types';
+import type { PrRef, RelevantPrs, TaskPrs } from '@shared/types';
 
-/** What finding a task's review target takes. */
-export interface ReviewTargetDeps {
-  /** The PR the person picked for the task to review, or null. */
-  storedTarget(taskId: string): PrRef | null;
-  getTask(id: string): Pick<Task, 'projectId' | 'path' | 'branch'> | undefined;
-  /** The project's open PRs, listed from checkout `cwd`, and their provider. */
-  openPrs(projectId: string, cwd: string): Promise<{ provider: PrProvider; prs: PullRequest[] }>;
-  /** The branch checked out at `cwd`; null on a detached HEAD. */
-  branchOf(cwd: string): Promise<string | null>;
-}
-
-/** The newest open PR from `branch`, or null. */
-export function ownOpenPr(prs: readonly PullRequest[], branch: string): number | null {
-  const own = prs.filter((p) => p.state === 'open' && p.headRefName === branch);
-  return own.length > 0 ? Math.max(...own.map((p) => p.number)) : null;
-}
-
-/** The task's own open PR (from the branch its checkout is on now), or null.
- *  Rejects when the provider can't be asked (no remote, ADO not configured,
- *  gh offline): that says nothing about whether there is one. */
-export async function ownReviewPr(taskId: string, deps: ReviewTargetDeps): Promise<PrRef | null> {
-  const task = deps.getTask(taskId);
-  if (!task) return null;
-  const branch = (await deps.branchOf(task.path)) ?? task.branch;
-  const { provider, prs } = await deps.openPrs(task.projectId, task.path);
-  const number = ownOpenPr(prs, branch);
-  return number === null ? null : { provider, number };
-}
-
-/**
- * The PR a task reviews: the one the person picked, else the task's own open
- * PR, else null. The one rule for the app and dashctl. Rejects as
- * `ownReviewPr` does when it has to ask the provider.
- */
-export async function effectiveReviewTarget(
-  taskId: string,
-  deps: ReviewTargetDeps,
-): Promise<TaskReviewTarget | null> {
-  const stored = deps.storedTarget(taskId);
-  if (stored) return { ...stored, source: 'stored' };
-  const own = await ownReviewPr(taskId, deps);
-  return own && { ...own, source: 'own' };
+/** What review mode takes: where it is kept, and the task's relevant PRs. */
+export interface ReviewModeDeps {
+  /** The PR the task is in review mode for (`task_review_targets`), or null. */
+  storedMode(taskId: string): PrRef | null;
+  storeMode(taskId: string, pr: PrRef | null): void;
+  /** The open PRs from and into the task's live branch. Rejects when the
+   *  forge can't be asked (no remote, ADO not configured, gh offline). */
+  relevantPrs(taskId: string): Promise<RelevantPrs>;
 }
 
 const samePr = (a: PrRef, b: PrRef) => a.provider === b.provider && a.number === b.number;
 
+/** Review mode for `mode` holds while the PR is open and from or into the
+ *  task's branch (D-R3a): merged, closed, or the branch moved off it, it ends. */
+export function reviewModeHolds(mode: PrRef, relevant: RelevantPrs): boolean {
+  return [...relevant.from, ...relevant.into].some((p) => samePr(p, mode));
+}
+
+/** The stored mode, ended (and cleared) when it no longer holds. */
+function liveMode(taskId: string, relevant: RelevantPrs, deps: ReviewModeDeps): PrRef | null {
+  const stored = deps.storedMode(taskId);
+  if (!stored || reviewModeHolds(stored, relevant)) return stored;
+  deps.storeMode(taskId, null);
+  return null;
+}
+
 /**
- * Pick the PR the task reviews (null stops reviewing) and answer its target
- * now. The task's own PR is never stored: it is the target without a pick, and
- * a stored one would outlive it (still pinned once it merges and the next one
- * opens), so picking it clears the pick. If the provider can't say which is
- * the own PR, the pick is stored as given.
+ * The task's relevant PRs and the PR it is in review mode for, ending a mode
+ * that no longer holds. When the forge can't be asked, `relevant` is null and
+ * the mode stays as stored: offline says nothing about the PR.
  */
-export async function pickReviewTarget(
-  taskId: string,
-  target: PrRef | null,
-  deps: ReviewTargetDeps & { store(taskId: string, target: PrRef | null): void },
-): Promise<TaskReviewTarget | null> {
-  const own = target && (await ownReviewPr(taskId, deps).catch(() => null));
-  deps.store(taskId, target && own && samePr(own, target) ? null : target);
-  return effectiveReviewTarget(taskId, deps);
+export async function settleReviewMode(taskId: string, deps: ReviewModeDeps): Promise<TaskPrs> {
+  const relevant = await deps.relevantPrs(taskId).catch(() => null);
+  if (!relevant) return { relevant: null, mode: deps.storedMode(taskId) };
+  return { relevant, mode: liveMode(taskId, relevant, deps) };
+}
+
+/**
+ * The PR `dashctl review` works on without `--number` (D-R3b): the one the
+ * task is in review mode for, else the newest open PR from its branch, else
+ * null. When the forge can't be asked, a stored mode still answers; without
+ * one the forge's error does.
+ */
+export async function defaultReviewPr(taskId: string, deps: ReviewModeDeps): Promise<PrRef | null> {
+  let relevant: RelevantPrs;
+  try {
+    relevant = await deps.relevantPrs(taskId);
+  } catch (err) {
+    const stored = deps.storedMode(taskId);
+    if (stored) return stored;
+    throw err;
+  }
+  const mode = liveMode(taskId, relevant, deps);
+  if (mode) return mode;
+  const own = relevant.from[0];
+  return own ? { provider: own.provider, number: own.number } : null;
 }

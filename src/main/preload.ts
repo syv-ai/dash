@@ -227,8 +227,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('github:prepare-pr-branch', { cwd, prNumber, headRefName }),
 
   // PR review (GitHub or Azure DevOps, picked by main from the project's remote)
-  prReviewList: (args: { projectId: string; cwd: string }) =>
-    ipcRenderer.invoke('prReview:list', args),
   prReviewRelevant: (args: { taskId: string }) => ipcRenderer.invoke('prReview:relevant', args),
   prReviewLoad: (args: { projectId: string; cwd: string; number: number }) =>
     ipcRenderer.invoke('prReview:load', args),
@@ -258,11 +256,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }) => ipcRenderer.invoke('prReview:reply', args),
   prReviewLocalAhead: (args: { cwd: string; head: string }) =>
     ipcRenderer.invoke('prReview:localAhead', args),
-  prReviewTarget: (args: { taskId: string }) => ipcRenderer.invoke('prReview:target', args),
-  prReviewSetTarget: (args: {
-    taskId: string;
-    target: { provider: string; number: number } | null;
-  }) => ipcRenderer.invoke('prReview:setTarget', args),
+  prReviewSetMode: (args: { taskId: string; pr: { provider: string; number: number } | null }) =>
+    ipcRenderer.invoke('prReview:setMode', args),
   prReviewViewed: (args: { taskId: string; provider: string; number: number }) =>
     ipcRenderer.invoke('prReview:viewed', args),
   prReviewSetViewed: (args: {
@@ -416,10 +411,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('editor:listIgnoredFiles', args),
   editorListDir: (args: { cwd: string; dirPath: string }) =>
     ipcRenderer.invoke('editor:listDir', args),
-  editorResolveDefaultBase: (args: { cwd: string }) =>
-    ipcRenderer.invoke('editor:resolveDefaultBase', args),
-  editorListFilesAgainstBase: (args: { cwd: string; base: string }) =>
-    ipcRenderer.invoke('editor:listFilesAgainstBase', args),
   editorReadAgainstBase: (args: { cwd: string; filePath: string; base: string }) =>
     ipcRenderer.invoke('editor:readAgainstBase', args),
   editorBlame: (args: { cwd: string; filePath: string; ref: string | null }) =>

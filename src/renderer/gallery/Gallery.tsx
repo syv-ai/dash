@@ -33,6 +33,7 @@ import {
   ContextMenuTrigger,
 } from '../components/ui/ContextMenu';
 import { CountBadge } from '../components/ui/CountBadge';
+import { Pill } from '../components/ui/Pill';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -327,6 +328,11 @@ function Badges() {
         <span className="text-xs">
           <LineStats add={3} del={0} />
         </span>
+      </Line>
+      <Line>
+        <Pill dismissLabel="Exit review" onDismiss={() => {}}>
+          Reviewing #215
+        </Pill>
       </Line>
       <Line>
         <PrBadge prs={[PR_PASSING]} allPrs={PRS} />

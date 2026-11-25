@@ -19,17 +19,16 @@ export interface EditorViewData {
   settled: boolean;
   commits: CommitSummary[];
   commitsLoading: boolean;
-  defaultBase: string | null;
 }
 
-/** Which reads run: the editor's (files, base), and the commit list (History). */
+/** Which reads run: the editor's files, and the commit list (History). */
 export interface ViewDataEnabled {
   files: boolean;
   commits: boolean;
 }
 
-/** Composes the view-dependent git reads (commit files, branch files, repo
- *  paths, commits, default base) behind one hook. Owns no view/selection
+/** Composes the view-dependent git reads (a commit's or PR's files, repo
+ *  paths, commits) behind one hook. Owns no view/selection
  *  state — those stay in the workspace; this just turns (cwd, view,
  *  workingFiles) into the merged data the sidebar + pane consume. Without
  *  `git` (a folder that is no task's worktree) only its files are listed. */
@@ -42,10 +41,8 @@ export function useEditorViewData(
 ): EditorViewData {
   const frozen = frozenCommit(view);
   const isCommit = frozen !== null && enabled.files;
-  const isBranch = view.kind === 'branch' && enabled.files;
   const commitHash = frozen?.hash ?? '';
   const commitBase = frozen?.base;
-  const branchBase = isBranch ? view.base : '';
 
   const commitFiles = useAsyncResource<FileChange[]>(
     () =>
@@ -55,16 +52,6 @@ export function useEditorViewData(
     [cwd, commitHash, commitBase, isCommit],
     NO_FILES,
     isCommit,
-  );
-
-  const branchFiles = useAsyncResource<FileChange[]>(
-    () =>
-      window.electronAPI
-        .editorListFilesAgainstBase({ cwd, base: branchBase })
-        .then((r) => (r.success && r.data ? r.data : NO_FILES)),
-    [cwd, branchBase, isBranch],
-    NO_FILES,
-    isBranch,
   );
 
   const repoSource = isCommit
@@ -87,31 +74,14 @@ export function useEditorViewData(
     git && enabled.commits,
   );
 
-  const defaultBase = useAsyncResource<string | null>(
-    () =>
-      window.electronAPI
-        .editorResolveDefaultBase({ cwd })
-        .then((r) => (r.success ? (r.data ?? null) : null)),
-    [cwd, git, enabled.files],
-    null,
-    git && enabled.files,
-  );
-
-  // A frozen or branch view's files load with the editor; until then, none.
+  // A frozen view's files load with the editor; until then, none.
   const changedFiles = isCommit
     ? commitFiles.data
-    : isBranch
-      ? branchFiles.data
-      : view.kind === 'working'
-        ? workingFiles
-        : NO_FILES;
-  const changedFilesLoading = isCommit
-    ? commitFiles.loading
-    : isBranch
-      ? branchFiles.loading
-      : false;
-  const settled =
-    (isCommit ? commitFiles.settled : isBranch ? branchFiles.settled : true) && repoListing.settled;
+    : view.kind === 'working'
+      ? workingFiles
+      : NO_FILES;
+  const changedFilesLoading = isCommit && commitFiles.loading;
+  const settled = (!isCommit || commitFiles.settled) && repoListing.settled;
 
   return useMemo(
     () => ({
@@ -123,7 +93,6 @@ export function useEditorViewData(
       settled,
       commits: commits.data,
       commitsLoading: commits.loading,
-      defaultBase: defaultBase.data,
     }),
     [
       changedFiles,
@@ -133,7 +102,6 @@ export function useEditorViewData(
       settled,
       commits.data,
       commits.loading,
-      defaultBase.data,
     ],
   );
 }

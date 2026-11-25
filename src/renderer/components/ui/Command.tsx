@@ -74,19 +74,32 @@ export function CommandSeparator({
   return <CommandPrimitive.Separator className={cn(menuSeparator, className)} {...props} />;
 }
 
-/** cmdk marks the active row with data-selected (Radix menus use data-highlighted). */
+/** cmdk marks the active row with data-selected (Radix menus use data-highlighted).
+ *  With a `description` the row takes a second, caption line under its label. */
 export function CommandItem({
   className,
+  description,
+  children,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Item>) {
+}: React.ComponentProps<typeof CommandPrimitive.Item> & { description?: React.ReactNode }) {
   return (
     <CommandPrimitive.Item
       className={cn(
         menuItem,
         'data-[selected=true]:bg-select data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-40',
+        description && 'h-auto flex-col items-stretch gap-0 py-1.5',
         className,
       )}
       {...props}
-    />
+    >
+      {description ? (
+        <>
+          <span className="flex min-w-0 items-center gap-2">{children}</span>
+          <span className="type-caption truncate">{description}</span>
+        </>
+      ) : (
+        children
+      )}
+    </CommandPrimitive.Item>
   );
 }

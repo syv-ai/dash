@@ -1,8 +1,10 @@
 import type { EditorView } from '../types';
 
 // Per-repo last-open view, so reopening the editor lands back where the user
-// left off (a commit, a branch comparison, a PR under review, or the working
-// tree) instead of always resetting to working. Keyed by cwd because each task worktree has its
+// left off (a commit, or the working tree) instead of always resetting to
+// working. A PR's view isn't restored: review mode shows it afresh, and out
+// of review mode there is none. Views of a retired kind (`branch`) read as
+// none, so the working tree. Keyed by cwd because each task worktree has its
 // own history. Renderer-only, like the other diff-editor UI prefs.
 const keyFor = (cwd: string) => `diffEditor.view:${cwd}`;
 
@@ -26,20 +28,6 @@ export function parseStoredView(raw: string | null): EditorView | null {
     // "latest commit" placeholder) — the working tree is the right default.
     if (o.hash === 'HEAD') return null;
     return { kind: 'commit', hash: o.hash };
-  }
-  if (o.kind === 'branch' && typeof o.base === 'string' && o.base) {
-    return { kind: 'branch', base: o.base };
-  }
-  if (
-    o.kind === 'pr' &&
-    (o.provider === 'github' || o.provider === 'ado') &&
-    typeof o.number === 'number' &&
-    typeof o.base === 'string' &&
-    typeof o.head === 'string' &&
-    o.base &&
-    o.head
-  ) {
-    return { kind: 'pr', provider: o.provider, number: o.number, base: o.base, head: o.head };
   }
   return null;
 }

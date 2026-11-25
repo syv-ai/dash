@@ -60,7 +60,7 @@ EOF
 
 ## Reviewing a PR
 
-\`dashctl review …\` works on the PR the task reviews: the one the person opened for review in this task, else the task's own open PR. Pass \`--number <pr>\` for another one; with neither, the command says so. What you write lands in the task's Review view and diff editor. **Nothing you write reaches the PR**: the person reads it, edits it and posts it. You can't post, resolve threads or vote, and don't do it any other way (\`gh\`, \`az\`, scripts) unless the person explicitly asks and has seen the text.
+\`dashctl review …\` works on the PR the task is in review mode for (the person picked it from the sidebar's PR button), else the open PR from the task's branch. Pass \`--number <pr>\` for another one; with neither, the command says so. What you write lands in the task's review mode and diff editor. **Nothing you write reaches the PR**: the person reads it, edits it and posts it. You can't post, resolve threads or vote, and don't do it any other way (\`gh\`, \`az\`, scripts) unless the person explicitly asks and has seen the text.
 
 ### Read before you write
 

@@ -2,11 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { commentCountsByScope, commentScope, commitShortHash, scopeLabel } from '../commentScope';
 
 describe('commentScope', () => {
-  it('maps working and branch views to the shared "live" scope', () => {
+  it('maps working views to the shared "live" scope', () => {
     expect(commentScope({ kind: 'working', ref: 'HEAD' })).toBe('live');
     expect(commentScope({ kind: 'working', ref: 'index' })).toBe('live');
-    expect(commentScope({ kind: 'branch', base: 'main' })).toBe('live');
-    expect(commentScope({ kind: 'branch', base: 'origin/main' })).toBe('live');
   });
 
   it('scopes a commit view to its hash', () => {

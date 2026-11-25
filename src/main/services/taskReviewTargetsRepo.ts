@@ -2,12 +2,11 @@ import type { Database, Statement } from 'better-sqlite3';
 import { getRawDb } from '../db/client';
 import type { PrRef } from '@shared/types';
 
-/** The PR a task reviews, when the person picked one other than its own
- *  (Compare → Pull requests, History's Review). Without one, the task's own
- *  open PR is its target (see `effectiveReviewTarget`, `pickReviewTarget`). */
+/** The PR a task is in review mode for (the sidebar's PR button), until the
+ *  person exits it or it stops being relevant (see `settleReviewMode`). */
 export interface TaskReviewTargetsRepo {
   get(taskId: string): PrRef | null;
-  /** Null clears it ("Stop reviewing"). */
+  /** Null clears it (review mode exited or ended). */
   set(taskId: string, target: PrRef | null): void;
 }
 

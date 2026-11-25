@@ -28,9 +28,7 @@ import { addCloseGuard } from './closeGuard';
 import { confirm } from '../ui/ConfirmHost';
 import { absolutePath } from './editor/fileRef';
 import { LspStatusIndicator } from './LspStatusIndicator';
-import { CompareButton } from './CompareButton';
 import { useReviewNavigation } from './prReview/useReviewNavigation';
-import { commentScope } from './comments/commentScope';
 import { installLsp } from '../../lsp';
 
 interface Props {
@@ -166,21 +164,7 @@ export function EditorGroups({ ws, terminalTheme, isDark }: Props) {
   // Editor-wide, so once: at the end of the last group's tab row, the
   // editor's top-right corner however it splits (the tree toggle holds the
   // first group's start). Language servers show here only when unwell.
-  const editorActions = (
-    <>
-      <LspStatusIndicator worktree={cwd} />
-      <CompareButton
-        cwd={cwd}
-        view={ws.view}
-        projectId={ws.projectId}
-        defaultBase={ws.data.defaultBase}
-        onSelectBase={ws.selectBase}
-        onExitBranchView={ws.exitBranchView}
-        onSelectPr={ws.reviewPr}
-        commentCount={ws.commentCountByScope.get(commentScope(ws.view)) ?? 0}
-      />
-    </>
-  );
+  const editorActions = <LspStatusIndicator worktree={cwd} />;
 
   return (
     <div

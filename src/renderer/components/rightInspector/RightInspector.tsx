@@ -41,26 +41,23 @@ import { HistoryList, type PrEntry } from '../diffEditor/HistoryList';
 import { useEditorWorkspace, type EditorTarget } from '../diffEditor/useEditorWorkspace';
 import { activePath, type OpenOptions } from '../diffEditor/tabs/editorLayout';
 import { useTreePanel } from '../diffEditor/TreeToggle';
-import { WorktreePath } from './WorktreePath';
 import {
   firstChangedTreeFile,
   firstListedChange,
   firstTreeFile,
   onChangeCount,
-  onLeavePrView,
   pickSegment,
-  prViewLags,
-  segmentForTarget,
+  segmentForMode,
   segmentOnExpand,
-  segmentOnNavigate,
+  viewForMode,
   viewOnSegment,
   type CodeSegment,
 } from './sidebarState';
 import { prScope } from '../../../shared/prScope';
+import { PrButton } from '../review/PrButton';
 import { ReviewView } from '../review/ReviewView';
-import { useReviewTarget } from '../review/useReviewTarget';
-import { usePrCommits, type PrCommitsRange } from '../diffEditor/data/usePrCommits';
-import { TextLink } from '../ui/TextLink';
+import { useTaskPrs } from '../review/useTaskPrs';
+import { usePrCommits } from '../diffEditor/data/usePrCommits';
 import { useUnpushedCommits } from './useUnpushedCommits';
 import type { SyncLinks } from '../changes/SyncStatus';
 import { useGit } from '../../stores/gitStore';
@@ -73,7 +70,7 @@ import { prKey, usePrReviews } from '../../stores/prReviewStore';
 import { unresolvedThreads } from '../../utils/prReviewNotices';
 import { formatBinding, matchesBinding, type KeyBinding } from '../../keybindings';
 import { needsAttention } from '../../../shared/diffComments';
-import type { ContextUsage, PrRef, RateLimits, Task } from '../../../shared/types';
+import type { ContextUsage, PullRequest, RateLimits, Task } from '../../../shared/types';
 import type { LimitBurns } from '../../lib/burnRate';
 
 const EditorGroups = lazy(() =>
@@ -81,8 +78,8 @@ const EditorGroups = lazy(() =>
 );
 
 /** What the sidebar's list shows: the changes, the whole repo, the commits
- *  or the PR under review (the view switch, always in words), or the task's
- *  details (an icon toggle at the row's end, read least often). */
+ *  and in review mode the PR's overview (the view switch, always in words),
+ *  or the task's details (an icon toggle at the row's end, read least often). */
 type Segment = CodeSegment | 'details';
 
 interface RightInspectorProps {
@@ -114,7 +111,7 @@ interface RightInspectorProps {
   onTaskSettings: () => void;
 }
 
-/** The Review list column's narrowest, in px (D81). */
+/** The list column's narrowest in review mode, in px (D81). */
 const REVIEW_LIST_MIN_PX = 320;
 
 /** A tooltip label with its shortcut, e.g. "Stage all  ⇧⌘A". */
@@ -178,12 +175,23 @@ export function RightInspector({
     }
   }, [task.id]);
 
-  // ── The PR the task reviews (the Review view's) ──
-  const reviewTarget = useReviewTarget(task.id);
-  const reviewThreads = usePrReviews((s) => {
-    const review = reviewTarget && s.byPr[prKey(reviewTarget.provider, reviewTarget.number)];
-    return review ? unresolvedThreads(review).length : 0;
-  });
+  // ── Review mode: the PRs from and into the branch, and the one reviewed ──
+  const taskPrs = useTaskPrs(task);
+  const mode = taskPrs.mode ?? null;
+  const reviewing = mode !== null;
+  const modeKey = mode ? prKey(mode.provider, mode.number) : null;
+  // The branch's own PR's unresolved threads, for the PR button's badge;
+  // its review is fetched once if nothing has yet.
+  const ownPr = taskPrs.relevant?.from[0];
+  const ownKey = ownPr ? prKey(ownPr.provider, ownPr.number) : null;
+  const ownReview = usePrReviews((s) => (ownKey ? s.byPr[ownKey] : undefined));
+  const ownThreads = ownReview ? unresolvedThreads(ownReview).length : 0;
+  const ownNumber = ownPr?.number;
+  const ownLoaded = !!ownReview;
+  useEffect(() => {
+    if (ownNumber !== undefined && !ownLoaded)
+      void usePrReviews.getState().load(task.projectId, task.path, ownNumber);
+  }, [ownNumber, ownLoaded, task.projectId, task.path]);
 
   // ── The editor's state: one workspace per task, open or not ──
   const editorMounted = diff !== null;
@@ -209,25 +217,10 @@ export function RightInspector({
     treeShown: segment === 'files',
     historyShown: segment === 'history',
     target,
-    // Compare → Pull requests: the PR is the target now, and its view shows;
-    // Review lists it.
-    onReviewPr: () => {
-      setSegment('review');
-      setLastCodeSegment('review');
-    },
-    // Compare leaving the PR view stops reviewing it (D99).
-    onLeavePrView: (left) => {
-      const leave = onLeavePrView({ left, target: reviewTarget, segment });
-      if (leave.clearTarget) usePrReviews.getState().setTarget(task.id, null);
-      if (leave.segment) {
-        setSegment(leave.segment);
-        setLastCodeSegment(leave.segment);
-      }
-    },
   });
   const { view, selectView } = ws;
   // The working tree's changes, as Changes lists them (null: not loaded,
-  // still the previous task's, or a branch or PR view's Changes).
+  // still the previous task's, or review mode's Changes, the PR's).
   const statusIsOwn = useGit((s) => s.gitStatusCwd === task.path);
   const changeCount =
     view.kind === 'working' && gitStatus && statusIsOwn ? gitStatus.files.length : null;
@@ -241,50 +234,43 @@ export function RightInspector({
     openEditor();
   };
 
-  // The PR's view in the editor: at once when its review is loaded (from
-  // History's hover, an earlier visit), else once it is.
-  const showPr = ({ provider, number }: PrRef) => {
-    const loaded = usePrReviews.getState().byPr[prKey(provider, number)];
-    const same = view.kind === 'pr' && view.provider === provider && view.number === number;
-    if (same && (!loaded || (loaded.base === view.base && loaded.head === view.head))) return;
-    if (loaded) selectView({ kind: 'pr', provider, number, base: loaded.base, head: loaded.head });
-    else void ws.openPrView(number);
+  const showView = (next: 'pr' | 'working' | null) => {
+    if (next === 'working') selectView({ kind: 'working', ref: 'HEAD' });
+    else if (next === 'pr' && mode) void ws.showPr(mode);
   };
-  // Review shows the target PR in the editor; leaving it for Changes or
-  // Files returns to the working tree, as leaving History drops the commit
-  // it showed (D2).
+  // Leaving History drops the commit it showed (D2): for the PR's view in
+  // review mode, the working tree otherwise.
   const selectSegment = (next: CodeSegment) => {
     setSegment(next);
     setLastCodeSegment(next);
-    const nextView = viewOnSegment({
-      from: segment,
-      lastCodeSegment,
-      to: next,
-      viewKind: view.kind,
-    });
-    if (nextView === 'working') selectView({ kind: 'working', ref: 'HEAD' });
-    else if (nextView === 'pr' && reviewTarget) showPr(reviewTarget);
+    showView(viewOnSegment({ reviewing, to: next, viewKind: view.kind }));
   };
-  // On Review the editor's PR view follows the target and its head: Stop
-  // reviewing falling back to the own PR, a refresh finding a new push (D38).
-  const targetReview = usePrReviews((s) =>
-    reviewTarget ? (s.byPr[prKey(reviewTarget.provider, reviewTarget.number)] ?? null) : null,
-  );
-  const lags = prViewLags({ segment, view, target: reviewTarget, review: targetReview });
-  const showPrRef = useRef(showPr);
-  showPrRef.current = showPr;
+  // The editor follows review mode: the PR's view at its loaded head while
+  // in it (a push re-points it), the working tree once it ends.
+  const modeReview = usePrReviews((s) => (modeKey ? (s.byPr[modeKey] ?? null) : null));
+  const follow = viewForMode({ mode, view, review: modeReview });
+  const showViewRef = useRef(showView);
+  showViewRef.current = showView;
   useEffect(() => {
-    if (lags && reviewTarget) showPrRef.current(reviewTarget);
-  }, [lags, reviewTarget]);
-  // Review shows while the task has a target; it gives way to Changes once
-  // the target is gone (Stop reviewing, the own PR merged), and the editor
-  // to the working tree.
+    showViewRef.current(follow);
+  }, [follow, modeKey, modeReview?.head]);
+  // Overview is review mode's alone: ending the mode leaves it for Changes.
   useEffect(() => {
-    if (segmentForTarget(segment, reviewTarget) === segment) return;
+    if (segmentForMode(segment, reviewing) === segment) return;
     setSegment('changes');
     setLastCodeSegment('changes');
-    if (view.kind === 'pr') selectView({ kind: 'working', ref: 'HEAD' });
-  }, [segment, reviewTarget, view.kind, selectView]);
+  }, [segment, reviewing]);
+  const enterReview = (pr: PullRequest) => {
+    usePrReviews.getState().setMode(task.id, { provider: pr.provider, number: pr.number });
+    setSegment('overview');
+    setLastCodeSegment('overview');
+  };
+  const exitReview = () => usePrReviews.getState().setMode(task.id, null);
+  // A file of the PR, opened from review mode's lists, in the PR's view.
+  const openReviewFile = (path: string, opts?: OpenOptions) => {
+    if (mode && view.kind !== 'pr') void ws.showPr(mode);
+    openFile(path, opts ?? { preview: true });
+  };
   // Re-picking the current view while expanded goes narrow (never collapsed:
   // that is the Hide control's, or ⌘⌥B's); while narrow, it expands on the
   // view's first file. Expanded with the tree folded away, picking another
@@ -296,7 +282,7 @@ export function RightInspector({
       next,
       expanded,
       changeCount,
-      listedChanges: files.length,
+      listedChanges: reviewing ? (modeReview?.files.length ?? 0) : files.length,
     });
     if (pick === 'none') return;
     if (pick === 'expand') {
@@ -314,15 +300,21 @@ export function RightInspector({
   // Expanding on a narrow view, as clicking its first row does: Changes'
   // first change; Files' last open file, else the tree's first; History's
   // commit (the one picked, else the newest), the editor then opening its
-  // first file; Review's first changed file.
+  // first file. In review mode Overview and Changes open the PR's first
+  // changed file.
   const expandOn = (on: CodeSegment) => {
+    if (reviewing && (on === 'overview' || on === 'changes')) {
+      const path = firstChangedTreeFile(modeReview?.files.map((f) => f.path) ?? []);
+      if (path) openReviewFile(path);
+      else openEditor();
+      return;
+    }
     if (on === 'changes') {
       const change = firstListedChange(files);
       if (change) viewDiff(change.path, change.staged);
       return;
     }
     if (on === 'history') {
-      const commits = prCommits ? prCommitList.commits : ws.data.commits;
       const hash = view.kind === 'commit' ? view.hash : commits[0]?.hash;
       if (hash) pickView({ kind: 'commit', hash });
       else openEditor();
@@ -332,11 +324,8 @@ export function RightInspector({
       openEditor();
       return;
     }
-    const path =
-      on === 'files'
-        ? firstTreeFile(ws.data.repoPaths)
-        : firstChangedTreeFile(targetReview?.files.map((f) => f.path) ?? []);
-    if (path) openFile(path, { preview: true });
+    const path = firstTreeFile(ws.data.repoPaths);
+    if (path) (reviewing ? openReviewFile : openFile)(path, { preview: true });
     else openEditor();
   };
   const toggleDetails = () => {
@@ -351,19 +340,21 @@ export function RightInspector({
     },
     [onViewDiff],
   );
-  // The Review header's "n commits": History, on the branch's own list, or
-  // (a picked PR, D-R2b) the PR's base..head, read from the checkout. Any
-  // other way out of History drops the PR's list.
-  const [prCommits, setPrCommits] = useState<PrCommitsRange | null>(null);
-  const showPrCommits = (range: PrCommitsRange | null) => {
+  // History: the branch's commits, or in review mode the PR's (base..head,
+  // read from the checkout).
+  const prRange = useMemo(
+    () =>
+      reviewing && modeReview
+        ? { number: modeReview.number, base: modeReview.base, head: modeReview.head }
+        : null,
+    [reviewing, modeReview],
+  );
+  const prCommitList = usePrCommits(task.path, prRange);
+  const commits = prRange ? prCommitList.commits : ws.data.commits;
+  const showPrCommits = () => {
     selectSegment('history');
-    setPrCommits(range);
     if (expanded) useEditorTabs.getState().setTreeCollapsed(false);
   };
-  useEffect(() => {
-    if (segment !== 'history') setPrCommits(null);
-  }, [segment]);
-  const prCommitList = usePrCommits(task.path, prCommits);
   // An empty Changes is never expanded (see sidebarState): it narrows as it
   // empties, and gives way to Files as a file opens on it or its status
   // loads empty. Each reacts to its own transition, read off the value before.
@@ -432,16 +423,12 @@ export function RightInspector({
       });
     },
   };
+  // History's PR row reviews the branch's own PR, as the PR button does.
   const pr: PrEntry | null = ws.prEntry && {
     ...ws.prEntry,
     onOpen: () => {
-      ws.prEntry?.onOpen();
-      openEditor();
-    },
-    // As Compare → Pull requests: the PR shows and Review lists it (main
-    // keeps no pick for the task's own PR, so it stays the target only while open).
-    onReview: () => {
-      if (ws.prEntry) void ws.reviewPr(ws.prEntry.number);
+      const own = taskPrs.relevant?.from.find((p) => p.number === ws.prEntry?.number);
+      if (own) enterReview(own);
     },
   };
 
@@ -457,19 +444,22 @@ export function RightInspector({
   // Below 24rem the bulk actions fold into a menu and Commit drops its label,
   // so the views keep their room.
   const compact = '@max-sm/sidehead:hidden';
+  // Working-tree actions: review mode's Changes are the PR's.
   const bulkActions = [
-    unstagedCount > 0 && {
-      label: 'Stage all',
-      binding: keybindings.stageAll,
-      icon: <Plus size={14} strokeWidth={1.8} />,
-      run: () => void stageAll(),
-    },
-    stagedCount > 0 && {
-      label: 'Unstage all',
-      binding: keybindings.unstageAll,
-      icon: <Minus size={14} strokeWidth={1.8} />,
-      run: () => void unstageAll(),
-    },
+    !reviewing &&
+      unstagedCount > 0 && {
+        label: 'Stage all',
+        binding: keybindings.stageAll,
+        icon: <Plus size={14} strokeWidth={1.8} />,
+        run: () => void stageAll(),
+      },
+    !reviewing &&
+      stagedCount > 0 && {
+        label: 'Unstage all',
+        binding: keybindings.unstageAll,
+        icon: <Minus size={14} strokeWidth={1.8} />,
+        run: () => void unstageAll(),
+      },
     // The editor holds the comments; this opens it.
     commentCount > 0 && {
       label: `Comments: ${commentCount} to send`,
@@ -485,7 +475,8 @@ export function RightInspector({
       {/* Who gives way as the row narrows, last first: the views (their
           padding tightens, their labels truncate, never below a floor), then
           Details and ✕ (never), Commit (its label goes below 24rem), the bulk
-          actions (into a menu below 24rem), the path (it only takes slack).
+          actions (into a menu below 24rem), the PR button (it takes the slack;
+          its "Reviewing #n" label truncates).
           Past all that the middle clips at its end, short of Details and ✕.
           The padding keeps focus outlines inside the clip. */}
       <div className="flex min-w-0 flex-1 items-center gap-0.5 self-stretch overflow-hidden px-1">
@@ -498,12 +489,14 @@ export function RightInspector({
             onChange={(next) => next !== 'details' && onPickSegment(next)}
             segmentClassName="@max-[20rem]/sidehead:px-1.5"
             options={[
-              { value: 'changes', label: 'Changes', count: files.length || undefined },
+              ...(reviewing ? [{ value: 'overview' as const, label: 'Overview' }] : []),
+              {
+                value: 'changes',
+                label: 'Changes',
+                count: (reviewing ? modeReview?.files.length : files.length) || undefined,
+              },
               { value: 'files', label: 'Files' },
               { value: 'history', label: 'History' },
-              ...(reviewTarget
-                ? [{ value: 'review' as const, label: 'Review', count: reviewThreads || undefined }]
-                : []),
             ]}
           />
         </div>
@@ -515,7 +508,7 @@ export function RightInspector({
             {a.count !== undefined && <CountBadge count={a.count} className="-ml-1" />}
           </div>
         ))}
-        {stagedCount > 0 && (
+        {!reviewing && stagedCount > 0 && (
           <div className="ml-1 shrink-0">
             <CommitPopover run={run} labelClassName={compact} />
           </div>
@@ -542,11 +535,16 @@ export function RightInspector({
             </DropdownMenu>
           </div>
         )}
-        {expanded && (
-          <div className="flex min-w-0 flex-1 justify-end overflow-hidden">
-            <WorktreePath path={task.path} className="shrink" />
-          </div>
-        )}
+        <div className="flex min-w-0 flex-1 justify-end overflow-hidden">
+          <PrButton
+            relevant={taskPrs.relevant}
+            mode={mode}
+            ownThreads={ownThreads}
+            onOpen={taskPrs.refresh}
+            onPick={enterReview}
+            onExit={exitReview}
+          />
+        </div>
       </div>
       <div className="flex shrink-0 items-center gap-0.5">
         <IconButton
@@ -575,26 +573,16 @@ export function RightInspector({
   const history = (
     <HistoryList
       cwd={task.path}
-      commits={prCommits ? prCommitList.commits : ws.data.commits}
-      loading={prCommits ? prCommitList.loading : ws.data.commitsLoading}
+      commits={commits}
+      loading={prRange ? prCommitList.loading : ws.data.commitsLoading}
       view={view}
       onSelectView={pickView}
       commentCountByScope={ws.commentCountByScope}
-      pr={prCommits ? null : pr}
+      pr={reviewing ? null : pr}
       commitFiles={view.kind === 'commit' ? ws.data.changedFiles : []}
       activePath={activePath(ws.layout)}
       onOpenFile={openFile}
-      unpushed={prCommits ? undefined : unpushed}
-      heading={
-        prCommits && (
-          <p className="type-caption flex flex-wrap gap-x-1 px-2.5 pt-1 pb-1.5">
-            <span className="tabular-nums">PR #{prCommits.number}'s commits.</span>
-            <TextLink quiet title="This branch's commits" onClick={() => setPrCommits(null)}>
-              Show the branch's history
-            </TextLink>
-          </p>
-        )
-      }
+      unpushed={reviewing ? undefined : unpushed}
     />
   );
 
@@ -609,62 +597,60 @@ export function RightInspector({
     />
   );
 
-  const review = (
-    <ReviewView
-      task={task}
-      target={reviewTarget}
-      onSwitchPr={ws.reviewPr}
-      activePath={activePath(ws.layout)}
-      onOpenFile={(path, opts) => openFile(path, opts ?? { preview: true })}
+  // The editor's tree: the changes or the whole repo (in review mode at the
+  // PR's head, the editor's view being the PR's).
+  const editorTree = (
+    <EditorTree
+      cwd={task.path}
+      git={ws.git}
+      view={view}
+      allPaths={ws.data.repoPaths}
+      repoDirs={ws.data.repoDirs}
+      changedFiles={ws.data.changedFiles}
+      changedOnly={segment === 'changes'}
+      filesLoading={ws.data.repoPathsLoading || ws.data.changedFilesLoading}
+      selectedPath={activePath(ws.layout) ?? ''}
+      onOpenFile={reviewing ? openReviewFile : openFile}
       canOpenToSide={ws.layout.groups.length < 2}
-      onShowCommits={showPrCommits}
-      onNavigate={(scope, path, id) => {
-        const next = segmentOnNavigate(
-          segment,
-          scope,
-          reviewTarget ? prScope(reviewTarget.provider, reviewTarget.number) : null,
-        );
-        if (next) {
-          setSegment(next);
-          setLastCodeSegment(next);
-        }
-        ws.navigateToComment(scope, path, id);
-        openEditor();
-      }}
+      badgeCounts={ws.badgeCounts}
     />
   );
 
-  // The tree or list column: the editor's tree (the changes or the whole
-  // repo), the commits, or the review's outline. Narrow, Changes is the
-  // changes list instead.
-  const tree =
-    segment === 'history' ? (
-      history
-    ) : segment === 'review' ? (
-      review
-    ) : (
-      <EditorTree
-        cwd={task.path}
-        git={ws.git}
-        view={view}
-        allPaths={ws.data.repoPaths}
-        repoDirs={ws.data.repoDirs}
-        changedFiles={ws.data.changedFiles}
-        changedOnly={segment === 'changes'}
-        filesLoading={ws.data.repoPathsLoading || ws.data.changedFilesLoading}
-        selectedPath={activePath(ws.layout) ?? ''}
-        onOpenFile={openFile}
-        canOpenToSide={ws.layout.groups.length < 2}
-        badgeCounts={ws.badgeCounts}
-      />
-    );
+  // Review mode's column: the PR's header over the picked view, with
+  // Communication docked under it.
+  const review = mode && segment !== 'details' && (
+    <ReviewView
+      task={task}
+      mode={mode}
+      tab={segment}
+      files={editorTree}
+      history={history}
+      activePath={activePath(ws.layout)}
+      onOpenFile={openReviewFile}
+      canOpenToSide={ws.layout.groups.length < 2}
+      onShowCommits={showPrCommits}
+      onNavigate={(scope, path, id) => {
+        // Review mode shows its PR only: a note written elsewhere (the
+        // working tree, a commit) is shown outside it.
+        if (scope !== prScope(mode.provider, mode.number)) exitReview();
+        ws.navigateToComment(scope, path, id);
+        openEditor();
+      }}
+      onExit={exitReview}
+    />
+  );
+
+  // The tree or list column: review mode's, the editor's tree (the changes
+  // or the whole repo), or the commits. Narrow, Changes is the changes list
+  // instead.
+  const tree = review || (segment === 'history' ? history : editorTree);
 
   // Narrow (and Details, expanded): the details, the changes list, or the
   // tree column alone.
   const list =
     segment === 'details' ? (
       details
-    ) : segment !== 'changes' ? (
+    ) : reviewing || segment !== 'changes' ? (
       tree
     ) : (
       <FileChangesPanel
@@ -704,9 +690,9 @@ export function RightInspector({
               <ResizablePanel
                 id="list"
                 defaultSize="30%"
-                // The Review outline needs room for its rows' counts and
+                // Review mode's header and rows need room for their counts and
                 // actions beside their text; the tree and commits do with less.
-                minSize={segment === 'review' ? REVIEW_LIST_MIN_PX : '15%'}
+                minSize={reviewing ? REVIEW_LIST_MIN_PX : '15%'}
                 maxSize="50%"
                 {...treePanel}
               >

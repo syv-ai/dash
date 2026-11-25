@@ -4,7 +4,7 @@ import { promises as fs, realpathSync } from 'fs';
 import { execFile } from 'child_process';
 import path from 'path';
 import { promisify } from 'util';
-import { parseArgs, errorResponse, ipcError, IpcError } from './validate';
+import { parseArgs, errorResponse, IpcError } from './validate';
 import { parseBlameIncremental } from '../services/blameParser';
 import { DatabaseService } from '../services/DatabaseService';
 import { isProjectMemoryDir } from '../services/MemoryService';
@@ -371,100 +371,6 @@ async function listCommitRepoFiles(cwd: string, hash: string): Promise<RepoListi
   ).stdout;
   // A commit's symlinks are blobs (their target path): files here.
   return { files: out.split('\0').filter(Boolean).sort(), dirs: [] };
-}
-
-/** Resolve the repo's default base branch.
- *  Preference order:
- *   1. `origin/HEAD` symbolic ref (whatever the remote calls its default)
- *   2. local `main`
- *   3. local `master`
- *  Returns `null` when none of the above can be resolved. */
-export async function resolveDefaultBase(cwd: string): Promise<string | null> {
-  try {
-    const { stdout } = await execFileAsync(
-      'git',
-      ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'],
-      { cwd, timeout: 5000 },
-    );
-    const ref = stdout.trim();
-    if (ref) return ref;
-  } catch {
-    /* origin/HEAD not set; fall through */
-  }
-  for (const candidate of ['main', 'master']) {
-    try {
-      await execFileAsync('git', ['rev-parse', '--verify', candidate], {
-        cwd,
-        timeout: 5000,
-      });
-      return candidate;
-    } catch {
-      /* try next candidate */
-    }
-  }
-  return null;
-}
-
-/** Parse `git diff --name-status -z <base>` output.
- *  Record format alternates: <code>\0<path>\0 for M/A/D, and
- *  <R|C><score>\0<oldPath>\0<newPath>\0 for renames/copies. */
-export function parseDiffNameStatusZ(
-  raw: string,
-): Array<{ status: FileChangeStatus; path: string; oldPath: string | undefined }> {
-  const tokens = raw.split('\0').filter((t) => t.length > 0);
-  const out: Array<{ status: FileChangeStatus; path: string; oldPath: string | undefined }> = [];
-  let i = 0;
-  while (i < tokens.length) {
-    const code = tokens[i++];
-    if (code == null) break;
-    const isRename = code.startsWith('R') || code.startsWith('C');
-    if (isRename) {
-      const oldPath = tokens[i++];
-      const newPath = tokens[i++];
-      if (oldPath == null || newPath == null) break;
-      out.push({ status: 'renamed', path: newPath, oldPath });
-    } else {
-      const path = tokens[i++];
-      if (path == null) break;
-      out.push({ status: statusFromGitCode(code), path, oldPath: undefined });
-    }
-  }
-  return out;
-}
-
-/** Parse `git diff --numstat -z <base>` output into a path → {adds, dels} map.
- *  For renames, numstat emits <adds>\t<dels>\t<old>\0<new>\0 (the stats
- *  apply to the renamed file at its new path). */
-export function parseDiffNumstatZ(
-  raw: string,
-): Map<string, { additions: number; deletions: number }> {
-  const tokens = raw.split('\0').filter((t) => t.length > 0);
-  const map = new Map<string, { additions: number; deletions: number }>();
-  let i = 0;
-  while (i < tokens.length) {
-    const head = tokens[i++];
-    if (head == null) break;
-    const tabIdx1 = head.indexOf('\t');
-    const tabIdx2 = head.indexOf('\t', tabIdx1 + 1);
-    if (tabIdx1 < 0 || tabIdx2 < 0) continue;
-    const addsStr = head.slice(0, tabIdx1);
-    const delsStr = head.slice(tabIdx1 + 1, tabIdx2);
-    const firstPath = head.slice(tabIdx2 + 1);
-    const additions = addsStr === '-' ? 0 : parseInt(addsStr, 10) || 0;
-    const deletions = delsStr === '-' ? 0 : parseInt(delsStr, 10) || 0;
-    // When the next token does NOT contain a tab, this is a rename and the
-    // next token is the new path (where the stats apply).
-    const next = tokens[i];
-    const isRename = next != null && !next.includes('\t');
-    if (isRename) {
-      const newPath = next;
-      i++;
-      map.set(newPath, { additions, deletions });
-    } else {
-      map.set(firstPath, { additions, deletions });
-    }
-  }
-  return map;
 }
 
 /** Parse `git log --numstat --format=%x1f%H` into a commit-hash → {adds, dels}
@@ -973,107 +879,6 @@ export function registerEditorIpc(): void {
       try {
         parseArgs('editor:listDir', z.looseObject({ cwd: z.string(), dirPath: z.string() }), args);
         return { success: true, data: await listDirectory(args.cwd, args.dirPath) };
-      } catch (err) {
-        return errorResponse(err);
-      }
-    },
-  );
-
-  // ── editor:resolveDefaultBase ─────────────────────────────────
-  ipcMain.handle(
-    'editor:resolveDefaultBase',
-    async (_event, args: { cwd: string }): Promise<IpcResponse<string | null>> => {
-      try {
-        parseArgs('editor:resolveDefaultBase', z.looseObject({ cwd: z.string() }), args);
-        return { success: true, data: await resolveDefaultBase(args.cwd) };
-      } catch (err) {
-        return errorResponse(err);
-      }
-    },
-  );
-
-  // ── editor:listFilesAgainstBase ───────────────────────────────
-  // Files that differ between the given base ref and the current working
-  // tree (HEAD + index + unstaged), plus untracked.
-  ipcMain.handle(
-    'editor:listFilesAgainstBase',
-    async (_event, args: { cwd: string; base: string }): Promise<IpcResponse<FileChange[]>> => {
-      try {
-        parseArgs(
-          'editor:listFilesAgainstBase',
-          z.looseObject({ cwd: z.string(), base: z.string() }),
-          args,
-        );
-        // Sanity-check the base ref upfront so a missing ref returns a clean
-        // error instead of confusing diff output.
-        try {
-          await execFileAsync('git', ['rev-parse', '--verify', args.base], {
-            cwd: args.cwd,
-            timeout: 5000,
-          });
-        } catch {
-          return ipcError(`Base ref not found: ${args.base}`, 'NOT_FOUND');
-        }
-
-        const nameStatusRaw = (
-          await execFileAsync('git', ['diff', '--name-status', '-z', args.base], {
-            cwd: args.cwd,
-            maxBuffer: 5 * 1024 * 1024,
-            timeout: 15000,
-          })
-        ).stdout;
-
-        const numstatRaw = (
-          await execFileAsync('git', ['diff', '--numstat', '-z', args.base], {
-            cwd: args.cwd,
-            maxBuffer: 5 * 1024 * 1024,
-            timeout: 15000,
-          })
-        ).stdout;
-
-        const parsed = parseDiffNameStatusZ(nameStatusRaw);
-        const stats = parseDiffNumstatZ(numstatRaw);
-
-        const files: FileChange[] = parsed.map((entry) => {
-          const s = stats.get(entry.path) ?? { additions: 0, deletions: 0 };
-          return {
-            path: entry.path,
-            status: entry.status,
-            staged: false,
-            additions: s.additions,
-            deletions: s.deletions,
-            oldPath: entry.oldPath,
-          };
-        });
-
-        // Untracked files are not part of `git diff` against a ref. Merge
-        // them in so the user sees brand-new files that don't exist on base.
-        let untracked: string[] = [];
-        try {
-          untracked = (
-            await execFileAsync('git', ['ls-files', '-z', '--others', '--exclude-standard'], {
-              cwd: args.cwd,
-              maxBuffer: 50 * 1024 * 1024,
-              timeout: 15000,
-            })
-          ).stdout
-            .split('\0')
-            .filter(Boolean);
-        } catch {
-          /* no untracked */
-        }
-        for (const path of untracked) {
-          files.push({
-            path,
-            status: 'untracked',
-            staged: false,
-            additions: 0,
-            deletions: 0,
-          });
-        }
-
-        files.sort((a, b) => a.path.localeCompare(b.path));
-        return { success: true, data: files };
       } catch (err) {
         return errorResponse(err);
       }

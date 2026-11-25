@@ -215,46 +215,43 @@ describe('prReviewStore writes', () => {
     expect(api.prReviewLoad).not.toHaveBeenCalled();
   });
 
-  it("keeps main's review target per task; a pick shows at once, then as main settles it", async () => {
-    const own = { provider: 'github' as const, number: 5, source: 'own' as const };
-    api.prReviewTarget = vi.fn(() =>
-      Promise.resolve({ success: true, data: { provider: 'ado', number: 9, source: 'stored' } }),
+  it("keeps main's relevant PRs and review mode per task; a mode change shows at once", async () => {
+    const relevant = { branch: 'feat', from: [], into: [] };
+    const gh = (number: number) => ({ provider: 'github' as const, number });
+    api.prReviewRelevant = vi.fn(() =>
+      Promise.resolve({ success: true, data: { relevant, mode: gh(9) } }),
     );
-    api.prReviewSetTarget = vi.fn(() => Promise.resolve({ success: true, data: own }));
     const { usePrReviews } = await freshStore();
-    await usePrReviews.getState().loadTarget('t1');
-    expect(usePrReviews.getState().targets.t1).toEqual({
-      provider: 'ado',
-      number: 9,
-      source: 'stored',
-    });
-    usePrReviews.getState().setTarget('t2', { provider: 'github', number: 5 });
-    expect(usePrReviews.getState().targets.t2).toEqual({
-      provider: 'github',
-      number: 5,
-      source: 'stored',
-    });
-    expect(api.prReviewSetTarget).toHaveBeenCalledWith({
-      taskId: 't2',
-      target: { provider: 'github', number: 5 },
-    });
-    await vi.waitFor(() => expect(usePrReviews.getState().targets.t2).toEqual(own));
-    usePrReviews.getState().setTarget('t1', null);
-    expect(usePrReviews.getState().targets.t1).toBeUndefined();
-    await vi.waitFor(() => expect(usePrReviews.getState().targets.t1).toEqual(own));
+    await usePrReviews.getState().loadPrs('t1');
+    expect(usePrReviews.getState().prs.t1).toEqual({ relevant, mode: gh(9) });
+    usePrReviews.getState().setMode('t1', null);
+    expect(usePrReviews.getState().prs.t1).toEqual({ relevant, mode: null });
+    expect(api.prReviewSetMode).toHaveBeenCalledWith({ taskId: 't1', pr: null });
   });
 
-  it('keeps the last target when a refresh fails; none when the first one does', async () => {
+  it('keeps the last listing when the forge could not be asked', async () => {
+    const relevant = { branch: 'feat', from: [], into: [] };
     const { usePrReviews } = await freshStore();
-    api.prReviewTarget = vi.fn(() => Promise.resolve({ success: false, error: 'offline' }));
-    await usePrReviews.getState().loadTarget('t1');
-    expect(usePrReviews.getState().targets.t1).toBeNull();
-    const own = { provider: 'github', number: 5, source: 'own' };
-    api.prReviewTarget = vi.fn(() => Promise.resolve({ success: true, data: own }));
-    await usePrReviews.getState().loadTarget('t1');
-    api.prReviewTarget = vi.fn(() => Promise.resolve({ success: false, error: 'offline' }));
-    await usePrReviews.getState().loadTarget('t1');
-    expect(usePrReviews.getState().targets.t1).toEqual(own);
+    api.prReviewRelevant = vi.fn(() =>
+      Promise.resolve({ success: true, data: { relevant, mode: null } }),
+    );
+    await usePrReviews.getState().loadPrs('t1');
+    api.prReviewRelevant = vi.fn(() =>
+      Promise.resolve({ success: true, data: { relevant: null, mode: null } }),
+    );
+    await usePrReviews.getState().loadPrs('t1');
+    expect(usePrReviews.getState().prs.t1?.relevant).toBe(relevant);
+  });
+
+  it('a load under way when the mode changes keeps the new mode', async () => {
+    let answer: (v: unknown) => void = () => {};
+    api.prReviewRelevant = vi.fn(() => new Promise((r) => (answer = r)));
+    const { usePrReviews } = await freshStore();
+    const loading = usePrReviews.getState().loadPrs('t1');
+    usePrReviews.getState().setMode('t1', { provider: 'github', number: 4 });
+    answer({ success: true, data: { relevant: null, mode: null } });
+    await loading;
+    expect(usePrReviews.getState().prs.t1?.mode).toEqual({ provider: 'github', number: 4 });
   });
 
   it('marks files viewed at once, saved behind, per task and PR', async () => {

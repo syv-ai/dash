@@ -4,7 +4,6 @@ import type { FileChange, PrProvider } from '../../../shared/types';
 export type EditorView =
   | { kind: 'working'; ref: 'HEAD' | 'index' }
   | { kind: 'commit'; hash: string }
-  | { kind: 'branch'; base: string }
   /** A PR's diff: its merge-base against its head, read-only, with its review threads. */
   | { kind: 'pr'; provider: PrProvider; number: number; base: string; head: string };
 

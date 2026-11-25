@@ -14,8 +14,6 @@ export function viewRevisions(view: EditorView): { original: string; modified: s
   switch (view.kind) {
     case 'working':
       return { original: view.ref, modified: null };
-    case 'branch':
-      return { original: view.base, modified: null };
     case 'commit':
       return { original: `${view.hash}^`, modified: view.hash };
     case 'pr':

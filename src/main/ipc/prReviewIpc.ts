@@ -3,10 +3,9 @@ import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
 import { prContextFor } from '../services/prReview/resolve';
 import {
-  appPickReviewTarget,
   appPrContextDeps as appDeps,
-  appRelevantPrs,
-  appReviewTarget,
+  appSetReviewMode,
+  appTaskPrs,
 } from '../services/prReview/appDeps';
 import { loadPrReview } from '../services/prReview/loadReview';
 import { commitsPastHead } from '../services/prReview/localCommits';
@@ -32,21 +31,12 @@ const verdict = z.enum([
  * so the renderer never does.
  */
 export function registerPrReviewIpc(): void {
-  ipcMain.handle('prReview:list', async (_e, args: { projectId: string; cwd: string }) => {
-    try {
-      parseArgs('prReview:list', z.looseObject(where), args);
-      const { provider, adapter, ctx } = prContextFor(args.projectId, args.cwd, appDeps);
-      return { success: true, data: { provider, prs: await adapter.list(ctx) } };
-    } catch (err) {
-      return errorResponse(err);
-    }
-  });
-
-  /** The open PRs from and into the task's branch (see `listRelevantPrs`). */
+  /** The open PRs from and into the task's branch, and the PR it is in review
+   *  mode for, ended when it no longer holds (see `settleReviewMode`). */
   ipcMain.handle('prReview:relevant', async (_e, args: { taskId: string }) => {
     try {
       parseArgs('prReview:relevant', z.looseObject({ taskId: z.string() }), args);
-      return { success: true, data: await appRelevantPrs(args.taskId) };
+      return { success: true, data: await appTaskPrs(args.taskId) };
     } catch (err) {
       return errorResponse(err);
     }
@@ -102,36 +92,23 @@ export function registerPrReviewIpc(): void {
     }
   });
 
-  /** The PR the task reviews and why, or null (see `effectiveReviewTarget`). */
-  ipcMain.handle('prReview:target', async (_e, args: { taskId: string }) => {
+  /** Enter review mode for a PR (null exits it). */
+  ipcMain.handle('prReview:setMode', (_e, args: { taskId: string; pr: PrRef | null }) => {
     try {
-      parseArgs('prReview:target', z.looseObject({ taskId: z.string() }), args);
-      return { success: true, data: await appReviewTarget(args.taskId) };
+      parseArgs(
+        'prReview:setMode',
+        z.looseObject({
+          taskId: z.string(),
+          pr: z.object({ provider, number: z.number() }).nullable(),
+        }),
+        args,
+      );
+      appSetReviewMode(args.taskId, args.pr);
+      return { success: true };
     } catch (err) {
       return errorResponse(err);
     }
   });
-
-  /** Pick the PR the task reviews (null stops reviewing); answers the target
-   *  now (see `pickReviewTarget`). */
-  ipcMain.handle(
-    'prReview:setTarget',
-    async (_e, args: { taskId: string; target: PrRef | null }) => {
-      try {
-        parseArgs(
-          'prReview:setTarget',
-          z.looseObject({
-            taskId: z.string(),
-            target: z.object({ provider, number: z.number() }).nullable(),
-          }),
-          args,
-        );
-        return { success: true, data: await appPickReviewTarget(args.taskId, args.target) };
-      } catch (err) {
-        return errorResponse(err);
-      }
-    },
-  );
 
   /** The PR's files the task marked viewed: path → the blob they were viewed at. */
   ipcMain.handle(

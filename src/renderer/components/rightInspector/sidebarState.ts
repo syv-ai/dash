@@ -10,19 +10,23 @@
  * again; opening a file does.
  *
  * `changeCount` is the working tree's, or null until its status has loaded
- * (and for a branch or PR view, whose Changes aren't the working tree's).
+ * (and in review mode, whose Changes are the PR's).
+ *
+ * Review mode (spec Revision 3) scopes the views to a PR and adds Overview
+ * ahead of them; the editor shows the PR's view, except a commit picked in
+ * History.
  */
 
 /** The view switch's views: the changes, the whole repo, the commits, and
- *  (while the task has a review target) the PR under review. */
-export type CodeSegment = 'changes' | 'files' | 'history' | 'review';
+ *  in review mode the PR's overview. */
+export type CodeSegment = 'overview' | 'changes' | 'files' | 'history';
 
 /** What picking a view does to the sidebar. */
 export type SegmentPick =
   /** Go narrow, the editor kept out of sight (on the picked view). */
   | 'narrow'
   /** Expand on the narrow view's first file (`firstListedChange`,
-   *  `firstTreeFile`, the commit's or the PR's first). */
+   *  `firstTreeFile`, the commit's, or in review mode the PR's first). */
   | 'expand'
   /** Show the picked view; while expanded, unfold a folded tree column. */
   | 'select'
@@ -48,7 +52,7 @@ export function pickSegment({
   expanded: boolean;
   changeCount: number | null;
   /** The changes a narrow Changes lists: the working tree's, whatever the
-   *  editor's view. */
+   *  editor's view; in review mode the PR's files. */
   listedChanges: number;
 }): SegmentPick {
   if (next === current) {
@@ -61,7 +65,7 @@ export function pickSegment({
 /*
  * The first file of a tree as it displays: depth first, a folder's
  * subfolders (by name, `localeCompare`) ahead of its files. Changes orders
- * its files by `localeCompare`, the editor's tree (Files, Review's changes)
+ * its files by `localeCompare`, the editor's tree (Files, a PR's changes)
  * by code unit, so `README.md` comes before `package.json` there.
  */
 
@@ -108,7 +112,7 @@ export function firstTreeFile(paths: readonly string[]): string | null {
   return first(paths, (a, b) => depth(a) - depth(b) || order(a, b));
 }
 
-/** The editor tree's first file with its folders unfolded: what Review's
+/** The editor tree's first file with its folders unfolded: what a PR's
  *  changes list first. Null with no files. */
 export function firstChangedTreeFile(paths: readonly string[]): string | null {
   return first(paths, treeOrder(byCodeUnit));
@@ -144,107 +148,57 @@ export function segmentOnExpand<S extends CodeSegment | 'details'>(
   return segment === 'changes' && changeCount === 0 ? 'files' : segment;
 }
 
-/**
- * The view to show once the task's review target is known: Review falls back
- * to Changes when its target is gone (Stop reviewing, the own PR merged).
- * `target` is undefined while it is still loading, which keeps the view.
- */
-export function segmentForTarget<S extends CodeSegment | 'details'>(
+/** The view to show as review mode starts or ends: Overview is review
+ *  mode's alone, so ending it there shows Changes. */
+export function segmentForMode<S extends CodeSegment | 'details'>(
   segment: S,
-  target: object | null | undefined,
+  reviewing: boolean,
 ): S | 'changes' {
-  return segment === 'review' && target === null ? 'changes' : segment;
+  return segment === 'overview' && !reviewing ? 'changes' : segment;
 }
 
 /**
- * What switching views does to the editor's compare view (D2): Review shows
- * the target PR; leaving it for Changes or Files returns to the working tree,
- * as leaving History drops the commit it showed. Leaving the details leaves
- * the view they were opened over (`lastCodeSegment`), so Review → Details →
- * Changes leaves Review too. Null: the view stays.
+ * What picking a view does to the editor's view (D2): leaving History drops
+ * the commit it showed, for the PR's view in review mode and the working
+ * tree otherwise. Null: the view stays.
  */
 export function viewOnSegment({
-  from,
-  lastCodeSegment,
+  reviewing,
   to,
   viewKind,
 }: {
-  from: CodeSegment | 'details';
-  /** The view the details were opened over. */
-  lastCodeSegment: CodeSegment;
+  reviewing: boolean;
   to: CodeSegment;
-  viewKind: 'working' | 'branch' | 'commit' | 'pr';
+  viewKind: 'working' | 'commit' | 'pr';
 }): 'pr' | 'working' | null {
-  const left = from === 'details' ? lastCodeSegment : from;
-  if (to === 'review') return 'pr';
-  if (to !== 'history' && viewKind === 'commit') return 'working';
-  if (left === 'review' && to !== 'history' && viewKind === 'pr') return 'working';
-  return null;
+  if (to === 'history' || viewKind !== 'commit') return null;
+  return reviewing ? 'pr' : 'working';
 }
 
-/**
- * The view to show as a note or draft is navigated to in `scope`: the Review
- * view outlines its target PR only, so a note from anywhere else (the working
- * tree, a commit, another PR) leaves it for Changes, whose tree follows the
- * editor's view. Null: the view stays.
- */
-export function segmentOnNavigate(
-  segment: CodeSegment | 'details',
-  scope: string,
-  /** The review target's scope (`prScope`); null without one. */
-  targetScope: string | null,
-): 'changes' | null {
-  return segment === 'review' && scope !== targetScope ? 'changes' : null;
-}
-
-/** The editor's compare view, as far as following the review target goes. */
+/** The editor's view, as far as following review mode goes. */
 type ViewOfPr =
   | { kind: 'pr'; provider: string; number: number; base: string; head: string }
-  | { kind: 'working' | 'branch' | 'commit' };
+  | { kind: 'working' | 'commit' };
 
 /**
- * Whether the editor's PR view must follow the Review view (D38): on Review,
- * showing a PR, but not the target (Stop reviewing fell back to the own PR) or
- * not at the head its refreshed review has. Other views are the person's pick.
+ * Whether the editor's view must follow review mode: in it, the PR's view at
+ * the head its review was last loaded at (a push moves it) — a commit picked
+ * in History aside; out of it, never a PR's view. 'pr' re-points it at the
+ * mode's PR, 'working' returns to the working tree; null: it stays.
  */
-export function prViewLags({
-  segment,
+export function viewForMode({
+  mode,
   view,
-  target,
   review,
 }: {
-  segment: CodeSegment | 'details';
+  mode: { provider: string; number: number } | null;
   view: ViewOfPr;
-  target: { provider: string; number: number } | null | undefined;
-  /** The target's review as last fetched, if it has been. */
+  /** The mode's PR's review as last fetched, if it has been. */
   review: { base: string; head: string } | null;
-}): boolean {
-  if (segment !== 'review' || !target || view.kind !== 'pr') return false;
-  if (view.provider !== target.provider || view.number !== target.number) return true;
-  return !!review && (review.base !== view.base || review.head !== view.head);
-}
-
-/**
- * Leaving a PR view through Compare (exit, or another base) stops reviewing
- * it (D99): the PR picked for the task is cleared when it is the one left
- * (the target falls back to the branch's own PR, or none), and Review gives
- * way to Changes. The branch's own PR stays the target, so Review stays
- * offered, just not selected.
- */
-export function onLeavePrView({
-  left,
-  target,
-  segment,
-}: {
-  left: { provider: string; number: number };
-  target: { provider: string; number: number; source: 'stored' | 'own' } | null | undefined;
-  segment: CodeSegment | 'details';
-}): { clearTarget: boolean; segment: 'changes' | null } {
-  return {
-    clearTarget:
-      target?.source === 'stored' &&
-      target.provider === left.provider &&
-      target.number === left.number,
-    segment: segment === 'review' ? 'changes' : null,
-  };
+}): 'pr' | 'working' | null {
+  if (!mode) return view.kind === 'pr' ? 'working' : null;
+  if (view.kind === 'commit') return null;
+  if (view.kind !== 'pr') return 'pr';
+  if (view.provider !== mode.provider || view.number !== mode.number) return 'pr';
+  return review && (review.base !== view.base || review.head !== view.head) ? 'pr' : null;
 }

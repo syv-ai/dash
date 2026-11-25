@@ -84,7 +84,7 @@ export function useFileLoad(
           language: resp.data.language,
           modifiedPresent,
         });
-      } else if (view.kind === 'commit' || view.kind === 'pr') {
+      } else {
         const frozen = frozenCommit(view)!;
         const resp = await window.electronAPI.editorReadCommit({
           cwd,
@@ -113,37 +113,6 @@ export function useFileLoad(
           isLargeFile: resp.data.isLargeFile,
           language: resp.data.language,
           modifiedPresent: true,
-        });
-      } else {
-        // view.kind === 'branch'
-        const resp = await window.electronAPI.editorReadAgainstBase({
-          cwd,
-          filePath,
-          base: view.base,
-        });
-        if (cancelled) return;
-        if (!resp.success || !resp.data) {
-          setState({
-            kind: 'error',
-            message: resp.error ?? 'Failed to load file',
-            code: resp.code,
-          });
-          return;
-        }
-        const modifiedPresent = resp.data.workingContent !== null;
-        const initial = resp.data.workingContent ?? '';
-        setState({
-          kind: 'loaded',
-          loadId: ++loadSeq.current,
-          filePath,
-          originalContent: resp.data.originalContent,
-          modifiedContent: initial,
-          mtimeMs: resp.data.mtimeMs,
-          sizeBytes: resp.data.sizeBytes,
-          isBinary: resp.data.isBinary,
-          isLargeFile: resp.data.isLargeFile,
-          language: resp.data.language,
-          modifiedPresent,
         });
       }
     }

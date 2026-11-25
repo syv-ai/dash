@@ -9,7 +9,7 @@ import type {
   PrReviewSummary,
   PrVerdict,
   PrWriteError,
-  TaskReviewTarget,
+  TaskPrs,
 } from '../../shared/types';
 
 /** The store key of a PR's review. */
@@ -35,9 +35,10 @@ export type PrWriteResult = { ok: true } | { ok: false; error: PrWriteError; pos
 interface PrReviewState {
   /** Per PR (`prKey`), its review as last fetched. */
   byPr: Record<string, PrReview>;
-  /** Per task: the PR it reviews and why (main's `effectiveReviewTarget`), or
-   *  null. Absent until first loaded; a failed refresh keeps the last one. */
-  targets: Record<string, TaskReviewTarget | null>;
+  /** Per task: the open PRs from and into its branch, and the PR it is in
+   *  review mode for (main's `settleReviewMode`). Absent until first loaded;
+   *  a listing that failed keeps the last one. */
+  prs: Record<string, TaskPrs>;
   /** Per task and PR (`reviewKey`): the files marked viewed, path → the head
    *  blob they were viewed at (`isViewed` says whether a mark still holds).
    *  Absent until loaded. */
@@ -55,11 +56,10 @@ interface PrReviewState {
   loadReview: (taskId: string, provider: PrProvider, number: number) => Promise<void>;
   /** Refetch each loaded summary of the task, after an agent changed it. */
   refreshSummaries: (taskId: string) => Promise<void>;
-  /** Fetch the PR the task reviews. */
-  loadTarget: (taskId: string) => Promise<void>;
-  /** Pick the PR the task reviews (null stops reviewing): shown at once as
-   *  picked, then as main settles it (its own PR is never a pick). */
-  setTarget: (taskId: string, target: PrRef | null) => void;
+  /** Fetch the task's relevant PRs and review mode. */
+  loadPrs: (taskId: string) => Promise<void>;
+  /** Enter review mode for `pr` (null exits it): shown at once, saved behind. */
+  setMode: (taskId: string, pr: PrRef | null) => void;
   /** Fetch the files of a PR the task marked viewed. */
   loadViewed: (taskId: string, provider: PrProvider, number: number) => Promise<void>;
   /** Mark a file viewed at `blob` (null unmarks it): shown at once, saved behind. */
@@ -134,15 +134,17 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
     set({ posting });
   };
 
-  const putTarget = (taskId: string, target: TaskReviewTarget | null) =>
-    set({ targets: { ...get().targets, [taskId]: target } });
-  // A failed fetch keeps what the task showed; with nothing yet, no target.
-  const settleTarget = (
-    taskId: string,
-    resp: { success: boolean; data?: TaskReviewTarget | null },
-  ) => {
-    if (resp.success) putTarget(taskId, resp.data ?? null);
-    else if (get().targets[taskId] === undefined) putTarget(taskId, null);
+  // Bumped by each `setMode`: a load that started before it carries a mode
+  // the person has since changed, so only its listing is taken.
+  let modeEpoch = 0;
+  const putPrs = (taskId: string, next: TaskPrs) => {
+    const last = get().prs[taskId];
+    set({
+      prs: {
+        ...get().prs,
+        [taskId]: { ...next, relevant: next.relevant ?? last?.relevant ?? null },
+      },
+    });
   };
   const putSummary = (key: string, summary: PrReviewSummary | null) =>
     set({ summaries: { ...get().summaries, [key]: summary } });
@@ -164,7 +166,7 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
 
   return {
     byPr: {},
-    targets: {},
+    prs: {},
     viewed: {},
     kindPicks: {},
     summaries: {},
@@ -198,26 +200,22 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
       );
     },
 
-    loadTarget: async (taskId) => {
+    loadPrs: async (taskId) => {
+      const epoch = modeEpoch;
       try {
-        settleTarget(taskId, await window.electronAPI.prReviewTarget({ taskId }));
+        const resp = await window.electronAPI.prReviewRelevant({ taskId });
+        if (!resp.success || !resp.data) return;
+        const mode = epoch === modeEpoch ? resp.data.mode : (get().prs[taskId]?.mode ?? null);
+        putPrs(taskId, { relevant: resp.data.relevant, mode });
       } catch {
-        settleTarget(taskId, { success: false });
+        /* stays as it was */
       }
     },
 
-    setTarget: (taskId, target) => {
-      // Stopping falls back to the own PR, which only main can tell: unknown till then.
-      if (target) putTarget(taskId, { ...target, source: 'stored' });
-      else {
-        const targets = { ...get().targets };
-        delete targets[taskId];
-        set({ targets });
-      }
-      void window.electronAPI
-        .prReviewSetTarget({ taskId, target })
-        .then((resp) => settleTarget(taskId, resp))
-        .catch(() => undefined);
+    setMode: (taskId, pr) => {
+      modeEpoch++;
+      putPrs(taskId, { relevant: null, mode: pr });
+      void window.electronAPI.prReviewSetMode({ taskId, pr }).catch(() => undefined);
     },
 
     loadViewed: async (taskId, provider, number) => {
