@@ -134,6 +134,10 @@ void app.whenReady().then(async () => {
   const { startMemoryBadges } = await import('./services/memoryBadge');
   void startMemoryBadges();
 
+  // The app menu, with Dash's zoom items.
+  const { installAppMenu } = await import('./zoom');
+  installAppMenu();
+
   // Create main window
   const { createWindow } = await import('./window');
   mainWindow = createWindow();

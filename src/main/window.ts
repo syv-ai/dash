@@ -1,6 +1,7 @@
-import { BrowserWindow, Menu, shell } from 'electron';
+import { BrowserWindow, shell } from 'electron';
 import * as path from 'path';
 import { getTuiHost } from './tui/hostInstance';
+import { applyZoom } from './zoom';
 
 const isDev = process.argv.includes('--dev');
 
@@ -27,6 +28,9 @@ export function createWindow(): BrowserWindow {
   if (process.platform === 'win32') {
     mainWindow.setMenu(null);
   }
+
+  // One step in by default, or the user's level (zoom.ts).
+  applyZoom(mainWindow);
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
