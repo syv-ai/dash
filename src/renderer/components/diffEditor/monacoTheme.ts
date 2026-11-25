@@ -4,8 +4,8 @@ import type { ITheme as XtermTheme } from '@xterm/xterm';
 // changes — Monaco caches themes by name, and the EditorPane's theme effect
 // only re-applies when `themeName` actually changes, so renaming forces a
 // fresh defineTheme + setTheme on already-open editors.
-export const MONACO_THEME_DARK = 'dash-terminal-dark-v8';
-export const MONACO_THEME_LIGHT = 'dash-terminal-light-v8';
+export const MONACO_THEME_DARK = 'dash-terminal-dark-v9';
+export const MONACO_THEME_LIGHT = 'dash-terminal-light-v9';
 
 /** HSL channels ("220 4% 47%", optionally "/ 0.06") as #rrggbbaa. */
 export function hslChannelsToHex(channels: string, alpha = 1): string | null {
@@ -57,9 +57,9 @@ export function defineMonacoThemeFromTerminal(
   // up under the pointer (no grey slab), and the peek view sits on the
   // raised surface like the app's other popovers.
   const ink = roleColor('--ink', fg);
-  const ink3 = roleColor('--ink-3', isDark ? '#93969c' : '#6d717b');
-  const icon = roleColor('--icon', isDark ? '#a8abb0' : '#606570');
-  const line = roleColor('--line', isDark ? '#ffffff29' : '#28303d36');
+  const ink3 = roleColor('--ink-3', isDark ? '#adafb3' : '#6d717b');
+  const icon = roleColor('--icon', isDark ? '#bfc1c5' : '#606570');
+  const line = roleColor('--line', isDark ? '#ffffff11' : '#28303d17');
   const hover = roleColor('--hover', isDark ? '#ffffff0d' : '#28303d0d');
   const select = roleColor('--select', isDark ? '#ffffff17' : '#28303d17');
   const raised = roleColor('--raised', isDark ? '#1e1f21' : '#ffffff');

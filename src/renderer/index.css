@@ -13,11 +13,11 @@
      state only: needs (amber), fail (red), work (blue), done (green).
      Contrast floor, both themes, on ground, well and raised: ink-2 ≥ 5.5:1,
      icon ≥ 4.5:1, ink-3 ≥ 4:1 (it labels things, so it reads as text, not
-     decoration); line ≥ 1.45:1 against every surface, so a hairline shows.
-     Dark sits well above it (ink-2 ≥ 8.6, icon ≥ 7.2, ink-3 ≥ 5.6): near-
-     black ground makes thin grey text look fainter than its ratio says.
-     Surfaces step apart in tone (ground < well < raised in dark; ground
-     under a white well in light), hairlines do the rest.
+     decoration). Dark sits well above it (ink-2 ≥ 10, icon ≥ 9, ink-3 ≥ 7):
+     near-black ground makes thin grey text and 1.8px strokes look fainter
+     than their ratio says. Separation comes from tone, not outlines:
+     surfaces step apart (ground < well < raised in dark; ground under a
+     white well in light) and line stays a quiet hairline.
      Every resting icon takes `text-icon` (IconButton, ListRow's leading
      slot, menu rows and Notice do it for you); hover or pressed may
      brighten it to ink. State colours (agent, PR, loc) stay their own. */
@@ -169,8 +169,7 @@
     --ground: 225 16% 92.5%;
     --well: 0 0% 100%;
     --raised: 0 0% 100%;
-    /* 1.47:1 on ground, 1.5:1 on well (was 1.15 / 1.16: invisible). */
-    --line: 225 20% 20% / 0.21;
+    --line: 225 20% 20% / 0.09;
     --ink: 225 14% 20%;
     /* On ground / well — ink-2 5.9 / 7.1, icon 4.9 / 5.8, ink-3 4.1 / 5.0
        (were 5.2 / 5.8, 4.3 / 4.8, 3.3 / 3.7). */
@@ -188,7 +187,7 @@
     --scrim: 225 20% 30% / 0.16;
     --edge: 225 20% 20% / 0.8;
     --shade: 225 20% 20% / 0.3;
-    --elevation: 0 0 0 1px hsl(var(--line)), 0 18px 48px hsl(225 20% 20% / 0.14);
+    --elevation: 0 0 0 1px hsl(225 20% 20% / 0.1), 0 18px 48px hsl(225 20% 20% / 0.14);
     --text-fade-k: 0.7;
 
     /* Aliases. Opaque on purpose: call sites add their own alpha. */
@@ -210,10 +209,8 @@
     --destructive-foreground: 0 0% 100%;
     --warn: var(--state-needs);
     --warn-foreground: 0 0% 100%;
-    /* Opaque hairline (the shadcn alias): 1.4:1 on ground, 1.7:1 on well.
-       input, a form field's edge, 2.7 / 3.2 (WCAG 1.4.11's 3:1 on well). */
-    --border: 225 12% 79%;
-    --input: 225 8% 58%;
+    --border: 225 12% 88%;
+    --input: 225 12% 85%;
     --ring: var(--ink-3);
 
     --surface-0: var(--well);
@@ -275,15 +272,15 @@
     --ground: 220 6% 3.5%;
     --well: 220 5% 8%;
     --raised: 220 5% 12.5%;
-    /* 1.5 / 1.6 / 1.7:1 on ground / well / raised (was 0.06: 1.1–1.2). */
-    --line: 0 0% 100% / 0.16;
+    --line: 0 0% 100% / 0.065;
     --ink: 220 6% 91%;
-    /* On ground / well / raised — ink-2 10.4 / 9.6 / 8.6, icon 8.8 / 8.1 / 7.2,
-       ink-3 6.9 / 6.3 / 5.7 (were 9.8 / 9.4 / 8.8, 8.2 / 7.9 / 7.4,
-       6.0 / 5.7 / 5.4 on the old surfaces). */
-    --ink-2: 220 5% 74%;
-    --ink-3: 220 4% 60%;
-    --icon: 220 4.5% 68%;
+    /* On ground / well / raised — ink-2 12.6 / 11.7 / 10.4, icon 11.1 / 10.2
+       / 9.1, ink-3 9.1 / 8.4 / 7.5 (were 9.8 / 9.4 / 8.8, 8.2 / 7.9 / 7.4,
+       6.0 / 5.7 / 5.4 before D183): muted labels and resting icons read
+       light, still under ink (16.2). */
+    --ink-2: 220 5% 81%;
+    --ink-3: 220 4% 69%;
+    --icon: 220 4.5% 76%;
     --hover: 0 0% 100% / 0.05;
     --select: 0 0% 100% / 0.09;
     --btn: 220 6% 91%;
@@ -295,7 +292,7 @@
     --scrim: 0 0% 0% / 0.55;
     --edge: 0 0% 100%;
     --shade: 0 0% 0%;
-    --elevation: 0 0 0 1px hsl(var(--line)), 0 24px 60px hsl(0 0% 0% / 0.7);
+    --elevation: 0 0 0 1px hsl(0 0% 100% / 0.09), 0 24px 60px hsl(0 0% 0% / 0.7);
     --text-fade-k: 1;
 
     --secondary: 220 5% 15.5%;
@@ -303,9 +300,8 @@
     --accent: 220 5% 14.5%;
     --destructive-foreground: var(--btn-ink);
     --warn-foreground: var(--btn-ink);
-    /* 1.8 / 1.6 / 1.4:1 on ground / well / raised; input 3.2 / 2.9 / 2.6. */
-    --border: 220 5% 22%;
-    --input: 220 4% 38%;
+    --border: 220 5% 15%;
+    --input: 220 5% 17%;
 
     --surface-0: var(--ground);
     --surface-1: var(--well);
@@ -314,8 +310,8 @@
 
     --shadow-card: 0 0 0 1px hsl(var(--line)), 0 12px 28px hsl(0 0% 0% / 0.45);
 
-    /* 12.3:1 on ground, 11.4:1 on well: between ink and ink-2, as in light. */
-    --git-untracked: 220 5% 80%;
+    /* 14.4:1 on ground, 13.3:1 on well: between ink and ink-2, as in light. */
+    --git-untracked: 220 5% 86%;
     --git-conflicted: 25 85% 60%;
     --pr-merged: 262 70% 72%;
 

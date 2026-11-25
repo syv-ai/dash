@@ -87,7 +87,7 @@ export function TaskHeader({
 
   const branchLabel = (
     <>
-      <BranchIcon size={14} strokeWidth={1.8} className="shrink-0" />
+      <BranchIcon size={14} strokeWidth={1.8} className="shrink-0 text-icon" />
       {/* The icon stays when the header is narrow; the tooltip names the branch. */}
       <span className="truncate @max-[24rem]/taskhead:hidden">{branch}</span>
     </>
