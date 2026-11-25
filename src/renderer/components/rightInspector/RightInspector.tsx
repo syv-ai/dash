@@ -43,6 +43,9 @@ import { activePath, type OpenOptions } from '../diffEditor/tabs/editorLayout';
 import { useTreePanel } from '../diffEditor/TreeToggle';
 import { WorktreePath } from './WorktreePath';
 import {
+  firstChangedTreeFile,
+  firstListedChange,
+  firstTreeFile,
   onChangeCount,
   onLeavePrView,
   pickSegment,
@@ -283,18 +286,58 @@ export function RightInspector({
     if (view.kind === 'pr') selectView({ kind: 'working', ref: 'HEAD' });
   }, [segment, reviewTarget, view.kind, selectView]);
   // Re-picking the current view while expanded goes narrow (never collapsed:
-  // that is the Hide control's, or ⌘⌥B's). Expanded with the tree folded
-  // away, picking another view unfolds it, easing as the tree toggle does;
-  // leaving Details keeps the fold as it was.
+  // that is the Hide control's, or ⌘⌥B's); while narrow, it expands on the
+  // view's first file. Expanded with the tree folded away, picking another
+  // view unfolds it, easing as the tree toggle does; leaving Details keeps
+  // the fold as it was.
   const onPickSegment = (next: CodeSegment) => {
-    const pick = pickSegment({ current: segment, next, expanded, changeCount });
+    const pick = pickSegment({
+      current: segment,
+      next,
+      expanded,
+      changeCount,
+      listedChanges: files.length,
+    });
     if (pick === 'none') return;
+    if (pick === 'expand') {
+      useEditorTabs.getState().setTreeCollapsed(false);
+      expandOn(next);
+      return;
+    }
     selectSegment(next);
     if (pick === 'narrow') {
       onNarrow();
       return;
     }
     if (expanded) useEditorTabs.getState().setTreeCollapsed(false);
+  };
+  // Expanding on a narrow view, as clicking its first row does: Changes'
+  // first change; Files' last open file, else the tree's first; History's
+  // commit (the one picked, else the newest), the editor then opening its
+  // first file; Review's first changed file.
+  const expandOn = (on: CodeSegment) => {
+    if (on === 'changes') {
+      const change = firstListedChange(files);
+      if (change) viewDiff(change.path, change.staged);
+      return;
+    }
+    if (on === 'history') {
+      const commits = prCommits ? prCommitList.commits : ws.data.commits;
+      const hash = view.kind === 'commit' ? view.hash : commits[0]?.hash;
+      if (hash) pickView({ kind: 'commit', hash });
+      else openEditor();
+      return;
+    }
+    if (on === 'files' && activePath(ws.layout)) {
+      openEditor();
+      return;
+    }
+    const path =
+      on === 'files'
+        ? firstTreeFile(ws.data.repoPaths)
+        : firstChangedTreeFile(targetReview?.files.map((f) => f.path) ?? []);
+    if (path) openFile(path, { preview: true });
+    else openEditor();
   };
   const toggleDetails = () => {
     if (segment === 'details') selectSegment(lastCodeSegment);

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  firstChangedTreeFile,
+  firstListedChange,
+  firstTreeFile,
   onChangeCount,
   onLeavePrView,
   pickSegment,
@@ -12,20 +15,37 @@ import {
 
 describe('pickSegment', () => {
   const pick = (
-    current: 'changes' | 'files' | 'history' | 'details',
-    next: 'changes' | 'files' | 'history',
+    current: 'changes' | 'files' | 'history' | 'review' | 'details',
+    next: 'changes' | 'files' | 'history' | 'review',
     expanded: boolean,
     changeCount: number | null = 3,
-  ) => pickSegment({ current, next, expanded, changeCount });
+    listedChanges = 3,
+  ) => pickSegment({ current, next, expanded, changeCount, listedChanges });
 
   it('goes narrow when the expanded view is picked again', () => {
     expect(pick('files', 'files', true)).toBe('narrow');
     expect(pick('changes', 'changes', true)).toBe('narrow');
   });
 
-  it('does nothing when the narrow view is picked again (never collapses)', () => {
-    expect(pick('history', 'history', false)).toBe('none');
-    expect(pick('files', 'files', false)).toBe('none');
+  it('expands when the narrow view is picked again (never collapses)', () => {
+    expect(pick('files', 'files', false)).toBe('expand');
+    expect(pick('history', 'history', false)).toBe('expand');
+    expect(pick('review', 'review', false)).toBe('expand');
+    expect(pick('changes', 'changes', false)).toBe('expand');
+  });
+
+  it('does nothing when a narrow Changes listing nothing is picked again', () => {
+    expect(pick('changes', 'changes', false, 0, 0)).toBe('none');
+  });
+
+  it('expands on the listed changes, not the editor view’s', () => {
+    // A branch view (no working count) still lists the working tree's.
+    expect(pick('changes', 'changes', false, null, 2)).toBe('expand');
+  });
+
+  it('expands Files and History whatever Changes lists', () => {
+    expect(pick('files', 'files', false, 0, 0)).toBe('expand');
+    expect(pick('history', 'history', false, 0, 0)).toBe('expand');
   });
 
   it('shows another view without changing the state', () => {
@@ -36,6 +56,7 @@ describe('pickSegment', () => {
 
   it('shows the view picked from the details', () => {
     expect(pick('details', 'files', true)).toBe('select');
+    expect(pick('details', 'files', false)).toBe('select');
   });
 
   it('goes narrow to an empty Changes', () => {
@@ -45,6 +66,55 @@ describe('pickSegment', () => {
 
   it('keeps Changes expanded while the status loads', () => {
     expect(pick('files', 'changes', true, null)).toBe('select');
+  });
+});
+
+describe('firstListedChange', () => {
+  const change = (path: string, staged = false) => ({ path, staged });
+
+  it('lists staged changes first', () => {
+    expect(firstListedChange([change('a.ts'), change('z.ts', true)])?.path).toBe('z.ts');
+  });
+
+  it('puts a folder ahead of the files beside it, depth first', () => {
+    expect(
+      firstListedChange([change('README.md'), change('src/b/c.ts'), change('src/a.ts')])?.path,
+    ).toBe('src/b/c.ts');
+  });
+
+  it('orders folders and files by name, as the list does', () => {
+    expect(firstListedChange([change('Zeta/x.ts'), change('alpha/y.ts')])?.path).toBe('alpha/y.ts');
+    expect(firstListedChange([change('package.json'), change('README.md')])?.path).toBe(
+      'package.json',
+    );
+  });
+
+  it('is null with nothing changed', () => {
+    expect(firstListedChange([])).toBeNull();
+  });
+});
+
+describe('firstTreeFile', () => {
+  it('takes the first file at the shallowest level, folders folded', () => {
+    expect(firstTreeFile(['src/a.ts', 'docs/x.md', 'package.json', 'README.md'])).toBe('README.md');
+  });
+
+  it('goes a level down when the root holds only folders', () => {
+    expect(firstTreeFile(['src/z.ts', 'docs/x.md', 'src/deep/a.ts'])).toBe('docs/x.md');
+  });
+
+  it('is null for an empty repo', () => {
+    expect(firstTreeFile([])).toBeNull();
+  });
+});
+
+describe('firstChangedTreeFile', () => {
+  it('takes the tree’s first file with its folders unfolded', () => {
+    expect(firstChangedTreeFile(['README.md', 'src/b.ts', 'src/a/c.ts'])).toBe('src/a/c.ts');
+  });
+
+  it('is null with no files', () => {
+    expect(firstChangedTreeFile([])).toBeNull();
   });
 });
 

@@ -21,30 +21,97 @@ export type CodeSegment = 'changes' | 'files' | 'history' | 'review';
 export type SegmentPick =
   /** Go narrow, the editor kept out of sight (on the picked view). */
   | 'narrow'
+  /** Expand on the narrow view's first file (`firstListedChange`,
+   *  `firstTreeFile`, the commit's or the PR's first). */
+  | 'expand'
   /** Show the picked view; while expanded, unfold a folded tree column. */
   | 'select'
-  /** Nothing: re-picking the view a narrow sidebar shows. */
+  /** Nothing: re-picking a narrow Changes that lists no changes. */
   | 'none';
 
 /**
  * Re-picking the view an expanded sidebar shows goes narrow; re-picking the
- * narrow one does nothing; never collapses. Another view keeps the state,
- * except an empty Changes, which goes narrow.
+ * narrow one expands on its first file, except an empty Changes, which has
+ * none; never collapses. Another view keeps the state, except an empty
+ * Changes, which goes narrow.
  */
 export function pickSegment({
   current,
   next,
   expanded,
   changeCount,
+  listedChanges,
 }: {
   /** What shows now: a view, or the details (any view picked from them shows). */
   current: CodeSegment | 'details';
   next: CodeSegment;
   expanded: boolean;
   changeCount: number | null;
+  /** The changes a narrow Changes lists: the working tree's, whatever the
+   *  editor's view. */
+  listedChanges: number;
 }): SegmentPick {
-  if (next === current) return expanded ? 'narrow' : 'none';
+  if (next === current) {
+    if (expanded) return 'narrow';
+    return next === 'changes' && listedChanges === 0 ? 'none' : 'expand';
+  }
   return expanded && next === 'changes' && changeCount === 0 ? 'narrow' : 'select';
+}
+
+/*
+ * The first file of a tree as it displays: depth first, a folder's
+ * subfolders (by name, `localeCompare`) ahead of its files. Changes orders
+ * its files by `localeCompare`, the editor's tree (Files, Review's changes)
+ * by code unit, so `README.md` comes before `package.json` there.
+ */
+
+type Order = (a: string, b: string) => number;
+const byCodeUnit: Order = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+const byLocale: Order = (a, b) => a.localeCompare(b);
+
+function treeOrder(fileOrder: Order): Order {
+  return (a, b) => {
+    const pa = a.split('/');
+    const pb = b.split('/');
+    for (let i = 0; ; i++) {
+      const fileA = i === pa.length - 1;
+      const fileB = i === pb.length - 1;
+      if (fileA !== fileB) return fileA ? 1 : -1;
+      if (fileA) return fileOrder(a, b);
+      if (pa[i] !== pb[i]) return byLocale(pa[i]!, pb[i]!);
+    }
+  };
+}
+
+function first<T>(items: readonly T[], order: (a: T, b: T) => number): T | null {
+  let best: T | null = null;
+  for (const item of items) if (best === null || order(item, best) < 0) best = item;
+  return best;
+}
+
+/** The file a narrow Changes lists first: its staged section's first, else
+ *  its unstaged section's. Null with no changes. */
+export function firstListedChange<F extends { path: string; staged: boolean }>(
+  files: readonly F[],
+): F | null {
+  const order = treeOrder(byLocale);
+  return first(files, (a, b) =>
+    a.staged !== b.staged ? (a.staged ? -1 : 1) : order(a.path, b.path),
+  );
+}
+
+/** The editor tree's first file at its shallowest level: what Files shows
+ *  first with its folders folded. Null for an empty repo. */
+export function firstTreeFile(paths: readonly string[]): string | null {
+  const order = treeOrder(byCodeUnit);
+  const depth = (p: string) => p.split('/').length;
+  return first(paths, (a, b) => depth(a) - depth(b) || order(a, b));
+}
+
+/** The editor tree's first file with its folders unfolded: what Review's
+ *  changes list first. Null with no files. */
+export function firstChangedTreeFile(paths: readonly string[]): string | null {
+  return first(paths, treeOrder(byCodeUnit));
 }
 
 /**
