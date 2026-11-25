@@ -121,8 +121,9 @@ export function EditorHeader({
 
   return (
     // Inside the file's sheet, under its tab: the tab names the file, so this
-    // row carries only where it lives and what can be done to it.
-    <div className="@container/panehead flex h-9 shrink-0 items-center justify-between gap-2 border-b border-line pr-2 pl-4">
+    // row carries only where it lives and what can be done to it. 40px on
+    // the 4px grid, the actions 6px apart so each reads as its own control.
+    <div className="@container/panehead flex h-10 shrink-0 items-center justify-between gap-3 border-b border-line pr-3 pl-4">
       <div className="flex items-center gap-3 min-w-0">
         {viewMeta && (
           <Tooltip
@@ -152,7 +153,7 @@ export function EditorHeader({
           </span>
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center gap-1.5">
         {reviewActions}
         <IconButton
           size="sm"
