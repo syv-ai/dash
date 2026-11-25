@@ -186,7 +186,8 @@ export function viewOnSegment({
 }
 
 /**
- * What leaving review mode does to the editor's view: back to the working
+ * What leaving review mode does to the editor's view, however it ends (✕,
+ * main ending it, a jump to a note outside the PR): back to the working
  * tree from the PR's view and from a commit, which in review mode is always
  * one of the PR's (History lists those alone). Null: it stays.
  */
@@ -202,20 +203,24 @@ type ViewOfPr =
 /**
  * Whether the editor's view must follow review mode: in it, the PR's view at
  * the head its review was last loaded at (a push moves it) — a commit picked
- * in History aside; out of it, never a PR's view. 'pr' re-points it at the
- * mode's PR, 'working' returns to the working tree; null: it stays.
+ * in History aside; out of it, never a PR's view, and on the render it ended
+ * `viewOnExit`'s rule. 'pr' re-points it at the mode's PR, 'working' returns
+ * to the working tree; null: it stays.
  */
 export function viewForMode({
   mode,
+  ended = false,
   view,
   review,
 }: {
   mode: { provider: string; number: number } | null;
+  /** Review mode has just ended (it was on, now it is off). */
+  ended?: boolean;
   view: ViewOfPr;
   /** The mode's PR's review as last fetched, if it has been. */
   review: { base: string; head: string } | null;
 }): 'pr' | 'working' | null {
-  if (!mode) return view.kind === 'pr' ? 'working' : null;
+  if (!mode) return ended ? viewOnExit(view.kind) : view.kind === 'pr' ? 'working' : null;
   if (view.kind === 'commit') return null;
   if (view.kind !== 'pr') return 'pr';
   if (view.provider !== mode.provider || view.number !== mode.number) return 'pr';

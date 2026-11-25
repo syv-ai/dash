@@ -13,7 +13,6 @@ import {
   firstChangedTreeFile,
   segmentOnMode,
   viewForMode,
-  viewOnExit,
   viewOnSegment,
   type CodeSegment,
 } from '../rightInspector/sidebarState';
@@ -103,12 +102,22 @@ export function useReviewMode(
     else if (next === 'pr' && mode) void showPr(mode);
   };
   // The editor follows review mode: the PR's view at its loaded head while
-  // in it (a push re-points it), the working tree once it ends.
+  // in it (a push re-points it), never a PR's view out of it. However the
+  // mode ends (✕, main ending it, a jump to a note outside the PR), one rule
+  // applies on the render it ends (`viewOnExit`), then any jump waiting on it.
   const follow = viewForMode({ mode, view, review });
-  const showViewRef = useRef(showView);
-  showViewRef.current = showView;
+  const latest = useRef({ mode, view, review, showView });
+  latest.current = { mode, view, review, showView };
+  const modeBefore = useRef(modeKey);
+  const afterExit = useRef<(() => void) | null>(null);
   useEffect(() => {
-    showViewRef.current(follow);
+    const ended = modeBefore.current !== null && modeKey === null;
+    modeBefore.current = modeKey;
+    const now = latest.current;
+    now.showView(viewForMode({ mode: now.mode, ended, view: now.view, review: now.review }));
+    const then = afterExit.current;
+    afterExit.current = null;
+    then?.();
   }, [follow, modeKey, review?.head]);
   // A task found in review mode, or entering it, shows Overview; Overview
   // is the mode's alone, so ending the mode leaves it for Changes. Read off
@@ -124,13 +133,8 @@ export function useReviewMode(
 
   const enter = (pr: PrRef) =>
     usePrReviews.getState().setMode(task.id, { provider: pr.provider, number: pr.number });
-  const endMode = () => usePrReviews.getState().setMode(task.id, null);
-  // Out of the mode the editor returns to the working tree, from a PR
-  // commit too (the follow effect only knows the PR's view).
-  const exit = () => {
-    endMode();
-    showView(viewOnExit(view.kind));
-  };
+  // Ending it is all an exit does: the follow effect moves the editor.
+  const exit = () => usePrReviews.getState().setMode(task.id, null);
   const openFile = (path: string, opts?: OpenOptions) => {
     if (mode && view.kind !== 'pr') void showPr(mode);
     sidebar.openFile(path, opts ?? { preview: true });
@@ -179,9 +183,12 @@ export function useReviewMode(
     onSegment: (to) => showView(viewOnSegment({ reviewing, to, viewKind: view.kind })),
     navigate: (scope, path, commentId) => {
       // Review mode shows its PR only: a note written elsewhere (the working
-      // tree, a commit) is shown outside it.
-      if (mode && scope !== prScope(mode.provider, mode.number)) endMode();
-      ws.navigateToComment(scope, path, commentId);
+      // tree, a commit) is shown outside it, once the exit has moved the editor.
+      const jump = () => ws.navigateToComment(scope, path, commentId);
+      if (mode && scope !== prScope(mode.provider, mode.number)) {
+        afterExit.current = jump;
+        exit();
+      } else jump();
       sidebar.openEditor();
     },
   };

@@ -227,4 +227,17 @@ describe('viewOnExit', () => {
     expect(viewOnExit('commit')).toBe('working');
     expect(viewOnExit('working')).toBeNull();
   });
+
+  it('applies however the mode ends, on the render it ends', () => {
+    const ended = (
+      view:
+        | { kind: 'working' | 'commit' }
+        | { kind: 'pr'; provider: string; number: number; base: string; head: string },
+    ) => viewForMode({ mode: null, ended: true, view, review: null });
+    expect(ended({ kind: 'commit' })).toBe('working');
+    expect(ended({ kind: 'pr', provider: 'github', number: 4, base: 'b1', head: 'h1' })).toBe(
+      'working',
+    );
+    expect(ended({ kind: 'working' })).toBeNull();
+  });
 });
