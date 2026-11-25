@@ -19,6 +19,8 @@ export interface PrThreadContext {
   review: PrReview;
   /** The PR's draft scope; null without a task to own drafts. */
   draftScope: string | null;
+  /** Why a thread can't take a draft reply now (no draft scope); null when it can. */
+  replyBlocked: string | null;
   /** On the own PR: where draft replies post from (Post reply / Post & resolve). */
   replyPoster: ReplyPoster | null;
   /** Who `@` completes from in a reply. */
@@ -57,6 +59,11 @@ export function usePrThreadContext({
     return {
       review,
       draftScope,
+      replyBlocked: draftScope
+        ? null
+        : taskId
+          ? "The task's drafts are still loading"
+          : 'Replies are drafted in a task; open this PR from one',
       replyPoster:
         review.viewerIsAuthor && draftScope && taskId ? { projectId, cwd, taskId, review } : null,
       mentions: mentionCandidates(review),

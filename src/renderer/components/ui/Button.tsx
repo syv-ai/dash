@@ -3,6 +3,7 @@ import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../../lib/cn';
 import { focusRing } from './styles';
+import { Tooltip } from './Tooltip';
 
 /**
  * The button. Variants: primary (the one neutral CTA), secondary (a quiet tint),
@@ -38,6 +39,9 @@ export type ButtonProps = React.ComponentProps<'button'> &
   VariantProps<typeof buttonVariants> & {
     /** Render the child element (a link, a Radix trigger) with the button's styling. */
     asChild?: boolean;
+    /** Disabled, and why, in a tooltip on a wrapper (a disabled `<button>`
+     *  gets no mouse events, so it couldn't show one itself). */
+    disabledReason?: string | null;
   };
 
 export function Button({
@@ -46,14 +50,25 @@ export function Button({
   size,
   asChild = false,
   type = 'button',
+  disabledReason,
+  disabled,
   ...props
 }: ButtonProps) {
   const Comp = asChild ? Slot : 'button';
-  return (
+  const button = (
     <Comp
       type={asChild ? undefined : type}
       className={cn(buttonVariants({ variant, size }), className)}
+      disabled={disabled || !!disabledReason}
       {...props}
     />
+  );
+  if (!disabledReason) return button;
+  return (
+    <Tooltip content={disabledReason}>
+      <span tabIndex={0} className={cn('inline-flex rounded-md', focusRing)}>
+        {button}
+      </span>
+    </Tooltip>
   );
 }

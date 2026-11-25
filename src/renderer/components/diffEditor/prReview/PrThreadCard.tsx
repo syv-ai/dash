@@ -23,7 +23,8 @@ const EMPTY: DiffComment[] = [];
  * the Comments tab: a header (fold, status, where, Ask agent), then its
  * posted comments, the task's draft replies (marked not posted), a reply
  * box, and Reply / Resolve. Folded, it shows who started it, its first line
- * and how many replies follow.
+ * and how many replies follow, and a Reply that opens it on the reply box.
+ * Reply is always there: disabled, saying why, while no task owns drafts.
  */
 export function PrThreadCard({
   thread,
@@ -44,7 +45,7 @@ export function PrThreadCard({
   /** Opens its file at its line, from the named place (a thread on a line). */
   onOpenLocation?: () => void;
 }) {
-  const { draftScope, replyPoster, mentions } = context;
+  const { draftScope, replyBlocked, replyPoster, mentions } = context;
   const [open, setOpen] = useState(defaultOpen);
   const [replying, setReplying] = useState(false);
   const drafts = useCommentsStore(
@@ -72,6 +73,12 @@ export function PrThreadCard({
     setReplying(false);
   };
 
+  /** Open the card on its reply box (the folded header's Reply). */
+  const startReply = () => {
+    setOpen(true);
+    setReplying(true);
+  };
+
   const author = first?.author ?? 'ghost';
   const place = showLocation ? threadPlace(thread).name : null;
   const tally = [threadTally(thread, drafts.length), place].filter(Boolean).join(' · ');
@@ -90,7 +97,7 @@ export function PrThreadCard({
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex h-7 min-w-0 items-center gap-2">
-                  <span className="type-heading shrink-0">{author}</span>
+                  <span className="type-heading min-w-0 truncate">{author}</span>
                   {tally && <span className="type-caption truncate tabular-nums">{tally}</span>}
                 </span>
                 <span className="type-body line-clamp-2 wrap-break-word">
@@ -110,6 +117,18 @@ export function PrThreadCard({
               place
             )}
           </span>
+        )}
+        {!open && (
+          <IconButton
+            size="sm"
+            className="mt-1"
+            title="Reply"
+            description={replyBlocked ?? 'Open the thread and write a reply'}
+            disabled={!!replyBlocked}
+            onClick={startReply}
+          >
+            <Reply size={14} strokeWidth={1.8} />
+          </IconButton>
         )}
         <IconButton
           size="sm"
@@ -145,8 +164,13 @@ export function PrThreadCard({
             </Composer>
           )}
           <footer className="flex flex-wrap items-center gap-1.5">
-            {draftScope && !replying && (
-              <Button variant="secondary" size="sm" onClick={() => setReplying(true)}>
+            {!replying && (
+              <Button
+                variant="secondary"
+                size="sm"
+                disabledReason={replyBlocked}
+                onClick={() => setReplying(true)}
+              >
                 <Reply size={14} strokeWidth={1.8} />
                 Reply
               </Button>
