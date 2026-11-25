@@ -296,7 +296,7 @@ function UpstreamRows({
         )}
       </DetailItem>
       <DetailItem label="Sync">
-        <SyncStatus status={status} links={links} look="quiet" />
+        <SyncStatus status={status} links={links} />
       </DetailItem>
     </>
   );

@@ -3,10 +3,8 @@ import {
   firstChangedTreeFile,
   firstListedChange,
   firstTreeFile,
-  onChangeCount,
   pickSegment,
   segmentOnMode,
-  segmentOnExpand,
   viewForMode,
   viewOnExit,
   viewOnSegment,
@@ -18,68 +16,63 @@ describe('pickSegment', () => {
     current: CodeSegment | 'details',
     next: CodeSegment,
     expanded: boolean,
-    changeCount: number | null = 3,
-    listedChanges = 3,
-    openThread = true,
-    reselect = true,
-  ) => pickSegment({ current, next, reselect, expanded, changeCount, listedChanges, openThread });
+    {
+      changesOnly = false,
+      listedChanges = 3,
+      openThread = true,
+      reselect = true,
+    }: {
+      changesOnly?: boolean;
+      listedChanges?: number;
+      openThread?: boolean;
+      reselect?: boolean;
+    } = {},
+  ) => pickSegment({ current, next, reselect, expanded, changesOnly, listedChanges, openThread });
 
   it('does nothing on a single click of the current view', () => {
-    expect(pick('files', 'files', true, 3, 3, true, false)).toBe('none');
-    expect(pick('files', 'files', false, 3, 3, true, false)).toBe('none');
+    expect(pick('files', 'files', true, { reselect: false })).toBe('none');
+    expect(pick('files', 'files', false, { reselect: false })).toBe('none');
   });
 
   it('goes narrow when the expanded view is picked again', () => {
     expect(pick('files', 'files', true)).toBe('narrow');
-    expect(pick('changes', 'changes', true)).toBe('narrow');
+    expect(pick('files', 'files', true, { changesOnly: true, listedChanges: 0 })).toBe('narrow');
   });
 
   it('expands when the narrow view is picked again (never collapses)', () => {
     expect(pick('files', 'files', false)).toBe('expand');
+    expect(pick('files', 'files', false, { changesOnly: true })).toBe('expand');
     expect(pick('history', 'history', false)).toBe('expand');
     expect(pick('overview', 'overview', false)).toBe('expand');
-    expect(pick('changes', 'changes', false)).toBe('expand');
     expect(pick('comments', 'comments', false)).toBe('expand');
   });
 
-  it('does nothing when a narrow Changes listing nothing is picked again', () => {
-    expect(pick('changes', 'changes', false, 0, 0)).toBe('none');
+  it('does nothing when a narrow Files listing no changes is picked again', () => {
+    expect(pick('files', 'files', false, { changesOnly: true, listedChanges: 0 })).toBe('none');
+  });
+
+  it('expands Files on all files whatever it lists, and History whatever is changed', () => {
+    expect(pick('files', 'files', false, { listedChanges: 0 })).toBe('expand');
+    expect(pick('history', 'history', false, { changesOnly: true, listedChanges: 0 })).toBe(
+      'expand',
+    );
   });
 
   it('does nothing when a narrow Comments without an open thread is picked again', () => {
-    expect(pick('comments', 'comments', false, 3, 3, false)).toBe('none');
-    expect(pick('comments', 'comments', true, 3, 3, false)).toBe('narrow');
+    expect(pick('comments', 'comments', false, { openThread: false })).toBe('none');
+    expect(pick('comments', 'comments', true, { openThread: false })).toBe('narrow');
   });
 
-  it('expands on the listed changes, not the editor view’s', () => {
-    // A PR view (no working count) lists what Changes shows.
-    expect(pick('changes', 'changes', false, null, 2)).toBe('expand');
-  });
-
-  it('expands Files and History whatever Changes lists, or Comments holds', () => {
-    expect(pick('files', 'files', false, 0, 0, false)).toBe('expand');
-    expect(pick('history', 'history', false, 0, 0, false)).toBe('expand');
-  });
-
-  it('shows another view without changing the state', () => {
-    expect(pick('changes', 'files', false)).toBe('select');
+  it('shows another view without changing the state, whatever Files lists', () => {
+    expect(pick('history', 'files', false)).toBe('select');
     expect(pick('files', 'history', true)).toBe('select');
-    expect(pick('files', 'changes', true)).toBe('select');
-    expect(pick('files', 'comments', true, 3, 3, false)).toBe('select');
+    expect(pick('history', 'files', true, { changesOnly: true, listedChanges: 0 })).toBe('select');
+    expect(pick('files', 'comments', true, { openThread: false })).toBe('select');
   });
 
   it('shows the view picked from the details', () => {
     expect(pick('details', 'files', true)).toBe('select');
     expect(pick('details', 'files', false)).toBe('select');
-  });
-
-  it('goes narrow to an empty Changes', () => {
-    expect(pick('files', 'changes', true, 0)).toBe('narrow');
-    expect(pick('files', 'changes', false, 0)).toBe('select');
-  });
-
-  it('keeps Changes expanded while the status loads', () => {
-    expect(pick('files', 'changes', true, null)).toBe('select');
   });
 });
 
@@ -132,63 +125,25 @@ describe('firstChangedTreeFile', () => {
   });
 });
 
-describe('onChangeCount', () => {
-  const base = { segment: 'changes' as const, expanded: true };
-
-  it('narrows when Changes empties while it shows expanded', () => {
-    expect(onChangeCount({ ...base, before: 2, now: 0 })).toBe('narrow');
-  });
-
-  it('shows Files when the status loads empty (a task switched back to)', () => {
-    expect(onChangeCount({ ...base, before: null, now: 0 })).toBe('files');
-  });
-
-  it('reacts to the change only, not to it staying empty', () => {
-    expect(onChangeCount({ ...base, before: 0, now: 0 })).toBeNull();
-  });
-
-  it('never expands again as changes appear', () => {
-    expect(onChangeCount({ ...base, before: 0, now: 2 })).toBeNull();
-  });
-
-  it('leaves the other views and a narrow sidebar alone', () => {
-    expect(onChangeCount({ ...base, segment: 'files', before: 2, now: 0 })).toBeNull();
-    expect(onChangeCount({ ...base, expanded: false, before: 2, now: 0 })).toBeNull();
-  });
-});
-
-describe('segmentOnExpand', () => {
-  it('shows Files when a file opens on an empty Changes', () => {
-    expect(segmentOnExpand('changes', 0)).toBe('files');
-  });
-
-  it('keeps Changes with changes to show, and any other view', () => {
-    expect(segmentOnExpand('changes', 2)).toBe('changes');
-    expect(segmentOnExpand('changes', null)).toBe('changes');
-    expect(segmentOnExpand('history', 0)).toBe('history');
-    expect(segmentOnExpand('details', 0)).toBe('details');
-  });
-});
-
 describe('segmentOnMode', () => {
   const on = (segment: CodeSegment | 'details', was?: boolean, now?: boolean) =>
     segmentOnMode({ segment, was, now });
 
   it('shows Overview for a task found in review mode, or one entering it', () => {
-    expect(on('changes', undefined, true)).toBe('overview');
+    expect(on('files', undefined, true)).toBe('overview');
     expect(on('files', false, true)).toBe('overview');
     expect(on('details', false, true)).toBe('overview');
   });
 
   it('keeps the view while the mode holds, or before it is known', () => {
     expect(on('files', true, true)).toBe('files');
-    expect(on('changes', undefined, undefined)).toBe('changes');
+    expect(on('files', undefined, undefined)).toBe('files');
     expect(on('history', undefined, false)).toBe('history');
   });
 
-  it('leaves Overview and Comments for Changes once review mode ends; they are its alone', () => {
-    expect(on('overview', true, false)).toBe('changes');
-    expect(on('comments', true, false)).toBe('changes');
+  it('leaves Overview and Comments for Files once review mode ends; they are its alone', () => {
+    expect(on('overview', true, false)).toBe('files');
+    expect(on('comments', true, false)).toBe('files');
     expect(on('files', true, false)).toBe('files');
     expect(on('details', true, false)).toBe('details');
   });
@@ -196,14 +151,14 @@ describe('segmentOnMode', () => {
 
 describe('viewOnSegment', () => {
   it("leaves History's commit for the PR in review mode, the working tree otherwise", () => {
-    expect(viewOnSegment({ reviewing: true, to: 'changes', viewKind: 'commit' })).toBe('pr');
+    expect(viewOnSegment({ reviewing: true, to: 'files', viewKind: 'commit' })).toBe('pr');
     expect(viewOnSegment({ reviewing: false, to: 'files', viewKind: 'commit' })).toBe('working');
   });
 
   it('keeps the view on History, and any view that is not a commit', () => {
     expect(viewOnSegment({ reviewing: true, to: 'history', viewKind: 'commit' })).toBeNull();
     expect(viewOnSegment({ reviewing: true, to: 'overview', viewKind: 'pr' })).toBeNull();
-    expect(viewOnSegment({ reviewing: false, to: 'changes', viewKind: 'working' })).toBeNull();
+    expect(viewOnSegment({ reviewing: false, to: 'files', viewKind: 'working' })).toBeNull();
   });
 });
 

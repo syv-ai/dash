@@ -12,7 +12,7 @@ import {
 } from 'react';
 import type { ITheme as XtermTheme } from '@xterm/xterm';
 import { Info, MessageSquareCode, X } from 'lucide-react';
-import { FileChangesPanel } from '../changes/FileChangesPanel';
+import { WorkingFiles, type RepoView } from '../changes/WorkingFiles';
 import { CommitBar } from '../changes/CommitBar';
 import { useCommitRun } from '../changes/useCommitRun';
 import { ShellDrawerWrapper } from '../terminal/ShellDrawerWrapper';
@@ -33,19 +33,12 @@ import {
   panelEaseMs,
   type PanelImperativeHandle,
 } from '../ui/Resizable';
-import { RepoTree } from '../fileTree/RepoTree';
 import { HistoryList } from '../diffEditor/HistoryList';
 import { useEditorWorkspace, type EditorTarget } from '../diffEditor/useEditorWorkspace';
 import { activePath, type OpenOptions } from '../diffEditor/tabs/editorLayout';
 import { useTreePanel } from '../diffEditor/TreeToggle';
-import {
-  firstListedChange,
-  firstTreeFile,
-  onChangeCount,
-  pickSegment,
-  segmentOnExpand,
-  type CodeSegment,
-} from './sidebarState';
+import { firstListedChange, firstTreeFile, pickSegment, type CodeSegment } from './sidebarState';
+import { defaultFilesScope, loadFilesScope, saveFilesScope, type FilesScope } from './filesScope';
 import { viewOfSection } from '../changes/changeSections';
 import {
   LIST_DEFAULTS,
@@ -77,8 +70,8 @@ const EditorGroups = lazy(() =>
   import('../diffEditor/EditorGroups').then((m) => ({ default: m.EditorGroups })),
 );
 
-/** What the sidebar's list shows: the changes, the whole repo and the
- *  commits, or in review mode the PR's overview, files, comments and commits
+/** What the sidebar's list shows: the files (the changes, or the whole repo
+ *  with them) and the commits, or in review mode the PR's overview, files, comments and commits
  *  (the view switch, always in words), or the task's details (an icon toggle
  *  at the row's end, read least often). */
 type Segment = CodeSegment | 'details';
@@ -148,7 +141,7 @@ const REVIEW_LIST_MIN_PX = 320;
 
 /**
  * The task sidebar: its usage on top, then the view switch.
- * Narrow: one column (the changes, the repo's file tree, or the commits)
+ * Narrow: one column (the files, or the commits)
  * over the task's terminals. Expanded, a file open: that column, under the
  * usage and the view switch, runs full height on the left; the editor sits
  * over the terminals on the right, from the sidebar's top.
@@ -221,6 +214,19 @@ export function RightInspector({
     setSegment(next);
     setLastCodeSegment(next);
   }, []);
+  // Files' scope: the user's pick for this task, else the changes when its
+  // status first loads with any, else all files. Taken once, so the tree
+  // doesn't swap under the user as changes come and go.
+  const statusIsOwn = useGit((s) => s.gitStatusCwd === task.path);
+  const ownCount = gitStatus && statusIsOwn ? gitStatus.files.length : null;
+  const [pickedScope, setPickedScope] = useState(() => loadFilesScope(task.id));
+  const [firstScope, setFirstScope] = useState<FilesScope | null>(null);
+  if (firstScope === null && ownCount !== null) setFirstScope(defaultFilesScope(ownCount));
+  const scope: FilesScope = pickedScope ?? firstScope ?? 'changed';
+  const pickScope = (next: FilesScope) => {
+    setPickedScope(next);
+    saveFilesScope(task.id, next);
+  };
   const target = useMemo<EditorTarget | null>(
     () => (diff ? { filePath: diff.filePath, initialView: diff.initialView } : null),
     [diff],
@@ -241,11 +247,6 @@ export function RightInspector({
     prLive: checkout.live,
   });
   const { view, selectView } = ws;
-  // The working tree's changes, as Changes lists them (null: not loaded,
-  // still the previous task's, or review mode's Changes, the PR's).
-  const statusIsOwn = useGit((s) => s.gitStatusCwd === task.path);
-  const changeCount =
-    view.kind === 'working' && gitStatus && statusIsOwn ? gitStatus.files.length : null;
   const treePanel = useTreePanel();
   const openEditor = () => {
     if (!expanded) onOpenEditor();
@@ -279,7 +280,7 @@ export function RightInspector({
       next,
       reselect,
       expanded,
-      changeCount,
+      changesOnly: !reviewing && scope === 'changed',
       listedChanges: files.length,
       openThread: !!review.review && firstOpenThread(review.review.threads) !== null,
     });
@@ -296,13 +297,14 @@ export function RightInspector({
     }
     if (expanded) useEditorTabs.getState().setTreeCollapsed(false);
   };
-  // Expanding on a narrow view, as clicking its first row does: Changes'
-  // first change; Files' last open file, else the tree's first; History's
-  // commit (the one picked, else the newest), the editor then opening its
-  // first file. Review mode decides for its Overview, Files and Comments.
+  // Expanding on a narrow view, as clicking its first row does: Files' first
+  // change on its changes, else the last open file or the tree's first;
+  // History's commit (the one picked, else the newest), the editor then
+  // opening its first file. Review mode decides for its Overview, Files and
+  // Comments.
   const expandOn = (on: CodeSegment) => {
     if (review.expandOn(on)) return;
-    if (on === 'changes') {
+    if (on === 'files' && scope === 'changed') {
       const change = firstListedChange(files);
       if (change) viewDiff(change.path, change.staged);
       return;
@@ -327,7 +329,7 @@ export function RightInspector({
   };
   const viewDiff = useCallback(
     (filePath: string, staged: boolean) => {
-      showSegment('changes');
+      showSegment('files');
       onViewDiff(filePath, staged);
     },
     [onViewDiff, showSegment],
@@ -338,26 +340,6 @@ export function RightInspector({
     selectSegment('history');
     if (expanded) useEditorTabs.getState().setTreeCollapsed(false);
   };
-  // An empty Changes is never expanded (see sidebarState): it narrows as it
-  // empties, and gives way to Files as a file opens on it or its status
-  // loads empty. Each reacts to its own transition, read off the value before.
-  const countBefore = useRef(changeCount);
-  useEffect(() => {
-    const before = countBefore.current;
-    countBefore.current = changeCount;
-    const next = onChangeCount({ segment, expanded, before, now: changeCount });
-    if (next === 'narrow') onNarrow();
-    else if (next === 'files') showSegment('files');
-  }, [segment, expanded, changeCount, onNarrow, showSegment]);
-  // Mounting expanded (a task switched back to) counts as expanding.
-  const expandedBefore = useRef(false);
-  useEffect(() => {
-    const before = expandedBefore.current;
-    expandedBefore.current = expanded;
-    if (before || !expanded || segment === 'details') return;
-    const next = segmentOnExpand(segment, changeCount);
-    if (next !== segment) showSegment(next);
-  }, [segment, expanded, changeCount, showSegment]);
   // History's rows open what they pick in the editor.
   const pickView = (next: typeof view) => {
     selectView(next);
@@ -411,11 +393,12 @@ export function RightInspector({
   // The comments to send: the editor holds them; the header's button opens
   // it. Review mode's Comments tab counts and lists them itself.
   const showComments = !reviewing && commentCount > 0;
-  // The commit actions, as Changes' footer, while it lists any (review
-  // mode's Changes are the PR's).
-  const commitBar = !reviewing && segment === 'changes' && files.length > 0 && (
-    <CommitBar run={run} />
-  );
+  // The commit actions, as Files' footer while it lists changes (review
+  // mode's Files are the PR's).
+  const commitBar = !reviewing &&
+    segment === 'files' &&
+    scope === 'changed' &&
+    files.length > 0 && <CommitBar run={run} />;
 
   // The list column's width while split: its mode's own (`loadListWidth`),
   // taken as it splits and as the mode changes; kept only when the user
@@ -490,7 +473,7 @@ export function RightInspector({
     });
   }
 
-  // The commit actions are Changes' footer (`CommitBar`), not the row's.
+  // The commit actions are Files' footer (`CommitBar`), not the row's.
   const header = (
     <ViewRow
       tabsMinPx={tabsMinPx}
@@ -522,12 +505,11 @@ export function RightInspector({
                 ]
               : [
                   {
-                    value: 'changes',
-                    label: 'Changes',
+                    value: 'files',
+                    label: 'Files',
                     count: files.length || undefined,
                     countLabel: 'Changed files',
                   },
-                  { value: 'files', label: 'Files' },
                   { value: 'history', label: 'History' },
                 ]
           }
@@ -584,9 +566,10 @@ export function RightInspector({
     />
   );
 
-  // Changes: staged and unstaged trees, narrow and expanded alike. A row
-  // opens its diff: narrow, through the editor's target (which expands);
-  // expanded, in the view of its section, as a preview like Files'.
+  // Files: the changes (staged and unstaged) or the whole repo with them,
+  // narrow and expanded alike. A change opens its diff: narrow, through the
+  // editor's target (which expands); expanded, in the view of its section,
+  // as a preview like any file's.
   const openChange = (path: string, staged: boolean, opts?: OpenOptions) => {
     if (!expanded) {
       viewDiff(path, staged);
@@ -596,35 +579,28 @@ export function RightInspector({
     if (view.kind !== 'working' || view.ref !== next.ref) selectView(next);
     openFile(path, opts);
   };
-  const changes = (
-    <FileChangesPanel
-      key={task.id}
+  const repo: RepoView = {
+    git: ws.git,
+    paths: ws.data.repoPaths,
+    dirs: ws.data.repoDirs,
+    changedFiles: ws.data.changedFiles,
+    loading: ws.data.repoPathsLoading || ws.data.changedFilesLoading,
+    badges: ws.badgeCounts,
+  };
+  const filesView = (
+    <WorkingFiles
       cwd={task.path}
       loading={gitLoading}
+      scope={scope}
+      onScope={pickScope}
       run={run}
       onOpenChange={openChange}
+      onOpenFile={openFile}
       activePath={activePath(ws.layout)}
       view={view}
       canOpenToSide={ws.layout.groups.length < 2}
+      repo={repo}
       syncLinks={syncLinks}
-    />
-  );
-
-  // The editor's tree: the whole repo (review mode has its own).
-  const editorTree = (
-    <RepoTree
-      cwd={task.path}
-      git={ws.git}
-      view={view}
-      allPaths={ws.data.repoPaths}
-      repoDirs={ws.data.repoDirs}
-      changedFiles={ws.data.changedFiles}
-      changedOnly={false}
-      filesLoading={ws.data.repoPathsLoading || ws.data.changedFilesLoading}
-      selectedPath={activePath(ws.layout) ?? ''}
-      onOpenFile={openFile}
-      canOpenToSide={ws.layout.groups.length < 2}
-      badgeCounts={ws.badgeCounts}
     />
   );
 
@@ -652,17 +628,14 @@ export function RightInspector({
     />
   );
 
-  // The tree or list column: review mode's, the changes, the editor's tree
-  // (the whole repo), or the commits.
-  const tree =
-    reviewColumn ||
-    (segment === 'history' ? history : segment === 'changes' ? changes : editorTree);
+  // The tree or list column: review mode's, the files, or the commits.
+  const tree = reviewColumn || (segment === 'history' ? history : filesView);
 
   // Narrow (and Details, expanded): the details, or the tree column alone.
   const list = segment === 'details' ? details : tree;
 
   // The view tabs' sheet: the list under them, as an open file under its
-  // tab, over Changes' commit actions.
+  // tab, over Files' commit actions.
   const onSheet = (content: ReactNode) => (
     <div className={cn('flex h-full flex-col', folderSheet)}>
       <div className="flex min-h-0 flex-1 flex-col">{content}</div>

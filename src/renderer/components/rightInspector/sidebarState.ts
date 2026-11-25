@@ -2,15 +2,11 @@
  * The task sidebar's states (see CLAUDE.md): collapsed (not shown; only the
  * Hide control or ⌘⌥B), narrow (one column, no editor pane) and expanded
  * (editor panes beside the tree or list). Opening a file expands it; these
- * decide what the view switch, and the working tree's changes, do to it.
+ * decide what the view switch does to it.
  *
- * Expanded on Changes with nothing changed, the editor would show files no
- * change names, so an empty Changes is always narrow: it says so there ("No
- * changes", ahead and behind). Changes appearing later don't expand it
- * again; opening a file does.
- *
- * `changeCount` is the working tree's, or null until its status has loaded
- * (and in review mode, whose Changes are the PR's).
+ * Normal mode's views are Files and History (spec Revision 5). Files is one
+ * tree scoped by its "All files" switch (`filesScope`): the changes (Staged /
+ * Unstaged, the commit footer) or the whole repo with them.
  *
  * Review mode (spec Revision 4) has its own views, each scoped to a PR:
  * Overview, Files (the PR's changed files, or all of them at its head),
@@ -20,38 +16,37 @@
 
 import { treeOrder } from '../fileTree/treeOrder';
 
-/** The view switch's views: normal mode's Changes, Files and History; review
- *  mode's Overview, Files, Comments and History. */
-export type CodeSegment = 'overview' | 'changes' | 'files' | 'comments' | 'history';
+/** The view switch's views: normal mode's Files and History; review mode's
+ *  Overview, Files, Comments and History. */
+export type CodeSegment = 'overview' | 'files' | 'comments' | 'history';
 
 /** What picking a view does to the sidebar. */
 export type SegmentPick =
   /** Go narrow, the editor kept out of sight (on the picked view). */
   | 'narrow'
-  /** Expand on the narrow view's first file (`firstListedChange`,
-   *  `firstTreeFile`, the commit's; in review mode the PR's first, or the
-   *  first open thread's at its line). */
+  /** Expand on the narrow view's first file (`firstListedChange` or
+   *  `firstTreeFile` by Files' scope, the commit's; in review mode the PR's
+   *  first, or the first open thread's at its line). */
   | 'expand'
   /** Show the picked view; while expanded, unfold a folded tree column. */
   | 'select'
-  /** Nothing: re-picking a narrow Changes that lists no changes, or a
-   *  narrow Comments with no open thread on the code. */
+  /** Nothing: a single click on the current view, or re-picking a narrow
+   *  view with no first file (Files on its changes with none, Comments with
+   *  no open thread on the code). */
   | 'none';
 
 /**
  * Re-picking the current view changes the state only on a double click
  * (`reselect`); a single click on it does nothing. Then: expanded goes
- * narrow; narrow expands on its first file, except an empty Changes or a
- * Comments without an open thread on the code, which have none; never
- * collapses. Another view keeps the state, except an empty Changes, which
- * goes narrow.
+ * narrow; narrow expands on its first file, unless it has none; never
+ * collapses. Another view keeps the state.
  */
 export function pickSegment({
   current,
   next,
   reselect,
   expanded,
-  changeCount,
+  changesOnly,
   listedChanges,
   openThread,
 }: {
@@ -61,21 +56,20 @@ export function pickSegment({
   current: CodeSegment | 'details';
   next: CodeSegment;
   expanded: boolean;
-  changeCount: number | null;
-  /** The changes a narrow Changes lists: the working tree's, whatever the
-   *  editor's view. */
+  /** Files lists the working tree's changes alone (normal mode). */
+  changesOnly: boolean;
+  /** The working tree's changes, as Files lists them on its changes. */
   listedChanges: number;
   /** Review mode's Comments has an open thread on the code to open at. */
   openThread: boolean;
 }): SegmentPick {
-  if (next === current) {
-    if (!reselect) return 'none';
-    if (expanded) return 'narrow';
-    const empty =
-      (next === 'changes' && listedChanges === 0) || (next === 'comments' && !openThread);
-    return empty ? 'none' : 'expand';
-  }
-  return expanded && next === 'changes' && changeCount === 0 ? 'narrow' : 'select';
+  if (next !== current) return 'select';
+  if (!reselect) return 'none';
+  if (expanded) return 'narrow';
+  const empty =
+    (next === 'files' && changesOnly && listedChanges === 0) ||
+    (next === 'comments' && !openThread);
+  return empty ? 'none' : 'expand';
 }
 
 /* The first file of a tree as it displays (see `fileTree/treeOrder`). */
@@ -86,7 +80,7 @@ function first<T>(items: readonly T[], order: (a: T, b: T) => number): T | null 
   return best;
 }
 
-/** The file a narrow Changes lists first: its staged section's first, else
+/** The file Files lists first on its changes: its staged section's first, else
  *  its unstaged section's. Null with no changes. */
 export function firstListedChange<F extends { path: string; staged: boolean }>(
   files: readonly F[],
@@ -96,8 +90,8 @@ export function firstListedChange<F extends { path: string; staged: boolean }>(
   );
 }
 
-/** The editor tree's first file at its shallowest level: what Files shows
- *  first with its folders folded. Null for an empty repo. */
+/** The repo tree's first file at its shallowest level: what Files shows
+ *  first on all files, its folders folded. Null for an empty repo. */
 export function firstTreeFile(paths: readonly string[]): string | null {
   const depth = (p: string) => p.split('/').length;
   return first(paths, (a, b) => depth(a) - depth(b) || treeOrder(a, b));
@@ -110,40 +104,10 @@ export function firstChangedTreeFile(paths: readonly string[]): string | null {
 }
 
 /**
- * What the working tree's change count moving from `before` to `now` does
- * while Changes shows expanded: emptying (a commit, say) goes narrow; loading
- * empty (a task switched back to) shows Files instead, as opening a file
- * there would.
- */
-export function onChangeCount({
-  segment,
-  expanded,
-  before,
-  now,
-}: {
-  segment: CodeSegment | 'details';
-  expanded: boolean;
-  before: number | null;
-  now: number | null;
-}): 'narrow' | 'files' | null {
-  if (!expanded || segment !== 'changes' || now !== 0 || before === 0) return null;
-  return before === null ? 'files' : 'narrow';
-}
-
-/** The view to show as the sidebar expands (a file opened): an empty
- *  Changes gives way to Files, the tree the file is in. */
-export function segmentOnExpand<S extends CodeSegment | 'details'>(
-  segment: S,
-  changeCount: number | null,
-): S | 'files' {
-  return segment === 'changes' && changeCount === 0 ? 'files' : segment;
-}
-
-/**
  * The view to show as review mode becomes known, starts or ends (each
  * `undefined` until main has said): a task found in review mode, opened or
  * just entered, shows Overview (D118); Overview and Comments are the mode's
- * alone, so ending it on either shows Changes.
+ * alone, so ending it on either shows Files.
  */
 export function segmentOnMode<S extends CodeSegment | 'details'>({
   segment,
@@ -153,10 +117,10 @@ export function segmentOnMode<S extends CodeSegment | 'details'>({
   segment: S;
   was: boolean | undefined;
   now: boolean | undefined;
-}): S | 'overview' | 'changes' {
+}): S | 'overview' | 'files' {
   if (now && !was) return 'overview';
   const reviewOnly = segment === 'overview' || segment === 'comments';
-  return reviewOnly && !now ? 'changes' : segment;
+  return reviewOnly && !now ? 'files' : segment;
 }
 
 /**

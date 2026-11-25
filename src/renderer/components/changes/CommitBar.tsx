@@ -9,7 +9,7 @@ import { CommitPopover } from './CommitPopover';
 import type { CommitRun } from './useCommitRun';
 
 /**
- * The working tree's commit actions, as the Changes list's footer: Stage all
+ * The working tree's commit actions, as Files' footer on its changes: Stage all
  * and Unstage all (each off while it has nothing to act on), then Commit.
  * Where the list is narrow, the stage buttons keep their icons alone (their
  * tooltips name them).

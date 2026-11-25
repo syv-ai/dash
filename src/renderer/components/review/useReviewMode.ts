@@ -124,8 +124,7 @@ export function useReviewMode(
   }, [follow, modeKey, review?.head]);
   // A task found in review mode, or entering it, shows Overview; Overview
   // and Comments are the mode's alone, so ending the mode leaves them for
-  // Changes. Read off
-  // the mode before (the sidebar starts on `initialSegment`'s).
+  // Files. Read off the mode before (the sidebar starts on `initialSegment`'s).
   const known = taskPrs.mode === undefined ? undefined : reviewing;
   const knownBefore = useRef(known);
   useEffect(() => {
@@ -180,7 +179,7 @@ export function useReviewMode(
     exit,
     openFile,
     expandOn: (on) => {
-      if (!mode || on === 'history' || on === 'changes') return false;
+      if (!mode || on === 'history') return false;
       if (on === 'comments') {
         const thread = review && firstOpenThread(review.threads);
         if (!thread) return true;
@@ -208,11 +207,11 @@ export function useReviewMode(
 }
 
 /** The view the task sidebar opens on: Overview for a task already in
- *  review mode (as far as the store knows), else Changes. */
-export function initialSegment(taskId: string): 'overview' | 'changes' {
+ *  review mode (as far as the store knows), else Files. */
+export function initialSegment(taskId: string): 'overview' | 'files' {
   const entry = usePrReviews.getState().prs[taskId];
   return segmentOnMode({
-    segment: 'changes',
+    segment: 'files',
     was: undefined,
     now: entry ? entry.mode !== null : undefined,
   });
