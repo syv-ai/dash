@@ -25,13 +25,20 @@ type Option<T> = {
   title?: string;
 };
 
-function Label<T>({ opt }: { opt: Option<T> }) {
-  return <span className="whitespace-nowrap">{opt.label}</span>;
+/** The label, with its count for screen readers while the badge is dropped. */
+function Label<T>({ opt, counted }: { opt: Option<T>; counted: boolean }) {
+  return (
+    <span className="whitespace-nowrap">
+      {opt.label}
+      {!counted && opt.count != null && <span className="sr-only"> {opt.count}</span>}
+    </span>
+  );
 }
 
-function Count<T>({ opt, shown }: { opt: Option<T>; shown: boolean }) {
-  if (opt.count == null) return null;
-  return shown ? <CountBadge count={opt.count} /> : <span className="sr-only">{opt.count}</span>;
+/** The count badge, only where there is one to show: an empty indicator would
+ *  still take `Tab`'s gap and push the label off centre. */
+function countBadge<T>(opt: Option<T>, counted: boolean) {
+  return counted && opt.count != null ? <CountBadge count={opt.count} /> : undefined;
 }
 
 /**
@@ -94,11 +101,11 @@ export function FolderTabs<T extends string>({
             <FolderTab
               active={opt.value === value}
               onSelect={() => onChange(opt.value)}
-              indicator={<Count opt={opt} shown={density === 'full'} />}
+              indicator={countBadge(opt, density === 'full')}
               className="max-w-none pr-3"
               {...reselect(opt.value)}
             >
-              <Label opt={opt} />
+              <Label opt={opt} counted={density === 'full'} />
             </FolderTab>
           </Tooltip>
         );
@@ -119,10 +126,10 @@ export function FolderTabs<T extends string>({
                 tabIndex={-1}
                 role="presentation"
                 onSelect={() => {}}
-                indicator={<Count opt={opt} shown={d === 'full'} />}
+                indicator={countBadge(opt, d === 'full')}
                 className="max-w-none pr-3"
               >
-                <Label opt={opt} />
+                <Label opt={opt} counted={d === 'full'} />
               </FolderTab>
             ))}
           </div>
