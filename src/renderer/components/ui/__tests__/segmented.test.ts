@@ -32,6 +32,14 @@ describe('segmentTip', () => {
     expect(segmentTip({ label: 'Files', count: 7, title: 'PR files' }, false)).toBe('PR files (7)');
     expect(segmentTip({ label: 'History' }, false)).toBeUndefined();
   });
+
+  it('names what the count counts, badge shown or not, once told', () => {
+    const opt = { label: 'Comments', count: 3, countLabel: 'Unresolved' };
+    const card = { title: 'Comments', body: undefined, rows: [{ label: 'Unresolved', value: 3 }] };
+    expect(segmentTip(opt, true)).toEqual(card);
+    expect(segmentTip(opt, false)).toEqual(card);
+    expect(segmentTip({ ...opt, count: undefined }, true)).toBeUndefined();
+  });
 });
 
 describe('firstFitting', () => {

@@ -8,7 +8,6 @@ import { IconButton } from './ui/IconButton';
 import { EmptyState } from './ui/EmptyState';
 import { useRuntime } from '../stores/runtimeStore';
 import { useSettings } from '../stores/settingsStore';
-import { formatBinding } from '../keybindings';
 import { cn } from '../lib/cn';
 import type { Project, Task } from '../../shared/types';
 
@@ -57,11 +56,8 @@ export function MainContent(props: MainContentProps) {
       {sidebarCollapsed && (
         <div className="titlebar-no-drag">
           <IconButton
-            title={
-              toggleSidebarBinding
-                ? `Show sidebar  ${formatBinding(toggleSidebarBinding)}`
-                : 'Show sidebar'
-            }
+            title="Show sidebar"
+            shortcut={toggleSidebarBinding}
             onClick={props.onToggleSidebar}
           >
             <PanelLeft size={14} strokeWidth={1.8} />

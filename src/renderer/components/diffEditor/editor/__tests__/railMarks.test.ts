@@ -94,6 +94,18 @@ describe('railMarks', () => {
     expect(m!.preview.endsWith('…')).toBe(true);
   });
 
+  it('keeps who and a few lines of the words apart for the hover card', () => {
+    const [t, n] = railMarks(
+      [thread('t', { startLine: 1 })],
+      [{ id: 'n', kind: 'note', startLine: 7, text: 'y'.repeat(300) }],
+      geometry(),
+    );
+    expect(t).toMatchObject({ who: '@ana', text: 'Rename this' });
+    expect(n!.who).toBe('Note to agent');
+    expect(n!.text).toHaveLength(240);
+    expect(n!.text.endsWith('…')).toBe(true);
+  });
+
   it('clamps to the rail and is empty before layout', () => {
     const [m] = railMarks([thread('t', { line: 500 })], [], geometry());
     expect(m!.at).toBe(1);

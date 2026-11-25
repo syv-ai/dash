@@ -14,7 +14,7 @@ import { usageColor } from '../../lib/usageColor';
 import { useMinuteClock } from '../../hooks/useMinuteClock';
 import { useSettings } from '../../stores/settingsStore';
 import { ProgressRing } from '../ui/ProgressRing';
-import { Tooltip } from '../ui/Tooltip';
+import { Tooltip, type RichTooltip } from '../ui/Tooltip';
 import { cn } from '../../lib/cn';
 
 interface UsageSectionProps {
@@ -55,7 +55,7 @@ function Item({
   caption,
   children,
 }: {
-  tooltip: string;
+  tooltip: RichTooltip;
   label: ReactNode;
   caption?: ReactNode;
   children: ReactNode;
@@ -131,9 +131,17 @@ function Limit({
   const pct = info ? Math.round(info.usedPercentage) : null;
   const resetsAt = info?.resetsAt ?? 0;
   const countdown = formatResetTime(resetsAt, now);
-  const tooltip = info
-    ? `${long} limit: ${pct}% used${countdown ? `, resets ${formatResetAt(resetsAt)} (${countdown})` : ''}`
-    : `${long} limit: no window running; the next message starts one`;
+  const tooltip: RichTooltip = info
+    ? {
+        title: `${long} limit`,
+        rows: [
+          { label: 'Used', value: `${pct}%` },
+          ...(countdown
+            ? [{ label: 'Resets', value: `${formatResetAt(resetsAt)} (${countdown})` }]
+            : []),
+        ],
+      }
+    : { title: `${long} limit`, body: 'No window running; the next message starts one.' };
   return (
     <Item
       tooltip={tooltip}
@@ -156,23 +164,28 @@ function windowLabel(key: LimitKey): string {
   return minutes < 60 ? `${minutes} min` : `${minutes / 60} h`;
 }
 
-function burnLine(limit: LimitKey, burn: Burn | null | undefined): string {
-  const { long } = LIMIT_LABELS[limit];
-  if (!burn) return `${long}: not rising, or too few readings yet`;
+/** A limit's burn as a tooltip row: its rate over its window, then when it
+ *  reaches 100 % at that pace (on a second line). */
+function burnRow(limit: LimitKey, burn: Burn | null | undefined) {
+  const label = LIMIT_LABELS[limit].long;
+  if (!burn) return { label, value: 'Not rising, or too few readings yet' };
   const eta =
     burn.toLimitMs === null
-      ? 'resets before reaching 100 % at this pace'
+      ? 'Resets before 100 % at this pace'
       : `100 % in ${formatEta(burn.toLimitMs)} at this pace`;
-  return `${long}: ${formatRate(burn.perHour)} over the last ${windowLabel(limit)}; ${eta}`;
+  return {
+    label,
+    value: `${formatRate(burn.perHour)} over the last ${windowLabel(limit)}\n${eta}`,
+  };
 }
 
 /** The most pressing limit's burn, "+6%/h", in a ring-sized box; both limits in the tooltip. */
 function BurnRate({ burns, burn }: { burns: LimitBurns; burn: Burn }) {
-  const lines = (Object.keys(LIMIT_LABELS) as LimitKey[])
+  const rows = (Object.keys(LIMIT_LABELS) as LimitKey[])
     .filter((k) => k in burns)
-    .map((k) => burnLine(k, burns[k]));
+    .map((k) => burnRow(k, burns[k]));
   return (
-    <Item tooltip={`Burn rate. ${lines.join('. ')}.`} label="Burn">
+    <Item tooltip={{ title: 'Burn rate', rows }} label="Burn">
       <span
         className={cn(
           'grid size-11 place-items-center text-sm font-semibold tabular-nums text-ink',
@@ -209,8 +222,21 @@ export function UsageSection({ contextUsage, rateLimits, burns }: UsageSectionPr
         key="session"
         tooltip={
           ctx
-            ? `Context used by this task's Claude session: ${formatTokens(ctx.used)} of ${formatTokens(ctx.total)}`
-            : "Context used by this task's Claude session, once it has replied"
+            ? {
+                title: 'Session context',
+                body: "Context used by this task's Claude session.",
+                rows: [
+                  { label: 'Used', value: `${Math.round(ctx.percentage)}%` },
+                  {
+                    label: 'Tokens',
+                    value: `${formatTokens(ctx.used)} of ${formatTokens(ctx.total)}`,
+                  },
+                ],
+              }
+            : {
+                title: 'Session context',
+                body: "Context used by this task's Claude session, once it has replied.",
+              }
         }
         label="Session"
       >

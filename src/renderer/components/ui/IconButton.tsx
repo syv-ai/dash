@@ -1,11 +1,16 @@
 import * as React from 'react';
 import { cn } from '../../lib/cn';
+import { getBindingKeys, type KeyBinding } from '../../keybindings';
 import { buttonVariants } from './Button';
 import { Tooltip } from './Tooltip';
 
 interface IconButtonProps extends Omit<React.ComponentProps<'button'>, 'title'> {
   /** Tooltip text, also the accessible name (not a native title, which would double up). */
   title: string;
+  /** Its keyboard shortcut: keycaps beside the title in the tooltip. */
+  shortcut?: KeyBinding;
+  /** A line under the title in the tooltip (a path, what it acts on). */
+  description?: React.ReactNode;
   /** default and muted: icon at rest, ink on hover; destructive: fail on hover. */
   variant?: 'default' | 'destructive' | 'muted';
   /** md = a 30px square (`Button size="icon"`), sm = 24px for dense rows. */
@@ -41,6 +46,8 @@ const PRESSED = 'bg-select text-ink hover:bg-select';
 export function IconButton({
   onClick,
   title,
+  shortcut,
+  description,
   variant = 'default',
   size = 'md',
   className,
@@ -50,7 +57,13 @@ export function IconButton({
   ...rest
 }: IconButtonProps) {
   return (
-    <Tooltip content={title}>
+    <Tooltip
+      content={
+        shortcut || description
+          ? { title, shortcut: shortcut && getBindingKeys(shortcut), body: description }
+          : title
+      }
+    >
       <button
         type="button"
         aria-label={title}

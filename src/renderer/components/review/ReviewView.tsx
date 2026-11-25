@@ -165,8 +165,18 @@ function Review({
                   value={pane}
                   onChange={(p) => useUi.getState().setReviewCommentsPane(p)}
                   options={[
-                    { value: 'comments', label: 'Comments', count: tally?.comments || undefined },
-                    { value: 'notes', label: 'Notes', count: tally?.notes || undefined },
+                    {
+                      value: 'comments',
+                      label: 'Comments',
+                      count: tally?.comments || undefined,
+                      countLabel: 'Unresolved',
+                    },
+                    {
+                      value: 'notes',
+                      label: 'Notes',
+                      count: tally?.notes || undefined,
+                      countLabel: 'Unsent',
+                    },
                   ]}
                 />
               </div>

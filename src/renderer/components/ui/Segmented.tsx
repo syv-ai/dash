@@ -3,7 +3,7 @@ import { cva } from 'class-variance-authority';
 import { cn } from '../../lib/cn';
 import { CountBadge } from './CountBadge';
 import { focusRing } from './styles';
-import { Tooltip } from './Tooltip';
+import { Tooltip, type TooltipContent } from './Tooltip';
 import { firstFitting, useFittedDensity } from './useFittedDensity';
 import { useReselect } from './useReselect';
 
@@ -38,12 +38,24 @@ export function fitDensity(available: number, needs: readonly number[]): Segment
   return firstFitting(available, needs, measured) ?? 'truncated';
 }
 
-/** A segment's tooltip: its `title`, plus the count once the badge is gone. */
+/**
+ * A segment's tooltip: its `title`; with a count, a card naming what the
+ * count counts (`countLabel`) whether or not the badge shows, or, without a
+ * `countLabel`, the count added once the badge is gone.
+ */
 export function segmentTip(
-  opt: { label: string; count?: number; title?: string },
+  opt: { label: string; count?: number; countLabel?: string; title?: string },
   countShown: boolean,
-): string | undefined {
-  if (countShown || opt.count == null) return opt.title;
+): TooltipContent {
+  if (opt.count == null) return opt.title;
+  if (opt.countLabel) {
+    return {
+      title: opt.label,
+      body: opt.title,
+      rows: [{ label: opt.countLabel, value: opt.count }],
+    };
+  }
+  if (countShown) return opt.title;
   return opt.title ? `${opt.title} (${opt.count})` : `${opt.label}: ${opt.count}`;
 }
 
@@ -52,6 +64,8 @@ type Option<T> = {
   label: string;
   icon?: React.ReactNode;
   count?: number;
+  /** What `count` counts ("Unresolved"): the tooltip names it. */
+  countLabel?: string;
   /** Greyed out and inert; `title` says why (its tooltip still shows). */
   disabled?: boolean;
   /** Tooltip text. */
@@ -144,7 +158,7 @@ export function Segmented<T extends string | number | null>({
         // Wrapped whenever a tip can appear, so a density change never
         // remounts (and unfocuses) the button.
         return opt.title || opt.count != null ? (
-          <Tooltip key={String(opt.value)} content={tip} open={tip ? undefined : false}>
+          <Tooltip key={String(opt.value)} content={tip}>
             {segment}
           </Tooltip>
         ) : (

@@ -1,7 +1,7 @@
 import { cva } from 'class-variance-authority';
 import { cn } from '../../lib/cn';
 import { focusRing } from './styles';
-import { Tooltip } from './Tooltip';
+import { Tooltip, type TooltipContent } from './Tooltip';
 
 /** How a mark is drawn: a hairline (strong or faint ink), a solid bar, or a
  *  hollow box — shape, not colour, tells kinds apart. */
@@ -12,8 +12,10 @@ export interface ScrollRailMark {
   /** Where it sits, as a fraction of the rail's height (0 top, 1 bottom). */
   at: number;
   tick: RailTick;
-  /** One line, shown on hover; also the mark's accessible name. */
+  /** One line: the mark's accessible name, and its hover unless `tip` says more. */
   label: string;
+  /** A richer hover (a card) in place of `label`. */
+  tip?: TooltipContent;
   onSelect: () => void;
 }
 
@@ -59,7 +61,7 @@ export function ScrollRail({
       style={{ right, height }}
     >
       {marks.map((m) => (
-        <Tooltip key={m.key} content={m.label} side="left" delay={150}>
+        <Tooltip key={m.key} content={m.tip ?? m.label} side="left" delay={150}>
           <button
             type="button"
             aria-label={m.label}

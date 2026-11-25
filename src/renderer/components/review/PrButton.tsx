@@ -64,18 +64,24 @@ export function PrButton({
         setOpen(next);
       }}
     >
-      <Tooltip content={label}>
+      <Tooltip
+        content={{
+          icon: GitPullRequestArrow,
+          title: plural(count, 'pull request'),
+          rows: [
+            { label: 'From this branch', value: from.length },
+            { label: 'Into this branch', value: into.length },
+            ...(own && own.threads > 0
+              ? [{ label: `Unresolved on #${own.number}`, value: own.threads }]
+              : []),
+          ],
+        }}
+      >
         <PopoverTrigger asChild>
           <Button variant="ghost" size="sm" aria-label={label}>
             <GitPullRequestArrow size={14} strokeWidth={1.8} />
             <span className="tabular-nums">{count}</span>
-            {own && own.threads > 0 && (
-              <CountBadge
-                count={own.threads}
-                tone="outline"
-                title={`${plural(own.threads, 'unresolved thread')} on #${own.number}`}
-              />
-            )}
+            {own && own.threads > 0 && <CountBadge count={own.threads} tone="outline" />}
           </Button>
         </PopoverTrigger>
       </Tooltip>
@@ -163,15 +169,23 @@ function PrItem({
         </span>
         <span className="type-caption flex items-center gap-2.5 tabular-nums empty:hidden">
           {pr.threads && pr.threads.total > 0 && (
-            <span
-              className="flex items-center gap-1 text-icon"
-              title={`${pr.threads.open} of ${plural(pr.threads.total, 'thread')} unresolved`}
+            <Tooltip
+              content={{
+                icon: MessageSquare,
+                title: 'Review threads',
+                rows: [
+                  { label: 'Unresolved', value: pr.threads.open },
+                  { label: 'Resolved', value: pr.threads.total - pr.threads.open },
+                ],
+              }}
             >
-              <MessageSquare size={14} strokeWidth={1.8} />
-              <span className="text-ink-3">
-                {pr.threads.open}/{pr.threads.total}
+              <span className="flex items-center gap-1 text-icon">
+                <MessageSquare size={14} strokeWidth={1.8} />
+                <span className="text-ink-3">
+                  {pr.threads.open}/{pr.threads.total}
+                </span>
               </span>
-            </span>
+            </Tooltip>
           )}
           {pr.ci && <ChecksRollupIcon ci={pr.ci} />}
           {pr.additions !== null && pr.deletions !== null && (
@@ -185,6 +199,7 @@ function PrItem({
       <IconButton
         size="sm"
         title={`Open #${pr.number} on ${forge}`}
+        description={pr.url}
         onClick={(e) => {
           e.stopPropagation();
           void window.electronAPI.openExternal(pr.url);

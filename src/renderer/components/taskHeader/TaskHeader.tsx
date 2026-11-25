@@ -13,7 +13,7 @@ import { useGit } from '../../stores/gitStore';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useSettings } from '../../stores/settingsStore';
 import { usePreferredIde } from '../../hooks/usePreferredIde';
-import { formatBinding, type KeyBinding } from '../../keybindings';
+import { formatBinding } from '../../keybindings';
 import { IconButton } from '../ui/IconButton';
 import { IdeIcon } from '../ui/IdeIcon';
 import { PrBadge } from '../ui/PrBadge';
@@ -46,11 +46,6 @@ interface TaskHeaderProps {
   onTaskSettings: () => void;
   onArchiveTask: () => void;
   onDeleteTask: () => void;
-}
-
-/** A tooltip label with its shortcut, e.g. "Show sidebar  ⌘B". */
-function withShortcut(label: string, binding: KeyBinding | undefined): string {
-  return binding ? `${label}  ${formatBinding(binding)}` : label;
 }
 
 /**
@@ -105,7 +100,8 @@ export function TaskHeader({
       {sidebarCollapsed && (
         <div className="titlebar-no-drag -mr-1">
           <IconButton
-            title={withShortcut('Show sidebar', keybindings.toggleSidebar)}
+            title="Show sidebar"
+            shortcut={keybindings.toggleSidebar}
             onClick={onToggleSidebar}
           >
             <PanelLeft size={14} strokeWidth={1.8} />
@@ -212,10 +208,8 @@ export function TaskHeader({
           </DropdownMenuContent>
         </DropdownMenu>
         <IconButton
-          title={withShortcut(
-            inspectorCollapsed ? 'Show task sidebar' : 'Hide task sidebar',
-            keybindings.toggleInspector,
-          )}
+          title={inspectorCollapsed ? 'Show task sidebar' : 'Hide task sidebar'}
+          shortcut={keybindings.toggleInspector}
           onClick={onToggleInspector}
         >
           <PanelRight size={14} strokeWidth={1.8} />

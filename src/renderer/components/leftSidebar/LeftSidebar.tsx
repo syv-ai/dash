@@ -10,7 +10,6 @@ import { useTaskStateList } from './useTaskStateList';
 import { STATE_LABELS, newTaskProjectId } from './taskStates';
 import { useSettings } from '../../stores/settingsStore';
 import { useUi } from '../../stores/uiStore';
-import { formatBinding, type KeyBinding } from '../../keybindings';
 
 interface LeftSidebarProps {
   projects: Project[];
@@ -39,11 +38,6 @@ interface LeftSidebarProps {
 
 const isMac = window.electronAPI.getPlatform() === 'darwin';
 
-/** A tooltip label with its shortcut, e.g. "Find a task  ⌘K". */
-function withShortcut(label: string, binding: KeyBinding | undefined): string {
-  return binding ? `${label}  ${formatBinding(binding)}` : label;
-}
-
 /**
  * The app sidebar: a title bar (find, new task), a Tasks | Projects switch
  * over the state-ordered task list or the project tree, and settings at the
@@ -59,10 +53,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
   const setTaskFinderOpen = useUi((s) => s.setTaskFinderOpen);
 
   const settingsButton = (
-    <IconButton
-      title={withShortcut('Settings', keybindings.openSettings)}
-      onClick={props.onOpenSettings}
-    >
+    <IconButton title="Settings" shortcut={keybindings.openSettings} onClick={props.onOpenSettings}>
       <Settings size={14} strokeWidth={1.8} />
     </IconButton>
   );
@@ -106,12 +97,13 @@ export function LeftSidebar(props: LeftSidebarProps) {
       <div className="titlebar-drag flex h-11 shrink-0 items-center justify-end gap-0.5 px-2">
         <div className="titlebar-no-drag flex items-center gap-0.5">
           <IconButton
-            title={withShortcut('Find a task', keybindings.findTask)}
+            title="Find a task"
+            shortcut={keybindings.findTask}
             onClick={() => setTaskFinderOpen(true)}
           >
             <Search size={14} strokeWidth={1.8} />
           </IconButton>
-          <IconButton title={withShortcut('New task', keybindings.newTask)} onClick={newTask}>
+          <IconButton title="New task" shortcut={keybindings.newTask} onClick={newTask}>
             <Plus size={14} strokeWidth={1.8} />
           </IconButton>
         </div>

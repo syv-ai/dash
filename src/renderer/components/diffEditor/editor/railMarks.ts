@@ -17,8 +17,12 @@ export interface RailMark {
   line: number;
   /** Where the line sits, as a fraction of the rail's height (0 top, 1 bottom). */
   at: number;
-  /** One line for the hover: "L12 · @ana: Rename this". */
+  /** One line, its accessible name: "L12 · @ana: Rename this". */
   preview: string;
+  /** Who wrote it: "@ana", or "Comment" / "Note to agent" for your own. */
+  who: string;
+  /** Its first line, up to a few lines' worth (the preview cuts it shorter). */
+  text: string;
 }
 
 /** The editor's geometry the rail maps lines through. */
@@ -33,6 +37,11 @@ export interface RailGeometry {
 }
 
 const PREVIEW_CHARS = 64;
+/** The hover card's words: a few lines, not a whole essay. */
+const TEXT_CHARS = 240;
+
+const clip = (text: string, max: number): string =>
+  text.length > max ? `${text.slice(0, max - 1)}…` : text;
 
 /** Later kinds paint over earlier ones where ticks meet: your own on top. */
 const PAINT_ORDER: readonly RailMarkKind[] = ['resolved', 'thread', 'note', 'comment'];
@@ -44,8 +53,7 @@ const firstLine = (text: string): string =>
     .find(Boolean) ?? '';
 
 function preview(line: number, who: string, text: string): string {
-  const full = `L${line} · ${who}: ${text || '(no text)'}`;
-  return full.length > PREVIEW_CHARS ? `${full.slice(0, PREVIEW_CHARS - 1)}…` : full;
+  return clip(`L${line} · ${who}: ${text || '(no text)'}`, PREVIEW_CHARS);
 }
 
 /**
@@ -67,26 +75,29 @@ export function railMarks(
   const marks: RailMark[] = [];
   for (const t of threads) {
     if (t.line === null) continue;
-    const author = t.comments[0]?.author ?? 'ghost';
+    const who = `@${t.comments[0]?.author ?? 'ghost'}`;
+    const text = clip(threadHeadline(t), TEXT_CHARS);
     marks.push({
       id: t.id,
       kind: t.resolved ? 'resolved' : 'thread',
       line: t.line,
       at: at(t.line),
-      preview: preview(t.line, `@${author}`, threadHeadline(t)),
+      preview: preview(t.line, who, text),
+      who,
+      text,
     });
   }
   for (const c of comments) {
+    const who = c.kind === 'note' ? 'Note to agent' : 'Comment';
+    const text = clip(firstLine(c.text), TEXT_CHARS);
     marks.push({
       id: c.id,
       kind: c.kind,
       line: c.startLine,
       at: at(c.startLine),
-      preview: preview(
-        c.startLine,
-        c.kind === 'note' ? 'Note to agent' : 'Comment',
-        firstLine(c.text),
-      ),
+      preview: preview(c.startLine, who, text),
+      who,
+      text,
     });
   }
   return marks.sort(

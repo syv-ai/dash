@@ -19,6 +19,8 @@ type Option<T> = {
   value: T;
   label: string;
   count?: number;
+  /** What `count` counts ("Changed files"): the tooltip names it. */
+  countLabel?: string;
   /** Tooltip text. */
   title?: string;
 };
@@ -88,7 +90,7 @@ export function FolderTabs<T extends string>({
       {options.map((opt) => {
         const tip = segmentTip(opt, density === 'full');
         return (
-          <Tooltip key={opt.value} content={tip} open={tip ? undefined : false}>
+          <Tooltip key={opt.value} content={tip}>
             <FolderTab
               active={opt.value === value}
               onSelect={() => onChange(opt.value)}

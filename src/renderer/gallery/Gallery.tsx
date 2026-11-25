@@ -233,6 +233,23 @@ function Buttons({ pinned }: { pinned: boolean }) {
             Tooltip
           </Button>
         </Tooltip>
+        <Tooltip
+          content={{
+            title: '5-hour limit',
+            shortcut: ['⌘', 'U'],
+            body: 'Resets with the window; the next message after starts one.',
+            rows: [
+              { label: 'Used', value: '42%' },
+              { label: 'Resets', value: 'Thu 26/11/2026, 09:00 (in 3h 12m)' },
+            ],
+          }}
+          side="bottom"
+          open={pinned || undefined}
+        >
+          <Button size="sm" variant="ghost">
+            Rich tooltip
+          </Button>
+        </Tooltip>
       </Line>
       <Line>
         <span className="text-sm text-ink-2">Search</span>

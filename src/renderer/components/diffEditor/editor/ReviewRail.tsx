@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import type { DiffComment, PrReviewThread } from '../../../../shared/types';
+import { Bot, CircleCheck, MessageSquare, type LucideIcon } from 'lucide-react';
 import { ScrollRail, type RailTick } from '../../ui/ScrollRail';
-import { railMarks, type RailMarkKind } from './railMarks';
+import type { RichTooltip } from '../../ui/Tooltip';
+import { railMarks, type RailMark, type RailMarkKind } from './railMarks';
 
 const TICK: Record<RailMarkKind, RailTick> = {
   thread: 'strong',
@@ -10,6 +12,24 @@ const TICK: Record<RailMarkKind, RailTick> = {
   comment: 'solid',
   note: 'hollow',
 };
+
+/** The hover card's title and icon per kind. */
+const KIND: Record<RailMarkKind, { title: string; icon: LucideIcon }> = {
+  thread: { title: 'Thread', icon: MessageSquare },
+  resolved: { title: 'Resolved thread', icon: CircleCheck },
+  comment: { title: 'Your comment', icon: MessageSquare },
+  note: { title: 'Note to agent', icon: Bot },
+};
+
+/** A tick's hover: what it is, the line and who wrote it, then its words. */
+function markTip(m: RailMark): RichTooltip {
+  const isThread = m.kind === 'thread' || m.kind === 'resolved';
+  return {
+    ...KIND[m.kind],
+    rows: [{ label: 'Line', value: m.line }, ...(isThread ? [{ label: 'By', value: m.who }] : [])],
+    body: m.text || '(no text)',
+  };
+}
 
 interface Layout {
   height: number;
@@ -72,6 +92,7 @@ export function ReviewRail({
       at: m.at,
       tick: TICK[m.kind],
       label: m.preview,
+      tip: markTip(m),
       onSelect: () => {
         modifiedEditor.revealLineInCenter(m.line, monaco.editor.ScrollType.Smooth);
         modifiedEditor.setPosition({ lineNumber: m.line, column: 1 });

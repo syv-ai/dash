@@ -74,11 +74,7 @@ export function EditorHeader({
   // Tooltip carries the full hash.
   const viewMeta =
     view.kind === 'commit'
-      ? {
-          label: `Showing commit ${view.hash.slice(0, 7)}`,
-          tooltip: `Commit ${view.hash}`,
-          Icon: GitCommit,
-        }
+      ? { label: `Showing commit ${view.hash.slice(0, 7)}`, hash: view.hash, Icon: GitCommit }
       : null;
   const [copied, setCopied] = useState(false);
   const folder = dirname(filePath);
@@ -130,11 +126,12 @@ export function EditorHeader({
       <div className="flex items-center gap-3 min-w-0">
         {viewMeta && (
           <Tooltip
-            content={
-              commentCount > 0
-                ? `${viewMeta.tooltip} · ${commentCount} comment${commentCount !== 1 ? 's' : ''}`
-                : viewMeta.tooltip
-            }
+            content={{
+              icon: viewMeta.Icon,
+              title: 'Commit',
+              body: viewMeta.hash,
+              rows: commentCount > 0 ? [{ label: 'Comments', value: commentCount }] : undefined,
+            }}
           >
             <span className="inline-flex items-center gap-1.5 h-6 text-xs font-medium min-w-0 text-primary">
               <viewMeta.Icon size={12} strokeWidth={1.8} className="shrink-0" />
@@ -157,7 +154,12 @@ export function EditorHeader({
       </div>
       <div className="flex shrink-0 items-center gap-1">
         {reviewActions}
-        <IconButton size="sm" title={copied ? 'Copied' : `Copy ${filePath}`} onClick={copyPath}>
+        <IconButton
+          size="sm"
+          title={copied ? 'Copied' : 'Copy path'}
+          description={copied ? undefined : filePath}
+          onClick={copyPath}
+        >
           {copied ? (
             <Check size={14} strokeWidth={1.8} className="text-loc-add" />
           ) : (

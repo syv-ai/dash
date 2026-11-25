@@ -154,11 +154,6 @@ const REVIEW_LIST_MIN_PX = 320;
  *  row's two 2px gaps, its 4px end padding, and the column's 8px gutter. */
 const VIEW_ROW_CHROME_PX = 12 + 8 + 24 + 2 * 2 + 4 + 8;
 
-/** A tooltip label with its shortcut, e.g. "Stage all  ⇧⌘A". */
-function withShortcut(label: string, binding: KeyBinding | undefined): string {
-  return binding ? `${label}  ${formatBinding(binding)}` : label;
-}
-
 /**
  * The task sidebar: its usage on top, then the view switch.
  * Narrow: one column (the changes, the repo's file tree, or the commits)
@@ -523,12 +518,23 @@ export function RightInspector({
                   value: 'files',
                   label: 'Files',
                   count: review.review?.files.length || undefined,
+                  countLabel: 'Changed files',
                 },
-                { value: 'comments', label: 'Comments', count: tally?.comments || undefined },
+                {
+                  value: 'comments',
+                  label: 'Comments',
+                  count: tally?.comments || undefined,
+                  countLabel: 'Unresolved',
+                },
                 { value: 'history', label: 'History' },
               ]
             : [
-                { value: 'changes', label: 'Changes', count: files.length || undefined },
+                {
+                  value: 'changes',
+                  label: 'Changes',
+                  count: files.length || undefined,
+                  countLabel: 'Changed files',
+                },
                 { value: 'files', label: 'Files' },
                 { value: 'history', label: 'History' },
               ]
@@ -538,7 +544,7 @@ export function RightInspector({
       <div className="flex min-w-0 flex-auto items-center gap-0.5 self-stretch overflow-hidden px-1">
         {bulkActions.map((a) => (
           <div key={a.label} className={cn('flex shrink-0 items-center', compact)}>
-            <IconButton size="sm" title={withShortcut(a.label, a.binding)} onClick={a.run}>
+            <IconButton size="sm" title={a.label} shortcut={a.binding} onClick={a.run}>
               {a.icon}
             </IconButton>
             {a.count !== undefined && <CountBadge count={a.count} className="-ml-1" />}
@@ -800,7 +806,8 @@ export function RightInspector({
                             actions={
                               <IconButton
                                 size="sm"
-                                title={withShortcut('Close editor', keybindings.closeDiff)}
+                                title="Close editor"
+                                shortcut={keybindings.closeDiff}
                                 onClick={onCloseDiff}
                               >
                                 <X size={14} strokeWidth={1.8} />

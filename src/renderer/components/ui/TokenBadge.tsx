@@ -18,7 +18,11 @@ export function TokenBadge({ totalTokens, totalCostUsd, size = 'md' }: TokenBadg
     // a separate model call outside the transcript; Dash counts transcripts
     // only, so those calls are billed but never appear here.
     <Tooltip
-      content={`${totalTokens.toLocaleString()} tokens from the session transcripts (Claude Code's session summaries are billed separately and not counted)`}
+      content={{
+        title: `${totalTokens.toLocaleString()} tokens`,
+        body: "From the session transcripts. Claude Code's session summaries are billed separately and not counted.",
+        rows: [{ label: 'Cost', value: formatCost(totalCostUsd) }],
+      }}
     >
       <Badge size={size === 'sm' ? 'sm' : 'md'} className="font-normal">
         <span>{formatTokens(totalTokens)}</span>
