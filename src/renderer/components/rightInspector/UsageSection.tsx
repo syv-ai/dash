@@ -255,7 +255,7 @@ export function UsageSection({ contextUsage, rateLimits, burns }: UsageSectionPr
     <div className="@container/usage shrink-0 px-1">
       <div
         className={cn(
-          'grid items-start justify-center gap-x-2 pt-3 pb-2',
+          'grid items-start justify-center gap-x-2 pt-4 pb-4',
           COLUMNS[items.length - 1],
         )}
       >
