@@ -1,3 +1,5 @@
+import { cn } from '../../lib/cn';
+import { sheetSurface } from '../ui/FolderTab';
 import { useEffect, useState } from 'react';
 import { sessionRegistry } from '../../terminal/SessionRegistry';
 import { ResizeVeil } from '../../terminal/resizeVeil';
@@ -34,7 +36,11 @@ export function TerminalResizeVeil({ id }: { id: string | null }) {
     <div
       aria-hidden
       data-shown={shown || undefined}
-      className="terminal-curtain pointer-events-none absolute inset-0 z-10 bg-ground"
+      className={cn(
+        'terminal-curtain pointer-events-none absolute inset-0 z-10',
+        // The terminal's own sheet, so the sweep reads as the pane, not a block.
+        sheetSurface,
+      )}
     />
   );
 }
