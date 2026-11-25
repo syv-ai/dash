@@ -1,4 +1,5 @@
 import type { RateLimitInfo, RateLimits } from '../../shared/types';
+import { formatSpan } from '../utils/format';
 
 /*
  * Burn rate: how fast a usage limit is being used (%/hour, the first
@@ -29,6 +30,26 @@ export interface Burn {
   perHour: number;
   /** Time until 100 % at this pace; null when the window resets first. */
   toLimitMs: number | null;
+  /** Time until the window resets; null when it reports no reset time. */
+  resetsInMs: number | null;
+  /** The used % the window would reach at its reset at this pace (over 100:
+   *  the limit comes first); Infinity without a reset time. */
+  atResetPct: number;
+}
+
+/**
+ * How a burn looks against its window, by the used % it projects for the
+ * reset (`atResetPct`): `over` past 100 (the limit comes before the reset),
+ * `close` from CLOSE_AT_PCT up to 100, `clear` below.
+ */
+export type BurnOutlook = 'clear' | 'close' | 'over';
+
+/** From this projected % at the reset, a burn is close to its limit. */
+export const CLOSE_AT_PCT = 85;
+
+export function burnOutlook(burn: Pick<Burn, 'atResetPct'>): BurnOutlook {
+  if (burn.atResetPct > 100) return 'over';
+  return burn.atResetPct >= CLOSE_AT_PCT ? 'close' : 'clear';
 }
 
 /** Each reported limit's burn; null while there is too little data or it isn't rising. */
@@ -114,8 +135,14 @@ export function burnFor(
   const perHour = ratePerHour(history, now, windowMs);
   if (perHour === null || perHour < MIN_RATE) return null;
   const toLimitMs = (Math.max(0, 100 - info.usedPercentage) / perHour) * HOUR;
-  const resetsInMs = info.resetsAt ? info.resetsAt * 1000 - now : Infinity;
-  return { perHour, toLimitMs: toLimitMs >= resetsInMs ? null : toLimitMs };
+  const resetsInMs = info.resetsAt ? Math.max(0, info.resetsAt * 1000 - now) : null;
+  if (resetsInMs === null) return { perHour, toLimitMs, resetsInMs, atResetPct: Infinity };
+  return {
+    perHour,
+    toLimitMs: toLimitMs >= resetsInMs ? null : toLimitMs,
+    resetsInMs,
+    atResetPct: info.usedPercentage + perHour * (resetsInMs / HOUR),
+  };
 }
 
 /**
@@ -135,23 +162,23 @@ export function limitBurns(histories: LimitHistories, limits: RateLimits): Limit
 
 /**
  * The burn worth showing when there is room for one: the limit reached
- * soonest at its pace, else (both reset first) the faster one. Null when
- * neither limit is burning.
+ * soonest at its pace, else (both reset first) the one that comes closest to
+ * its limit by its reset. Null when neither limit is burning.
  */
 export function pressingBurn(burns: LimitBurns): { limit: LimitKey; burn: Burn } | null {
   let best: { limit: LimitKey; burn: Burn } | null = null;
   for (const limit of Object.keys(BURN_WINDOW_MS) as LimitKey[]) {
     const burn = burns[limit];
     if (!burn) continue;
-    if (!best || soonerOrFaster(burn, best.burn)) best = { limit, burn };
+    if (!best || morePressing(burn, best.burn)) best = { limit, burn };
   }
   return best;
 }
 
-function soonerOrFaster(a: Burn, b: Burn): boolean {
+function morePressing(a: Burn, b: Burn): boolean {
   if (a.toLimitMs !== null && b.toLimitMs !== null) return a.toLimitMs < b.toLimitMs;
   if (a.toLimitMs !== null || b.toLimitMs !== null) return a.toLimitMs !== null;
-  return a.perHour > b.perHour;
+  return a.atResetPct > b.atResetPct;
 }
 
 /** "+6%/h"; under 10, one decimal ("+0.4%/h", "+2.5%/h"). */
@@ -160,11 +187,12 @@ export function formatRate(perHour: number): string {
   return `+${n}%/h`;
 }
 
-/** "~40m", "~9h", "~3d": the rough time to the limit. */
-export function formatEta(ms: number): string {
-  const minutes = Math.max(1, Math.round(ms / MINUTE));
-  if (minutes < 60) return `~${minutes}m`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 48) return `~${hours}h`;
-  return `~${Math.round(hours / 24)}d`;
+/** Where the pace takes a limit: "At this rate you'd reach 100% in 2h 10m;
+ *  resets in 3h 44m", or the % it would reach by its reset. */
+export function formatProjection(burn: Burn): string {
+  const resets = burn.resetsInMs === null ? '' : `; resets in ${formatSpan(burn.resetsInMs)}`;
+  if (burn.toLimitMs !== null) {
+    return `At this rate you'd reach 100% in ${formatSpan(burn.toLimitMs)}${resets}`;
+  }
+  return `At this rate you'd reach ${Math.round(burn.atResetPct)}% by then${resets}`;
 }

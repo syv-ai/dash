@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   BURN_WINDOW_MS,
   burnFor,
-  formatEta,
+  burnOutlook,
+  CLOSE_AT_PCT,
+  formatProjection,
   formatRate,
   pressingBurn,
   limitBurns,
@@ -96,7 +98,29 @@ describe('burnFor', () => {
     // 6 %/h with 54 points left is 9 h; the window resets in 5 h.
     const h = history([40, 43, 46], 30 * MIN);
     const burn = burnFor(h, { usedPercentage: 46, resetsAt: RESETS }, T0 + HOUR, 2 * HOUR);
-    expect(burn).toEqual({ perHour: expect.closeTo(6), toLimitMs: null });
+    // 46 % now, 6 %/h for the 4 h left: 70 % at the reset.
+    expect(burn).toEqual({
+      perHour: expect.closeTo(6),
+      toLimitMs: null,
+      resetsInMs: 4 * HOUR,
+      atResetPct: expect.closeTo(70),
+    });
+  });
+
+  it('projects past 100 % when the limit comes before the reset', () => {
+    // 6 %/h for 20 h from 46 %: 166 % "at the reset".
+    const resetsAt = T0 / 1000 + 20 * 3600;
+    const h = history([40, 43, 46], 30 * MIN, resetsAt);
+    const burn = burnFor(h, { usedPercentage: 46, resetsAt }, T0 + HOUR, 2 * HOUR);
+    expect(burn?.resetsInMs).toBe(19 * HOUR);
+    expect(burn?.atResetPct).toBeCloseTo(160);
+  });
+
+  it('reaches the limit with no reset in sight when the window reports none', () => {
+    const h = history([40, 43, 46], 30 * MIN, 0);
+    const burn = burnFor(h, { usedPercentage: 46, resetsAt: 0 }, T0 + HOUR, 2 * HOUR);
+    expect(burn).toMatchObject({ resetsInMs: null, atResetPct: Infinity });
+    expect(burn?.toLimitMs).toBeCloseTo(9 * HOUR);
   });
 
   it('is null while the % holds still or without enough data', () => {
@@ -140,7 +164,12 @@ describe('limitBurns', () => {
 });
 
 describe('pressingBurn', () => {
-  const burn = (perHour: number, toLimitMs: number | null) => ({ perHour, toLimitMs });
+  const burn = (perHour: number, toLimitMs: number | null, atResetPct = 50) => ({
+    perHour,
+    toLimitMs,
+    resetsInMs: HOUR,
+    atResetPct,
+  });
 
   it('is null when no limit is burning', () => {
     expect(pressingBurn({})).toBeNull();
@@ -157,9 +186,28 @@ describe('pressingBurn', () => {
     expect(got?.limit).toBe('sevenDay');
   });
 
-  it('falls back to the faster rate when both reset first', () => {
-    const got = pressingBurn({ fiveHour: burn(2, null), sevenDay: burn(0.5, null) });
-    expect(got?.limit).toBe('fiveHour');
+  it('picks the one that comes closest to its limit when both reset first', () => {
+    const got = pressingBurn({ fiveHour: burn(9, null, 60), sevenDay: burn(0.5, null, 92) });
+    expect(got?.limit).toBe('sevenDay');
+  });
+});
+
+describe('burnOutlook', () => {
+  const at = (atResetPct: number) => burnOutlook({ atResetPct });
+
+  it('is clear while the window would reset below the close mark', () => {
+    expect(at(0)).toBe('clear');
+    expect(at(CLOSE_AT_PCT - 0.01)).toBe('clear');
+  });
+
+  it('is close from the mark up to exactly 100 % at the reset', () => {
+    expect(at(CLOSE_AT_PCT)).toBe('close');
+    expect(at(100)).toBe('close');
+  });
+
+  it('is over once the limit comes before the reset', () => {
+    expect(at(100.01)).toBe('over');
+    expect(at(Infinity)).toBe('over');
   });
 });
 
@@ -170,9 +218,14 @@ describe('formatting', () => {
     expect(formatRate(12.6)).toBe('+13%/h');
   });
 
-  it('rounds the time to the limit to minutes, hours or days', () => {
-    expect(formatEta(40 * MIN)).toBe('~40m');
-    expect(formatEta(9 * HOUR + 10 * MIN)).toBe('~9h');
-    expect(formatEta(80 * HOUR)).toBe('~3d');
+  it('says when the pace reaches the limit, and when the window resets', () => {
+    const over = { perHour: 20, toLimitMs: 2 * HOUR + 10 * MIN, resetsInMs: 3 * HOUR + 44 * MIN };
+    expect(formatProjection({ ...over, atResetPct: 130 })).toBe(
+      "At this rate you'd reach 100% in 2h 10m; resets in 3h 44m",
+    );
+    const clear = { perHour: 5, toLimitMs: null, resetsInMs: 3 * HOUR, atResetPct: 61.6 };
+    expect(formatProjection(clear)).toBe("At this rate you'd reach 62% by then; resets in 3h 0m");
+    const unknown = { perHour: 5, toLimitMs: 40 * MIN, resetsInMs: null, atResetPct: Infinity };
+    expect(formatProjection(unknown)).toBe("At this rate you'd reach 100% in 40m");
   });
 });

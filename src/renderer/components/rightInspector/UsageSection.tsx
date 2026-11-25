@@ -2,10 +2,13 @@ import type { ContextUsage, RateLimitInfo, RateLimits } from '../../../shared/ty
 import { formatResetAt, formatResetTime, formatTokens } from '../../utils/format';
 import {
   BURN_WINDOW_MS,
-  formatEta,
+  burnOutlook,
+  CLOSE_AT_PCT,
+  formatProjection,
   formatRate,
   pressingBurn,
   type Burn,
+  type BurnOutlook,
   type LimitBurns,
   type LimitKey,
 } from '../../lib/burnRate';
@@ -50,8 +53,16 @@ const COLUMNS = [
 /** One column's content: a level (the session's context, a limit) or the burn. */
 type Cell = { key: string; tooltip: RichTooltip; label: string } & (
   | { kind: 'level'; pct: number | null; aria: string; countdown?: string }
-  | { kind: 'burn'; rate: string }
+  | { kind: 'burn'; rate: string; outlook: BurnOutlook }
 );
+
+/** The burn's figure by its outlook: green, it resets first; amber, close;
+ *  red, the limit comes first. */
+const OUTLOOK_TEXT: Record<BurnOutlook, string> = {
+  clear: 'text-state-done',
+  close: 'text-state-needs',
+  over: 'text-state-fail',
+};
 
 /** One column: the figure on top, its label below, then any caption. Its
  *  tooltip, unless it is a measuring copy (`bare`). */
@@ -78,7 +89,9 @@ function Figure({ cell, density }: { cell: Cell; density: UsageDensity }) {
   const figure = 'text-sm font-semibold tabular-nums';
   if (cell.kind === 'burn') {
     return (
-      <span className={cn('grid size-11 place-items-center text-ink', figure)}>{cell.rate}</span>
+      <span className={cn('grid size-11 place-items-center', OUTLOOK_TEXT[cell.outlook], figure)}>
+        {cell.rate}
+      </span>
     );
   }
   const { pct, aria } = cell;
@@ -158,22 +171,19 @@ function windowLabel(key: LimitKey): string {
   return minutes < 60 ? `${minutes} min` : `${minutes / 60} h`;
 }
 
-/** A limit's burn as a tooltip row: its rate over its window, then when it
- *  reaches 100 % at that pace (on a second line). */
+/** A limit's burn as a tooltip row: its rate over its window, then where
+ *  that pace takes it (on a second line). */
 function burnRow(limit: LimitKey, burn: Burn | null | undefined) {
   const label = LIMIT_LABELS[limit];
   if (!burn) return { label, value: 'Not rising, or too few readings yet' };
-  const eta =
-    burn.toLimitMs === null
-      ? 'Resets before 100 % at this pace'
-      : `100 % in ${formatEta(burn.toLimitMs)} at this pace`;
   return {
     label,
-    value: `${formatRate(burn.perHour)} over the last ${windowLabel(limit)}\n${eta}`,
+    value: `${formatRate(burn.perHour)} over the last ${windowLabel(limit)}\n${formatProjection(burn)}`,
   };
 }
 
-/** The most pressing limit's burn, "+6%/h"; both limits in the tooltip. */
+/** The most pressing limit's burn, "+6%/h", coloured by its outlook; both
+ *  limits in the tooltip. */
 function burnCell(burns: LimitBurns, burn: Burn): Cell {
   const rows = (Object.keys(LIMIT_LABELS) as LimitKey[])
     .filter((k) => k in burns)
@@ -182,8 +192,13 @@ function burnCell(burns: LimitBurns, burn: Burn): Cell {
     key: 'burn',
     kind: 'burn',
     rate: formatRate(burn.perHour),
+    outlook: burnOutlook(burn),
     label: 'Burn',
-    tooltip: { title: 'Burn rate', rows },
+    tooltip: {
+      title: 'Burn rate',
+      body: `Green: the limit resets first. Amber: ${CLOSE_AT_PCT}% or more by the reset. Red: the limit comes first.`,
+      rows,
+    },
   };
 }
 

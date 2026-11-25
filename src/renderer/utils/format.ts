@@ -39,18 +39,21 @@ export function formatDuration(ms: number): string {
   return `${h}h ${m % 60}m`;
 }
 
+/** A span ahead, to the minute: `30m`, `2h 10m`, `2d 3h`. */
+export function formatSpan(ms: number): string {
+  const min = Math.round(ms / 60000);
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h ${min % 60}m`;
+  const d = Math.floor(h / 24);
+  return h % 24 > 0 ? `${d}d ${h % 24}h` : `${d}d`;
+}
+
 /** Relative reset time from an epoch-seconds timestamp: `now`, `in 30m`, `in 2d 3h`. */
 export function formatResetTime(epochSeconds: number, nowMs = Date.now()): string {
   if (!epochSeconds) return '';
   const diffMs = epochSeconds * 1000 - nowMs;
-  if (diffMs <= 0) return 'now';
-  const diffMin = Math.round(diffMs / 60000);
-  if (diffMin < 60) return `in ${diffMin}m`;
-  const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return `in ${diffH}h ${diffMin % 60}m`;
-  const diffD = Math.floor(diffH / 24);
-  const remH = diffH % 24;
-  return remH > 0 ? `in ${diffD}d ${remH}h` : `in ${diffD}d`;
+  return diffMs <= 0 ? 'now' : `in ${formatSpan(diffMs)}`;
 }
 
 /** The locale and zone a clock time is read in; both default to the system's. */
