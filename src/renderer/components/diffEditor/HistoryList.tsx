@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUp, ChevronDown, ChevronRight, GitPullRequestArrow, History } from 'lucide-react';
 import { formatRelativeTime } from '@shared/relativeTime';
 import type { FileChange } from '../../../shared/types';
@@ -10,7 +10,7 @@ import { EmptyState } from '../ui/EmptyState';
 import { Markdown } from '../ui/Markdown';
 import { HoverCard } from '../ui/HoverCard';
 import { CommitHoverCard } from '../commits/CommitHoverCard';
-import { LineStats } from '../ui/LineStats';
+import { LineStats, lineStatsColumns, type LineStatsColumns } from '../ui/LineStats';
 import { cn } from '../../lib/cn';
 
 /** The task's open PR in History. `threads` and `body` are null until its
@@ -20,6 +20,9 @@ export interface PrEntry {
   title: string;
   body: string | null;
   threads: number | null;
+  /** Its lines added and deleted; null where the forge doesn't say. */
+  additions: number | null;
+  deletions: number | null;
   /** Review it: enter review mode for it. */
   onOpen: () => void;
   /** The hover card opened: fetch the review if it isn't yet. */
@@ -80,6 +83,9 @@ export function HistoryList({
     onSelectView({ kind: 'commit', hash });
   };
 
+  // The +/− columns fit the list's widest counts, the PR's included.
+  const lines = useMemo(() => lineStatsColumns(pr ? [pr, ...commits] : commits), [pr, commits]);
+
   // Keep the selected row in sight when the view changes elsewhere.
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -93,7 +99,7 @@ export function HistoryList({
       ref={listRef}
       className="scrollbar-gutter-stable scrollbar-thin-hover @container flex h-full min-h-0 flex-col gap-px overflow-y-auto pb-2"
     >
-      {pr && <PrRow pr={pr} />}
+      {pr && <PrRow pr={pr} lines={lines} />}
       {loading && commits.length === 0 && <EmptyState title="Loading…" />}
       {!loading && commits.length === 0 && (
         <EmptyState icon={<History size={14} strokeWidth={1.8} />} title="No commits yet" />
@@ -106,6 +112,7 @@ export function HistoryList({
             <CommitRow
               commit={c}
               cwd={cwd}
+              lines={lines}
               selected={selected}
               unfolded={unfolded}
               commentCount={commentCountByScope.get(`commit:${c.hash}`) ?? 0}
@@ -141,22 +148,23 @@ export function HistoryList({
 
 /** A commit row's fixed columns, so they line up from row to row; the
  *  subject takes what is left and truncates first. The author shows only
- *  where the list is wide enough (its hover card names it anyway). */
+ *  where the list is wide enough (its hover card names it anyway). The
+ *  lines added and deleted are two more, sized to the list (`LineStats`). */
 const COL = {
   sha: 'w-13 shrink-0',
   when: 'w-7 shrink-0',
   author: 'hidden w-18 shrink-0 truncate @md:block',
-  lines: 'flex min-w-16 shrink-0 justify-end',
 } as const;
 
 /**
- * A commit as columns: short sha, age, author and lines changed, then its
- * subject. Comments on it, the "not pushed" arrow and (selected) the fold
+ * A commit as columns: short sha, age, author, lines added, lines deleted,
+ * then its subject. Comments on it, the "not pushed" arrow and (selected) the fold
  * chevron trail it.
  */
 function CommitRow({
   commit,
   cwd,
+  lines,
   selected,
   unfolded,
   commentCount,
@@ -165,6 +173,7 @@ function CommitRow({
 }: {
   commit: CommitSummary;
   cwd: string;
+  lines: LineStatsColumns;
   selected: boolean;
   /** Its files are listed under it. */
   unfolded: boolean;
@@ -190,9 +199,7 @@ function CommitRow({
               <span className={COL.sha}>{commit.shortHash}</span>
               <span className={COL.when}>{when}</span>
               <span className={COL.author}>{commit.authorName}</span>
-              <span className={COL.lines}>
-                <LineStats add={commit.additions} del={commit.deletions} />
-              </span>
+              <LineStats add={commit.additions} del={commit.deletions} columns={lines} />
             </span>
           }
           trailing={
@@ -224,8 +231,9 @@ function CommitRow({
 }
 
 /** The task's PR: review it (review mode), with a hover card holding its
- *  description. */
-function PrRow({ pr }: { pr: PrEntry }) {
+ *  description. Its icon and number sit in the sha column, its lines in the
+ *  commits' line columns. */
+function PrRow({ pr, lines }: { pr: PrEntry; lines: LineStatsColumns }) {
   return (
     <HoverCard
       onOpen={pr.onPeek}
@@ -241,6 +249,9 @@ function PrRow({ pr }: { pr: PrEntry }) {
                 <GitPullRequestArrow size={14} strokeWidth={1.8} className="text-icon" />
                 <span>#{pr.number}</span>
               </span>
+              <span className={COL.when} />
+              <span className={COL.author} />
+              <LineStats add={pr.additions ?? 0} del={pr.deletions ?? 0} columns={lines} />
             </span>
           }
           trailing={(pr.threads ?? 0) > 0 && <CountBadge count={pr.threads!} />}

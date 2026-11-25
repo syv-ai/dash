@@ -158,6 +158,8 @@ export function useReviewMode(
           title: ownPr.title,
           body: ownReview?.body ?? null,
           threads: ownReview ? ownThreads : null,
+          additions: ownPr.additions ?? null,
+          deletions: ownPr.deletions ?? null,
           onPeek: () => {
             if (!ownReview)
               void usePrReviews.getState().load(task.projectId, task.path, ownPr.number);

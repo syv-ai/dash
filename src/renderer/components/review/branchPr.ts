@@ -1,7 +1,9 @@
-import type { PullRequestInfo, RelevantPrs } from '../../../shared/types';
+import type { PullRequestInfo, RelevantPr, RelevantPrs } from '../../../shared/types';
 
-/** The branch's own PR, as far as the sidebar names it. */
-export type BranchPr = Pick<PullRequestInfo, 'provider' | 'number' | 'title'>;
+/** The branch's own PR, as far as the sidebar names it; its line counts
+ *  once the relevant listing has them. */
+export type BranchPr = Pick<PullRequestInfo, 'provider' | 'number' | 'title'> &
+  Partial<Pick<RelevantPr, 'additions' | 'deletions'>>;
 
 /**
  * The branch's own PR: the newest open PR from it, as the relevant listing
