@@ -27,13 +27,13 @@ const SEARCH_FROM = 8;
  */
 export function PrButton({
   relevant,
-  ownThreads,
+  own,
   onOpen,
   onPick,
 }: {
   relevant: RelevantPrs | null;
-  /** Unresolved threads on the newest PR from the branch (0: no badge). */
-  ownThreads: number;
+  /** The branch's own PR and its unresolved threads (0: no badge). */
+  own: { number: number; threads: number } | null;
   /** The list is opening: list the PRs again. */
   onOpen: () => void;
   onPick: (pr: PullRequest) => void;
@@ -62,11 +62,11 @@ export function PrButton({
           <Button variant="ghost" size="sm" aria-label={label}>
             <GitPullRequestArrow size={14} strokeWidth={1.8} />
             <span className="tabular-nums">{count}</span>
-            {ownThreads > 0 && (
+            {own && own.threads > 0 && (
               <CountBadge
-                count={ownThreads}
+                count={own.threads}
                 tone="outline"
-                title={`${plural(ownThreads, 'unresolved thread')} on #${from[0]!.number}`}
+                title={`${plural(own.threads, 'unresolved thread')} on #${own.number}`}
               />
             )}
           </Button>

@@ -7,6 +7,7 @@ import { useProjects } from '../../stores/projectsStore';
 import { useUi } from '../../stores/uiStore';
 import { useTaskReview } from '../diffEditor/prReview/useTaskReview';
 import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
+import type { CodeSegment } from '../rightInspector/sidebarState';
 import { Button } from '../ui/Button';
 import { DockedPanel } from '../ui/DockedPanel';
 import { EmptyState } from '../ui/EmptyState';
@@ -22,14 +23,12 @@ import { ReviewThreads } from './ReviewThreads';
 import { useReviewData } from './useReviewData';
 import { YourReview } from './YourReview';
 
-/** Review mode's views, each scoped to the PR. */
-export type ReviewTab = 'overview' | 'changes' | 'files' | 'history';
-
 interface ReviewViewProps {
   task: Task;
   /** The PR the task is in review mode for. */
   mode: PrRef;
-  tab: ReviewTab;
+  /** The sidebar's view, each scoped to the PR. */
+  tab: CodeSegment;
   /** Files' and History's lists, scoped to the PR by the host. */
   files: ReactNode;
   history: ReactNode;

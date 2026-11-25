@@ -24,7 +24,6 @@ import {
 import { isDirty, workingUri } from './models';
 import { absolutePath } from './editor/fileRef';
 import type { FileBadges } from './EditorTree';
-import type { PrEntry } from './HistoryList';
 
 const NO_COMMENTS: Record<string, DiffComment[]> = {};
 
@@ -86,8 +85,6 @@ export interface EditorWorkspace {
   badgeCounts: Map<string, FileBadges>;
   /** Comments needing attention per scope ('live', 'commit:<sha>'), for History. */
   commentCountByScope: Map<string, number>;
-  /** The task's open PR, for History (opening it is the sidebar's). */
-  prEntry: Omit<PrEntry, 'onOpen'> | null;
   /** A comment to reveal once its file shows (cross-file navigation). */
   revealCommentId: string | null;
   clearRevealComment(): void;
@@ -267,17 +264,9 @@ export function useEditorWorkspace({
   const [revealCommentId, setRevealCommentId] = useState<string | null>(null);
   const clearRevealComment = useCallback(() => setRevealCommentId(null), []);
 
-  // ── The task's open PR and its review threads ──
-  // History's PR row: the task's PR as its badges show it.
-  const openPr = useGit((s) => {
-    const pr = activeTaskId ? s.prByTask[activeTaskId]?.[0] : undefined;
-    return pr && pr.state === 'open' ? pr : null;
-  });
+  // ── The PR's review threads, in a PR's view ──
   const viewReview = usePrReviews((s) =>
     view.kind === 'pr' ? (s.byPr[prKey(view.provider, view.number)] ?? null) : null,
-  );
-  const ownReview = usePrReviews((s) =>
-    openPr ? (s.byPr[prKey(openPr.provider, openPr.number)] ?? null) : null,
   );
   const showPr = useCallback(
     async ({ provider, number }: PrRef): Promise<boolean> => {
@@ -325,19 +314,6 @@ export function useEditorWorkspace({
     },
     [view, showPr, openFile],
   );
-
-  const prEntry: Omit<PrEntry, 'onOpen'> | null = openPr
-    ? {
-        number: openPr.number,
-        title: openPr.title,
-        body: ownReview?.body ?? null,
-        threads: ownReview ? unresolvedThreads(ownReview).length : null,
-        onPeek: () => {
-          if (!ownReview && projectId)
-            void usePrReviews.getState().load(projectId, cwd, openPr.number);
-        },
-      }
-    : null;
 
   // Your notes and comments in this view, and in a PR view its unresolved
   // threads too. Already-sent comments don't need attention.
@@ -387,7 +363,6 @@ export function useEditorWorkspace({
     focusGroup,
     badgeCounts,
     commentCountByScope,
-    prEntry,
     revealCommentId,
     clearRevealComment,
     navigateToComment,

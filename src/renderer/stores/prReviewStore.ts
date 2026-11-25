@@ -19,6 +19,15 @@ export const prKey = (provider: PrProvider, number: number): string => `${provid
 export const reviewKey = (taskId: string, provider: PrProvider, number: number): string =>
   `${taskId}:${prKey(provider, number)}`;
 
+/** A selector: the review of the PR the task is in review mode for, as last
+ *  fetched; null in normal mode or until it has been. */
+export const modeReviewOf =
+  (taskId: string) =>
+  (s: Pick<PrReviewState, 'prs' | 'byPr'>): PrReview | null => {
+    const mode = s.prs[taskId]?.mode;
+    return mode ? (s.byPr[prKey(mode.provider, mode.number)] ?? null) : null;
+  };
+
 /** Where a reply on the own PR posts from: the task that drafted it, its
  *  project and checkout, and the PR. */
 export interface ReplyPoster {

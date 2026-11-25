@@ -1,20 +1,23 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import type { CheckoutVsHead, PrReview, Task } from '../../../shared/types';
+import type { CheckoutVsHead, Task } from '../../../shared/types';
 import { useGit, useTaskBranch } from '../../stores/gitStore';
+import { modeReviewOf, usePrReviews } from '../../stores/prReviewStore';
 import { anyDirtyUnder, dirtyVersion, subscribeDirty } from '../diffEditor/models';
 import { checkoutNotice, reviewCheckout, type ReviewCheckout } from './checkout';
 
 /**
- * What the diff's right side is in review mode (see `reviewCheckout`), and
- * the notice saying how the checkout differs from the PR. The checkout is
- * measured against the PR head in main, again on each git status change;
- * unsaved edits in the editor count as uncommitted changes. Out of review
- * mode (`review` null): not live, no notice.
+ * What the diff's right side is in the task's review mode (see
+ * `reviewCheckout`), and the notice saying how the checkout differs from the
+ * PR. The checkout is measured against the PR head in main, again on each
+ * git status change; unsaved edits in the editor count as uncommitted
+ * changes. Out of review mode, or until its PR has loaded: not live, no
+ * notice. Its own hook, not `useReviewMode`'s: the editor's workspace takes
+ * `live`, and `useReviewMode` takes the workspace.
  */
 export function useReviewCheckout(
   task: Pick<Task, 'id' | 'branch' | 'path'>,
-  review: Pick<PrReview, 'head' | 'headRef'> | null,
 ): ReviewCheckout & { notice: string | null } {
+  const review = usePrReviews(modeReviewOf(task.id));
   const status = useGit((s) => (s.gitStatusCwd === task.path ? s.gitStatus : null));
   const taskBranch = useTaskBranch(task);
   const branch = status ? status.branch : taskBranch;
