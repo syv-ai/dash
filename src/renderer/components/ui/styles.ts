@@ -13,7 +13,7 @@ export const menuSurface =
 
 /** A row in a floating menu; its icons rest in the icon token. */
 export const menuItem =
-  'relative flex h-7.5 cursor-default select-none items-center gap-2 rounded-md px-2.5 text-sm text-ink outline-none transition-colors [&_svg]:shrink-0 [&_svg]:text-icon';
+  'relative flex h-8 cursor-default select-none items-center gap-2 rounded-md px-3 text-sm text-ink outline-none transition-colors [&_svg]:shrink-0 [&_svg]:text-icon';
 
 /** Radix menu row states: present-or-absent `data-highlighted` / `data-disabled`.
  *  (cmdk writes `data-disabled="false"`, so Command spells its own.) */
@@ -25,7 +25,7 @@ export const menuItemDestructive =
   'text-state-fail [&_svg]:text-state-fail data-highlighted:bg-state-fail/10';
 
 /** A section label inside a menu. */
-export const menuLabel = 'type-subheading px-2.5 pt-1.5 pb-1';
+export const menuLabel = 'type-subheading px-3 pt-2 pb-1';
 
 /** A hairline between menu groups. */
 export const menuSeparator = '-mx-1.5 my-1.5 h-px bg-line';

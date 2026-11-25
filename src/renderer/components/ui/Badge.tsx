@@ -11,7 +11,7 @@ import { cn } from '../../lib/cn';
  * `CountBadge`, `TokenBadge`, `MainRepoBadge` and `PrBadge` build on it.
  */
 export const badgeVariants = cva(
-  'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-sm font-medium tabular-nums [&_svg]:shrink-0',
+  'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm font-medium tabular-nums [&_svg]:shrink-0',
   {
     variants: {
       tone: {

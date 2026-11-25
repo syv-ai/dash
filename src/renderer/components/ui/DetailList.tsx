@@ -46,7 +46,7 @@ export function DetailSection({
   const id = React.useId();
   if (!collapsible) {
     return (
-      <section className="grid gap-1 px-2.5 pt-4 pb-1">
+      <section className="grid gap-1.5 px-3 pt-5 pb-2">
         <div className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1">
           <h3 className="type-heading min-w-0 flex-1">
             {title}
@@ -60,7 +60,7 @@ export function DetailSection({
   }
   return (
     <section className="not-first:-mt-px">
-      <div className="flex min-h-8 flex-wrap items-center gap-x-2 border-y border-line bg-well pr-2.5">
+      <div className="flex min-h-9 flex-wrap items-center gap-x-2 border-y border-line bg-well pr-3">
         <h3 className="type-heading flex min-w-0 flex-1 self-stretch">
           <button
             type="button"
@@ -68,7 +68,7 @@ export function DetailSection({
             aria-controls={id}
             onClick={() => setOpen(!open)}
             className={cn(
-              'flex min-h-8 min-w-0 flex-1 items-center gap-1.5 py-1 pl-2.5 text-left',
+              'flex min-h-9 min-w-0 flex-1 items-center gap-2 py-1.5 pl-3 text-left',
               focusRing,
             )}
           >
@@ -89,7 +89,7 @@ export function DetailSection({
       <div id={id} className="collapse-grid" data-open={open}>
         {/* The padding sits inside the clipped child, which folds to nothing. */}
         <div>
-          <div className="grid gap-1 px-2.5 py-1.5">{children}</div>
+          <div className="grid gap-1.5 px-3 py-2.5">{children}</div>
         </div>
       </div>
     </section>
@@ -105,7 +105,7 @@ function Summary({ text }: { text?: string | null }) {
  * rest (truncated; the full value in the tooltip or behind copy).
  */
 export function DetailList({ children }: { children: React.ReactNode }) {
-  return <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 text-sm">{children}</dl>;
+  return <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-sm">{children}</dl>;
 }
 
 export function DetailItem({

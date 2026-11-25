@@ -60,7 +60,7 @@ export function CommandGroup({
   return (
     <CommandPrimitive.Group
       className={cn(
-        'overflow-hidden text-ink **:[[cmdk-group-heading]]:px-2.5 **:[[cmdk-group-heading]]:pt-1.5 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group-heading]]:type-subheading',
+        'overflow-hidden text-ink **:[[cmdk-group-heading]]:px-3 **:[[cmdk-group-heading]]:pt-2 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group-heading]]:type-subheading',
         className,
       )}
       {...props}

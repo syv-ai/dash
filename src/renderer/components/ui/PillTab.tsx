@@ -6,7 +6,7 @@ import { Tab, type TabProps } from './Tab';
 
 const pillTabVariants = cva(
   cn(
-    'group/tab relative flex h-6 min-w-11 shrink-0 cursor-pointer items-center justify-center rounded-md px-2.5 select-none transition-colors duration-150',
+    'group/tab relative flex h-6 min-w-11 shrink-0 cursor-pointer items-center justify-center rounded-md px-3 select-none transition-colors duration-150',
     focusRing,
   ),
   {

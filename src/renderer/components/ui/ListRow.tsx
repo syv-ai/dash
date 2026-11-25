@@ -10,9 +10,9 @@ const listRowVariants = cva(
   ),
   {
     variants: {
-      size: { sm: 'h-7 text-sm', md: 'h-8 text-base' },
+      size: { sm: 'h-8 text-sm', md: 'h-9 text-base' },
       // A second line: the row grows and the leading slot stays on the first.
-      twoLine: { true: 'h-auto items-start py-1.5', false: '' },
+      twoLine: { true: 'h-auto items-start py-2', false: '' },
       dimmed: {
         true: 'text-ink-3 hover:text-ink data-[selected=true]:text-ink',
         false: '',
@@ -48,7 +48,7 @@ export type ListRowProps = Omit<React.ComponentProps<'button'>, 'children'> &
 export const TREE_INDENT_PX = 12;
 
 /**
- * A sidebar or tree row: 28–32px, rounded-lg, hover tint, select tint when
+ * A sidebar or tree row: 32–36px, rounded-lg, hover tint, select tint when
  * `selected`. Leading slot, truncating label (with an optional second line),
  * trailing slot (ink-3).
  */
@@ -87,7 +87,7 @@ export function ListRow({
       ) : (
         <span className="min-w-0 flex-1 truncate">{children}</span>
       )}
-      {trailing && <span className="flex shrink-0 items-center gap-1 text-ink-3">{trailing}</span>}
+      {trailing && <span className="flex shrink-0 items-center gap-1.5 text-ink-3">{trailing}</span>}
     </Comp>
   );
 }

@@ -53,7 +53,7 @@ export const Tab = React.forwardRef<HTMLDivElement, TabProps>(function Tab(
     >
       {/* The label and its indicator sit together; the × floats in the right
           gutter so it never shifts them. */}
-      <span className="flex min-w-0 items-center gap-1">
+      <span className="flex min-w-0 items-center gap-1.5">
         <span className="truncate text-sm font-medium">{children}</span>
         {indicator && (
           <span className={cn('flex shrink-0', onClose && 'group-hover/tab:invisible')}>

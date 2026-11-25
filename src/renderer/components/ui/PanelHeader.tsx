@@ -16,9 +16,9 @@ export function PanelHeader({
   className?: string;
 }) {
   return (
-    <div className={cn('flex h-11 shrink-0 items-center gap-1 pl-3 pr-1.5', className)}>
+    <div className={cn('flex h-11 shrink-0 items-center gap-1 pl-3 pr-2', className)}>
       <h2 className="type-subheading min-w-0 flex-1 truncate">{title}</h2>
-      {actions && <div className="flex shrink-0 items-center gap-0.5">{actions}</div>}
+      {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
     </div>
   );
 }

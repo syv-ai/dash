@@ -11,7 +11,7 @@ import type { FileChange } from '../../../shared/types';
 /** Above this many changed files the panel renders this list instead of the animated tree. */
 export const VIRTUALIZE_THRESHOLD = 300;
 
-const ROW_ESTIMATE_PX = 28;
+const ROW_ESTIMATE_PX = 32;
 
 export interface FileSection extends Omit<Callbacks, 'onToggleFolderStage'> {
   id: string;
