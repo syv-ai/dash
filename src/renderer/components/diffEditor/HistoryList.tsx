@@ -35,7 +35,7 @@ interface HistoryListProps {
   commits: CommitSummary[];
   loading: boolean;
   view: EditorView;
-  /** A commit. The way back is Changes or Files (D29b), so it has no row here. */
+  /** A commit. The way back is Files (D29b), so it has no row here. */
   onSelectView: (view: EditorView) => void;
   /** Comments needing attention per scope ('commit:<hash>' is read here). */
   commentCountByScope: Map<string, number>;

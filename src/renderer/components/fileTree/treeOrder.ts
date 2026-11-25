@@ -2,7 +2,7 @@
  * The order every file tree displays its paths in: depth first, a folder's
  * subfolders (by name, `localeCompare`) ahead of its files (by code unit, so
  * `README.md` comes before `package.json`). Anything that walks the files
- * "in order" (Changes' first change, next unviewed, next thread) uses it.
+ * "in order" (Files' first change, next unviewed, next thread) uses it.
  */
 
 /** How a tree orders sibling folders by name. */

@@ -23,8 +23,8 @@ import { TreeItem, TreeNote } from './TreeItem';
 export type FileRow = Extract<TreeRow, { kind: 'file' }>;
 
 export interface FileTreeProps {
-  /** The trees it lists, one after another: one for Files, Staged and
-   *  Unstaged for Changes (each headed by its `label`). */
+  /** The trees it lists, one after another: one for all files, Staged and
+   *  Unstaged for Files' changes (each headed by its `label`). */
   sections: readonly TreeSection[];
   /** The folder the paths are in: for the menus, and lazy folders' reads. */
   cwd: string;
@@ -51,7 +51,7 @@ export interface FileTreeProps {
 const estimate = (row: TreeRow | undefined) => (row?.kind === 'section' ? 28 : 32);
 
 /**
- * The app's one file tree (Files, Changes, a PR's files, the editor modal):
+ * The app's one file tree (Files, a PR's files, the editor modal):
  * its sections' folders (folded) and files, depth first, windowed so a
  * repo-sized tree stays light. It owns which folders are open (changed ones
  * and the selection's by default; lazy folders read when opened), the

@@ -77,7 +77,7 @@ export function nextUnviewed(rows: readonly FileRow[], from: string | null): str
   return null;
 }
 
-/** The PR's files as the Files tree lists changes (the Changes tab). */
+/** The PR's files as a tree lists changes. */
 export const prFileChanges = (files: readonly PrFile[]): FileChange[] =>
   files.map(({ path, status, oldPath, additions, deletions }) => ({
     path,

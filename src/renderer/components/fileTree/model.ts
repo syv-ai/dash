@@ -2,8 +2,8 @@
  * The file tree's model, pure: building a tree from changed files (and, for a
  * whole-repo tree, every listed path), folding single-child folder chains,
  * which folders are open, and the visible rows as one flat list that the
- * component windows. Every file tree in the app (Files, Changes, a PR's
- * files, the editor modal) renders these rows through `FileTree`.
+ * component windows. Every file tree in the app (Files, a PR's files, the
+ * editor modal) renders these rows through `FileTree`.
  */
 import type { DirEntry, FileChange, RepoListing } from '../../../shared/types';
 import { treeOrder, folderOrder } from './treeOrder';
@@ -219,7 +219,7 @@ export function folded(folder: TreeFolder): {
 
 // ── Rows ─────────────────────────────────────────────────────
 
-/** One tree in a `FileTree`: Files is one; Changes has Staged and Unstaged. */
+/** One tree in a `FileTree`: all files is one; Files' changes are two. */
 export interface TreeSection {
   id: string;
   /** Its header row; none for a tree of one section. */

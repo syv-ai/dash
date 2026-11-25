@@ -52,7 +52,7 @@ interface TaskHeaderProps {
  * The task sheet's title row: name, branch, setup status and linked issues
  * on the left; the model and token badge, then open in IDE, pull request,
  * "…" (remote control, commit graph, the task's actions) and the
- * right-sidebar toggle on the right. Ahead/behind live in the Changes view.
+ * right-sidebar toggle on the right. Ahead/behind live in Files' sync row.
  * The row drags the window; its controls don't.
  */
 export function TaskHeader({
