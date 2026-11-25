@@ -1057,13 +1057,27 @@ export function App() {
       widths: loadInspectorWidths(),
     });
     if (width === null) return;
-    setChangesAnimating(true);
-    panel.resize(`${width}%`);
-    const id = setTimeout(() => {
-      setChangesAnimating(false);
-      if (expanded) setEditorReady(true);
-    }, panelEaseMs());
-    return () => clearTimeout(id);
+    // The ease starts after the sidebar's new content has painted, from a
+    // task of its own. A transition's clock starts at the frame its style
+    // change lands in: started in the long frame that splits or unsplits the
+    // sidebar (the editor shown or hidden, the list remounted), or in a frame
+    // whose rAF does the re-render, it runs on unseen, and its ease-out has
+    // covered a third to a half of the distance by the first frame drawn.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const raf = requestAnimationFrame(() => {
+      timer = setTimeout(() => {
+        setChangesAnimating(true);
+        panel.resize(`${width}%`);
+        timer = setTimeout(() => {
+          setChangesAnimating(false);
+          if (expanded) setEditorReady(true);
+        }, panelEaseMs());
+      });
+    });
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
   }, [expanded, setChangesAnimating]);
   const narrowEditor = useCallback(() => {
     if (activeTask) useEditors.getState().hide(activeTask.path);
