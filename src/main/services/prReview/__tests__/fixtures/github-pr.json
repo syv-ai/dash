@@ -14,13 +14,18 @@
   "headRefOid": "H",
   "reviewRequests": {
     "nodes": [
-      { "requestedReviewer": { "login": "cy" } },
-      { "requestedReviewer": { "name": "core-team" } }
+      { "requestedReviewer": { "login": "cy", "url": "https://github.com/cy" } },
+      {
+        "requestedReviewer": {
+          "name": "core-team",
+          "url": "https://github.com/orgs/o/teams/core-team"
+        }
+      }
     ]
   },
   "latestReviews": {
     "nodes": [
-      { "author": { "login": "ann" }, "state": "APPROVED" },
+      { "author": { "login": "ann", "url": "https://github.com/ann" }, "state": "APPROVED" },
       { "author": { "login": "cy" }, "state": "CHANGES_REQUESTED" },
       { "author": { "login": "di" }, "state": "COMMENTED" },
       { "author": { "login": "ed" }, "state": "DISMISSED" },
@@ -30,7 +35,7 @@
   },
   "latestOpinionatedReviews": {
     "nodes": [
-      { "author": { "login": "ann" }, "state": "APPROVED" },
+      { "author": { "login": "ann", "url": "https://github.com/ann" }, "state": "APPROVED" },
       { "author": { "login": "fay" }, "state": "APPROVED" }
     ]
   },

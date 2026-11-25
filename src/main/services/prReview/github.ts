@@ -45,10 +45,10 @@ export const PR_REVIEW_QUERY = `query($owner: String!, $name: String!, $number: 
       comments(first: 100) { nodes { id author { login } body createdAt url } }
       reviews(first: 100) { nodes { id author { login } body state createdAt url } }
       reviewRequests(first: 100) {
-        nodes { requestedReviewer { ... on User { login } ... on Team { name } } }
+        nodes { requestedReviewer { ... on User { login url } ... on Team { name url } } }
       }
-      latestReviews(first: 100) { nodes { author { login } state } }
-      latestOpinionatedReviews(first: 100) { nodes { author { login } state } }
+      latestReviews(first: 100) { nodes { author { login url } state } }
+      latestOpinionatedReviews(first: 100) { nodes { author { login url } state } }
       assignees(first: 50) { nodes { login } }
       commits(last: 1) {
         nodes {
@@ -73,6 +73,8 @@ type Node = Record<string, unknown>;
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const login = (v: unknown): string => str((v as { login?: unknown } | null)?.login);
+/** A user's or team's page on GitHub; null when the node has none. */
+const profileUrl = (v: unknown): string | null => str((v as { url?: unknown } | null)?.url) || null;
 const num = (v: unknown): number | null => (typeof v === 'number' ? v : null);
 const nodes = (v: unknown): Node[] => {
   const list = (v as { nodes?: unknown } | null)?.nodes;
@@ -122,18 +124,18 @@ const REVIEW_STATES: Record<string, PrReviewer['state']> = {
  *  requests: a re-request outranks the review before it, as on GitHub.
  *  Dismissed reviews don't count. */
 function reviewersFrom(p: Node): PrReviewer[] {
-  const byName = new Map<string, PrReviewer['state']>();
+  const byName = new Map<string, PrReviewer>();
   for (const r of [...nodes(p.latestReviews), ...nodes(p.latestOpinionatedReviews)]) {
     const name = login(r.author);
     const state = REVIEW_STATES[str(r.state)];
-    if (name && state) byName.set(name, state);
+    if (name && state) byName.set(name, { name, url: profileUrl(r.author), state });
   }
   for (const r of nodes(p.reviewRequests)) {
-    const who = (r.requestedReviewer ?? {}) as Node;
-    const name = str(who.login) || str(who.name);
-    if (name) byName.set(name, 'pending');
+    const who = r.requestedReviewer;
+    const name = login(who) || str((who as Node | null)?.name);
+    if (name) byName.set(name, { name, url: profileUrl(who), state: 'pending' });
   }
-  return [...byName].map(([name, state]) => ({ name, state }));
+  return [...byName.values()];
 }
 
 /** The head commit's check runs and statuses. */
@@ -179,7 +181,7 @@ export function githubReviewFrom(
     conversation,
     ...(threads?.pageInfo?.hasNextPage === true ? { partial: true } : {}),
     author: login(p.author) || 'ghost',
-    authorUrl: str((p.author as Node | null)?.url) || null,
+    authorUrl: profileUrl(p.author),
     createdAt: str(p.createdAt),
     lastActivityAt: str(p.updatedAt) || str(p.createdAt),
     state: stateFrom(p),

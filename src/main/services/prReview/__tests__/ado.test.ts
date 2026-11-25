@@ -64,11 +64,11 @@ describe('adoReviewFrom', () => {
       checks,
     });
     expect(review.reviewers).toEqual([
-      { name: 'Ann Reviewer', state: 'approved_with_suggestions' },
-      { name: 'Cy Lead', state: 'waiting' },
-      { name: '[Proj]\\Proj Team', state: 'pending' },
-      { name: 'Di Ops', state: 'approved' },
-      { name: 'Ed Sec', state: 'rejected' },
+      { name: 'Ann Reviewer', url: null, state: 'approved_with_suggestions' },
+      { name: 'Cy Lead', url: null, state: 'waiting' },
+      { name: '[Proj]\\Proj Team', url: null, state: 'pending' },
+      { name: 'Di Ops', url: null, state: 'approved' },
+      { name: 'Ed Sec', url: null, state: 'rejected' },
     ]);
     const at = (over: object) =>
       adoReviewFrom(

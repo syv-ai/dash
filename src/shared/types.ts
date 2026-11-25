@@ -658,6 +658,8 @@ export type PrState = 'open' | 'draft' | 'merged' | 'closed';
  *  approved_with_suggestions / waiting / rejected. */
 export interface PrReviewer {
   name: string;
+  /** Their page on the forge; null where it has none (ADO). */
+  url: string | null;
   state:
     | 'approved'
     | 'changes_requested'

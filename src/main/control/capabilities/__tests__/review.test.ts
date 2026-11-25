@@ -72,7 +72,7 @@ const review = (pr: PrRef): PrReview => ({
   headRef: 'fix',
   commits: 2,
   behindBase: 1,
-  reviewers: [{ name: 'ana', state: 'commented' }],
+  reviewers: [{ name: 'ana', url: null, state: 'commented' }],
   assignees: [],
   checks: [{ name: 'ci', state: 'passing', url: 'https://ci' }],
   files: [

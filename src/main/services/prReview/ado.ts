@@ -161,6 +161,7 @@ const VOTE_STATES: Record<number, PrReviewer['state']> = {
 const reviewersFrom = (pr: RawPr): PrReviewer[] =>
   (pr.reviewers ?? []).map((r) => ({
     name: r.displayName || 'Unknown',
+    url: null,
     state: VOTE_STATES[r.vote ?? 0] ?? 'pending',
   }));
 

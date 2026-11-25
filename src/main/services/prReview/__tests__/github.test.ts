@@ -136,11 +136,11 @@ describe('githubReviewFrom', () => {
     // A re-request outranks the review before it; a dismissed review doesn't
     // count; a comment after an approval leaves it approved.
     expect(review.reviewers).toEqual([
-      { name: 'ann', state: 'approved' },
-      { name: 'cy', state: 'pending' },
-      { name: 'di', state: 'commented' },
-      { name: 'fay', state: 'approved' },
-      { name: 'core-team', state: 'pending' },
+      { name: 'ann', url: 'https://github.com/ann', state: 'approved' },
+      { name: 'cy', url: 'https://github.com/cy', state: 'pending' },
+      { name: 'di', url: null, state: 'commented' },
+      { name: 'fay', url: null, state: 'approved' },
+      { name: 'core-team', url: 'https://github.com/orgs/o/teams/core-team', state: 'pending' },
     ]);
     expect(review.checks).toEqual([
       { name: 'test', state: 'passing', url: 'https://github.com/o/r/actions/runs/1' },
