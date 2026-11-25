@@ -1,38 +1,61 @@
-import { useRef } from 'react';
-import { FileDiff } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { EyeOff, FileDiff, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Checkbox } from '../ui/Checkbox';
 import { EmptyState } from '../ui/EmptyState';
-import { FileTreeView } from './FileTreeView';
-import { VirtualFileList, VIRTUALIZE_THRESHOLD, type FileSection } from './VirtualFileList';
+import { IconButton } from '../ui/IconButton';
+import { Popover, PopoverArrow, PopoverContent, PopoverTrigger } from '../ui/Popover';
+import { FileTree } from '../fileTree/FileTree';
+import { subtreeChanges, type ItemRow } from '../fileTree/model';
+import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
+import type { EditorView } from '../diffEditor/types';
 import { CommitRunView } from './CommitRunView';
-import { SectionLabel } from './SectionLabel';
+import { DiscardFolderConfirm } from './DiscardFolderConfirm';
 import { SyncStatus, type SyncLinks } from './SyncStatus';
+import { changeSections, changeSelection, fileActions, folderActions } from './changeSections';
 import type { CommitRun } from './useCommitRun';
 import type { CommitRunState } from './commitRunReducer';
 import { useGit } from '../../stores/gitStore';
-import type { FileChange } from '../../../shared/types';
 
 interface FileChangesPanelProps {
+  cwd: string;
   loading: boolean;
   /** The commit in flight (or just finished): shown instead of the files. */
   run: CommitRun;
-  onViewDiff: (filePath: string, staged: boolean) => void;
+  /** Open a change's diff: staged against HEAD, or the working tree's. A
+   *  click previews it (`preview`), ⌥-click opens it beside (`toSide`). */
+  onOpenChange: (path: string, staged: boolean, opts?: OpenOptions) => void;
+  /** The editor's file and view: its row reads as current. */
+  activePath: string | null;
+  view: EditorView;
+  canOpenToSide: boolean;
   /** Where the empty view's ahead / behind counts lead. */
   syncLinks: SyncLinks;
 }
 
 /**
- * The task's working changes as staged and unstaged trees (a windowed list
- * past VIRTUALIZE_THRESHOLD files), or the commit run while one is shown.
- * With nothing changed, where the branch stands against its upstream.
+ * The task's working changes as staged and unstaged trees in one `FileTree`,
+ * narrow and expanded alike: a stage tick at each row's left edge, discard
+ * and .gitignore on hover; or the commit run while one is shown. With
+ * nothing changed, where the branch stands against its upstream.
  */
-export function FileChangesPanel({ loading, run, onViewDiff, syncLinks }: FileChangesPanelProps) {
+export function FileChangesPanel({
+  cwd,
+  loading,
+  run,
+  onOpenChange,
+  activePath,
+  view,
+  canOpenToSide,
+  syncLinks,
+}: FileChangesPanelProps) {
   const gitStatus = useGit((s) => s.gitStatus);
-  const onStageFiles = useGit((s) => s.stageFiles);
-  const onUnstageFiles = useGit((s) => s.unstageFiles);
-  const onDiscardFiles = useGit((s) => s.discardFiles);
-  const onAddToGitignore = useGit((s) => s.addToGitignore);
-  const fileListRef = useRef<HTMLDivElement | null>(null);
+  const files = gitStatus?.files;
+  const sections = useMemo(() => changeSections(files ?? []), [files]);
+  const selected = useMemo(
+    () => changeSelection(activePath, view, files ?? []),
+    [activePath, view, files],
+  );
 
   if (!gitStatus) {
     return <EmptyState title={loading ? 'Loading…' : 'No task selected'} />;
@@ -63,11 +86,7 @@ export function FileChangesPanel({ loading, run, onViewDiff, syncLinks }: FileCh
     );
   }
 
-  const stagedFiles = gitStatus.files.filter((f) => f.staged);
-  const unstagedFiles = gitStatus.files.filter((f) => !f.staged);
-  const total = gitStatus.files.length;
-
-  if (total === 0) {
+  if (gitStatus.files.length === 0) {
     return (
       <EmptyState
         icon={<FileDiff size={14} strokeWidth={1.8} />}
@@ -77,58 +96,136 @@ export function FileChangesPanel({ loading, run, onViewDiff, syncLinks }: FileCh
     );
   }
 
-  const common = {
-    onDiscard: (f: FileChange) => void onDiscardFiles([f.path]),
-    onDiscardMany: (paths: string[]) => void onDiscardFiles(paths),
-    onAddToGitignore: (path: string) => void onAddToGitignore(path),
-  };
-  const sections: FileSection[] = [];
-  if (stagedFiles.length > 0) {
-    sections.push({
-      id: 'staged',
-      label: `Staged · ${stagedFiles.length}`,
-      files: stagedFiles,
-      onToggleFileStage: (f) => void onUnstageFiles([f.path]),
-      onToggleFolderStage: (paths) => void onUnstageFiles(paths),
-      onViewDiff: (f) => onViewDiff(f.path, true),
-      ...common,
-    });
-  }
-  if (unstagedFiles.length > 0) {
-    sections.push({
-      id: 'unstaged',
-      label: `Unstaged · ${unstagedFiles.length}`,
-      files: unstagedFiles,
-      onToggleFileStage: (f) => void onStageFiles([f.path]),
-      onToggleFolderStage: (paths) => void onStageFiles(paths),
-      onViewDiff: (f) => onViewDiff(f.path, false),
-      ...common,
-    });
-  }
-
   return (
-    <div
-      ref={fileListRef}
-      className="scrollbar-gutter-stable min-h-0 flex-1 overflow-y-auto pb-2 animate-fade-in"
-    >
-      {total > VIRTUALIZE_THRESHOLD ? (
-        <VirtualFileList sections={sections} filesVersion={gitStatus} scrollRef={fileListRef} />
-      ) : (
-        sections.map((section) => (
-          <div key={section.id} className="flex flex-col">
-            <SectionLabel>{section.label}</SectionLabel>
-            <FileTreeView
-              files={section.files}
-              onToggleFileStage={section.onToggleFileStage}
-              onToggleFolderStage={section.onToggleFolderStage}
-              onViewDiff={section.onViewDiff}
-              onDiscard={section.onDiscard}
-              onDiscardMany={section.onDiscardMany}
-              onAddToGitignore={section.onAddToGitignore}
-            />
-          </div>
-        ))
-      )}
+    <div className="flex min-h-0 flex-1 flex-col animate-fade-in">
+      <FileTree
+        sections={sections}
+        cwd={cwd}
+        selected={selected}
+        onOpenFile={(row, opts) => onOpenChange(row.file.path, row.section === 'staged', opts)}
+        canOpenToSide={canOpenToSide}
+        leading={(row) => <StageTick row={row} />}
+        actions={(row) => <ChangeActions row={row} />}
+      />
     </div>
+  );
+}
+
+/** Stage or unstage a file, or every change in a folder. */
+function StageTick({ row }: { row: ItemRow }) {
+  const checked: boolean | 'mixed' =
+    row.kind === 'file'
+      ? !!row.file.change?.staged
+      : row.folder.tally.staged === 0
+        ? false
+        : row.folder.tally.staged === row.folder.tally.changed
+          ? true
+          : 'mixed';
+  const noun = row.kind === 'folder' ? ' folder' : '';
+  return (
+    <Checkbox
+      checked={checked}
+      aria-label={checked === true ? `Unstage${noun}` : `Stage${noun}`}
+      onChange={() => {
+        const paths =
+          row.kind === 'file' ? [row.file.path] : subtreeChanges(row.folder).map((c) => c.path);
+        const git = useGit.getState();
+        void (row.section === 'staged' ? git.unstageFiles(paths) : git.stageFiles(paths));
+      }}
+    />
+  );
+}
+
+/** A change's hover actions: .gitignore an untracked file or folder, discard
+ *  unstaged changes (a folder's after a confirm). None: the tree's default. */
+function ChangeActions({ row }: { row: ItemRow }) {
+  if (row.kind === 'file') {
+    const change = row.file.change;
+    if (!change) return null;
+    const { canDiscard, canIgnore } = fileActions(change);
+    if (!canDiscard && !canIgnore) return null;
+    return (
+      <>
+        {canIgnore && <IgnoreAction path={change.path} folder={false} />}
+        {canDiscard && (
+          <IconButton
+            title="Discard changes"
+            size="sm"
+            variant="destructive"
+            onClick={(e) => {
+              e.stopPropagation();
+              void useGit.getState().discardFiles([change.path]);
+            }}
+          >
+            <Undo2 size={14} strokeWidth={1.8} />
+          </IconButton>
+        )}
+      </>
+    );
+  }
+  const { discardable, canIgnore } = folderActions(row.folder);
+  if (discardable.length === 0 && !canIgnore) return null;
+  return (
+    <>
+      {canIgnore && <IgnoreAction path={`${row.folder.path}/`} folder />}
+      {discardable.length > 0 && (
+        <DiscardFolderAction name={row.name} folderPath={row.folder.path} paths={discardable} />
+      )}
+    </>
+  );
+}
+
+function IgnoreAction({ path, folder }: { path: string; folder: boolean }) {
+  return (
+    <IconButton
+      title={folder ? 'Add folder to .gitignore' : 'Add to .gitignore'}
+      size="sm"
+      onClick={(e) => {
+        e.stopPropagation();
+        void useGit.getState().addToGitignore(path);
+      }}
+    >
+      <EyeOff size={14} strokeWidth={1.8} />
+    </IconButton>
+  );
+}
+
+/** Discard a folder's unstaged changes, after a confirm listing them. */
+function DiscardFolderAction({
+  name,
+  folderPath,
+  paths,
+}: {
+  name: string;
+  folderPath: string;
+  paths: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <IconButton
+          title="Discard folder changes"
+          size="sm"
+          variant="destructive"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Undo2 size={14} strokeWidth={1.8} />
+        </IconButton>
+      </PopoverTrigger>
+      <PopoverContent side="left" align="end" sideOffset={8} onClick={(e) => e.stopPropagation()}>
+        <DiscardFolderConfirm
+          folderName={name}
+          folderBasePath={folderPath}
+          paths={paths}
+          onClose={() => setOpen(false)}
+          onConfirm={async () => {
+            await useGit.getState().discardFiles(paths);
+            setOpen(false);
+          }}
+        />
+        <PopoverArrow />
+      </PopoverContent>
+    </Popover>
   );
 }

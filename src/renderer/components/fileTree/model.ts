@@ -6,7 +6,7 @@
  * files, the editor modal) renders these rows through `FileTree`.
  */
 import type { DirEntry, FileChange, RepoListing } from '../../../shared/types';
-import { editorTreeOrder, folderOrder } from './treeOrder';
+import { treeOrder, folderOrder } from './treeOrder';
 
 export interface TreeFile {
   name: string;
@@ -148,7 +148,7 @@ export function buildTree(changes: readonly FileChange[], repo?: RepoFiles): Tre
   for (const p of byPath.keys()) all.add(p);
   for (const p of ignoredFiles) all.add(p);
 
-  for (const p of [...all].sort(editorTreeOrder)) {
+  for (const p of [...all].sort(treeOrder)) {
     if (lazy.has(p)) continue;
     const parts = p.split('/');
     const ignored = !byPath.has(p) && ignoredFiles.has(p);

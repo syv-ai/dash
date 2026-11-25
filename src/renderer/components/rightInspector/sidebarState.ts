@@ -18,7 +18,7 @@
  * picked in History.
  */
 
-import { byLocale, editorTreeOrder, treeOrder } from '../fileTree/treeOrder';
+import { treeOrder } from '../fileTree/treeOrder';
 
 /** The view switch's views: normal mode's Changes, Files and History; review
  *  mode's Overview, Files, Comments and History. */
@@ -91,9 +91,8 @@ function first<T>(items: readonly T[], order: (a: T, b: T) => number): T | null 
 export function firstListedChange<F extends { path: string; staged: boolean }>(
   files: readonly F[],
 ): F | null {
-  const order = treeOrder(byLocale);
   return first(files, (a, b) =>
-    a.staged !== b.staged ? (a.staged ? -1 : 1) : order(a.path, b.path),
+    a.staged !== b.staged ? (a.staged ? -1 : 1) : treeOrder(a.path, b.path),
   );
 }
 
@@ -101,13 +100,13 @@ export function firstListedChange<F extends { path: string; staged: boolean }>(
  *  first with its folders folded. Null for an empty repo. */
 export function firstTreeFile(paths: readonly string[]): string | null {
   const depth = (p: string) => p.split('/').length;
-  return first(paths, (a, b) => depth(a) - depth(b) || editorTreeOrder(a, b));
+  return first(paths, (a, b) => depth(a) - depth(b) || treeOrder(a, b));
 }
 
 /** The editor tree's first file with its folders unfolded: what a PR's
  *  changes list first. Null with no files. */
 export function firstChangedTreeFile(paths: readonly string[]): string | null {
-  return first(paths, editorTreeOrder);
+  return first(paths, treeOrder);
 }
 
 /**

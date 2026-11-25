@@ -96,10 +96,10 @@ describe('firstListedChange', () => {
     ).toBe('src/b/c.ts');
   });
 
-  it('orders folders and files by name, as the list does', () => {
+  it('orders folders by name and files by code unit, as the tree does', () => {
     expect(firstListedChange([change('Zeta/x.ts'), change('alpha/y.ts')])?.path).toBe('alpha/y.ts');
     expect(firstListedChange([change('package.json'), change('README.md')])?.path).toBe(
-      'package.json',
+      'README.md',
     );
   });
 

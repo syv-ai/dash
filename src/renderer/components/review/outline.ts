@@ -11,7 +11,7 @@ import type { TextRange } from '../../stores/editorTabsStore';
 import type { FileBadges } from '../fileTree/model';
 import { threadLocation } from '../../utils/prReviewNotices';
 import { isInlineThread } from '../diffEditor/prReview/prViewPolicy';
-import { editorTreeOrder } from '../fileTree/treeOrder';
+import { treeOrder } from '../fileTree/treeOrder';
 
 /*
  * The Review view's outline, as data: which PR it is about, the files with
@@ -57,7 +57,7 @@ export function fileRows(
   const open = count(threads.filter((t) => !t.resolved).map((t) => t.path));
   const mine = count(drafts.filter(isPrComment).map((c) => c.filePath));
   return [...files]
-    .sort((a, b) => editorTreeOrder(a.path, b.path))
+    .sort((a, b) => treeOrder(a.path, b.path))
     .map((file) => ({
       file,
       viewed: isViewed(file, marks),
@@ -151,7 +151,7 @@ export function commentGroups(
   const byPlace = (a: CommentItem, b: CommentItem) => {
     const pa = itemPlace(a);
     const pb = itemPlace(b);
-    return editorTreeOrder(pa.path, pb.path) || pa.line - pb.line;
+    return treeOrder(pa.path, pb.path) || pa.line - pb.line;
   };
   return {
     unresolved: [...threads.filter((t) => !t.resolved).map(item), ...own].sort(byPlace),
@@ -171,7 +171,7 @@ export function firstOpenThread(threads: readonly PrReviewThread[]): LineThread 
   return (
     threads
       .filter((t): t is LineThread => !t.resolved && isInlineThread(t))
-      .sort((a, b) => editorTreeOrder(a.path, b.path) || a.line - b.line)[0] ?? null
+      .sort((a, b) => treeOrder(a.path, b.path) || a.line - b.line)[0] ?? null
   );
 }
 
@@ -244,7 +244,7 @@ export function groupByPath<T extends Pick<DiffComment, 'filePath' | 'startLine'
     else m.set(c.filePath, [c]);
   }
   return [...m.entries()]
-    .sort(([a], [b]) => editorTreeOrder(a, b))
+    .sort(([a], [b]) => treeOrder(a, b))
     .map(([path, list]) => [path, [...list].sort((a, b) => a.startLine - b.startLine)]);
 }
 
@@ -302,7 +302,7 @@ export interface NavStop {
 }
 
 const comparePlace = (a: Omit<NavStop, 'id'>, b: Omit<NavStop, 'id'>) =>
-  editorTreeOrder(a.path, b.path) || a.line - b.line;
+  treeOrder(a.path, b.path) || a.line - b.line;
 
 /**
  * Every thread drawn on a line and every draft on lines (notes and comments;

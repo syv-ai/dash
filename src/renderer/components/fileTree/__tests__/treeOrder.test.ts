@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { editorTreeOrder } from '../treeOrder';
+import { treeOrder } from '../treeOrder';
 
-const sorted = (paths: string[]) => [...paths].sort(editorTreeOrder);
+const sorted = (paths: string[]) => [...paths].sort(treeOrder);
 
-describe('editorTreeOrder', () => {
+describe('treeOrder', () => {
   it('lists a folder’s subfolders ahead of its files, depth first', () => {
     expect(sorted(['b.ts', 'src/z.ts', 'src/a/c.ts', 'a/x.ts'])).toEqual([
       'a/x.ts',

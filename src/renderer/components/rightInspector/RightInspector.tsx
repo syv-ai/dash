@@ -44,6 +44,7 @@ import {
   segmentOnExpand,
   type CodeSegment,
 } from './sidebarState';
+import { viewOfSection } from '../changes/changeSections';
 import {
   LIST_DEFAULTS,
   loadListWidth,
@@ -587,7 +588,33 @@ export function RightInspector({
     />
   );
 
-  // The editor's tree: the changes or the whole repo (review mode has its own).
+  // Changes: staged and unstaged trees, narrow and expanded alike. A row
+  // opens its diff: narrow, through the editor's target (which expands);
+  // expanded, in the view of its section, as a preview like Files'.
+  const openChange = (path: string, staged: boolean, opts?: OpenOptions) => {
+    if (!expanded) {
+      viewDiff(path, staged);
+      return;
+    }
+    const next = viewOfSection(staged ? 'staged' : 'unstaged');
+    if (view.kind !== 'working' || view.ref !== next.ref) selectView(next);
+    openFile(path, opts);
+  };
+  const changes = (
+    <FileChangesPanel
+      key={task.id}
+      cwd={task.path}
+      loading={gitLoading}
+      run={run}
+      onOpenChange={openChange}
+      activePath={activePath(ws.layout)}
+      view={view}
+      canOpenToSide={ws.layout.groups.length < 2}
+      syncLinks={syncLinks}
+    />
+  );
+
+  // The editor's tree: the whole repo (review mode has its own).
   const editorTree = (
     <RepoTree
       cwd={task.path}
@@ -596,7 +623,7 @@ export function RightInspector({
       allPaths={ws.data.repoPaths}
       repoDirs={ws.data.repoDirs}
       changedFiles={ws.data.changedFiles}
-      changedOnly={segment === 'changes'}
+      changedOnly={false}
       filesLoading={ws.data.repoPathsLoading || ws.data.changedFilesLoading}
       selectedPath={activePath(ws.layout) ?? ''}
       onOpenFile={openFile}
@@ -629,27 +656,14 @@ export function RightInspector({
     />
   );
 
-  // The tree or list column: review mode's, the editor's tree (the changes
-  // or the whole repo), or the commits. Narrow, Changes is the changes list
-  // instead.
-  const tree = reviewColumn || (segment === 'history' ? history : editorTree);
+  // The tree or list column: review mode's, the changes, the editor's tree
+  // (the whole repo), or the commits.
+  const tree =
+    reviewColumn ||
+    (segment === 'history' ? history : segment === 'changes' ? changes : editorTree);
 
-  // Narrow (and Details, expanded): the details, the changes list, or the
-  // tree column alone.
-  const list =
-    segment === 'details' ? (
-      details
-    ) : reviewing || segment !== 'changes' ? (
-      tree
-    ) : (
-      <FileChangesPanel
-        key={task.id}
-        loading={gitLoading}
-        run={run}
-        onViewDiff={viewDiff}
-        syncLinks={syncLinks}
-      />
-    );
+  // Narrow (and Details, expanded): the details, or the tree column alone.
+  const list = segment === 'details' ? details : tree;
 
   // The view tabs' sheet: the list under them, as an open file under its
   // tab, over Changes' commit actions.
