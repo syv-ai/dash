@@ -5,9 +5,9 @@ let db: Database.Database;
 vi.mock('../../db/client', () => ({ getRawDb: () => db }));
 
 import { runMigrations } from '../../db/migrate';
-import { createTaskReviewTargetsRepo } from '../taskReviewTargetsRepo';
+import { createTaskReviewModesRepo } from '../taskReviewModesRepo';
 
-describe('taskReviewTargetsRepo', () => {
+describe('taskReviewModesRepo', () => {
   beforeEach(() => {
     db = new Database(':memory:');
     runMigrations();
@@ -19,7 +19,7 @@ describe('taskReviewTargetsRepo', () => {
   });
 
   it('keeps one target per task, replaced by the next pick and cleared by null', () => {
-    const repo = createTaskReviewTargetsRepo(db);
+    const repo = createTaskReviewModesRepo(db);
     expect(repo.get('t1')).toBeNull();
     repo.set('t1', { provider: 'github', number: 4 });
     repo.set('t2', { provider: 'ado', number: 7 });
@@ -32,7 +32,7 @@ describe('taskReviewTargetsRepo', () => {
   });
 
   it('goes with its task', () => {
-    const repo = createTaskReviewTargetsRepo(db);
+    const repo = createTaskReviewModesRepo(db);
     repo.set('t1', { provider: 'github', number: 4 });
     db.prepare(`DELETE FROM tasks WHERE id = 't1'`).run();
     expect(repo.get('t1')).toBeNull();

@@ -2,7 +2,7 @@ import type { PrRef, RelevantPrs, TaskPrs } from '@shared/types';
 
 /** What review mode takes: where it is kept, and the task's relevant PRs. */
 export interface ReviewModeDeps {
-  /** The PR the task is in review mode for (`task_review_targets`), or null. */
+  /** The PR the task is in review mode for (`taskReviewModesRepo`), or null. */
   storedMode(taskId: string): PrRef | null;
   storeMode(taskId: string, pr: PrRef | null): void;
   /** The open PRs from and into the task's live branch. Rejects when the

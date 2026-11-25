@@ -160,7 +160,7 @@ export function reviewDeps(): ReviewCapabilityDeps {
     get reviews() {
       return taskReviews();
     },
-    reviewTarget: appDefaultReviewPr,
+    defaultPr: appDefaultReviewPr,
     async loadReview(task, pr) {
       const { provider, adapter, ctx } = prContextFor(task.projectId, task.path, appPrContextDeps);
       if (provider !== pr.provider) {

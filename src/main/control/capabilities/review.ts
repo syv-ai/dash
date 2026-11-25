@@ -20,7 +20,7 @@ export interface ReviewCapabilityDeps {
   getTask(id: string): Task | undefined;
   reviews: TaskReviews;
   /** The PR the task is in review mode for, else its branch's own open PR, else null. */
-  reviewTarget(taskId: string): Promise<PrRef | null>;
+  defaultPr(taskId: string): Promise<PrRef | null>;
   /** The PR's review as the editor loads it, from the task's checkout. Reads only. */
   loadReview(task: Task, pr: PrRef): Promise<PrReview>;
 }
@@ -136,7 +136,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
     const task = deps.getTask(taskId)!;
     const pr =
       number === undefined
-        ? await deps.reviewTarget(taskId)
+        ? await deps.defaultPr(taskId)
         : { provider: deps.providerFor(task.projectId), number };
     if (!pr) throw new ControlError(400, 'No pull request to review: pass --number');
     if (asked && asked !== pr.provider) {

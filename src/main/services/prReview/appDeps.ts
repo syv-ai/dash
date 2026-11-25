@@ -2,10 +2,10 @@ import type { PrRef, RelevantPrs, TaskPrs } from '@shared/types';
 import { DatabaseService } from '../DatabaseService';
 import { ConnectionConfigService } from '../ConnectionConfigService';
 import { GitService } from '../GitService';
-import { taskReviewTargetsRepo } from '../taskReviewTargetsRepo';
+import { taskReviewModesRepo } from '../taskReviewModesRepo';
 import { prContextFor, type PrContextDeps } from './resolve';
 import { listRelevantPrs } from './relevantPrs';
-import { defaultReviewPr, settleReviewMode, type ReviewModeDeps } from './reviewTarget';
+import { defaultReviewPr, settleReviewMode, type ReviewModeDeps } from './reviewMode';
 
 /** The app's lookups for picking a project's PR provider. */
 export const appPrContextDeps: PrContextDeps = {
@@ -24,8 +24,8 @@ async function appRelevantPrs(taskId: string): Promise<RelevantPrs> {
 }
 
 const reviewModeDeps: ReviewModeDeps = {
-  storedMode: (id) => taskReviewTargetsRepo().get(id),
-  storeMode: (id, pr) => taskReviewTargetsRepo().set(id, pr),
+  storedMode: (id) => taskReviewModesRepo().get(id),
+  storeMode: (id, pr) => taskReviewModesRepo().set(id, pr),
   relevantPrs: appRelevantPrs,
 };
 

@@ -5,7 +5,7 @@ import {
   reviewModeHolds,
   settleReviewMode,
   type ReviewModeDeps,
-} from '../reviewTarget';
+} from '../reviewMode';
 import { listRelevantPrs } from '../relevantPrs';
 
 const pr = (number: number, provider: PullRequest['provider'] = 'github') =>

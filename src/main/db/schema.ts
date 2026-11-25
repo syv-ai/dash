@@ -240,9 +240,9 @@ export const prReviewSummaries = sqliteTable(
   }),
 );
 
-// The PR a task reviews, when the person picked one; else its own open PR is
-// its review target.
-export const taskReviewTargets = sqliteTable('task_review_targets', {
+// The PR a task is in review mode for (spec Revision 3). The table keeps its
+// first name; renaming it would need a migration for nothing.
+export const taskReviewModes = sqliteTable('task_review_targets', {
   taskId: text('task_id')
     .primaryKey()
     .references(() => tasks.id, { onDelete: 'cascade' }),

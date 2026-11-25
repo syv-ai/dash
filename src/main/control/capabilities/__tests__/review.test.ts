@@ -24,7 +24,7 @@ const tasks = [
 let registry: Registry;
 let comments: DiffCommentsRepo;
 let changed: string[];
-/** The task's review target (`effectiveReviewTarget`), and the PRs `loadReview` was asked for. */
+/** The PR `dashctl review` defaults to (`defaultReviewPr`), and the PRs `loadReview` was asked for. */
 let target: PrRef | null;
 let loaded: PrRef[];
 
@@ -149,7 +149,7 @@ beforeEach(() => {
       summaries: createPrReviewSummariesRepo(db),
       changed: (taskId) => void changed.push(taskId),
     }),
-    reviewTarget: async () => target,
+    defaultPr: async () => target,
     loadReview: async (_task, pr) => {
       loaded.push(pr);
       return review(pr);
@@ -316,7 +316,7 @@ describe('review.summary_get / summary_set', () => {
 });
 
 describe('the PR a command is about', () => {
-  it("defaults to the task's review target, and refuses when there is none", async () => {
+  it("defaults to the task's review-mode PR, else its own, and refuses when there is none", async () => {
     target = { provider: 'github', number: 7 };
     const created = (await registry.call(asTask('me'), 'review.drafts_create', {
       path: 'a.ts',

@@ -49,16 +49,18 @@ export interface ClockOptions {
 }
 
 /**
- * When an epoch-seconds timestamp falls, in full and in the user's locale:
- * the weekday, then the short date and time (`Thu 26/11/2026, 09:00`).
- * '' for 0 (no reset time known).
+ * When an epoch-seconds timestamp falls, in full (`formatDateTime`). '' for
+ * 0 (no reset time known).
  */
-export function formatResetAt(
-  epochSeconds: number,
-  { locale, timeZone }: ClockOptions = {},
-): string {
-  if (!epochSeconds) return '';
-  const at = new Date(epochSeconds * 1000);
+export function formatResetAt(epochSeconds: number, clock?: ClockOptions): string {
+  return epochSeconds ? formatDateTime(new Date(epochSeconds * 1000), clock) : '';
+}
+
+/**
+ * A moment in full, in the user's locale: the weekday, then the short date
+ * and time (`Thu 26/11/2026, 09:00`).
+ */
+export function formatDateTime(at: Date, { locale, timeZone }: ClockOptions = {}): string {
   const weekday = new Intl.DateTimeFormat(locale, { timeZone, weekday: 'short' }).format(at);
   const when = new Intl.DateTimeFormat(locale, {
     timeZone,

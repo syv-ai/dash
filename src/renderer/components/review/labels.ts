@@ -6,7 +6,7 @@ import type {
   PrReviewer,
   PrState,
 } from '../../../shared/types';
-import { formatResetAt, type ClockOptions } from '../../utils/format';
+import { formatDateTime, type ClockOptions } from '../../utils/format';
 
 /** The forge's name, as people say it. */
 export const providerName = (p: PrProvider): string => (p === 'ado' ? 'Azure DevOps' : 'GitHub');
@@ -71,8 +71,10 @@ export function threadsLine(threads: readonly Pick<PrReviewThread, 'resolved'>[]
 
 /** A PR's date (ISO 8601) in full, in the user's locale: "Thu 26/11/2026, 09:00";
  *  '' when it doesn't parse. */
-export const prDateTime = (iso: string, clock?: ClockOptions): string =>
-  formatResetAt(Math.floor(Date.parse(iso) / 1000) || 0, clock);
+export function prDateTime(iso: string, clock?: ClockOptions): string {
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? '' : formatDateTime(new Date(ms), clock);
+}
 
 /** Communication's counts, read one way in its bar ("5 open · 2 drafts ·
  *  1 note") and in each of its sections ("Your drafts · 2 drafts"): the
