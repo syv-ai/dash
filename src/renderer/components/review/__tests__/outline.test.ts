@@ -119,6 +119,31 @@ describe('nextUnviewed', () => {
     const one = fileRows([file('a'), file('b')], [], { b: 'b-b' }, []);
     expect(nextUnviewed(one, 'a')).toBeNull();
   });
+
+  it('follows the Files tree: folders first, depth first', () => {
+    const d = 'src/renderer/components';
+    const tree = fileRows(
+      [
+        file(`${d}/ui/Modal.tsx`),
+        file(`${d}/review/SubmitReview.tsx`),
+        file(`${d}/diffEditor/EditorSidebar.tsx`),
+        file(`${d}/review/finish/Footer.tsx`),
+      ],
+      [],
+      {},
+      [],
+    );
+    expect(tree.map((r) => r.file.path)).toEqual([
+      `${d}/diffEditor/EditorSidebar.tsx`,
+      `${d}/review/finish/Footer.tsx`,
+      `${d}/review/SubmitReview.tsx`,
+      `${d}/ui/Modal.tsx`,
+    ]);
+    expect(nextUnviewed(tree, `${d}/review/SubmitReview.tsx`)).toBe(`${d}/ui/Modal.tsx`);
+    expect(nextUnviewed(tree, `${d}/review/finish/Footer.tsx`)).toBe(
+      `${d}/review/SubmitReview.tsx`,
+    );
+  });
 });
 
 describe('commentGroups', () => {
@@ -303,6 +328,15 @@ describe('next/previous thread or draft', () => {
 
   it('has nowhere to go without threads or drafts', () => {
     expect(nextStop([], { path: 'a.ts', line: 1 }, 1)).toBeNull();
+  });
+
+  it('crosses files in the Files tree’s order: a folder’s files after its subfolders', () => {
+    const tree = navStops(
+      [thread('root', { path: 'z.ts', line: 1 }), thread('deep', { path: 'src/a/b.ts', line: 2 })],
+      [draft('mid', { filePath: 'src/z.ts', startLine: 1 })],
+    );
+    expect(tree.map((s) => s.id)).toEqual(['deep', 'mid', 'root']);
+    expect(nextStop(tree, { path: 'src/a/b.ts', line: 2 }, 1)?.id).toBe('mid');
   });
 });
 

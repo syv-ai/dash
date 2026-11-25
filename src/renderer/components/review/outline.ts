@@ -11,6 +11,7 @@ import type { TextRange } from '../../stores/editorTabsStore';
 import type { FileBadges } from '../diffEditor/EditorTree';
 import { threadLocation } from '../../utils/prReviewNotices';
 import { isInlineThread } from '../diffEditor/prReview/prViewPolicy';
+import { editorTreeOrder } from '../diffEditor/treeOrder';
 
 /*
  * The Review view's outline, as data: which PR it is about, the files with
@@ -41,7 +42,7 @@ export interface FileRow {
   drafts: number;
 }
 
-/** The PR's files in outline order (by path), each with its mark and counts. */
+/** The PR's files in outline order (as the review Files tree lists them), each with its mark and counts. */
 export function fileRows(
   files: readonly PrFile[],
   threads: readonly PrReviewThread[],
@@ -56,7 +57,7 @@ export function fileRows(
   const open = count(threads.filter((t) => !t.resolved).map((t) => t.path));
   const mine = count(drafts.filter(isPrComment).map((c) => c.filePath));
   return [...files]
-    .sort((a, b) => a.path.localeCompare(b.path))
+    .sort((a, b) => editorTreeOrder(a.path, b.path))
     .map((file) => ({
       file,
       viewed: isViewed(file, marks),
@@ -150,7 +151,7 @@ export function commentGroups(
   const byPlace = (a: CommentItem, b: CommentItem) => {
     const pa = itemPlace(a);
     const pb = itemPlace(b);
-    return pa.path.localeCompare(pb.path) || pa.line - pb.line;
+    return editorTreeOrder(pa.path, pb.path) || pa.line - pb.line;
   };
   return {
     unresolved: [...threads.filter((t) => !t.resolved).map(item), ...own].sort(byPlace),
@@ -170,7 +171,7 @@ export function firstOpenThread(threads: readonly PrReviewThread[]): LineThread 
   return (
     threads
       .filter((t): t is LineThread => !t.resolved && isInlineThread(t))
-      .sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line)[0] ?? null
+      .sort((a, b) => editorTreeOrder(a.path, b.path) || a.line - b.line)[0] ?? null
   );
 }
 
@@ -232,7 +233,7 @@ export function draftPlace(c: Pick<DiffComment, 'filePath' | 'startLine' | 'endL
 
 // ── Drafts and notes ──
 
-/** `items` grouped by file, files by path, each file's by line. */
+/** `items` grouped by file, files in tree order, each file's by line. */
 export function groupByPath<T extends Pick<DiffComment, 'filePath' | 'startLine'>>(
   items: readonly T[],
 ): [string, T[]][] {
@@ -243,7 +244,7 @@ export function groupByPath<T extends Pick<DiffComment, 'filePath' | 'startLine'
     else m.set(c.filePath, [c]);
   }
   return [...m.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
+    .sort(([a], [b]) => editorTreeOrder(a, b))
     .map(([path, list]) => [path, [...list].sort((a, b) => a.startLine - b.startLine)]);
 }
 
@@ -301,11 +302,11 @@ export interface NavStop {
 }
 
 const comparePlace = (a: Omit<NavStop, 'id'>, b: Omit<NavStop, 'id'>) =>
-  a.path.localeCompare(b.path) || a.line - b.line;
+  editorTreeOrder(a.path, b.path) || a.line - b.line;
 
 /**
  * Every thread drawn on a line and every draft on lines (notes and comments;
- * a reply sits with its thread), in outline order: files by path, then line.
+ * a reply sits with its thread), in outline order: files in tree order, then line.
  */
 export function navStops(
   threads: readonly PrReviewThread[],

@@ -24,6 +24,7 @@ import { usePreferredIde } from '../../hooks/usePreferredIde';
 import { openInIde } from '../../lib/openInIde';
 import { absolutePath } from './editor/fileRef';
 import { copyText, revealLabel } from './fileActions';
+import { editorTreeOrder, folderOrder } from './treeOrder';
 import type { DirEntry, FileChange, FileChangeStatus, RepoListing } from '../../../shared/types';
 import type { EditorView } from './types';
 import type { OpenOptions } from './tabs/editorLayout';
@@ -212,7 +213,7 @@ function buildRepoTree(
   for (const f of changedFiles) all.add(f.path);
   for (const p of ignored.files) all.add(p);
 
-  for (const p of Array.from(all).sort()) {
+  for (const p of Array.from(all).sort(editorTreeOrder)) {
     if (lazySet.has(p)) continue;
     const parts = p.split('/');
     const node = folderAt(root, parts.slice(0, -1));
@@ -522,7 +523,7 @@ function FileTreePanel({
 function FolderContents({ node, indent }: { node: TreeFolder; indent: number }) {
   const { selectedPath, onOpenFile, badgeCounts, viewed, cols } = useTree();
   const childFolders = Array.from(node.children.values()).sort((a, b) =>
-    a.name.localeCompare(b.name),
+    folderOrder(a.name, b.name),
   );
   return (
     <>

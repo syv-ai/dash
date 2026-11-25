@@ -18,6 +18,8 @@
  * picked in History.
  */
 
+import { byLocale, editorTreeOrder, treeOrder } from '../diffEditor/treeOrder';
+
 /** The view switch's views: normal mode's Changes, Files and History; review
  *  mode's Overview, Files, Comments and History. */
 export type CodeSegment = 'overview' | 'changes' | 'files' | 'comments' | 'history';
@@ -76,30 +78,7 @@ export function pickSegment({
   return expanded && next === 'changes' && changeCount === 0 ? 'narrow' : 'select';
 }
 
-/*
- * The first file of a tree as it displays: depth first, a folder's
- * subfolders (by name, `localeCompare`) ahead of its files. Changes orders
- * its files by `localeCompare`, the editor's tree (Files, a PR's changes)
- * by code unit, so `README.md` comes before `package.json` there.
- */
-
-type Order = (a: string, b: string) => number;
-const byCodeUnit: Order = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
-const byLocale: Order = (a, b) => a.localeCompare(b);
-
-function treeOrder(fileOrder: Order): Order {
-  return (a, b) => {
-    const pa = a.split('/');
-    const pb = b.split('/');
-    for (let i = 0; ; i++) {
-      const fileA = i === pa.length - 1;
-      const fileB = i === pb.length - 1;
-      if (fileA !== fileB) return fileA ? 1 : -1;
-      if (fileA) return fileOrder(a, b);
-      if (pa[i] !== pb[i]) return byLocale(pa[i]!, pb[i]!);
-    }
-  };
-}
+/* The first file of a tree as it displays (see `diffEditor/treeOrder`). */
 
 function first<T>(items: readonly T[], order: (a: T, b: T) => number): T | null {
   let best: T | null = null;
@@ -121,15 +100,14 @@ export function firstListedChange<F extends { path: string; staged: boolean }>(
 /** The editor tree's first file at its shallowest level: what Files shows
  *  first with its folders folded. Null for an empty repo. */
 export function firstTreeFile(paths: readonly string[]): string | null {
-  const order = treeOrder(byCodeUnit);
   const depth = (p: string) => p.split('/').length;
-  return first(paths, (a, b) => depth(a) - depth(b) || order(a, b));
+  return first(paths, (a, b) => depth(a) - depth(b) || editorTreeOrder(a, b));
 }
 
 /** The editor tree's first file with its folders unfolded: what a PR's
  *  changes list first. Null with no files. */
 export function firstChangedTreeFile(paths: readonly string[]): string | null {
-  return first(paths, treeOrder(byCodeUnit));
+  return first(paths, editorTreeOrder);
 }
 
 /**
