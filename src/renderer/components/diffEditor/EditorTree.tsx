@@ -765,7 +765,7 @@ function FileEntry({
           same indent (the chevron column for folders). */}
           <span className="flex shrink-0 justify-center" style={{ width: ICON_SLOT }}>
             {viewed && (
-              <Check size={11} strokeWidth={1.8} className="text-ink-3" aria-label="Viewed" />
+              <Check size={11} strokeWidth={1.8} className="text-icon" aria-label="Viewed" />
             )}
           </span>
           <span className={`flex-1 min-w-0 text-sm truncate text-left ${tint}`}>{file.name}</span>

@@ -142,7 +142,7 @@ export function EditorHeader({
               {commentCount > 0 && (
                 <>
                   <span className="opacity-40">·</span>
-                  <MessageSquare size={11} strokeWidth={2} className="opacity-80 shrink-0" />
+                  <MessageSquare size={11} strokeWidth={2} className="text-icon shrink-0" />
                   <span className="tabular-nums">{commentCount}</span>
                 </>
               )}

@@ -384,7 +384,7 @@ function TaskModalBody({
         <button
           onClick={close}
           disabled={isCreating}
-          className="p-1.5 rounded-lg hover:bg-accent text-muted-fade-50 hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
+          className="p-1.5 rounded-lg hover:bg-accent text-icon hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
         >
           <X size={14} strokeWidth={2} />
         </button>
@@ -416,11 +416,7 @@ function TaskModalBody({
             {/* Worktree toggle */}
             {gitReady && repoHasNoCommits ? (
               <div className="mb-4 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-[hsl(var(--surface-1))]">
-                <FolderGit2
-                  size={13}
-                  className="text-muted-fade-25 mt-0.5 shrink-0"
-                  strokeWidth={1.8}
-                />
+                <FolderGit2 size={13} className="text-icon mt-0.5 shrink-0" strokeWidth={1.8} />
                 <span className="text-sm text-muted-fade-45">
                   No commits yet — this task runs in the project folder. Make an initial commit to
                   enable worktrees and branches.
@@ -445,7 +441,7 @@ function TaskModalBody({
                     <div className="absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-muted-foreground/40 peer-checked:bg-primary-foreground peer-checked:translate-x-[14px] transition-all duration-200" />
                   </div>
                   <div className="flex items-center gap-2">
-                    <GitBranch size={13} className="text-muted-fade-40" strokeWidth={1.8} />
+                    <GitBranch size={13} className="text-icon" strokeWidth={1.8} />
                     <span className="text-base text-fg-fade-80">Git worktree</span>
                     <span className="text-xs text-muted-fade-40">isolated branch</span>
                   </div>
@@ -461,7 +457,7 @@ function TaskModalBody({
               </div>
             ) : (
               <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[hsl(var(--surface-1))] border border-border/40">
-                <FolderGit2 size={13} className="text-muted-fade-40" strokeWidth={1.8} />
+                <FolderGit2 size={13} className="text-icon" strokeWidth={1.8} />
                 <span className="text-sm text-muted-fade-60 flex-1">Not a git repository</span>
                 <button
                   type="button"
@@ -496,7 +492,7 @@ function TaskModalBody({
                     <div className="absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-muted-foreground/40 peer-checked:bg-primary-foreground peer-checked:translate-x-[14px] transition-all duration-200" />
                   </div>
                   <div className="flex items-center gap-2">
-                    <GitBranch size={13} className="text-muted-fade-40" strokeWidth={1.8} />
+                    <GitBranch size={13} className="text-icon" strokeWidth={1.8} />
                     <span className="text-base text-fg-fade-80">Create new branch</span>
                     <span className="text-xs text-muted-fade-40">
                       {showGithub || showAdo ? 'from a base branch or PR' : 'from a base branch'}
@@ -522,7 +518,7 @@ function TaskModalBody({
                     <div className="absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-muted-foreground/40 peer-checked:bg-primary-foreground peer-checked:translate-x-[14px] transition-all duration-200" />
                   </div>
                   <div className="flex items-center gap-2">
-                    <Upload size={13} className="text-muted-fade-40" strokeWidth={1.8} />
+                    <Upload size={13} className="text-icon" strokeWidth={1.8} />
                     <span className="text-base text-fg-fade-80">Push remote branch</span>
                   </div>
                 </label>

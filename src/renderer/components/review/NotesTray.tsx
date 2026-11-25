@@ -114,7 +114,7 @@ function NoteRow({
       tabIndex={0}
       size="sm"
       dimmed={c.sent}
-      leading={<Bot size={14} strokeWidth={1.8} className="text-icon" />}
+      leading={<Bot size={14} strokeWidth={1.8} />}
       description={`${lineLabel(c)} · ${scopeLabel(c.viewScope)}`}
       trailing={
         <>

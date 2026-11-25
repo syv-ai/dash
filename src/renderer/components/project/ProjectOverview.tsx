@@ -146,7 +146,7 @@ export function ProjectOverview({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-9 h-9 rounded-lg bg-accent/60 flex items-center justify-center shrink-0">
-                  <FolderOpen size={16} className="text-muted-foreground" strokeWidth={1.8} />
+                  <FolderOpen size={16} className="text-icon" strokeWidth={1.8} />
                 </div>
                 <h1 className="type-title truncate">{project.name}</h1>
               </div>

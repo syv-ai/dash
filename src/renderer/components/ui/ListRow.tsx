@@ -31,7 +31,8 @@ export type ListRowProps = Omit<React.ComponentProps<'button'>, 'children'> &
     description?: React.ReactNode;
     /** Quiet row (ink-3) that reads normally on hover or when selected. */
     dimmed?: boolean;
-    /** Before the label: a StatusDot, a file icon. */
+    /** Before the label: a StatusDot, a file icon. An icon that doesn't
+     *  colour itself rests in the icon token. */
     leading?: React.ReactNode;
     /** At the row's end: a count, a time, hover actions. */
     trailing?: React.ReactNode;
@@ -77,7 +78,7 @@ export function ListRow({
       style={indent ? { ...style, paddingLeft: 10 + indent * TREE_INDENT_PX } : style}
       {...(props as React.HTMLAttributes<HTMLElement>)}
     >
-      {leading && <span className="flex h-5 shrink-0 items-center">{leading}</span>}
+      {leading && <span className="flex h-5 shrink-0 items-center text-icon">{leading}</span>}
       {description ? (
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate">{children}</span>

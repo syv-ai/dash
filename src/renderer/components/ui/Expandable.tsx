@@ -34,7 +34,7 @@ export function Expandable({
         <ChevronRight
           size={13}
           strokeWidth={2}
-          className={`transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          className={`text-icon transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
             open ? 'rotate-90' : ''
           }`}
         />

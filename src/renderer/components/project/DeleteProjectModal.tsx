@@ -113,7 +113,7 @@ function DeleteProjectBody({ project, tasks, onConfirm }: DeleteProjectBodyProps
         <button
           onClick={close}
           disabled={isDeleting}
-          className="p-1.5 rounded-lg hover:bg-accent text-muted-fade-50 hover:text-foreground transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none"
+          className="p-1.5 rounded-lg hover:bg-accent text-icon hover:text-foreground transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none"
         >
           <X size={14} strokeWidth={2} />
         </button>

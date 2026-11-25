@@ -118,7 +118,7 @@ function PortRow({
             onClick={() => {
               void runStop();
             }}
-            className={`p-[2px] rounded-md text-muted-fade-40 hover:bg-accent/60 transition-colors disabled:opacity-40 ${
+            className={`p-[2px] rounded-md text-icon hover:bg-accent/60 transition-colors disabled:opacity-40 ${
               showStop ? 'hover:text-destructive' : 'hover:text-foreground'
             }`}
           >
@@ -139,7 +139,7 @@ function PortRow({
             onClick={() => {
               void window.electronAPI.portsServiceLogs(taskId, port);
             }}
-            className="p-[2px] rounded-md text-muted-fade-40 hover:text-foreground hover:bg-accent/60 transition-colors"
+            className="p-[2px] rounded-md text-icon hover:text-foreground hover:bg-accent/60 transition-colors"
           >
             <ScrollText size={10} strokeWidth={2} />
           </button>
@@ -151,7 +151,7 @@ function PortRow({
           onClick={() => {
             void window.electronAPI.portsOpenUrl(port.hostPort);
           }}
-          className="p-[2px] rounded-md text-muted-fade-40 hover:text-foreground hover:bg-accent/60 transition-colors"
+          className="p-[2px] rounded-md text-icon hover:text-foreground hover:bg-accent/60 transition-colors"
         >
           <ExternalLink size={10} strokeWidth={2} />
         </button>

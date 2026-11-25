@@ -117,7 +117,7 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
         <button
           onClick={close}
           disabled={busy}
-          className="p-1.5 rounded-lg hover:bg-accent text-muted-fade-50 hover:text-foreground transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none"
+          className="p-1.5 rounded-lg hover:bg-accent text-icon hover:text-foreground transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none"
         >
           <X size={14} strokeWidth={2} />
         </button>
@@ -155,7 +155,7 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
                       onChange={() => toggleProject(project.projectId)}
                       className="accent-primary"
                     />
-                    <FolderGit2 size={13} strokeWidth={1.8} className="text-muted-foreground" />
+                    <FolderGit2 size={13} strokeWidth={1.8} className="text-icon" />
                     <span className="text-base font-medium text-foreground truncate">
                       {project.projectName}
                     </span>

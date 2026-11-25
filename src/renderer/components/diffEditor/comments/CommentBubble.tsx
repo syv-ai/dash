@@ -53,9 +53,9 @@ function KindLabel({ kind }: { kind: DiffCommentKind }) {
   return (
     <span className="type-caption inline-flex items-center gap-1">
       {kind === 'note' ? (
-        <Bot size={14} strokeWidth={1.8} />
+        <Bot size={14} strokeWidth={1.8} className="text-icon" />
       ) : (
-        <MessageSquare size={14} strokeWidth={1.8} />
+        <MessageSquare size={14} strokeWidth={1.8} className="text-icon" />
       )}
       {kind === 'note' ? 'Note to agent' : 'Comment'}
     </span>

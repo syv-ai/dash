@@ -109,7 +109,7 @@ export function TerminalSearch({ searchAddon, onClose }: TerminalSearchProps) {
       <button
         type="button"
         onClick={findPrev}
-        className="p-1 text-muted-fade-80 hover:text-foreground transition-colors"
+        className="p-1 text-icon hover:text-foreground transition-colors"
         title="Previous match (Shift+Enter)"
       >
         <ChevronUp size={14} strokeWidth={1.8} />
@@ -117,7 +117,7 @@ export function TerminalSearch({ searchAddon, onClose }: TerminalSearchProps) {
       <button
         type="button"
         onClick={findNext}
-        className="p-1 text-muted-fade-80 hover:text-foreground transition-colors"
+        className="p-1 text-icon hover:text-foreground transition-colors"
         title="Next match (Enter)"
       >
         <ChevronDown size={14} strokeWidth={1.8} />
@@ -125,7 +125,7 @@ export function TerminalSearch({ searchAddon, onClose }: TerminalSearchProps) {
       <button
         type="button"
         onClick={handleClose}
-        className="p-1 text-muted-fade-80 hover:text-foreground transition-colors"
+        className="p-1 text-icon hover:text-foreground transition-colors"
         title="Close (Esc)"
       >
         <X size={14} strokeWidth={1.8} />

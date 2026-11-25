@@ -11,9 +11,9 @@ export const focusRing =
 export const menuSurface =
   'z-50 rounded-lg bg-raised p-1.5 text-ink shadow-raised outline-none animate-popover-in';
 
-/** A row in a floating menu. */
+/** A row in a floating menu; its icons rest in the icon token. */
 export const menuItem =
-  'relative flex h-7.5 cursor-default select-none items-center gap-2 rounded-md px-2.5 text-sm text-ink outline-none transition-colors [&_svg]:shrink-0 [&_svg]:text-ink-3';
+  'relative flex h-7.5 cursor-default select-none items-center gap-2 rounded-md px-2.5 text-sm text-ink outline-none transition-colors [&_svg]:shrink-0 [&_svg]:text-icon';
 
 /** Radix menu row states: present-or-absent `data-highlighted` / `data-disabled`.
  *  (cmdk writes `data-disabled="false"`, so Command spells its own.) */

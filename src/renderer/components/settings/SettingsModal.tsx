@@ -223,7 +223,7 @@ function SettingsRow({
           <span className="text-base text-foreground leading-snug">{label}</span>
           {tooltip && (
             <Tooltip content={tooltip}>
-              <span className="inline-flex cursor-help text-fg-fade-40 hover:text-fg-fade-70">
+              <span className="inline-flex cursor-help text-icon hover:text-ink">
                 <HelpCircle size={12} strokeWidth={1.8} />
               </span>
             </Tooltip>
@@ -736,7 +736,7 @@ function ClaudeCodeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) {
                 </span>
                 <button
                   onClick={() => removeEntry(key)}
-                  className="p-1.5 rounded-md hover:bg-destructive/10 text-fg-fade-40 hover:text-destructive transition-all duration-150 shrink-0"
+                  className="p-1.5 rounded-md hover:bg-destructive/10 text-icon hover:text-destructive transition-all duration-150 shrink-0"
                 >
                   <Trash2 size={13} strokeWidth={1.8} />
                 </button>
@@ -767,7 +767,7 @@ function ClaudeCodeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) {
               <button
                 onClick={addEntry}
                 disabled={!newKey.trim()}
-                className="p-1.5 rounded-md hover:bg-primary/10 text-fg-fade-40 hover:text-primary transition-all duration-150 shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
+                className="p-1.5 rounded-md hover:bg-primary/10 text-icon hover:text-primary transition-all duration-150 shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <Plus size={13} strokeWidth={1.8} />
               </button>
@@ -1244,7 +1244,7 @@ export function SettingsModal({
                             strokeWidth={1.8}
                           />
                         ) : (
-                          <Check size={15} className="text-muted-foreground" strokeWidth={1.8} />
+                          <Check size={15} className="text-icon" strokeWidth={1.8} />
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
@@ -1671,7 +1671,7 @@ function SettingsCloseButton() {
   return (
     <button
       onClick={close}
-      className="p-1 rounded-md hover:bg-accent text-fg-fade-50 hover:text-foreground transition-all duration-150"
+      className="p-1 rounded-md hover:bg-accent text-icon hover:text-foreground transition-all duration-150"
       aria-label="Close settings"
     >
       <X size={13} strokeWidth={2} />
@@ -1800,7 +1800,7 @@ function AddOnAccordion({
         <ChevronDown
           size={14}
           strokeWidth={1.8}
-          className={`text-fg-fade-40 shrink-0 transition-transform duration-200 ${
+          className={`text-icon shrink-0 transition-transform duration-200 ${
             open ? 'rotate-180' : 'rotate-0'
           }`}
         />

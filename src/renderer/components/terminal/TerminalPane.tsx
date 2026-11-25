@@ -142,7 +142,7 @@ export function TerminalPane({ id, cwd, permissionMode, terminalBg }: TerminalPa
           className="absolute inset-0 z-10 flex items-center justify-center gap-2 animate-fade-in"
           style={{ background: terminalBg }}
         >
-          <Loader2 size={14} strokeWidth={1.8} className="animate-spin text-muted-fade-60" />
+          <Loader2 size={14} strokeWidth={1.8} className="animate-spin text-icon" />
           <span className="text-sm text-muted-foreground">Reconnecting…</span>
         </div>
       )}
@@ -155,7 +155,7 @@ export function TerminalPane({ id, cwd, permissionMode, terminalBg }: TerminalPa
             className="flex flex-col items-center gap-3 px-8 py-6 rounded-2xl border border-border/40 text-center max-w-[360px]"
             style={{ background: 'hsl(var(--surface-2))' }}
           >
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-accent/80 text-muted-foreground">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-accent/80 text-icon">
               <PlugZap size={16} strokeWidth={1.8} />
             </div>
             <div>

@@ -14,7 +14,10 @@
      Contrast floor, both themes, on ground, well and raised: ink-2 ≥ 4.5:1
      (body text), ink-3 ≥ 3:1 (faint text), icon ≥ 4:1. Dark sits well above
      it (ink-2 ≥ 8.8, icon ≥ 7.3, ink-3 ≥ 5.3): near-black ground makes thin
-     grey text look fainter than its ratio says. */
+     grey text look fainter than its ratio says.
+     Every resting icon takes `text-icon` (IconButton, ListRow's leading
+     slot, menu rows and Notice do it for you); hover or pressed may
+     brighten it to ink. State colours (agent, PR, loc) stay their own. */
   --color-ground: hsl(var(--ground));
   --color-well: hsl(var(--well));
   --color-raised: hsl(var(--raised));

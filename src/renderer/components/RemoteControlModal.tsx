@@ -74,7 +74,7 @@ function RemoteControlBody({ ptyId, state }: RemoteControlBodyProps) {
         </div>
         <button
           onClick={close}
-          className="p-1.5 rounded-lg hover:bg-accent text-muted-fade-50 hover:text-foreground transition-all duration-150"
+          className="p-1.5 rounded-lg hover:bg-accent text-icon hover:text-foreground transition-all duration-150"
         >
           <X size={14} strokeWidth={2} />
         </button>
@@ -84,7 +84,7 @@ function RemoteControlBody({ ptyId, state }: RemoteControlBodyProps) {
         {enabling && !state?.url ? (
           <>
             <div className="w-[200px] h-[200px] rounded-lg bg-accent/30 flex items-center justify-center">
-              <Loader2 size={24} className="text-muted-foreground animate-spin" />
+              <Loader2 size={24} className="text-icon animate-spin" />
             </div>
             <p className="text-base text-muted-foreground">Enabling remote access...</p>
           </>
@@ -120,7 +120,7 @@ function RemoteControlBody({ ptyId, state }: RemoteControlBodyProps) {
         ) : (
           <>
             <div className="w-[200px] h-[200px] rounded-lg bg-accent/30 flex items-center justify-center">
-              <X size={24} className="text-muted-fade-40" />
+              <X size={24} className="text-icon" />
             </div>
             <p className="text-base text-muted-foreground text-center max-w-[280px]">
               Could not enable remote access. Make sure you have a Claude Pro plan and are signed

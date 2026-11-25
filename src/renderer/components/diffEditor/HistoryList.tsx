@@ -216,7 +216,7 @@ function PrRow({ pr }: { pr: PrEntry }) {
           role="button"
           tabIndex={0}
           size="sm"
-          leading={<GitPullRequestArrow size={14} strokeWidth={1.8} className="text-icon" />}
+          leading={<GitPullRequestArrow size={14} strokeWidth={1.8} />}
           trailing={(pr.threads ?? 0) > 0 && <CountBadge count={pr.threads!} />}
           onClick={pr.onOpen}
           onKeyDown={(e) => {

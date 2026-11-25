@@ -105,7 +105,7 @@ function Sheet({
             <span className="type-label flex-1">Summary</span>
             {summary?.author === 'agent' && (
               <span className="type-caption inline-flex items-center gap-1">
-                <Bot size={14} strokeWidth={1.8} />
+                <Bot size={14} strokeWidth={1.8} className="text-icon" />
                 Drafted by the agent
               </span>
             )}

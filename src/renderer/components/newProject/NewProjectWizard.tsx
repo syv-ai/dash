@@ -93,7 +93,7 @@ function WizardBody({ onCreated }: { onCreated: (id: string) => void }) {
         <h2 className="type-title">New Project</h2>
         <button
           onClick={close}
-          className="p-1.5 rounded-lg hover:bg-accent text-muted-fade-50 hover:text-foreground transition-all"
+          className="p-1.5 rounded-lg hover:bg-accent text-icon hover:text-foreground transition-all"
         >
           <X size={14} strokeWidth={2} />
         </button>

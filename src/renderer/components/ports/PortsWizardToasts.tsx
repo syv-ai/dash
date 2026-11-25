@@ -54,9 +54,7 @@ function Status({ icon, children }: { icon: React.ReactNode; children: React.Rea
   );
 }
 
-const spinner = (
-  <Loader2 size={14} className="animate-spin text-muted-foreground" strokeWidth={2} />
-);
+const spinner = <Loader2 size={14} className="animate-spin text-icon" strokeWidth={2} />;
 
 function plural(n: number): string {
   return `${n} port${n === 1 ? '' : 's'}`;

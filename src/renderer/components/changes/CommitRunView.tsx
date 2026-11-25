@@ -14,7 +14,7 @@ interface CommitRunViewProps {
 const STATUS_ICON: Record<HookStatus, React.ReactNode> = {
   Passed: <Check size={12} strokeWidth={2.5} className="text-[hsl(var(--git-added))]" />,
   Failed: <X size={12} strokeWidth={2.5} className="text-[hsl(var(--destructive))]" />,
-  Skipped: <Minus size={12} strokeWidth={2.5} className="text-muted-foreground" />,
+  Skipped: <Minus size={12} strokeWidth={2.5} className="text-icon" />,
 };
 
 export function CommitRunView({
@@ -167,7 +167,7 @@ function HookItem({ hook }: { hook: HookRecord }) {
           <ChevronRight
             size={12}
             strokeWidth={2}
-            className={`text-muted-fade-60 transition-transform ${open ? 'rotate-90' : ''}`}
+            className={`text-icon transition-transform ${open ? 'rotate-90' : ''}`}
           />
         )}
       </button>

@@ -40,7 +40,7 @@ export function ModelPicker({
         options={OPTIONS}
         renderOption={(opt) => (
           <span className="inline-flex items-center gap-2 align-middle">
-            <Sparkles size={13} strokeWidth={1.8} className="text-muted-fade-60" />
+            <Sparkles size={13} strokeWidth={1.8} className="text-icon" />
             <span>{opt.label}</span>
           </span>
         )}

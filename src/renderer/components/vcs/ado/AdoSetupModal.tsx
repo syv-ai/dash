@@ -50,7 +50,7 @@ function AdoSetupBody({ projectId, organizationUrl, project, onClose }: AdoSetup
         <h2 className="type-title">Azure DevOps Detected</h2>
         <button
           onClick={close}
-          className="p-1.5 rounded-lg hover:bg-accent text-fg-fade-50 hover:text-foreground transition-all duration-150"
+          className="p-1.5 rounded-lg hover:bg-accent text-icon hover:text-foreground transition-all duration-150"
         >
           <X size={14} strokeWidth={2} />
         </button>

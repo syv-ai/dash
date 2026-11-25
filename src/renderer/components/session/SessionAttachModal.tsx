@@ -52,7 +52,7 @@ function SessionAttachBody({
         <button
           onClick={close}
           title="Detach and close"
-          className="p-1.5 rounded-lg hover:bg-accent text-muted-fade-50 hover:text-foreground transition-all duration-150 shrink-0"
+          className="p-1.5 rounded-lg hover:bg-accent text-icon hover:text-foreground transition-all duration-150 shrink-0"
         >
           <X size={14} strokeWidth={2} />
         </button>

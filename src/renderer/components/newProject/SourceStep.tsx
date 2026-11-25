@@ -10,19 +10,19 @@ interface SourceStepProps {
 const CARDS: { id: ProjectSource; icon: React.ReactNode; title: string; subtitle: string }[] = [
   {
     id: 'local',
-    icon: <FolderOpen size={18} className="text-fg-fade-70" strokeWidth={1.8} />,
+    icon: <FolderOpen size={18} className="text-icon" strokeWidth={1.8} />,
     title: 'Local folder',
     subtitle: 'Open an existing directory',
   },
   {
     id: 'clone',
-    icon: <Download size={18} className="text-fg-fade-70" strokeWidth={1.8} />,
+    icon: <Download size={18} className="text-icon" strokeWidth={1.8} />,
     title: 'Clone repository',
     subtitle: 'From a Git URL or template — you pick where',
   },
   {
     id: 'empty',
-    icon: <Plus size={18} className="text-fg-fade-70" strokeWidth={1.8} />,
+    icon: <Plus size={18} className="text-icon" strokeWidth={1.8} />,
     title: 'Empty project',
     subtitle: 'New directory, optional git init',
   },

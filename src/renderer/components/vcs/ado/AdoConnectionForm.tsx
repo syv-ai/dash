@@ -56,7 +56,7 @@ export function AdoConnectionForm({ projectId }: AdoConnectionFormProps) {
             {configured ? (
               <Check size={14} className="text-[hsl(var(--git-added))]" strokeWidth={2.5} />
             ) : (
-              <AlertCircle size={14} className="text-muted-fade-40" strokeWidth={2} />
+              <AlertCircle size={14} className="text-icon" strokeWidth={2} />
             )}
           </div>
           <div className="min-w-0">

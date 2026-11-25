@@ -61,7 +61,7 @@ export function CommitDetailPanel({
           <span className="type-subheading">Details</span>
           <button
             onClick={onClose}
-            className="p-1 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+            className="p-1 rounded-md hover:bg-accent text-icon hover:text-foreground transition-colors"
           >
             <X size={12} strokeWidth={2} />
           </button>
@@ -86,15 +86,15 @@ export function CommitDetailPanel({
               {/* Meta */}
               <div className="flex flex-col gap-2 pt-2 border-t border-border/40">
                 <div className="type-caption flex items-center gap-2">
-                  <GitCommit size={14} strokeWidth={1.8} className="shrink-0" />
+                  <GitCommit size={14} strokeWidth={1.8} className="shrink-0 text-icon" />
                   <CommitHash hash={detail.commit.hash.slice(0, 12)} url={links.commitUrl} />
                 </div>
                 <div className="type-caption flex items-center gap-2">
-                  <User size={14} strokeWidth={1.8} className="shrink-0" />
+                  <User size={14} strokeWidth={1.8} className="shrink-0 text-icon" />
                   <CommitAuthor name={detail.commit.authorName} url={links.authorUrl} />
                 </div>
                 <div className="type-caption flex items-center gap-2">
-                  <Clock size={14} strokeWidth={1.8} />
+                  <Clock size={14} strokeWidth={1.8} className="shrink-0 text-icon" />
                   <span>{formatFullDate(detail.commit.authorDate)}</span>
                 </div>
               </div>
@@ -105,7 +105,7 @@ export function CommitDetailPanel({
                 detail.stats.deletions > 0) && (
                 <div className="flex flex-col gap-1.5 pt-2 border-t border-border/40">
                   <div className="type-caption flex items-center gap-2">
-                    <FileText size={14} strokeWidth={1.8} />
+                    <FileText size={14} strokeWidth={1.8} className="shrink-0 text-icon" />
                     <span>
                       {detail.stats.filesChanged} file{detail.stats.filesChanged !== 1 ? 's' : ''}{' '}
                       changed

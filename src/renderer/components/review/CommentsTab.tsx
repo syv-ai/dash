@@ -241,7 +241,7 @@ function ReplyRow({ draft: c, poster }: { draft: DiffComment; poster: ReplyPoste
         as="div"
         size="sm"
         indent={1}
-        leading={<CornerDownRight size={14} strokeWidth={1.8} className="text-icon" />}
+        leading={<CornerDownRight size={14} strokeWidth={1.8} />}
         description={`Draft reply · ${c.author === 'agent' ? 'agent' : 'you'}`}
         trailing={<DraftActions comment={c} onEdit={() => setEditing(true)} />}
       >
@@ -275,7 +275,7 @@ function DraftRow({
       role="button"
       tabIndex={0}
       size="sm"
-      leading={<MessageSquare size={14} strokeWidth={1.8} className="text-icon" />}
+      leading={<MessageSquare size={14} strokeWidth={1.8} />}
       description={
         <Meta
           name={place.name}
@@ -313,7 +313,7 @@ function SummaryRow({ text, onFinish }: { text: string; onFinish?: () => void })
   return (
     <ListRow
       size="sm"
-      leading={<MessageSquare size={14} strokeWidth={1.8} className="text-icon" />}
+      leading={<MessageSquare size={14} strokeWidth={1.8} />}
       description="Review summary"
       trailing={<Badge size="sm">Draft</Badge>}
       {...props}

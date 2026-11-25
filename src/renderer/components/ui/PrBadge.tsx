@@ -95,7 +95,12 @@ export function PrRow({ pr, taskId }: { pr: PullRequestInfo; taskId?: string }) 
         href={pr.url}
         target="_blank"
         rel="noopener noreferrer"
-        className={cn(menuItem, 'min-w-0 flex-1 hover:bg-hover', !pr.current && 'text-ink-2')}
+        className={cn(
+          menuItem,
+          // The state icon takes its badge's colour, not the menu's icon ink (D133).
+          'min-w-0 flex-1 hover:bg-hover [&_svg]:text-current',
+          !pr.current && 'text-ink-2',
+        )}
       >
         <span className={cn(badgeVariants({ tone: 'bare', size: 'icon' }), iconColor(pr))}>
           <StateIcon pr={pr} size={11} />

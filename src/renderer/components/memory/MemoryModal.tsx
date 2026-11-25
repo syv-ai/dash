@@ -232,7 +232,7 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
           <div className="flex min-h-0 flex-1">
             <div className="flex w-[300px] shrink-0 flex-col border-r border-border/40">
               <div className="flex items-center gap-2 border-b border-border/40 px-3 py-2">
-                <Search size={14} strokeWidth={1.8} className="text-muted-foreground" />
+                <Search size={14} strokeWidth={1.8} className="text-icon" />
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
@@ -393,7 +393,7 @@ function ListRow(props: {
 function EmptyState({ dir, projectName }: { dir: string; projectName: string }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 px-10 text-center">
-      <Brain size={28} strokeWidth={1.5} className="text-muted-foreground" />
+      <Brain size={28} strokeWidth={1.5} className="text-icon" />
       <p className="text-base text-foreground">No memories yet for {projectName}</p>
       <button
         onClick={() => copy(dir)}
