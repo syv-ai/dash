@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapAdoPrList, adoSourceBranchName } from '../adoPr';
+import { adoPrListQuery, mapAdoPrList, adoSourceBranchName } from '../adoPr';
 
 const ctx = {
   organizationUrl: 'https://dev.azure.com/myorg',
@@ -53,5 +53,15 @@ describe('mapAdoPrList', () => {
 
   it('returns [] for non-array input', () => {
     expect(mapAdoPrList(undefined, ctx)).toEqual([]);
+  });
+});
+
+describe('adoPrListQuery', () => {
+  it('asks for active PRs, narrowed by source and target ref', () => {
+    expect(adoPrListQuery()).toBe('searchCriteria.status=active&$top=50');
+    expect(adoPrListQuery({ head: 'feat/x', base: 'main' })).toBe(
+      'searchCriteria.status=active&searchCriteria.sourceRefName=refs%2Fheads%2Ffeat%2Fx' +
+        '&searchCriteria.targetRefName=refs%2Fheads%2Fmain&$top=50',
+    );
   });
 });

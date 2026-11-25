@@ -1,9 +1,10 @@
-import type { PrRef, TaskReviewTarget } from '@shared/types';
+import type { PrRef, RelevantPrs, TaskReviewTarget } from '@shared/types';
 import { DatabaseService } from '../DatabaseService';
 import { ConnectionConfigService } from '../ConnectionConfigService';
 import { GitService } from '../GitService';
 import { taskReviewTargetsRepo } from '../taskReviewTargetsRepo';
 import { prContextFor, type PrContextDeps } from './resolve';
+import { listRelevantPrs } from './relevantPrs';
 import { effectiveReviewTarget, pickReviewTarget, type ReviewTargetDeps } from './reviewTarget';
 
 /** The app's lookups for picking a project's PR provider. */
@@ -36,4 +37,14 @@ export function appPickReviewTarget(
     ...reviewTargetDeps,
     store: (id, t) => taskReviewTargetsRepo().set(id, t),
   });
+}
+
+/** The open PRs from and into the branch task `taskId`'s checkout is on now
+ *  (see `listRelevantPrs`). */
+export async function appRelevantPrs(taskId: string): Promise<RelevantPrs> {
+  const task = DatabaseService.getTask(taskId);
+  if (!task) throw new Error('Unknown task');
+  const branch = (await GitService.getBranch(task.path)) ?? task.branch;
+  const { adapter, ctx } = prContextFor(task.projectId, task.path, appPrContextDeps);
+  return listRelevantPrs((filter) => adapter.list(ctx, filter), branch);
 }

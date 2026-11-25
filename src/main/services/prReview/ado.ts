@@ -419,7 +419,8 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): PrReviewProvider {
   const prPath = (ctx: PrContext, n: number) => `${repoPath(adoOf(ctx))}/pullRequests/${n}`;
 
   return {
-    list: (ctx) => AzureDevOpsService.listPullRequests(adoOf(ctx), adoOf(ctx).repository),
+    list: (ctx, filter) =>
+      AzureDevOpsService.listPullRequests(adoOf(ctx), adoOf(ctx).repository, filter),
 
     async load(ctx, number) {
       const ado = adoOf(ctx);

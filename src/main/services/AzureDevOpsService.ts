@@ -2,13 +2,14 @@ import type {
   AzureDevOpsConfig,
   AzureDevOpsWorkItem,
   AzureDevOpsWorkItemRef,
+  PrListFilter,
   PullRequest,
   CiState,
   PrCheck,
   PullRequestInfo,
 } from '@shared/types';
 import { normalizeAdoProject } from '@shared/urls';
-import { mapAdoPrList } from './adoPr';
+import { adoPrListQuery, mapAdoPrList } from './adoPr';
 import { describeAdoFailure } from './adoErrors';
 import { GitService } from './GitService';
 import { adoChecks, ciOf, relevantPrs } from './prRelevance';
@@ -281,12 +282,13 @@ export class AzureDevOpsService {
   static async listPullRequests(
     config: AzureDevOpsConfig,
     repositoryName: string,
+    filter?: PrListFilter,
   ): Promise<PullRequest[]> {
     const result = (await this.request(
       config,
       `${this.proj(config)}/_apis/git/repositories/${encodeURIComponent(
         repositoryName,
-      )}/pullrequests?searchCriteria.status=active&$top=50`,
+      )}/pullrequests?${adoPrListQuery(filter)}`,
     )) as { value?: unknown };
 
     return mapAdoPrList(result.value, {

@@ -5,6 +5,7 @@ import { prContextFor } from '../services/prReview/resolve';
 import {
   appPickReviewTarget,
   appPrContextDeps as appDeps,
+  appRelevantPrs,
   appReviewTarget,
 } from '../services/prReview/appDeps';
 import { loadPrReview } from '../services/prReview/loadReview';
@@ -36,6 +37,16 @@ export function registerPrReviewIpc(): void {
       parseArgs('prReview:list', z.looseObject(where), args);
       const { provider, adapter, ctx } = prContextFor(args.projectId, args.cwd, appDeps);
       return { success: true, data: { provider, prs: await adapter.list(ctx) } };
+    } catch (err) {
+      return errorResponse(err);
+    }
+  });
+
+  /** The open PRs from and into the task's branch (see `listRelevantPrs`). */
+  ipcMain.handle('prReview:relevant', async (_e, args: { taskId: string }) => {
+    try {
+      parseArgs('prReview:relevant', z.looseObject({ taskId: z.string() }), args);
+      return { success: true, data: await appRelevantPrs(args.taskId) };
     } catch (err) {
       return errorResponse(err);
     }

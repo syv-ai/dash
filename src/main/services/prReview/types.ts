@@ -2,6 +2,7 @@ import type {
   AzureDevOpsConfig,
   PrReview,
   PrReviewComment,
+  PrListFilter,
   PrSubmission,
   PullRequest,
   SubmitResult,
@@ -28,8 +29,8 @@ export type ForgeLoad = ForgeReview & { baseTip: string | null };
 
 /** One provider's PR review operations, behind the shared model. */
 export interface PrReviewProvider {
-  /** Open PRs, newest first. */
-  list(ctx: PrContext): Promise<PullRequest[]>;
+  /** Open PRs, newest first; only those from or into a branch with `filter`. */
+  list(ctx: PrContext, filter?: PrListFilter): Promise<PullRequest[]>;
   /** The PR's review, with its base, head and base tip present in the checkout. */
   load(ctx: PrContext, number: number): Promise<ForgeLoad>;
   setResolved(ctx: PrContext, number: number, threadId: string, resolved: boolean): Promise<void>;

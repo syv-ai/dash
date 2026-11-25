@@ -1,4 +1,4 @@
-import type { PullRequest, PullRequestState } from '@shared/types';
+import type { PrListFilter, PullRequest, PullRequestState } from '@shared/types';
 
 /** Raw entry from `gh pr list --json number,title,url,state,headRefName,baseRefName,author`. */
 interface RawGithubPr {
@@ -41,4 +41,20 @@ export function mapGithubPrList(raw: unknown): PullRequest[] {
  */
 export function buildPrHeadRefspec(prNumber: number, headRefName: string): string {
   return `pull/${prNumber}/head:${headRefName}`;
+}
+
+/** `gh pr list`'s arguments for the open PRs, narrowed by `filter`. */
+export function githubPrListArgs(filter: PrListFilter = {}): string[] {
+  return [
+    'pr',
+    'list',
+    '--state',
+    'open',
+    ...(filter.head ? ['--head', filter.head] : []),
+    ...(filter.base ? ['--base', filter.base] : []),
+    '--json',
+    'number,title,url,state,headRefName,baseRefName,author',
+    '--limit',
+    '50',
+  ];
 }

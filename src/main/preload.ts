@@ -229,6 +229,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // PR review (GitHub or Azure DevOps, picked by main from the project's remote)
   prReviewList: (args: { projectId: string; cwd: string }) =>
     ipcRenderer.invoke('prReview:list', args),
+  prReviewRelevant: (args: { taskId: string }) => ipcRenderer.invoke('prReview:relevant', args),
   prReviewLoad: (args: { projectId: string; cwd: string; number: number }) =>
     ipcRenderer.invoke('prReview:load', args),
   prReviewSetResolved: (args: {

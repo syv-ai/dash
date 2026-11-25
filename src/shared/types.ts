@@ -800,6 +800,20 @@ export interface PullRequest {
   provider: 'github' | 'ado';
 }
 
+/** Narrows a PR listing to those from (`head`) or into (`base`) a branch. */
+export interface PrListFilter {
+  head?: string;
+  base?: string;
+}
+
+/** The open PRs that matter to a task's branch: opened from it, or into it.
+ *  Newest first; both empty on a detached HEAD (`branch` null). */
+export interface RelevantPrs {
+  branch: string | null;
+  from: PullRequest[];
+  into: PullRequest[];
+}
+
 // ── Remote Control Types ────────────────────────────────────
 
 export interface RemoteControlState {

@@ -1,4 +1,4 @@
-import type { PullRequest } from '@shared/types';
+import type { PrListFilter, PullRequest } from '@shared/types';
 
 /** Raw entry from the ADO `git/pullrequests` REST `value[]`. */
 interface RawAdoPr {
@@ -39,4 +39,15 @@ export function mapAdoPrList(raw: unknown, ctx: AdoPrContext): PullRequest[] {
       provider: 'ado' as const,
     };
   });
+}
+
+/** The `git/pullrequests` query for the active PRs, narrowed by `filter`. */
+export function adoPrListQuery(filter: PrListFilter = {}): string {
+  const ref = (name: string) => encodeURIComponent(`refs/heads/${name}`);
+  return [
+    'searchCriteria.status=active',
+    ...(filter.head ? [`searchCriteria.sourceRefName=${ref(filter.head)}`] : []),
+    ...(filter.base ? [`searchCriteria.targetRefName=${ref(filter.base)}`] : []),
+    '$top=50',
+  ].join('&');
 }

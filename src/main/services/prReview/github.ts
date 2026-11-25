@@ -336,7 +336,7 @@ const pick = (data: Node, ...path: string[]): unknown =>
 /** The GitHub adapter, over a GraphQL transport (the real one runs `gh`). */
 export function makeGithubProvider(gql: Gql = ghGql, rest: Rest = ghRest): PrReviewProvider {
   return {
-    list: (ctx) => GithubService.listPullRequests(ctx.cwd),
+    list: (ctx, filter) => GithubService.listPullRequests(ctx.cwd, filter),
 
     async load(ctx, number) {
       const data = await gql(ctx.cwd, PR_REVIEW_QUERY, repoVars(number));

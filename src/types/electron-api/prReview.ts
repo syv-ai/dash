@@ -7,6 +7,7 @@ import type {
   PrReviewSummary,
   PrVerdict,
   PullRequest,
+  RelevantPrs,
   SubmitResult,
   TaskReviewTarget,
 } from '../../shared/types';
@@ -18,6 +19,8 @@ export interface PrReviewApi {
     projectId: string;
     cwd: string;
   }) => Promise<IpcResponse<{ provider: PrProvider; prs: PullRequest[] }>>;
+  /** The open PRs from and into the task's branch, newest first. */
+  prReviewRelevant: (args: { taskId: string }) => Promise<IpcResponse<RelevantPrs>>;
   /** PR `number`'s threads and general comments, with its base and head fetched into `cwd`. */
   prReviewLoad: (args: {
     projectId: string;

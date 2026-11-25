@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapGithubPrList, buildPrHeadRefspec } from '../githubPr';
+import { mapGithubPrList, buildPrHeadRefspec, githubPrListArgs } from '../githubPr';
 
 describe('mapGithubPrList', () => {
   it('maps gh pr list JSON to PullRequest[]', () => {
@@ -48,5 +48,14 @@ describe('mapGithubPrList', () => {
 describe('buildPrHeadRefspec', () => {
   it('builds the refs/pull head refspec into a local branch', () => {
     expect(buildPrHeadRefspec(42, 'fix/auth')).toBe('pull/42/head:fix/auth');
+  });
+});
+
+describe('githubPrListArgs', () => {
+  it('lists open PRs, narrowed to a head or base branch when asked', () => {
+    expect(githubPrListArgs()).not.toContain('--head');
+    const args = githubPrListArgs({ head: 'feat/x', base: 'main' });
+    expect(args.slice(0, 4)).toEqual(['pr', 'list', '--state', 'open']);
+    expect(args.join(' ')).toContain('--head feat/x --base main');
   });
 });
