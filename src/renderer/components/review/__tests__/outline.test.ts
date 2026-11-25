@@ -41,7 +41,17 @@ const thread = (id: string, over: Partial<PrReviewThread> = {}): PrReviewThread 
   side: 'RIGHT',
   isOutdated: false,
   resolved: false,
-  comments: [{ id: `${id}c`, author: 'ann', body: 'hi', createdAt: '', url: '' }],
+  comments: [
+    {
+      id: `${id}c`,
+      author: 'ann',
+      body: 'hi',
+      createdAt: '',
+      url: '',
+      authorUrl: null,
+      reactions: [],
+    },
+  ],
   ...over,
 });
 
@@ -157,7 +167,15 @@ describe('threadHeadline', () => {
   it('is the first non-blank line of the first comment', () => {
     const t = thread('1', {
       comments: [
-        { id: 'c', author: 'a', body: '\n  Rename this\nbecause', createdAt: '', url: '' },
+        {
+          id: 'c',
+          author: 'a',
+          body: '\n  Rename this\nbecause',
+          createdAt: '',
+          url: '',
+          authorUrl: null,
+          reactions: [],
+        },
       ],
     });
     expect(threadHeadline(t)).toBe('Rename this');

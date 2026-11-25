@@ -30,7 +30,11 @@
           "content": "This can throw.",
           "commentType": "text",
           "publishedDate": "2026-10-10T09:00:00Z",
-          "author": { "displayName": "Ann Reviewer" }
+          "author": { "displayName": "Ann Reviewer" },
+          "usersLiked": [
+            { "id": "me-id", "displayName": "Me" },
+            { "id": "bo-id", "displayName": "Bo Author" }
+          ]
         },
         {
           "id": 2,
@@ -38,7 +42,8 @@
           "content": "Fixed in the next push.",
           "commentType": "text",
           "publishedDate": "2026-10-10T10:00:00Z",
-          "author": { "displayName": "Bo Author" }
+          "author": { "displayName": "Bo Author" },
+          "usersLiked": [{ "id": "ann-id", "displayName": "Ann Reviewer" }]
         },
         {
           "id": 3,

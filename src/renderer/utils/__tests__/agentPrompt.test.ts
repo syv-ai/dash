@@ -133,6 +133,8 @@ const thread = (
     body: `body ${c}`,
     createdAt: '',
     url: '',
+    authorUrl: null,
+    reactions: [],
   })),
   ...over,
 });

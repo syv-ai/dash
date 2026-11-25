@@ -3,6 +3,7 @@ import type {
   PrReview,
   PrReviewComment,
   PrListFilter,
+  PrReactionContent,
   PrSubmission,
   RelevantPr,
   SubmitResult,
@@ -37,4 +38,12 @@ export interface PrReviewProvider {
   submit(ctx: PrContext, number: number, submission: PrSubmission): Promise<SubmitResult>;
   /** Post a reply to a thread at once, outside any review. */
   reply(ctx: PrContext, number: number, threadId: string, body: string): Promise<PrReviewComment>;
+  /** Give (`on`) or take back the viewer's reaction on comment `commentId`, at once. */
+  react(
+    ctx: PrContext,
+    number: number,
+    commentId: string,
+    content: PrReactionContent,
+    on: boolean,
+  ): Promise<void>;
 }

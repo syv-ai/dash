@@ -93,7 +93,9 @@ export async function adoRequest(
       );
     }
 
-    return await resp.json();
+    // A write like DELETE …/likes answers 204 with no body.
+    const text = await resp.text();
+    return text ? (JSON.parse(text) as unknown) : null;
   } finally {
     clearTimeout(timeout);
   }

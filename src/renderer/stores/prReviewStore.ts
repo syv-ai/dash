@@ -3,6 +3,7 @@ import type {
   DiffComment,
   DiffCommentKind,
   PrProvider,
+  PrReactionContent,
   PrRef,
   PrReview,
   PrReviewComment,
@@ -11,6 +12,7 @@ import type {
   PrWriteError,
   TaskPrs,
 } from '../../shared/types';
+import { toggleReaction } from '../../shared/prReactions';
 
 /** The store key of a PR's review. */
 export const prKey = (provider: PrProvider, number: number): string => `${provider}:${number}`;
@@ -103,6 +105,18 @@ interface PrReviewState {
     threadId: string,
     resolved: boolean,
   ) => Promise<PrWriteResult>;
+  /**
+   * Give (`on`) or take back the viewer's reaction on a comment (a thread's
+   * or the conversation's): shown at once, undone if the PR refuses.
+   */
+  react: (
+    projectId: string,
+    cwd: string,
+    review: Pick<PrReview, 'provider' | 'number'>,
+    commentId: string,
+    content: PrReactionContent,
+    on: boolean,
+  ) => Promise<PrWriteResult>;
   /** Draft replies being posted, by id. */
   posting: Record<string, true>;
   /**
@@ -145,6 +159,25 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
       t.id === threadId ? { ...t, comments: [...t.comments, comment] } : t,
     );
     set({ byPr: { ...get().byPr, [key]: { ...review, threads } } });
+  };
+  /** Swap comment `commentId` (in a thread or the conversation) for `fn` of it. */
+  const mapComment = (
+    key: string,
+    commentId: string,
+    fn: (c: PrReviewComment) => PrReviewComment,
+  ) => {
+    const review = get().byPr[key];
+    if (!review) return;
+    const each = (list: PrReviewComment[]) => list.map((c) => (c.id === commentId ? fn(c) : c));
+    const threads = review.threads.map((t) =>
+      t.comments.some((c) => c.id === commentId) ? { ...t, comments: each(t.comments) } : t,
+    );
+    set({
+      byPr: {
+        ...get().byPr,
+        [key]: { ...review, threads, conversation: each(review.conversation) },
+      },
+    });
   };
   const setPosting = (id: string, on: boolean) => {
     const posting = { ...get().posting };
@@ -312,6 +345,33 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
       }
       if (!error) return { ok: true };
       flip(key, threadId, !resolved);
+      return { ok: false, error };
+    },
+
+    react: async (projectId, cwd, review, commentId, content, on) => {
+      const key = prKey(review.provider, review.number);
+      const flipTo = (to: boolean) =>
+        mapComment(key, commentId, (c) => ({
+          ...c,
+          reactions: toggleReaction(c.reactions, content, to),
+        }));
+      flipTo(on);
+      let error: PrWriteError | null = null;
+      try {
+        const resp = await window.electronAPI.prReviewReact({
+          projectId,
+          cwd,
+          number: review.number,
+          commentId,
+          content,
+          on,
+        });
+        if (!resp.success) error = ipcError(resp.error ?? 'unknown error');
+      } catch (err) {
+        error = ipcError(String(err));
+      }
+      if (!error) return { ok: true };
+      flipTo(!on);
       return { ok: false, error };
     },
 

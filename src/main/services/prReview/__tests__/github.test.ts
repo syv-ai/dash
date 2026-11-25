@@ -3,6 +3,7 @@ import type { PrSubmission } from '../../../../shared/types';
 import prFixture from './fixtures/github-pr.json';
 import relevantFixture from './fixtures/github-relevant-prs.json';
 import {
+  githubReactionRequest,
   githubRelevantPrsFrom,
   githubReplyRequest,
   githubReviewFrom,
@@ -75,9 +76,11 @@ describe('githubReviewFrom', () => {
     expect(threads[0]!.comments[0]).toEqual({
       id: 'C1',
       author: 'rev',
+      authorUrl: null,
       body: 'Null here',
       createdAt: '2026-10-17T10:00:00Z',
       url: 'u/C1',
+      reactions: [],
     });
     // A deleted account reads as GitHub's "ghost".
     expect(threads[2]!.comments[0]!.author).toBe('ghost');
@@ -166,6 +169,24 @@ describe('githubReviewFrom', () => {
     pr.reviewRequests.nodes.push({ requestedReviewer: { login: 'me' } });
     expect(githubReviewFrom(pr, at).viewerIsRequestedReviewer).toBe(true);
     expect(githubReviewFrom(pr, { ...at, viewer: '' }).viewerIsRequestedReviewer).toBe(false);
+  });
+
+  it("links each comment's author and keeps the reactions someone gave", () => {
+    const review = githubReviewFrom(prFixture, at);
+    const [first, second] = review.threads[0]!.comments;
+    expect(first).toMatchObject({
+      author: 'ann',
+      authorUrl: 'https://github.com/ann',
+      reactions: [
+        { content: 'THUMBS_UP', count: 2, viewerReacted: true },
+        { content: 'EYES', count: 1, viewerReacted: false },
+      ],
+    });
+    // A deleted account has no page; no one reacted to it.
+    expect(second).toMatchObject({ author: 'ghost', authorUrl: null, reactions: [] });
+    expect(review.conversation[0]!.reactions).toEqual([
+      { content: 'HOORAY', count: 3, viewerReacted: false },
+    ]);
   });
 
   it('flags a review with more threads than were loaded', () => {
@@ -364,6 +385,25 @@ describe('githubProvider.setResolved', () => {
   });
 });
 
+describe('githubProvider.react', () => {
+  it('adds or removes the reaction on the comment node', () => {
+    const add = githubReactionRequest('PRRC_1', 'HEART', true);
+    expect(add.query).toContain('addReaction(input: { subjectId: $subject, content: $content })');
+    expect(add.vars).toEqual({ subject: 'PRRC_1', content: 'HEART' });
+    expect(githubReactionRequest('PRRC_1', 'HEART', false).query).toContain('removeReaction(');
+  });
+
+  it("sends the mutation, and refuses ADO's like", async () => {
+    const { gql, ops, calls } = fakeGql();
+    const gh = makeGithubProvider(gql);
+    await gh.react(ctx, 4, 'PRRC_1', 'ROCKET', true);
+    await gh.react(ctx, 4, 'PRRC_1', 'ROCKET', false);
+    expect(ops()).toEqual(['addReaction', 'removeReaction']);
+    expect(calls[0]!.vars).toEqual({ subject: 'PRRC_1', content: 'ROCKET' });
+    await expect(gh.react(ctx, 4, 'PRRC_1', 'LIKE', true)).rejects.toThrow('no "like"');
+  });
+});
+
 describe('githubProvider.reply', () => {
   it("posts at once through REST, under the thread's first comment", () => {
     expect(githubReplyRequest(4, 1234, 'agreed')).toEqual({
@@ -395,6 +435,8 @@ describe('githubProvider.reply', () => {
     expect(comment).toEqual({
       id: 'PRRC_9',
       author: 'me',
+      authorUrl: null,
+      reactions: [],
       body: 'agreed',
       createdAt: '2026-11-24T10:00:00Z',
       url: 'https://github.com/o/r/pull/4#discussion_r99',

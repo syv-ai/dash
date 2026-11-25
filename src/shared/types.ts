@@ -626,13 +626,36 @@ export type PrVerdict =
   | 'wait_for_author'
   | 'reject';
 
+/** A reaction on a PR comment: GitHub's eight, or ADO's one, a like. */
+export type PrReactionContent =
+  | 'THUMBS_UP'
+  | 'THUMBS_DOWN'
+  | 'LAUGH'
+  | 'HOORAY'
+  | 'CONFUSED'
+  | 'HEART'
+  | 'ROCKET'
+  | 'EYES'
+  | 'LIKE';
+
+/** One reaction on a comment: how many gave it, and whether the viewer did. */
+export interface PrReaction {
+  content: PrReactionContent;
+  count: number;
+  viewerReacted: boolean;
+}
+
 /** One comment in a PR review thread, or a general PR comment. */
 export interface PrReviewComment {
   id: string;
   author: string;
+  /** The author's page on the forge; null where it has none (ADO). */
+  authorUrl: string | null;
   body: string;
   createdAt: string;
   url: string;
+  /** Reactions someone gave (count > 0), in the forge's order. */
+  reactions: PrReaction[];
 }
 
 /** A review thread on a PR, anchored to a file and line. */

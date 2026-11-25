@@ -129,7 +129,15 @@ describe('TaskReviews.submit', () => {
 });
 
 describe('TaskReviews.reply', () => {
-  const posted = { id: 'C9', author: 'me', body: 'agreed', createdAt: 'now', url: 'u/C9' };
+  const posted = {
+    id: 'C9',
+    author: 'me',
+    body: 'agreed',
+    createdAt: 'now',
+    url: 'u/C9',
+    authorUrl: null,
+    reactions: [],
+  };
   const replyTarget = (fail = false) => {
     const reply = vi.fn(async () => {
       if (fail) throw new Error('GraphQL: Not Found');

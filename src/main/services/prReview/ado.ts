@@ -2,6 +2,8 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type {
   PrCheck,
+  PrReaction,
+  PrReactionContent,
   PrReviewComment,
   PrReviewer,
   PrReviewThread,
@@ -36,6 +38,8 @@ interface RawComment {
   publishedDate?: string;
   lastUpdatedDate?: string;
   author?: { displayName?: string } | null;
+  /** Who liked it (ADO's one reaction). */
+  usersLiked?: { id?: string }[] | null;
 }
 interface RawThread {
   id?: number;
@@ -166,13 +170,26 @@ const reviewersFrom = (pr: RawPr): PrReviewer[] =>
     state: VOTE_STATES[r.vote ?? 0] ?? 'pending',
   }));
 
+/** A comment's likes as its one reaction; none when no one liked it. `me`
+ *  is the viewer's identity id ('' when unknown). */
+export function adoLikes(c: Pick<RawComment, 'usersLiked'>, me: string): PrReaction[] {
+  const users = (c.usersLiked ?? []).filter((u) => !!u);
+  if (users.length === 0) return [];
+  return [
+    { content: 'LIKE', count: users.length, viewerReacted: !!me && users.some((u) => u.id === me) },
+  ];
+}
+
 /** One person's comment of thread `tid`, linked to where ADO shows the thread. */
-const commentFrom = (c: RawComment, tid: string, threadUrl: string): PrReviewComment => ({
+const commentFrom = (c: RawComment, tid: string, threadUrl: string, me = ''): PrReviewComment => ({
   id: `${tid}:${c.id ?? ''}`,
   author: c.author?.displayName || 'Unknown',
+  // ADO has no profile page to link a person to.
+  authorUrl: null,
   body: c.content ?? '',
   createdAt: c.publishedDate ?? '',
   url: threadUrl,
+  reactions: adoLikes(c, me),
 });
 
 const threadUrl = (url: string, t: RawThread) =>
@@ -232,7 +249,7 @@ export function adoReviewFrom(
     const where = t.threadContext;
     const comments = (t.comments ?? [])
       .filter((c) => c.commentType !== 'system' && !c.isDeleted)
-      .map((c) => commentFrom(c, tid, threadUrl(url, t)));
+      .map((c) => commentFrom(c, tid, threadUrl(url, t), raw.me));
     if (!where) {
       conversation.push(...comments);
       continue;
@@ -332,6 +349,22 @@ export const adoSummaryBody = (body: string) => ({
   comments: [{ parentCommentId: 0, content: body, commentType: TEXT }],
   status: CLOSED,
 });
+
+/**
+ * Like (`on`) or unlike a comment, by its id (`thread:comment`, as
+ * `commentFrom` makes it): PUT / DELETE on the comment's likes, under the PR
+ * at `prPath`.
+ */
+export function adoLikeRequest(
+  prPath: string,
+  commentId: string,
+  on: boolean,
+): { path: string; method: 'PUT' | 'DELETE' } {
+  const [tid, cid] = commentId.split(':');
+  if (!tid || !cid || !/^\d+$/.test(tid) || !/^\d+$/.test(cid))
+    throw new Error(`Not an Azure DevOps comment id: ${commentId}`);
+  return { path: `${prPath}/threads/${tid}/comments/${cid}/likes`, method: on ? 'PUT' : 'DELETE' };
+}
 
 const VOTES: Partial<Record<PrVerdict, number>> = {
   approve: 10,
@@ -463,6 +496,12 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): PrReviewProvider {
         body: adoReplyBody(body, adoRootCommentId(thread)),
       })) as RawComment;
       return commentFrom(posted, threadId, threadUrl(prUrl(repoContext(ado), number), thread));
+    },
+
+    async react(ctx, number, commentId, content: PrReactionContent, on) {
+      if (content !== 'LIKE') throw new Error('Azure DevOps has only likes');
+      const req = adoLikeRequest(prPath(ctx, number), commentId, on);
+      await deps.request(adoOf(ctx), req.path, { method: req.method });
     },
 
     async setResolved(ctx, number, threadId, resolved) {

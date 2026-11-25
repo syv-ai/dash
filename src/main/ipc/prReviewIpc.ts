@@ -11,11 +11,13 @@ import { loadPrReview } from '../services/prReview/loadReview';
 import { checkoutVsHead } from '../services/prReview/localCommits';
 import { taskReviews } from '../services/prReview/taskReview';
 import { prViewedFilesRepo } from '../services/prViewedFilesRepo';
-import type { PrProvider, PrRef, PrVerdict } from '@shared/types';
+import { PR_REACTIONS } from '@shared/prReactions';
+import type { PrProvider, PrReactionContent, PrRef, PrVerdict } from '@shared/types';
 
 const where = { projectId: z.string(), cwd: z.string() };
 const provider = z.enum(['github', 'ado']);
 const reviewOf = { taskId: z.string(), provider, number: z.number() };
+const reaction = z.enum(PR_REACTIONS);
 const verdict = z.enum([
   'comment',
   'approve',
@@ -74,6 +76,42 @@ export function registerPrReviewIpc(): void {
         );
         const { adapter, ctx } = prContextFor(args.projectId, args.cwd, appDeps);
         await adapter.setResolved(ctx, args.number, args.threadId, args.resolved);
+        return { success: true };
+      } catch (err) {
+        return errorResponse(err);
+      }
+    },
+  );
+
+  /** Give or take back the viewer's reaction on a comment, at once (posts on
+   *  the click, D194). */
+  ipcMain.handle(
+    'prReview:react',
+    async (
+      _e,
+      args: {
+        projectId: string;
+        cwd: string;
+        number: number;
+        commentId: string;
+        content: PrReactionContent;
+        on: boolean;
+      },
+    ) => {
+      try {
+        parseArgs(
+          'prReview:react',
+          z.looseObject({
+            ...where,
+            number: z.number(),
+            commentId: z.string().min(1),
+            content: reaction,
+            on: z.boolean(),
+          }),
+          args,
+        );
+        const { adapter, ctx } = prContextFor(args.projectId, args.cwd, appDeps);
+        await adapter.react(ctx, args.number, args.commentId, args.content, args.on);
         return { success: true };
       } catch (err) {
         return errorResponse(err);

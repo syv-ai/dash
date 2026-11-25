@@ -2,6 +2,7 @@ import type {
   CheckoutVsHead,
   IpcResponse,
   PrProvider,
+  PrReactionContent,
   PrRef,
   PrReview,
   PrReviewComment,
@@ -29,6 +30,15 @@ export interface PrReviewApi {
     number: number;
     threadId: string;
     resolved: boolean;
+  }) => Promise<IpcResponse<void>>;
+  /** Give (`on`) or take back the viewer's reaction on a comment of PR `number`, at once. */
+  prReviewReact: (args: {
+    projectId: string;
+    cwd: string;
+    number: number;
+    commentId: string;
+    content: PrReactionContent;
+    on: boolean;
   }) => Promise<IpcResponse<void>>;
   /** Submit the task's drafts for PR `number` with a verdict and summary. */
   prReviewSubmit: (args: {

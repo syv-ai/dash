@@ -3,6 +3,8 @@ import { promisify } from 'util';
 import type {
   CiState,
   PrCheck,
+  PrReaction,
+  PrReactionContent,
   PrListFilter,
   PrReviewComment,
   PrReviewer,
@@ -12,6 +14,7 @@ import type {
   PrWriteError,
   RelevantPr,
 } from '@shared/types';
+import { GITHUB_REACTIONS } from '@shared/prReactions';
 import { githubChecks } from '../prRelevance';
 import { ensureCommits, runGit } from './localCommits';
 import type { ForgeReview, PrReviewProvider } from './types';
@@ -41,11 +44,17 @@ export const PR_REVIEW_QUERY = `query($owner: String!, $name: String!, $number: 
         pageInfo { hasNextPage }
         nodes {
           id isResolved isOutdated path line startLine diffSide
-          comments(first: 50) { nodes { id author { login } body createdAt url } }
+          comments(first: 50) {
+            nodes { id author { login url } body createdAt url reactionGroups { content viewerHasReacted reactors { totalCount } } }
+          }
         }
       }
-      comments(first: 100) { nodes { id author { login } body createdAt url } }
-      reviews(first: 100) { nodes { id author { login } body state createdAt url } }
+      comments(first: 100) {
+        nodes { id author { login url } body createdAt url reactionGroups { content viewerHasReacted reactors { totalCount } } }
+      }
+      reviews(first: 100) {
+        nodes { id author { login url } body state createdAt url reactionGroups { content viewerHasReacted reactors { totalCount } } }
+      }
       reviewRequests(first: 100) {
         nodes { requestedReviewer { ... on User { login url } ... on Team { name url } } }
       }
@@ -109,14 +118,27 @@ const nodes = (v: unknown): Node[] => {
 const pick = (data: Node, ...path: string[]): unknown =>
   path.reduce<unknown>((v, k) => (v && typeof v === 'object' ? (v as Node)[k] : undefined), data);
 
+/** A comment's reaction groups, those someone gave (GitHub lists all eight). */
+export function reactionsFrom(groups: unknown): PrReaction[] {
+  if (!Array.isArray(groups)) return [];
+  return groups.flatMap((g: Node | null): PrReaction[] => {
+    const content = str(g?.content) as PrReactionContent;
+    const count = num(pick(g ?? {}, 'reactors', 'totalCount')) ?? 0;
+    if (!GITHUB_REACTIONS.includes(content) || count <= 0) return [];
+    return [{ content, count, viewerReacted: g?.viewerHasReacted === true }];
+  });
+}
+
 function commentFrom(c: Node): PrReviewComment {
   return {
     id: str(c.id),
     // A deleted account comes back without an author, as GitHub's "ghost".
     author: login(c.author) || 'ghost',
+    authorUrl: profileUrl(c.author),
     body: str(c.body),
     createdAt: str(c.createdAt),
     url: str(c.url),
+    reactions: reactionsFrom(c.reactionGroups),
   };
 }
 
@@ -400,11 +422,28 @@ export function restCommentFrom(c: unknown): PrReviewComment {
   return {
     id: str(r.node_id),
     author: login(r.user) || 'ghost',
+    authorUrl: str((r.user as Node | null)?.html_url) || null,
     body: str(r.body),
     createdAt: str(r.created_at),
     url: str(r.html_url),
+    reactions: [],
   };
 }
+
+/** Give (`on`) or take back the viewer's reaction on a comment, issue
+ *  comment or review: `addReaction` / `removeReaction` on its node id. */
+export const githubReactionRequest = (
+  subjectId: string,
+  content: PrReactionContent,
+  on: boolean,
+) => ({
+  query: `mutation($subject: ID!, $content: ReactionContent!) {
+  ${on ? 'addReaction' : 'removeReaction'}(input: { subjectId: $subject, content: $content }) {
+    reaction { content }
+  }
+}`,
+  vars: { subject: subjectId, content },
+});
 
 /** The GitHub adapter, over a GraphQL transport (the real one runs `gh`). */
 export function makeGithubProvider(gql: Gql = ghGql, rest: Rest = ghRest): PrReviewProvider {
@@ -434,6 +473,12 @@ export function makeGithubProvider(gql: Gql = ghGql, rest: Rest = ghRest): PrRev
 
     async setResolved(ctx, _number, threadId, resolved) {
       await gql(ctx.cwd, resolveMutation(resolved), { id: threadId });
+    },
+
+    async react(ctx, _number, commentId, content, on) {
+      if (content === 'LIKE') throw new Error('GitHub has no "like" reaction');
+      const req = githubReactionRequest(commentId, content, on);
+      await gql(ctx.cwd, req.query, req.vars);
     },
 
     /**

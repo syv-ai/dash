@@ -27,6 +27,14 @@ describe('adoRequest', () => {
     expect((init.headers as Record<string, string>)['X-TFS-FedAuthRedirect']).toBe('Suppress');
   });
 
+  it('answers null for a write with no body (204)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(null, { status: 204 })),
+    );
+    expect(await adoRequest(config, 'proj/_apis/x', { method: 'DELETE' })).toBeNull();
+  });
+
   it('throws an AdoRequestError carrying the status', async () => {
     stubFetch(401, 'nope', 'text/plain');
     const err = await adoRequest(config, 'x').catch((e: unknown) => e);

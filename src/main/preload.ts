@@ -237,6 +237,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     threadId: string;
     resolved: boolean;
   }) => ipcRenderer.invoke('prReview:setResolved', args),
+  prReviewReact: (args: {
+    projectId: string;
+    cwd: string;
+    number: number;
+    commentId: string;
+    content: string;
+    on: boolean;
+  }) => ipcRenderer.invoke('prReview:react', args),
   prReviewSubmit: (args: {
     projectId: string;
     cwd: string;

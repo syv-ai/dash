@@ -10,7 +10,17 @@ const thread = (id: string, over: Partial<PrReviewThread> = {}): PrReviewThread 
   side: 'RIGHT',
   isOutdated: false,
   resolved: false,
-  comments: [{ id: `${id}-c`, author: 'ana', body: 'Rename this\nplease', createdAt: '', url: '' }],
+  comments: [
+    {
+      id: `${id}-c`,
+      author: 'ana',
+      body: 'Rename this\nplease',
+      createdAt: '',
+      url: '',
+      authorUrl: null,
+      reactions: [],
+    },
+  ],
   ...over,
 });
 

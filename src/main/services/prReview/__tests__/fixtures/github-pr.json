@@ -39,6 +39,103 @@
       { "author": { "login": "fay" }, "state": "APPROVED" }
     ]
   },
+  "reviewThreads": {
+    "pageInfo": { "hasNextPage": false },
+    "nodes": [
+      {
+        "id": "PRRT_1",
+        "isResolved": false,
+        "isOutdated": false,
+        "path": "src/a.ts",
+        "line": 12,
+        "startLine": null,
+        "diffSide": "RIGHT",
+        "comments": {
+          "nodes": [
+            {
+              "id": "PRRC_1",
+              "author": { "login": "ann", "url": "https://github.com/ann" },
+              "body": "Null here",
+              "createdAt": "2026-11-02T10:00:00Z",
+              "url": "https://github.com/o/r/pull/4#discussion_r1",
+              "reactionGroups": [
+                {
+                  "content": "THUMBS_UP",
+                  "viewerHasReacted": true,
+                  "reactors": { "totalCount": 2 }
+                },
+                {
+                  "content": "THUMBS_DOWN",
+                  "viewerHasReacted": false,
+                  "reactors": { "totalCount": 0 }
+                },
+                { "content": "LAUGH", "viewerHasReacted": false, "reactors": { "totalCount": 0 } },
+                { "content": "HOORAY", "viewerHasReacted": false, "reactors": { "totalCount": 0 } },
+                {
+                  "content": "CONFUSED",
+                  "viewerHasReacted": false,
+                  "reactors": { "totalCount": 0 }
+                },
+                { "content": "HEART", "viewerHasReacted": false, "reactors": { "totalCount": 0 } },
+                { "content": "ROCKET", "viewerHasReacted": false, "reactors": { "totalCount": 0 } },
+                { "content": "EYES", "viewerHasReacted": false, "reactors": { "totalCount": 1 } }
+              ]
+            },
+            {
+              "id": "PRRC_2",
+              "author": null,
+              "body": "ok",
+              "createdAt": "2026-11-02T11:00:00Z",
+              "url": "https://github.com/o/r/pull/4#discussion_r2",
+              "reactionGroups": [
+                {
+                  "content": "THUMBS_UP",
+                  "viewerHasReacted": false,
+                  "reactors": { "totalCount": 0 }
+                },
+                {
+                  "content": "THUMBS_DOWN",
+                  "viewerHasReacted": false,
+                  "reactors": { "totalCount": 0 }
+                },
+                { "content": "LAUGH", "viewerHasReacted": false, "reactors": { "totalCount": 0 } },
+                { "content": "HOORAY", "viewerHasReacted": false, "reactors": { "totalCount": 0 } },
+                {
+                  "content": "CONFUSED",
+                  "viewerHasReacted": false,
+                  "reactors": { "totalCount": 0 }
+                },
+                { "content": "HEART", "viewerHasReacted": false, "reactors": { "totalCount": 0 } },
+                { "content": "ROCKET", "viewerHasReacted": false, "reactors": { "totalCount": 0 } },
+                { "content": "EYES", "viewerHasReacted": false, "reactors": { "totalCount": 0 } }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "comments": {
+    "nodes": [
+      {
+        "id": "IC_1",
+        "author": { "login": "bo", "url": "https://github.com/bo" },
+        "body": "Ready",
+        "createdAt": "2026-11-01T10:00:00Z",
+        "url": "https://github.com/o/r/pull/4#issuecomment-1",
+        "reactionGroups": [
+          { "content": "THUMBS_UP", "viewerHasReacted": false, "reactors": { "totalCount": 0 } },
+          { "content": "THUMBS_DOWN", "viewerHasReacted": false, "reactors": { "totalCount": 0 } },
+          { "content": "LAUGH", "viewerHasReacted": false, "reactors": { "totalCount": 0 } },
+          { "content": "HOORAY", "viewerHasReacted": false, "reactors": { "totalCount": 3 } },
+          { "content": "CONFUSED", "viewerHasReacted": false, "reactors": { "totalCount": 0 } },
+          { "content": "HEART", "viewerHasReacted": false, "reactors": { "totalCount": 0 } },
+          { "content": "ROCKET", "viewerHasReacted": false, "reactors": { "totalCount": 0 } },
+          { "content": "EYES", "viewerHasReacted": false, "reactors": { "totalCount": 0 } }
+        ]
+      }
+    ]
+  },
   "assignees": { "nodes": [{ "login": "bo" }, { "login": "ann" }] },
   "commits": {
     "nodes": [

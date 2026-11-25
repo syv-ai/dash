@@ -4,6 +4,8 @@ import prFixture from './fixtures/ado-pr.json';
 import type { PrSubmission } from '../../../../shared/types';
 import { AdoRequestError } from '../../AzureDevOpsService';
 import {
+  adoLikeRequest,
+  adoLikes,
   adoReplyBody,
   adoRootCommentId,
   adoReviewFrom,
@@ -145,11 +147,17 @@ describe('adoReviewFrom', () => {
       {
         id: '101:1',
         author: 'Ann Reviewer',
+        authorUrl: null,
         body: 'This can throw.',
         createdAt: '2026-10-10T09:00:00Z',
         url: 'https://dev.azure.com/org/Proj/_git/repo/pullrequest/7204?_a=files&discussionId=101',
+        reactions: [{ content: 'LIKE', count: 2, viewerReacted: true }],
       },
-      expect.objectContaining({ id: '101:2', author: 'Bo Author' }),
+      expect.objectContaining({
+        id: '101:2',
+        author: 'Bo Author',
+        reactions: [{ content: 'LIKE', count: 1, viewerReacted: false }],
+      }),
     ]);
   });
 
@@ -164,6 +172,27 @@ describe('adoReviewFrom', () => {
       'src/app/unmoved.ts',
       'src/app/deleted.ts',
     ]);
+  });
+});
+
+describe('adoLikes', () => {
+  it("counts the likes, and whether the viewer's is among them", () => {
+    const users = { usersLiked: [{ id: 'a' }, { id: 'me' }] };
+    expect(adoLikes(users, 'me')).toEqual([{ content: 'LIKE', count: 2, viewerReacted: true }]);
+    expect(adoLikes(users, '')).toEqual([{ content: 'LIKE', count: 2, viewerReacted: false }]);
+    expect(adoLikes({ usersLiked: [] }, 'me')).toEqual([]);
+    expect(adoLikes({}, 'me')).toEqual([]);
+  });
+});
+
+describe('adoLikeRequest', () => {
+  it('puts or deletes the like under the PR, and refuses an id it did not make', () => {
+    expect(adoLikeRequest('P/pullRequests/7', '12:3', true)).toEqual({
+      path: 'P/pullRequests/7/threads/12/comments/3/likes',
+      method: 'PUT',
+    });
+    expect(adoLikeRequest('P/pullRequests/7', '12:3', false).method).toBe('DELETE');
+    expect(() => adoLikeRequest('P', 'PRRC_x', true)).toThrow('Not an Azure DevOps comment id');
   });
 });
 
@@ -397,10 +426,25 @@ describe('adoProvider', () => {
     expect(comment).toEqual({
       id: '101:5',
       author: 'Me',
+      authorUrl: null,
+      reactions: [],
       body: 'agreed',
       createdAt: '2026-11-24T10:00:00Z',
       url: 'https://dev.azure.com/org/My Proj/_git/repo/pullrequest/7204?_a=files&discussionId=101',
     });
+  });
+
+  it("likes and unlikes a comment, by its thread's and its own id", async () => {
+    const { deps, calls } = fakeDeps();
+    await makeAdoProvider(deps).react(pctx, 7204, '101:2', 'LIKE', true);
+    await makeAdoProvider(deps).react(pctx, 7204, '101:2', 'LIKE', false);
+    expect(calls).toEqual([
+      { path: `${base}/threads/101/comments/2/likes`, method: 'PUT', body: undefined },
+      { path: `${base}/threads/101/comments/2/likes`, method: 'DELETE', body: undefined },
+    ]);
+    await expect(makeAdoProvider(deps).react(pctx, 7204, '101:2', 'HEART', true)).rejects.toThrow(
+      'only likes',
+    );
   });
 
   it('resolves and reactivates a thread', async () => {
