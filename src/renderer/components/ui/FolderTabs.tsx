@@ -7,13 +7,17 @@ import { Tooltip } from './Tooltip';
 import { firstFitting, useFittedDensity } from './useFittedDensity';
 import { useReselect } from './useReselect';
 
-/** How the row gives way as it narrows: it drops the counts (they move into
- *  the tooltip). Its labels never truncate; the host keeps it at least as
- *  wide as `uncounted` (`onMinWidth`). */
-type Density = 'full' | 'uncounted';
-const measured = ['full', 'uncounted'] as const;
-const fit = (available: number, needs: readonly number[]): Density =>
+/** How the row gives way as it narrows: it gives up the inset that keeps its
+ *  first tab off the sheet's rounded corner, then drops the counts (they move
+ *  into the tooltip). Its labels never truncate; the host keeps it at least
+ *  as wide as `uncounted` (`onMinWidth`). */
+export type FolderTabsDensity = 'full' | 'flush' | 'uncounted';
+const measured = ['full', 'flush', 'uncounted'] as const;
+export const fitFolderTabs = (available: number, needs: readonly number[]): FolderTabsDensity =>
   firstFitting(available, needs, measured) ?? 'uncounted';
+
+/** The inset off the sheet's 12px corner, while the row has room for it. */
+const inset = (d: FolderTabsDensity) => (d === 'full' ? 'pl-3' : '');
 
 type Option<T> = {
   value: T;
@@ -47,11 +51,11 @@ function countBadge<T>(opt: Option<T>, counted: boolean) {
  * (`folderSheet`) right under the row, as the editor's tabs sit on its
  * sheet. None is open while `value` names no option.
  *
- * Its labels always read in full. It takes its full width (counts included)
- * when the row has room and shrinks first when it hasn't, dropping the
+ * Its labels always read in full. It takes its full width (its first tab
+ * inset clear of the sheet's rounded corner, counts included) when the row
+ * has room and shrinks first when it hasn't, giving up the inset, then the
  * counts; it never goes below its labels' width, which it reports through
- * `onMinWidth` so the host can keep that much room. Its first tab keeps clear
- * of the sheet's rounded corner.
+ * `onMinWidth` so the host can keep that much room.
  */
 export function FolderTabs<T extends string>({
   value,
@@ -68,17 +72,19 @@ export function FolderTabs<T extends string>({
   /** A double click on the option that was already open when the gesture
    *  began. */
   onReselect?: (v: T) => void;
-  /** The row's least width (its labels, no counts), in px, once measured. */
+  /** The row's least width (its labels, no inset or counts), in px, once
+   *  measured. */
   onMinWidth?: (px: number) => void;
   className?: string;
   'aria-label'?: string;
 }) {
-  const { rootRef, sizerRef, density, needs } = useFittedDensity<Density>(
-    fit,
+  const { rootRef, sizerRef, density, needs } = useFittedDensity<FolderTabsDensity>(
+    fitFolderTabs,
     'full',
     options.length,
   );
-  const [fullNeed, minNeed] = needs;
+  const [fullNeed, , minNeed] = needs;
+  const counted = density !== 'uncounted';
   React.useEffect(() => {
     if (minNeed !== undefined) onMinWidth?.(minNeed);
   }, [minNeed, onMinWidth]);
@@ -89,23 +95,23 @@ export function FolderTabs<T extends string>({
       ref={rootRef}
       role="tablist"
       aria-label={ariaLabel}
-      className={cn('relative flex h-full items-end gap-0.5', className)}
+      className={cn('relative flex h-full items-end gap-0.5', inset(density), className)}
       // Shrinks ahead of the row's other items (by far the largest factor),
       // from its full width down to its labels'.
       style={{ flexBasis: fullNeed, flexShrink: 1000, flexGrow: 0, minWidth: minNeed }}
     >
       {options.map((opt) => {
-        const tip = segmentTip(opt, density === 'full');
+        const tip = segmentTip(opt, counted);
         return (
           <Tooltip key={opt.value} content={tip}>
             <FolderTab
               active={opt.value === value}
               onSelect={() => onChange(opt.value)}
-              indicator={countBadge(opt, density === 'full')}
+              indicator={countBadge(opt, counted)}
               className="max-w-none pr-3"
               {...reselect(opt.value)}
             >
-              <Label opt={opt} counted={density === 'full'} />
+              <Label opt={opt} counted={counted} />
             </FolderTab>
           </Tooltip>
         );
@@ -117,7 +123,7 @@ export function FolderTabs<T extends string>({
         className="invisible absolute inset-x-0 top-0 h-0 overflow-hidden"
       >
         {measured.map((d) => (
-          <div key={d} className="flex w-max gap-0.5">
+          <div key={d} className={cn('flex w-max gap-0.5', inset(d))}>
             {options.map((opt) => (
               <FolderTab
                 key={opt.value}
@@ -126,10 +132,10 @@ export function FolderTabs<T extends string>({
                 tabIndex={-1}
                 role="presentation"
                 onSelect={() => {}}
-                indicator={countBadge(opt, d === 'full')}
+                indicator={countBadge(opt, d !== 'uncounted')}
                 className="max-w-none pr-3"
               >
-                <Label opt={opt} counted={d === 'full'} />
+                <Label opt={opt} counted={d !== 'uncounted'} />
               </FolderTab>
             ))}
           </div>

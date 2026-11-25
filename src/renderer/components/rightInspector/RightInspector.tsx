@@ -18,11 +18,13 @@ import { useCommitRun } from '../changes/useCommitRun';
 import { ShellDrawerWrapper } from '../terminal/ShellDrawerWrapper';
 import { PortsDrawerWrapper } from './PortsDrawerWrapper';
 import { UsageSection } from './UsageSection';
+import { ViewRow, type ViewRowExtra } from './ViewRow';
+import { viewRowMinPx } from './viewRowFit';
 import { TaskDetails } from './TaskDetails';
 import { IconButton } from '../ui/IconButton';
 import { cn } from '../../lib/cn';
 import { FolderTabs } from '../ui/FolderTabs';
-import { folderSheet, folderStripBand, folderStripSlot } from '../ui/FolderTab';
+import { folderSheet, folderStripSlot } from '../ui/FolderTab';
 import { CountBadge } from '../ui/CountBadge';
 import {
   ResizableHandle,
@@ -143,10 +145,6 @@ interface RightInspectorProps {
 
 /** The list column's narrowest in review mode, in px (D81). */
 const REVIEW_LIST_MIN_PX = 320;
-/** The view row around its tabs, in px: the 12px that keeps the first tab
- *  off the sheet's corner, the middle's 8px padding, Details (24) and the
- *  row's two 2px gaps, its 4px end padding, and the column's 8px gutter. */
-const VIEW_ROW_CHROME_PX = 12 + 8 + 24 + 2 * 2 + 4 + 8;
 
 /**
  * The task sidebar: its usage on top, then the view switch.
@@ -458,98 +456,96 @@ export function RightInspector({
   // The view tabs' labels, measured: the list column (narrow, the sidebar)
   // never goes narrower than they and the row's chrome need.
   const [tabsMinPx, setTabsMinPx] = useState<number>();
-  const listMinPx = tabsMinPx === undefined ? undefined : tabsMinPx + VIEW_ROW_CHROME_PX;
+  const listMinPx = tabsMinPx === undefined ? undefined : viewRowMinPx(tabsMinPx);
   useEffect(() => {
     if (listMinPx !== undefined) onMinWidth?.(listMinPx);
   }, [listMinPx, onMinWidth]);
 
+  const extras: ViewRowExtra[] = [];
+  if (showComments) {
+    extras.push({
+      key: 'comments',
+      node: (
+        <>
+          <IconButton size="sm" title={`Comments: ${commentCount} to send`} onClick={onOpenEditor}>
+            <MessageSquareCode size={14} strokeWidth={1.8} />
+          </IconButton>
+          <CountBadge count={commentCount} className="-ml-1" />
+        </>
+      ),
+    });
+  }
+  if (!reviewing) {
+    extras.push({
+      key: 'pr',
+      trailing: true,
+      node: (
+        <PrButton
+          relevant={review.relevant}
+          own={review.own}
+          onOpen={review.refreshPrs}
+          onPick={review.enter}
+        />
+      ),
+    });
+  }
+
+  // The commit actions are Changes' footer (`CommitBar`), not the row's.
   const header = (
-    // On the sheet's top edge, 1px over, like the editor's tab strip.
-    <div className="relative z-10 -mb-px flex h-9 shrink-0 items-center gap-0.5 pr-1">
-      {/* Who gives way as the row narrows: the views' counts first (into
-          their tooltips), then the middle (the comments to send, the PR
-          button), which clips at its end. The views' labels and Details never
-          do: the sidebar is kept as wide as they need (`onMinWidth`). The
-          commit actions are Changes' footer (`CommitBar`), not the row's. */}
-      <FolderTabs<Segment>
-        aria-label="Task sidebar view"
-        className="ml-3"
-        value={segment}
-        onChange={(next) => next !== 'details' && onPickSegment(next, false)}
-        onReselect={(next) => next !== 'details' && onPickSegment(next, true)}
-        onMinWidth={setTabsMinPx}
-        options={
-          reviewing
-            ? [
-                { value: 'overview', label: 'Overview' },
-                {
-                  value: 'files',
-                  label: 'Files',
-                  count: review.review?.files.length || undefined,
-                  countLabel: 'Changed files',
-                },
-                {
-                  value: 'comments',
-                  label: 'Comments',
-                  count: tally?.comments || undefined,
-                  countLabel: 'Unresolved',
-                },
-                { value: 'history', label: 'History' },
-              ]
-            : [
-                {
-                  value: 'changes',
-                  label: 'Changes',
-                  count: files.length || undefined,
-                  countLabel: 'Changed files',
-                },
-                { value: 'files', label: 'Files' },
-                { value: 'history', label: 'History' },
-              ]
-        }
-      />
-      {/* On the labels' line. It clips across only, its padding keeping
-          focus outlines inside the clip. */}
-      <div
-        className={cn(
-          'flex min-w-0 flex-auto items-center gap-0.5 overflow-x-clip px-1',
-          folderStripBand,
-        )}
-      >
-        {showComments && (
-          <div className="flex shrink-0 items-center">
-            <IconButton
-              size="sm"
-              title={`Comments: ${commentCount} to send`}
-              onClick={onOpenEditor}
-            >
-              <MessageSquareCode size={14} strokeWidth={1.8} />
-            </IconButton>
-            <CountBadge count={commentCount} className="-ml-1" />
-          </div>
-        )}
-        {!reviewing && (
-          <div className="ml-auto flex shrink-0 justify-end">
-            <PrButton
-              relevant={review.relevant}
-              own={review.own}
-              onOpen={review.refreshPrs}
-              onPick={review.enter}
-            />
-          </div>
-        )}
-      </div>
-      <div className={folderStripSlot}>
-        <IconButton
-          size="sm"
-          title={segment === 'details' ? 'Hide details' : 'Details'}
-          pressed={segment === 'details'}
-          onClick={toggleDetails}
-        >
-          <Info size={14} strokeWidth={1.8} />
-        </IconButton>
-      </div>
-    </div>
+    <ViewRow
+      tabsMinPx={tabsMinPx}
+      extras={extras}
+      tabs={
+        <FolderTabs<Segment>
+          aria-label="Task sidebar view"
+          value={segment}
+          onChange={(next) => next !== 'details' && onPickSegment(next, false)}
+          onReselect={(next) => next !== 'details' && onPickSegment(next, true)}
+          onMinWidth={setTabsMinPx}
+          options={
+            reviewing
+              ? [
+                  { value: 'overview', label: 'Overview' },
+                  {
+                    value: 'files',
+                    label: 'Files',
+                    count: review.review?.files.length || undefined,
+                    countLabel: 'Changed files',
+                  },
+                  {
+                    value: 'comments',
+                    label: 'Comments',
+                    count: tally?.comments || undefined,
+                    countLabel: 'Unresolved',
+                  },
+                  { value: 'history', label: 'History' },
+                ]
+              : [
+                  {
+                    value: 'changes',
+                    label: 'Changes',
+                    count: files.length || undefined,
+                    countLabel: 'Changed files',
+                  },
+                  { value: 'files', label: 'Files' },
+                  { value: 'history', label: 'History' },
+                ]
+          }
+        />
+      }
+      end={
+        <div className={folderStripSlot}>
+          <IconButton
+            size="sm"
+            title={segment === 'details' ? 'Hide details' : 'Details'}
+            pressed={segment === 'details'}
+            onClick={toggleDetails}
+          >
+            <Info size={14} strokeWidth={1.8} />
+          </IconButton>
+        </div>
+      }
+    />
   );
 
   // Review mode's band, above the views it scopes.
