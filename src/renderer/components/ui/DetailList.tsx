@@ -8,9 +8,9 @@ import { focusRing } from './styles';
  * A titled block of a details view: a `type-heading` (with an optional action
  * at its end; the action wraps under a long title, which never truncates),
  * then its rows. Sections stack with their own spacing.
- * `collapsible` makes it a band instead: the heading on a filled `well` row
- * between hairlines, a disclosure that folds the rows away. Banded sections
- * stack flush, sharing their rules, so a column of them reads as one list.
+ * `collapsible` makes it a band instead: the heading on a faint fill (`hover`,
+ * an overlay that reads on any surface; no rules), a disclosure that folds the
+ * rows away. Banded sections stack 4px apart, so two folded bands never fuse.
  * A `summary` follows the title quietly ("Checks · 1 passing").
  */
 export function DetailSection({
@@ -59,8 +59,8 @@ export function DetailSection({
     );
   }
   return (
-    <section className="not-first:-mt-px">
-      <div className="flex min-h-9 flex-wrap items-center gap-x-2 border-y border-line bg-well pr-3">
+    <section className="not-first:mt-1">
+      <div className="flex min-h-9 flex-wrap items-center gap-x-2 bg-hover pr-3">
         <h3 className="type-heading flex min-w-0 flex-1 self-stretch">
           <button
             type="button"
@@ -105,7 +105,9 @@ function Summary({ text }: { text?: string | null }) {
  * rest (truncated; the full value in the tooltip or behind copy).
  */
 export function DetailList({ children }: { children: React.ReactNode }) {
-  return <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-sm">{children}</dl>;
+  return (
+    <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-sm">{children}</dl>
+  );
 }
 
 export function DetailItem({
