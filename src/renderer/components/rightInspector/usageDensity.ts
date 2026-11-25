@@ -1,14 +1,14 @@
 import { firstFitting } from '../ui/useFittedDensity';
 
 /**
- * How the usage row gives way as it narrows, in order: it drops the burn rate,
+ * How the usage row gives way as it narrows, in order: it drops the pace,
  * then trades its rings for coloured percentages and drops the reset times.
  * Every limit keeps its tooltip throughout.
  */
-export type UsageDensity = 'full' | 'noBurn' | 'compact';
+export type UsageDensity = 'full' | 'noPace' | 'compact';
 
 /** The measured rows, widest first; `compact` has none (it is the floor). */
-export const USAGE_MEASURED = ['full', 'noBurn'] as const;
+export const USAGE_MEASURED = ['full', 'noPace'] as const;
 
 /** The first density whose natural width fits `available`; `needs` holds the
  *  natural widths of `USAGE_MEASURED`, in that order. */

@@ -22,8 +22,8 @@ export interface SettingsState {
   showTaskCost: boolean;
   showRateLimits: boolean;
   showUsageInline: boolean;
-  /** Burn rate beside the limits in the right sidebar's usage row (D33). */
-  showBurnRate: boolean;
+  /** Pace beside the limits in the right sidebar's usage row (D33). */
+  showPace: boolean;
   /** The left sidebar's view: the state-ordered task list or the project tree. */
   sidebarView: 'tasks' | 'projects';
   showProjectTokens: boolean;
@@ -97,7 +97,8 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('showTaskCost', 'showTaskCost', boolDefaultTrue()),
   entry('showRateLimits', 'showRateLimits', boolNotFalse()),
   entry('showUsageInline', 'showUsageInline', boolNotFalse()),
-  entry('showBurnRate', 'showBurnRate', boolDefaultFalse()),
+  // Renamed from showBurnRate (D248); the stored key stays, so the opt-in carries over.
+  entry('showPace', 'showBurnRate', boolDefaultFalse()),
   // Removed keys (showActiveTasksSection, showContextUsageOnTaskCards,
   // showContextBarOnTaskCards, shellDrawerPosition) are simply no longer read;
   // stored values linger, unused.

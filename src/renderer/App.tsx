@@ -305,7 +305,7 @@ export function App() {
   const setRemoteControlModalPtyId = useUi((s) => s.setRemoteControlModalPtyId);
 
   // Status line data (context + cost + rate limits) — derived contextUsage & latestRateLimits
-  const { statusLineData, contextUsage, latestRateLimits, burns } = useStatusLine();
+  const { statusLineData, contextUsage, latestRateLimits, paces } = useStatusLine();
 
   // Usage thresholds for popup notifications
   const usageThresholds = useSettings((s) => s.usageThresholds);
@@ -1491,7 +1491,7 @@ export function App() {
                       activeTask.model,
                     )}
                     rateLimits={latestRateLimits}
-                    burns={burns}
+                    paces={paces}
                     contextUsage={contextUsage[activeTask.id]}
                     diff={inlineEditor?.target ?? null}
                     expanded={expanded}

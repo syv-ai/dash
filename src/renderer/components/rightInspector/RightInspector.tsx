@@ -64,7 +64,7 @@ import { useCommentsStore } from '../../stores/commentsStore';
 import { matchesBinding, type KeyBinding } from '../../keybindings';
 import { needsAttention } from '../../../shared/diffComments';
 import type { ContextUsage, RateLimits, Task } from '../../../shared/types';
-import type { LimitBurns } from '../../lib/burnRate';
+import type { LimitPaces } from '../../lib/pace';
 
 const EditorGroups = lazy(() =>
   import('../diffEditor/EditorGroups').then((m) => ({ default: m.EditorGroups })),
@@ -104,7 +104,7 @@ interface RightInspectorProps {
   modelName: string | null;
   /** The account's limits; undefined until a session reports one. */
   rateLimits?: RateLimits;
-  burns: LimitBurns;
+  paces: LimitPaces;
   contextUsage?: ContextUsage;
   /** What the editor opened on, or null while it isn't mounted (closed, or
    *  not yet: it mounts once the sidebar has eased to its expanded width).
@@ -154,7 +154,7 @@ export function RightInspector({
   task,
   modelName,
   rateLimits,
-  burns,
+  paces,
   contextUsage,
   diff,
   expanded: expandedProp,
@@ -537,7 +537,7 @@ export function RightInspector({
     </div>
   );
 
-  const usage = <UsageSection contextUsage={contextUsage} rateLimits={rateLimits} burns={burns} />;
+  const usage = <UsageSection contextUsage={contextUsage} rateLimits={rateLimits} paces={paces} />;
 
   const history = (
     <HistoryList

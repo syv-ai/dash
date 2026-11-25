@@ -344,8 +344,8 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
   const onThresholdsChange = useSettings((s) => s.setUsageThresholds);
   const showRateLimits = useSettings((s) => s.showRateLimits);
   const onShowRateLimitsChange = useSettings((s) => s.setShowRateLimits);
-  const showBurnRate = useSettings((s) => s.showBurnRate);
-  const onShowBurnRateChange = useSettings((s) => s.setShowBurnRate);
+  const showPace = useSettings((s) => s.showPace);
+  const onShowPaceChange = useSettings((s) => s.setShowPace);
   const showUsageInline = useSettings((s) => s.showUsageInline);
   const onShowUsageInlineChange = useSettings((s) => s.setShowUsageInline);
   const showTaskTokens = useSettings((s) => s.showTaskTokens);
@@ -416,12 +416,12 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
           control={<Switch checked={showRateLimits} onCheckedChange={onShowRateLimitsChange} />}
         />
         <SettingsRow
-          label="Show burn rate"
+          label="Show pace"
           description="How fast the 5-hour and weekly limits are being used, once there's enough data."
           control={
             <Switch
-              checked={showBurnRate}
-              onCheckedChange={onShowBurnRateChange}
+              checked={showPace}
+              onCheckedChange={onShowPaceChange}
               disabled={!showRateLimits}
             />
           }

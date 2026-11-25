@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { ContextUsage, StatusLineData } from '../../shared/types';
-import { limitBurns, recordLimits, type LimitHistories } from '../lib/burnRate';
+import { limitPaces, recordLimits, type LimitHistories } from '../lib/pace';
 import { mergeRateLimits } from '../lib/rateLimits';
 
 export function useStatusLine() {
   const [statusLineData, setStatusLineData] = useState<Record<string, StatusLineData>>({});
-  // Recent readings of the limits, in memory, for their burn rate.
+  // Recent readings of the limits, in memory, for their pace.
   const [limitHistories, setLimitHistories] = useState<LimitHistories>({});
 
   // Subscribe to status line updates from main process.
@@ -46,10 +46,10 @@ export function useStatusLine() {
     () => mergeRateLimits(statusLineData, Date.now()),
     [statusLineData],
   );
-  const burns = useMemo(
-    () => limitBurns(limitHistories, latestRateLimits ?? {}),
+  const paces = useMemo(
+    () => limitPaces(limitHistories, latestRateLimits ?? {}),
     [limitHistories, latestRateLimits],
   );
 
-  return { statusLineData, contextUsage, latestRateLimits, burns };
+  return { statusLineData, contextUsage, latestRateLimits, paces };
 }

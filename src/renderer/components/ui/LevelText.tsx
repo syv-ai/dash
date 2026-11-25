@@ -32,7 +32,7 @@ export function LevelText({
       aria-valuemax={100}
       aria-valuenow={value === null ? undefined : Math.round(clampPercent(value))}
       className={cn(
-        'text-lg font-semibold tabular-nums',
+        'text-base font-semibold tabular-nums',
         color ? 'text-(--level-color)' : 'text-ink-3',
         className,
       )}

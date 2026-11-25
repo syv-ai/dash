@@ -1,18 +1,20 @@
 import type { ContextUsage, RateLimitInfo, RateLimits } from '../../../shared/types';
 import { formatResetAt, formatTokens, formatTtr, TTR_MEANING } from '../../utils/format';
 import {
-  BURN_WINDOW_MS,
-  burnOutlook,
+  LOOK_BACK_MS,
+  paceOutlook,
   CLOSE_AT_PCT,
   formatProjection,
   formatRate,
-  pressingBurn,
-  type Burn,
-  type BurnOutlook,
-  type PressingBurn,
-  type LimitBurns,
+  formatRateFigure,
+  pressingPace,
+  RATE_UNIT,
+  type Pace,
+  type PaceOutlook,
+  type PressingPace,
+  type LimitPaces,
   type LimitKey,
-} from '../../lib/burnRate';
+} from '../../lib/pace';
 import { usageColor } from '../../lib/usageColor';
 import { useMinuteClock } from '../../hooks/useMinuteClock';
 import { useSettings } from '../../stores/settingsStore';
@@ -28,7 +30,7 @@ interface UsageSectionProps {
   contextUsage?: ContextUsage;
   /** The account's limits; undefined until a session reports one. */
   rateLimits?: RateLimits;
-  burns: LimitBurns;
+  paces: LimitPaces;
 }
 
 const LIMIT_LABELS: Record<LimitKey, string> = {
@@ -38,10 +40,10 @@ const LIMIT_LABELS: Record<LimitKey, string> = {
 
 /*
  * Fixed-width columns, centred as a group with a fixed gap, each a ring (or
- * the burn's figure) over its label and a limit's time to reset: an
+ * the pace's figure) over its label and a limit's time to reset: an
  * expanded sidebar leaves them where they are instead of spreading them
  * apart. The row never wraps or overflows: it gives way by its measured
- * width (`fitUsage`), dropping the burn rate, then the rings and TTRs.
+ * width (`fitUsage`), dropping the pace, then the rings and TTRs.
  * Details (the exact reset time) live in tooltips at every density.
  */
 const COLUMNS = [
@@ -52,15 +54,15 @@ const COLUMNS = [
 ];
 
 /** One column's content: a level (the session's context, a limit) or the
- *  burn; its caption (a limit's TTR, the burn's look-back) under the label. */
+ *  pace; its caption (a limit's TTR, the pace's look-back) under the label. */
 type Cell = { key: string; tooltip: RichTooltip; label: string; caption?: string } & (
   | { kind: 'level'; pct: number | null; aria: string }
-  | { kind: 'burn'; rate: string; outlook: BurnOutlook | null }
+  | { kind: 'pace'; rate: string; outlook: PaceOutlook | null }
 );
 
-/** The burn's figure by its outlook: green, it resets first; amber, close;
+/** The pace's figure by its outlook: green, it resets first; amber, close;
  *  red, the limit comes first; plain ink with no projection yet. */
-const OUTLOOK_TEXT: Record<BurnOutlook, string> = {
+const OUTLOOK_TEXT: Record<PaceOutlook, string> = {
   clear: 'text-state-done',
   close: 'text-state-needs',
   over: 'text-state-fail',
@@ -85,19 +87,20 @@ function Column({ cell, density, bare }: { cell: Cell; density: UsageDensity; ba
 }
 
 /** A level as a ring with its percent inside, or (compact) the percent alone,
- *  coloured by how close it is to full; the burn's rate in a ring-sized box. */
+ *  coloured by how close it is to full; the pace's rate in a ring-sized box. */
 function Figure({ cell, density }: { cell: Cell; density: UsageDensity }) {
-  const figure = 'text-lg font-semibold tabular-nums';
-  if (cell.kind === 'burn') {
+  const figure = 'text-base font-semibold tabular-nums';
+  if (cell.kind === 'pace') {
     return (
       <span
         className={cn(
-          'grid size-16 place-items-center',
+          'flex size-16 items-center justify-center',
           cell.outlook ? OUTLOOK_TEXT[cell.outlook] : 'text-ink',
           figure,
         )}
       >
         {cell.rate}
+        <span className="text-ink-2">{RATE_UNIT}</span>
       </span>
     );
   }
@@ -118,9 +121,9 @@ function Figure({ cell, density }: { cell: Cell; density: UsageDensity }) {
   );
 }
 
-/** The cells at `density`: the burn only where there is room for it. */
+/** The cells at `density`: the pace only where there is room for it. */
 const shown = (cells: Cell[], density: UsageDensity) =>
-  density === 'full' ? cells : cells.filter((c) => c.kind !== 'burn');
+  density === 'full' ? cells : cells.filter((c) => c.kind !== 'pace');
 
 function limitCell(limit: LimitKey, info: RateLimitInfo | undefined, now: number): Cell {
   const long = LIMIT_LABELS[limit];
@@ -173,7 +176,7 @@ function sessionCell(ctx: ContextUsage | null): Cell {
 
 /** How far back the barometer looks: "last 30 min", "last hour". */
 function lookBack(key: LimitKey): string {
-  const minutes = BURN_WINDOW_MS[key] / 60_000;
+  const minutes = LOOK_BACK_MS[key] / 60_000;
   if (minutes < 60) return `last ${minutes} min`;
   return minutes === 60 ? 'last hour' : `last ${minutes / 60} hours`;
 }
@@ -184,40 +187,41 @@ const AVERAGE_LABELS: Record<LimitKey, string> = {
   sevenDay: 'Average this week',
 };
 
-/** A limit's burn as a tooltip row: the barometer, then (on a second line)
+/** A limit's pace as a tooltip row: the barometer, then (on a second line)
  *  the window's average pace and where it leads. */
-function burnRow(limit: LimitKey, burn: Burn | undefined) {
+function paceRow(limit: LimitKey, pace: Pace | undefined) {
   const now =
-    burn && burn.perHour !== null
-      ? `${formatRate(burn.perHour)} (${lookBack(limit)})`
+    pace && pace.perHour !== null
+      ? `${formatRate(pace.perHour)} (${lookBack(limit)})`
       : 'not rising, or too few readings yet';
-  const average = burn?.projection ? formatProjection(burn.projection) : 'not enough data yet';
+  const average = pace?.projection ? formatProjection(pace.projection) : 'not enough data yet';
   return {
     label: LIMIT_LABELS[limit],
     value: `Now: ${now}\n${AVERAGE_LABELS[limit]}: ${average}`,
   };
 }
 
-/** The most pressing limit's barometer, "+6%/h" over its look-back, coloured
- *  by where its window's average pace leads; both limits in the tooltip. */
-function burnCell(burns: LimitBurns, pressing: PressingBurn): Cell {
-  const keys = (Object.keys(LIMIT_LABELS) as LimitKey[]).filter((k) => k in burns);
+/** The most pressing limit's barometer, "+6%/h" over its look-back, its
+ *  figure coloured by where its window's average pace leads (the unit stays
+ *  quiet); both limits in the tooltip. */
+function paceCell(paces: LimitPaces, pressing: PressingPace): Cell {
+  const keys = (Object.keys(LIMIT_LABELS) as LimitKey[]).filter((k) => k in paces);
   const legend =
     "The colour: where the window's average pace so far, idle time included, leads by the reset. " +
     `Green: the limit resets first. Amber: ${CLOSE_AT_PCT}% or more by the reset. Red: the limit comes first.`;
   // A projection names its TTR.
-  const ttr = keys.some((k) => burns[k]?.projection);
+  const ttr = keys.some((k) => paces[k]?.projection);
   return {
-    key: 'burn',
-    kind: 'burn',
-    rate: formatRate(pressing.perHour),
-    outlook: pressing.projection ? burnOutlook(pressing.projection) : null,
-    label: 'Burn',
+    key: 'pace',
+    kind: 'pace',
+    rate: formatRateFigure(pressing.perHour),
+    outlook: pressing.projection ? paceOutlook(pressing.projection) : null,
+    label: 'Pace',
     caption: lookBack(pressing.limit),
     tooltip: {
-      title: 'Burn rate',
+      title: 'Pace',
       body: ttr ? `${legend} ${TTR_MEANING}` : legend,
-      rows: keys.map((k) => burnRow(k, burns[k])),
+      rows: keys.map((k) => paceRow(k, paces[k])),
     },
   };
 }
@@ -227,16 +231,16 @@ function burnCell(burns: LimitBurns, pressing: PressingBurn): Cell {
  * 5-hour and weekly limits as rings, and (opt-in, once there's a rate, D33)
  * how fast the limits are being used.
  */
-export function UsageSection({ contextUsage, rateLimits, burns }: UsageSectionProps) {
+export function UsageSection({ contextUsage, rateLimits, paces }: UsageSectionProps) {
   const showSession = useSettings((s) => s.showUsageInline);
   const showLimits = useSettings((s) => s.showRateLimits);
-  const showBurn = useSettings((s) => s.showBurnRate);
+  const showPace = useSettings((s) => s.showPace);
   const now = useMinuteClock();
 
   // Both limits show once the account reports either: a window that isn't
   // running (it reset, and no message has started the next) reads "—".
   const limits = showLimits ? rateLimits : undefined;
-  const pressing = showBurn && limits ? pressingBurn(burns) : null;
+  const pressing = showPace && limits ? pressingPace(paces) : null;
   const ctx = contextUsage && contextUsage.percentage > 0 ? contextUsage : null;
 
   const cells: Cell[] = [];
@@ -245,7 +249,7 @@ export function UsageSection({ contextUsage, rateLimits, burns }: UsageSectionPr
     cells.push(limitCell('fiveHour', limits.fiveHour, now));
     cells.push(limitCell('sevenDay', limits.sevenDay, now));
   }
-  if (pressing) cells.push(burnCell(burns, pressing));
+  if (pressing) cells.push(paceCell(paces, pressing));
 
   const { rootRef, sizerRef, density } = useFittedDensity<UsageDensity>(
     fitUsage,
