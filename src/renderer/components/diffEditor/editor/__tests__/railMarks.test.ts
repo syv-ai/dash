@@ -36,28 +36,43 @@ const geometry = (over: Partial<RailGeometry> = {}): RailGeometry => ({
 describe('railMarks', () => {
   it('scales a long file into the rail by its content height', () => {
     const [m] = railMarks([thread('t', { line: 50 })], [], geometry());
-    // Line 50's middle is at 495 of 1000.
-    expect(m!.at).toBeCloseTo(0.495);
+    // Line 50 is 490–500px of 1000.
+    expect(m!.at).toBeCloseTo(0.49);
+    expect(m!.size).toBeCloseTo(0.01);
   });
 
   it('keeps a short file beside its lines', () => {
     const [m] = railMarks([thread('t', { line: 5 })], [], geometry({ contentHeight: 100 }));
-    // Line 5's middle is at 45px of a 500px rail.
-    expect(m!.at).toBeCloseTo(0.09);
+    // Line 5 is 40–50px of a 500px rail.
+    expect(m!.at).toBeCloseTo(0.08);
+    expect(m!.size).toBeCloseTo(0.02);
   });
 
   it('places by the editor geometry, so view zones above push marks down', () => {
     const zoned = geometry({ topFor: (line) => (line - 1) * 10 + (line > 2 ? 200 : 0) });
     const [m] = railMarks([thread('t', { line: 3 })], [], zoned);
-    expect(m!.at).toBeCloseTo(0.225);
+    expect(m!.at).toBeCloseTo(0.22);
+  });
+
+  it('spans a multi-line thread or draft over its lines', () => {
+    const [t, c] = railMarks(
+      [thread('t', { startLine: 10, line: 19 })],
+      [{ id: 'c', kind: 'comment', startLine: 30, endLine: 34, text: '' }],
+      geometry(),
+    );
+    // Lines 10–19 are 90–190px, 30–34 are 290–340px, of 1000.
+    expect(t).toMatchObject({ line: 19, at: 0.09 });
+    expect(t!.size).toBeCloseTo(0.1);
+    expect(c).toMatchObject({ line: 30, at: 0.29 });
+    expect(c!.size).toBeCloseTo(0.05);
   });
 
   it('kinds threads, drafts and notes; skips threads off the code', () => {
     const marks = railMarks(
       [thread('open'), thread('done', { resolved: true }), thread('off', { line: null })],
       [
-        { id: 'n', kind: 'note', startLine: 1, text: 'Check this' },
-        { id: 'c', kind: 'comment', startLine: 2, text: 'Typo' },
+        { id: 'n', kind: 'note', startLine: 1, endLine: 1, text: 'Check this' },
+        { id: 'c', kind: 'comment', startLine: 2, endLine: 2, text: 'Typo' },
       ],
       geometry(),
     );
@@ -72,7 +87,7 @@ describe('railMarks', () => {
   it('paints your own over threads, each kind by line', () => {
     const marks = railMarks(
       [thread('late', { line: 9 }), thread('early', { line: 2 })],
-      [{ id: 'c', kind: 'comment', startLine: 1, text: '' }],
+      [{ id: 'c', kind: 'comment', startLine: 1, endLine: 1, text: '' }],
       geometry(),
     );
     expect(marks.map((m) => m.id)).toEqual(['early', 'late', 'c']);
@@ -82,8 +97,8 @@ describe('railMarks', () => {
     const marks = railMarks(
       [thread('t', { startLine: 1 })],
       [
-        { id: 'n', kind: 'note', startLine: 7, text: '\n  Check the guard \nmore' },
-        { id: 'c', kind: 'comment', startLine: 8, text: '' },
+        { id: 'n', kind: 'note', startLine: 7, endLine: 7, text: '\n  Check the guard \nmore' },
+        { id: 'c', kind: 'comment', startLine: 8, endLine: 8, text: '' },
       ],
       geometry(),
     );
@@ -97,7 +112,7 @@ describe('railMarks', () => {
   it('cuts a long preview', () => {
     const [m] = railMarks(
       [],
-      [{ id: 'n', kind: 'note', startLine: 1, text: 'x'.repeat(300) }],
+      [{ id: 'n', kind: 'note', startLine: 1, endLine: 1, text: 'x'.repeat(300) }],
       geometry(),
     );
     expect(m!.preview).toHaveLength(64);
@@ -107,7 +122,7 @@ describe('railMarks', () => {
   it('keeps who and a few lines of the words apart for the hover card', () => {
     const [t, n] = railMarks(
       [thread('t', { startLine: 1 })],
-      [{ id: 'n', kind: 'note', startLine: 7, text: 'y'.repeat(300) }],
+      [{ id: 'n', kind: 'note', startLine: 7, endLine: 7, text: 'y'.repeat(300) }],
       geometry(),
     );
     expect(t).toMatchObject({ who: '@ana', text: 'Rename this' });
@@ -164,19 +179,34 @@ describe('railChanges', () => {
     expect(s!.at).toBeCloseTo(0.22);
   });
 
-  it('merges changes of a kind closer than a rail pixel', () => {
-    // 1000px of content on a 100px rail: a rail pixel is 10px, one line.
+  it('merges changes of a kind whose least-height bars would touch', () => {
+    // 1000px of content on a 100px rail: a line is a rail pixel, so each
+    // one-line change draws at the 8px least height.
     const g = geometry({ railHeight: 100 });
     const spans = railChanges(
-      [change(1, 0, 2, 2), change(2, 0, 3, 3), change(3, 4, 5, 5), change(9, 0, 30, 31)],
+      [change(1, 0, 2, 2), change(5, 0, 6, 6), change(3, 4, 5, 5), change(9, 0, 30, 31)],
       g,
     );
     expect(spans.map((s) => [s.kind, s.startLine, s.endLine])).toEqual([
-      ['add', 2, 3],
+      ['add', 2, 6],
       ['mod', 5, 5],
       ['add', 30, 31],
     ]);
-    expect(spans[0]!.size).toBeCloseTo(0.02);
+    expect(spans[0]!.size).toBeCloseTo(0.05);
+  });
+
+  it('keeps changes apart whose bars do not touch, on a short or a long file', () => {
+    // Short: 100 lines on a 1000px rail, lines 10px; 8 lines apart stays two.
+    expect(
+      railChanges([change(1, 0, 2, 2), change(9, 0, 10, 10)], geometry({ railHeight: 1000 })),
+    ).toHaveLength(2);
+    // Long: 10,000 lines on a 500px rail, a rail pixel is 20 lines; 200 apart stays two.
+    expect(
+      railChanges(
+        [change(1, 0, 100, 100), change(299, 0, 300, 300)],
+        geometry({ contentHeight: 100_000 }),
+      ),
+    ).toHaveLength(2);
   });
 
   it('is empty before layout', () => {

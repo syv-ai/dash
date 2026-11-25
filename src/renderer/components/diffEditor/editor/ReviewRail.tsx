@@ -55,7 +55,7 @@ interface Layout {
 /**
  * Where the open file's changes, PR threads, comment drafts and notes are, on
  * a rail at the modified editor's right edge, beside its scrollbar (D80): the
- * diff's changes as segments, the rest as ticks on top. Monaco's diff editor
+ * diff's changes as bars down one lane, the rest as bars down the other. Monaco's diff editor
  * forces the minimap off, so this stands in for minimap marks. A click
  * centres the line; hovering previews it.
  */
@@ -73,7 +73,7 @@ export function ReviewRail({
   /** The file's threads drawn on its lines. */
   threads: readonly PrReviewThread[];
   /** The file's line drafts and notes, at their live lines. */
-  comments: readonly Pick<DiffComment, 'id' | 'kind' | 'startLine' | 'text'>[];
+  comments: readonly Pick<DiffComment, 'id' | 'kind' | 'startLine' | 'endLine' | 'text'>[];
 }) {
   const [layout, setLayout] = useState<Layout | null>(null);
 
@@ -141,6 +141,7 @@ export function ReviewRail({
     }).map((m) => ({
       key: m.id,
       at: m.at,
+      size: m.size,
       tick: TICK[m.kind],
       label: m.preview,
       tip: markTip(m),

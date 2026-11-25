@@ -389,11 +389,11 @@ function Meters() {
   );
 }
 
-const RAIL_TICKS: [RailTick, number, string][] = [
-  ['faint', 0.15, 'L12 · @ana: Resolved thread'],
-  ['strong', 0.4, 'L48 · @ana: Unresolved thread'],
-  ['hollow', 0.62, 'L80 · Note to agent: Check the guard'],
-  ['solid', 0.85, 'L110 · Comment: Rename this'],
+const RAIL_TICKS: [RailTick, number, number, string][] = [
+  ['faint', 0.15, 0, 'L12 · @ana: Resolved thread'],
+  ['strong', 0.4, 0.05, 'L48 · @ana: Unresolved thread'],
+  ['hollow', 0.62, 0, 'L80 · Note to agent: Check the guard'],
+  ['solid', 0.85, 0.02, 'L110 · Comment: Rename this'],
 ];
 
 const RAIL_SPANS: [RailSpanTone, number, number, string][] = [
@@ -411,10 +411,11 @@ function Rails() {
           aria-label="Review marks"
           height={160}
           right={8}
-          marks={RAIL_TICKS.map(([tick, at, label]) => ({
+          marks={RAIL_TICKS.map(([tick, at, size, label]) => ({
             key: label,
             tick,
             at,
+            size,
             label,
             onSelect: () => toast(label),
           }))}

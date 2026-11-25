@@ -1,9 +1,10 @@
 import type { DiffComment, PrReviewThread } from '../../../../shared/types';
 import { threadHeadline } from '../../review/outline';
+import { railBar } from '../../ui/railBar';
 
 /*
  * The review rail's marks, as data: one per PR thread on a line, comment draft
- * and note in the open file, placed where its line sits in the file. Pure, so
+ * and note in the open file, spanning its lines where they sit in the file. Pure, so
  * the placement and paint order are tested without Monaco (D80).
  */
 
@@ -15,8 +16,10 @@ export interface RailMark {
   kind: RailMarkKind;
   /** The line a click reveals. */
   line: number;
-  /** Where the line sits, as a fraction of the rail's height (0 top, 1 bottom). */
+  /** The top of its first line, as a fraction of the rail's height (0 top, 1 bottom). */
   at: number;
+  /** Its lines' height, as a fraction of the rail's height. */
+  size: number;
   /** One line, its accessible name: "L12 · @ana: Rename this". */
   preview: string;
   /** Who wrote it: "@ana", or "Comment" / "Note to agent" for your own. */
@@ -58,19 +61,24 @@ function preview(line: number, who: string, text: string): string {
 
 /**
  * The marks for a file: `threads` drawn on its lines and `comments` (line
- * drafts and notes; reply drafts sit in their thread's card). A file shorter
- * than the rail keeps its marks beside their lines; a longer one is scaled
- * into the rail, as a minimap would.
+ * drafts and notes; reply drafts sit in their thread's card), each spanning
+ * its line range (a thread from its `startLine`, when multi-line, to `line`).
+ * A file shorter than the rail keeps its marks beside their lines; a longer
+ * one is scaled into the rail, as a minimap would.
  */
 export function railMarks(
   threads: readonly PrReviewThread[],
-  comments: readonly Pick<DiffComment, 'id' | 'kind' | 'startLine' | 'text'>[],
+  comments: readonly Pick<DiffComment, 'id' | 'kind' | 'startLine' | 'endLine' | 'text'>[],
   geometry: RailGeometry,
 ): RailMark[] {
   const { topFor, lineHeight, contentHeight, railHeight } = geometry;
   const span = Math.max(contentHeight, railHeight);
   if (span <= 0) return [];
-  const at = (line: number) => Math.min(1, Math.max(0, (topFor(line) + lineHeight / 2) / span));
+  const frac = (px: number) => Math.min(1, Math.max(0, px / span));
+  const place = (first: number, last: number) => {
+    const at = frac(topFor(Math.min(first, last)));
+    return { at, size: frac(topFor(Math.max(first, last)) + lineHeight) - at };
+  };
 
   const marks: RailMark[] = [];
   for (const t of threads) {
@@ -81,7 +89,7 @@ export function railMarks(
       id: t.id,
       kind: t.resolved ? 'resolved' : 'thread',
       line: t.line,
-      at: at(t.line),
+      ...place(t.startLine ?? t.line, t.line),
       preview: preview(t.line, who, text),
       who,
       text,
@@ -94,7 +102,7 @@ export function railMarks(
       id: c.id,
       kind: c.kind,
       line: c.startLine,
-      at: at(c.startLine),
+      ...place(c.startLine, c.endLine),
       preview: preview(c.startLine, who, text),
       who,
       text,
@@ -130,11 +138,13 @@ export interface RailChange {
 }
 
 /**
- * The open diff's changes as segments on the review rail, under its ticks:
+ * The open diff's changes as bars in the review rail's change lane, beside its
+ * marks:
  * each spans its lines in the modified file, placed through the editor's
  * geometry as `railMarks` places ticks; a deletion sits at the point the lines
- * left. Changes of one kind closer than a rail pixel merge, so a long file
- * draws at most a segment per pixel.
+ * left. Changes of one kind whose drawn bars (each at least `RAIL_BAR_MIN_PX`
+ * tall) would touch merge into one over both, so a long file draws separate
+ * bars, never a pile of overlapping ones, and no bar shrinks to a dot.
  */
 export function railChanges(
   changes: readonly RailLineChange[],
@@ -144,7 +154,6 @@ export function railChanges(
   const span = Math.max(contentHeight, railHeight);
   if (span <= 0 || railHeight <= 0) return [];
   const frac = (px: number) => Math.min(1, Math.max(0, px / span));
-  const pixel = 1 / railHeight;
 
   const out: RailChange[] = [];
   for (const c of changes) {
@@ -159,10 +168,13 @@ export function railChanges(
     const size = frac(bottom) - at;
     let prev: RailChange | undefined;
     for (let i = out.length - 1; i >= 0 && !prev; i--) if (out[i]!.kind === kind) prev = out[i];
-    if (prev && at - (prev.at + prev.size) < pixel) {
-      prev.endLine = Math.max(prev.endLine, endLine);
-      prev.size = Math.max(prev.size, at + size - prev.at);
-      continue;
+    if (prev) {
+      const was = railBar(prev.at, prev.size, railHeight);
+      if (railBar(at, size, railHeight).top - (was.top + was.height) < 1) {
+        prev.endLine = Math.max(prev.endLine, endLine);
+        prev.size = Math.max(prev.size, at + size - prev.at);
+        continue;
+      }
     }
     out.push({ kind, startLine, endLine, at, size });
   }
