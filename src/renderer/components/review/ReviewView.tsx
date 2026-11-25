@@ -80,7 +80,7 @@ function Review({
   onNavigate,
   onExit,
 }: ReviewViewProps) {
-  const { review, marks, error, loading, refresh } = useReviewData({
+  const { review, marks, error } = useReviewData({
     taskId: task.id,
     projectId: task.projectId,
     cwd: task.path,
@@ -126,14 +126,7 @@ function Review({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="scrollbar-gutter-stable scrollbar-thin-hover flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <ReviewHeader
-          review={review}
-          remote={remote}
-          loading={loading}
-          error={error}
-          onRefresh={refresh}
-          onShowCommits={onShowCommits}
-        />
+        <ReviewHeader review={review} remote={remote} error={error} onShowCommits={onShowCommits} />
         {notice && (
           <Notice icon={<GitCompareArrows size={14} strokeWidth={1.8} />} className="mx-2.5 my-1">
             {notice}

@@ -16,15 +16,14 @@ export interface ReviewData {
   marks: Record<string, string>;
   /** Why the last fetch failed; null after a good one. */
   error: string | null;
-  loading: boolean;
-  refresh: () => void;
 }
 
 /**
  * The target PR's review and the task's viewed marks, fetched as the Review
  * view mounts, every `REVIEW_RELOAD_MS` while it shows (and the window is
- * visible), on `refresh` (D8), and at once when the task's PR lookup finds
- * the PR's head moved past the loaded one (a push, D96).
+ * visible), whenever the window regains focus, and at once when the task's
+ * PR lookup finds the PR's head moved past the loaded one (a push, D96).
+ * There is no manual refresh.
  */
 export function useReviewData({
   taskId,
@@ -41,7 +40,6 @@ export function useReviewData({
   const review = usePrReviews((s) => s.byPr[prKey(provider, number)] ?? null);
   const marks = usePrReviews((s) => s.viewed[reviewKey(taskId, provider, number)] ?? NO_MARKS);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
   // `force`: the PR is known to have moved, so a fetch already under way
   // (started before the push) can't answer for it.
@@ -49,9 +47,7 @@ export function useReviewData({
     (force: boolean) => {
       const store = usePrReviews.getState();
       void store.loadViewed(taskId, provider, number);
-      setLoading(true);
       void store.load(projectId, cwd, number, { force }).then((r) => {
-        setLoading(false);
         setError(r.ok ? null : r.error);
       });
     },
@@ -64,7 +60,13 @@ export function useReviewData({
     const id = setInterval(() => {
       if (document.visibilityState === 'visible') refresh();
     }, REVIEW_RELOAD_MS);
-    return () => clearInterval(id);
+    // Coming back to Dash (say, after reading a reply on the forge) catches
+    // up at once instead of on the next tick.
+    window.addEventListener('focus', refresh);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('focus', refresh);
+    };
   }, [refresh]);
 
   // The task's own PR lookup (refetched as HEAD moves) sees a push before the
@@ -83,5 +85,5 @@ export function useReviewData({
     reload(true);
   }, [stale, detectedHead, reload]);
 
-  return { review, marks, error, loading, refresh };
+  return { review, marks, error };
 }

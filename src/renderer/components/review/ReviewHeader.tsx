@@ -1,8 +1,6 @@
-import { RefreshCw } from 'lucide-react';
 import type { PrReview } from '../../../shared/types';
 import { branchUrl } from '../../../shared/urls';
 import { cn } from '../../lib/cn';
-import { IconButton } from '../ui/IconButton';
 import { TextLink } from '../ui/TextLink';
 import { prStateIcon, prStatusText } from '../ui/prStatusColors';
 import { mergeVerb, plural, providerName } from './labels';
@@ -22,26 +20,22 @@ function Branch({ remote, name }: { remote: string | null; name: string }) {
 /**
  * Review mode's head (spec Revision 3), under the mode's banner and views:
  * the PR's state icon (GitHub's shape and colour) and title (to the forge)
- * with its number, refresh at the row's end; then "who wants to merge n
+ * with its number; then "who wants to merge n
  * commits into base from head" in secondary ink, its links in the link
  * colour (the commits to History). The diff totals are About's (Overview). A failed
- * refresh says why until the next lands.
+ * reload says why until the next lands (reloads are automatic: `useReviewData`).
  */
 export function ReviewHeader({
   review,
   remote,
-  loading,
   error,
-  onRefresh,
   onShowCommits,
 }: {
   review: PrReview;
   /** The project's git remote: where branch links point. */
   remote: string | null;
-  loading: boolean;
-  /** Why the last refresh failed; null after a good one. */
+  /** Why the last reload failed; null after a good one. */
   error: string | null;
-  onRefresh: () => void;
   /** Show the PR's commits in History. */
   onShowCommits: () => void;
 }) {
@@ -61,15 +55,6 @@ export function ReviewHeader({
           </TextLink>{' '}
           <span className="type-label tabular-nums">#{review.number}</span>
         </h2>
-        <IconButton
-          size="sm"
-          title="Refresh"
-          onClick={onRefresh}
-          disabled={loading}
-          className="-my-0.5"
-        >
-          <RefreshCw size={14} strokeWidth={1.8} className={cn(loading && 'animate-spin')} />
-        </IconButton>
       </div>
       {/* Running prose, not a name: secondary ink, no type role (D162); its
           links in the link colour (D191). */}
@@ -90,7 +75,7 @@ export function ReviewHeader({
       </p>
       {error && (
         <p className="type-caption wrap-break-word" role="status">
-          Could not refresh: {error}
+          Could not reload: {error}
         </p>
       )}
     </section>

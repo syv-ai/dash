@@ -546,7 +546,7 @@ export function RightInspector({
 
   // Review mode's band, above the views it scopes.
   const banner = mode && (
-    <div className="shrink-0 px-1 pt-2 pb-3">
+    <div className="shrink-0 px-1 pt-1 pb-3">
       <ReviewBanner mode={mode} state={review.review?.state ?? null} onExit={review.exit} />
     </div>
   );
