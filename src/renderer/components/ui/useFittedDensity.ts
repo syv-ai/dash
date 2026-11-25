@@ -39,6 +39,10 @@ export function useFittedDensity<D>(
     const sizer = sizerRef.current;
     if (!root || !sizer) return;
     const fit = () => {
+      // Not rendered (a hidden ancestor, e.g. the collapsed task sidebar):
+      // every copy measures 0, which would report a least width of nothing
+      // and feed back into its host's layout. Keep the last real measure.
+      if (root.getClientRects().length === 0) return;
       const widths = Array.from(sizer.children, (row) => row.getBoundingClientRect().width);
       const rounded = widths.map(Math.ceil);
       setNeeds((was) =>
