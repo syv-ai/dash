@@ -14,7 +14,7 @@ import type { EditorView } from '../diffEditor/types';
 import type { FilesScope } from '../rightInspector/filesScope';
 import { CommitRunView } from './CommitRunView';
 import { DiscardFolderConfirm } from './DiscardFolderConfirm';
-import { isOutOfSync, SyncText, type SyncLinks } from './SyncStatus';
+import { isOutOfSync, SyncText, SyncTextLeast, type SyncLinks } from './SyncStatus';
 import {
   changeSections,
   changeSelection,
@@ -93,12 +93,13 @@ export function WorkingFiles({
   }
   const changedOnly = scope === 'changed';
   const showingRun = changedOnly && isShowingRun(run.state);
-  const sync = isOutOfSync(gitStatus) && <SyncText status={gitStatus} links={syncLinks} />;
+  const outOfSync = isOutOfSync(gitStatus);
   const working = repo.git && view.kind === 'working';
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <FilesTopRow
-        start={sync}
+        start={outOfSync && <SyncText status={gitStatus} links={syncLinks} />}
+        startLeast={outOfSync && <SyncTextLeast status={gitStatus} />}
         end={
           !showingRun && (
             <AllFilesSwitch

@@ -148,6 +148,12 @@ function SyncLine({
   );
 }
 
+/** The sync text at its most compact, "↑3 ↓1", bare: what Files' top row
+ *  measures to tell whether "Show filetree" still fits beside it. */
+export function SyncTextLeast({ status }: { status: Sync }) {
+  return <SyncLine status={status} density="arrows" />;
+}
+
 /**
  * "3 commits ahead, 1 behind", for a branch and upstream that have moved apart
  * (`isOutOfSync`): Files' top row, always. Secondary ink, the counts green and
