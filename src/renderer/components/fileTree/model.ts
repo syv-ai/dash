@@ -378,8 +378,8 @@ export interface TreeColumns {
   comments: boolean;
   add: number;
   del: number;
-  /** A file's status letter and a folder's changed count share it. */
-  status: number;
+  /** A file's status letter (folders show none). */
+  status: boolean;
 }
 
 const signed = (n: number) => (n > 0 ? String(n).length + 1 : 0);
@@ -388,21 +388,20 @@ export function treeColumns(
   sections: readonly TreeSection[],
   badges?: ReadonlyMap<string, FileBadges>,
 ): TreeColumns {
-  const cols: TreeColumns = { threads: false, comments: false, add: 0, del: 0, status: 0 };
+  const cols: TreeColumns = { threads: false, comments: false, add: 0, del: 0, status: false };
   const walk = (node: TreeFolder) => {
     for (const f of node.files) {
       const b = badges?.get(f.path);
       if (b?.threads) cols.threads = true;
       if (b?.comments) cols.comments = true;
       if (!f.change) continue;
-      cols.status = Math.max(cols.status, 1);
+      cols.status = true;
       cols.add = Math.max(cols.add, signed(f.change.additions));
       cols.del = Math.max(cols.del, signed(f.change.deletions));
     }
     for (const child of node.folders.values()) {
       const t = child.tally;
       if (t.changed > 0) {
-        cols.status = Math.max(cols.status, String(t.changed).length);
         // A closed folder shows its lines in the same columns.
         cols.add = Math.max(cols.add, signed(t.add + t.untrackedAdd));
         cols.del = Math.max(cols.del, signed(t.del));

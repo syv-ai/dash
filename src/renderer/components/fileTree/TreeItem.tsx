@@ -183,7 +183,8 @@ export function TreeNote({
 
 /** The row's columns at rest, each as wide as the tree's widest value: the
  *  PR's threads, your comments, lines added and removed (a folder's while
- *  it is closed), and a file's status letter or a folder's changed count. */
+ *  it is closed), and a file's status letter. A folder shows no count of its
+ *  changes: its lines say as much, and the counts crowded the column. */
 function Columns({
   row,
   cols,
@@ -196,7 +197,6 @@ function Columns({
   let add = 0;
   let del = 0;
   let status: React.ReactNode = null;
-  let statusLabel: string | undefined;
   if (row.kind === 'file') {
     const c = row.file.change;
     if (c) {
@@ -204,17 +204,11 @@ function Columns({
       del = c.deletions;
       status = STATUS_LETTER[c.status];
     }
-  } else {
+  } else if (!row.open) {
     const t = row.folder.tally;
-    if (!row.open) {
-      // New files count too, so the folders sum to the tree's total.
-      add = t.add + t.untrackedAdd;
-      del = t.del;
-    }
-    if (t.changed > 0) {
-      status = t.changed;
-      statusLabel = `${t.changed} changed`;
-    }
+    // New files count too, so the folders sum to the tree's total.
+    add = t.add + t.untrackedAdd;
+    del = t.del;
   }
   return (
     <span className="flex items-center gap-1.5 text-xs">
@@ -231,8 +225,8 @@ function Columns({
       {(cols.add > 0 || cols.del > 0) && (
         <LineStats add={add} del={del} columns={{ add: cols.add, del: cols.del }} />
       )}
-      {cols.status > 0 && (
-        <CharColumn chars={cols.status} align="center" aria-label={statusLabel}>
+      {cols.status && (
+        <CharColumn chars={1} align="center">
           {status}
         </CharColumn>
       )}

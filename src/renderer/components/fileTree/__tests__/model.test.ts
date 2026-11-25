@@ -335,7 +335,7 @@ describe('revealing a folder', () => {
 });
 
 describe('treeColumns', () => {
-  it('sizes each column to its widest value, folders’ counts and lines included', () => {
+  it('sizes each column to its widest value, folders’ lines included', () => {
     const tree = buildTree([
       f('a.ts', 'modified', false, 120, 3),
       ...Array.from({ length: 12 }, (_, i) => f(`dir/${i}.ts`, 'untracked', false, 100, 0)),
@@ -345,7 +345,7 @@ describe('treeColumns', () => {
       comments: false,
       add: 5, // "+1200", the folder's untracked lines
       del: 2,
-      status: 2, // the folder's "12"
+      status: true, // files' letters; folders show no count
     });
   });
 
@@ -362,7 +362,7 @@ describe('treeColumns', () => {
       comments: false,
       add: 0,
       del: 0,
-      status: 0,
+      status: false,
     });
   });
 });
