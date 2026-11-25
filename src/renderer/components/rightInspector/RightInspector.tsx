@@ -122,8 +122,9 @@ function withShortcut(label: string, binding: KeyBinding | undefined): string {
 /**
  * The task sidebar: its usage on top, then the view switch.
  * Narrow: one column (the changes, the repo's file tree, or the commits)
- * over the task's terminals. Expanded, a file open: that column runs full
- * height on the left; the editor sits over the terminals on the right.
+ * over the task's terminals. Expanded, a file open: that column, under the
+ * usage and the view switch, runs full height on the left; the editor sits
+ * over the terminals on the right, from the sidebar's top.
  * Opening a file expands it; re-picking the current view goes back to
  * narrow, the editor kept mounted out of sight. Details, either way, spans
  * the whole body over the terminals. The terminals stay mounted throughout,
@@ -526,6 +527,8 @@ export function RightInspector({
     </div>
   );
 
+  const usage = <UsageSection contextUsage={contextUsage} rateLimits={rateLimits} burns={burns} />;
+
   const history = (
     <HistoryList
       cwd={task.path}
@@ -645,8 +648,6 @@ export function RightInspector({
     // pb-2: the terminal sheet keeps the same 8px gutter from the window's
     // bottom edge as the main sheet.
     <div className="flex h-full min-w-0 flex-col bg-ground pt-2 pr-2 pb-2">
-      <UsageSection contextUsage={contextUsage} rateLimits={rateLimits} burns={burns} />
-      {header}
       <div className="min-h-0 flex-1">
         <ResizablePanelGroup
           orientation="horizontal"
@@ -666,39 +667,50 @@ export function RightInspector({
                 maxSize="50%"
                 {...treePanel}
               >
-                <div className="h-full min-h-0 pr-2">{withPorts(tree)}</div>
+                <div className="flex h-full min-h-0 flex-col pr-2">
+                  {usage}
+                  {header}
+                  <div className="min-h-0 flex-1">{withPorts(tree)}</div>
+                </div>
               </ResizablePanel>
               <ResizableHandle />
             </>
           )}
           <ResizablePanel id="main" minSize="40%">
-            <div className="h-full min-h-0">
-              <ShellDrawerWrapper
-                taskId={task.id}
-                cwd={task.path}
-                collapsed={shellDrawerCollapsed}
-                label={task.useWorktree ? 'Worktree' : 'Terminal'}
-                terminalBg={terminalTheme.background}
-                panelRef={shellDrawerRef}
-                animating={shellDrawerAnimating}
-                onAnimate={() => setShellDrawerAnimating(true)}
-                onCollapse={() => settleShellDrawer(true)}
-                onExpand={() => settleShellDrawer(false)}
-                onTuiActiveChange={onTuiActiveChange}
-              >
-                {/* Mounted while open, out of sight while narrow: its tabs,
+            {/* The usage and view row lead the one column; split, they lead
+                the list's, and the editor runs the full height. They sit
+                ahead of the terminals, which keep their place either way. */}
+            <div className="flex h-full min-h-0 flex-col">
+              {!split && usage}
+              {!split && header}
+              <div className="min-h-0 flex-1">
+                <ShellDrawerWrapper
+                  taskId={task.id}
+                  cwd={task.path}
+                  collapsed={shellDrawerCollapsed}
+                  label={task.useWorktree ? 'Worktree' : 'Terminal'}
+                  terminalBg={terminalTheme.background}
+                  panelRef={shellDrawerRef}
+                  animating={shellDrawerAnimating}
+                  onAnimate={() => setShellDrawerAnimating(true)}
+                  onCollapse={() => settleShellDrawer(true)}
+                  onExpand={() => settleShellDrawer(false)}
+                  onTuiActiveChange={onTuiActiveChange}
+                >
+                  {/* Mounted while open, out of sight while narrow: its tabs,
                     scroll and unsaved edits wait for the next file to open. */}
-                {editorMounted && (
-                  <div className={split ? 'h-full' : 'hidden'}>
-                    <EditorSheet closeBinding={keybindings.closeDiff} onClose={onCloseDiff}>
-                      <Suspense fallback={null}>
-                        <EditorGroups ws={ws} terminalTheme={terminalTheme} isDark={isDark} />
-                      </Suspense>
-                    </EditorSheet>
-                  </div>
-                )}
-                {!split && withPorts(list)}
-              </ShellDrawerWrapper>
+                  {editorMounted && (
+                    <div className={split ? 'h-full' : 'hidden'}>
+                      <EditorSheet closeBinding={keybindings.closeDiff} onClose={onCloseDiff}>
+                        <Suspense fallback={null}>
+                          <EditorGroups ws={ws} terminalTheme={terminalTheme} isDark={isDark} />
+                        </Suspense>
+                      </EditorSheet>
+                    </div>
+                  )}
+                  {!split && withPorts(list)}
+                </ShellDrawerWrapper>
+              </div>
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>
