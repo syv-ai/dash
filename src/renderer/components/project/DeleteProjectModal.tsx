@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { X, Trash2, Loader2 } from 'lucide-react';
 import type { Project, Task } from '../../../shared/types';
-import { CircleCheck } from '../ui/CircleCheck';
+import { CheckboxField } from '../ui/CheckboxField';
 import { Modal, useModalClose } from '../ui/Modal';
 
 const PROTECTED_BRANCHES = new Set([
@@ -128,7 +128,7 @@ function DeleteProjectBody({ project, tasks, onConfirm }: DeleteProjectBodyProps
         {hasCleanupOptions && (
           <div className="flex flex-col gap-2.5 mb-4">
             {worktreeTasks.length > 0 && (
-              <CircleCheck
+              <CheckboxField
                 checked={deleteWorktreeDirs}
                 onChange={setDeleteWorktreeDirs}
                 label={
@@ -143,7 +143,7 @@ function DeleteProjectBody({ project, tasks, onConfirm }: DeleteProjectBodyProps
               />
             )}
             {branchTasks.length > 0 && (
-              <CircleCheck
+              <CheckboxField
                 checked={deleteLocalBranches}
                 onChange={setDeleteLocalBranches}
                 label={
@@ -158,7 +158,7 @@ function DeleteProjectBody({ project, tasks, onConfirm }: DeleteProjectBodyProps
               />
             )}
             {remoteBranchTasks.length > 0 && (
-              <CircleCheck
+              <CheckboxField
                 checked={deleteRemoteBranches}
                 onChange={setDeleteRemoteBranches}
                 label={

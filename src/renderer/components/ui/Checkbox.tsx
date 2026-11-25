@@ -3,17 +3,20 @@ import { cn } from '../../lib/cn';
 import { focusRing } from './styles';
 
 /**
- * A 14px tick box: filled when checked, a dash when partly (a folder whose
- * files are only some of them checked). Its click doesn't reach the row
- * around it.
+ * A 14px round tick box, the app's one checkbox look: filled with a centred
+ * tick when checked, a dash when partly (a folder whose files are only some of
+ * them checked). Its click doesn't reach the row around it; inside a `<label>`
+ * the label's text toggles it too.
  */
 export function Checkbox({
   checked,
   onChange,
+  disabled,
   'aria-label': ariaLabel,
 }: {
   checked: boolean | 'mixed';
   onChange: () => void;
+  disabled?: boolean;
   'aria-label'?: string;
 }) {
   return (
@@ -22,11 +25,17 @@ export function Checkbox({
       role="checkbox"
       aria-checked={checked}
       aria-label={ariaLabel}
+      disabled={disabled}
       onClick={(e) => {
         e.stopPropagation();
         onChange();
       }}
-      className={cn(boxClass(checked), checked === false && 'hover:border-ink-2', focusRing)}
+      className={cn(
+        boxClass(checked),
+        checked === false && 'enabled:hover:border-ink-2',
+        'disabled:cursor-not-allowed disabled:opacity-50',
+        focusRing,
+      )}
     >
       <Mark checked={checked} />
     </button>
@@ -35,7 +44,7 @@ export function Checkbox({
 
 const boxClass = (checked: boolean | 'mixed') =>
   cn(
-    'inline-flex size-3.5 shrink-0 items-center justify-center rounded-sm border transition-colors',
+    'inline-flex size-3.5 shrink-0 items-center justify-center rounded-full border transition-colors',
     checked === false ? 'border-ink-3' : 'border-btn bg-btn text-btn-ink',
   );
 

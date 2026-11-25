@@ -3,6 +3,7 @@ import type { PermissionMode } from '../../../shared/types';
 import { PERMISSION_MODE_LABELS, type ConfigureValues } from './types';
 import { Expandable } from '../ui/Expandable';
 import { SwitchField } from '../ui/SwitchField';
+import { CheckboxField } from '../ui/CheckboxField';
 import { useControlInfo } from '../../hooks/useControlInfo';
 
 interface ConfigureFormProps {
@@ -64,15 +65,12 @@ export function ConfigureForm({ value, onChange, showName = true }: ConfigureFor
             </select>
           </div>
         </div>
-        <label className="flex items-center gap-2 mt-3 text-base text-fg-fade-90 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={value.useWorktree}
-            onChange={(e) => set('useWorktree', e.target.checked)}
-            className="accent-primary"
-          />
-          Use a git worktree per task
-        </label>
+        <CheckboxField
+          className="mt-3"
+          checked={value.useWorktree}
+          onChange={(v) => set('useWorktree', v)}
+          label="Use a git worktree per task"
+        />
         {controlSupported && (
           <div className="mt-3">
             <SwitchField

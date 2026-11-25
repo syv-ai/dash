@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Trash2, Loader2 } from 'lucide-react';
 import type { Task } from '../../../shared/types';
-import { CircleCheck } from '../ui/CircleCheck';
+import { CheckboxField } from '../ui/CheckboxField';
 import { Modal, useModalClose } from '../ui/Modal';
 
 interface RemoveWorktreeOptions {
@@ -85,7 +85,7 @@ function DeleteTaskBody({ task, onConfirm }: DeleteTaskBodyProps) {
 
         {task.useWorktree && (
           <div className="flex flex-col gap-2.5 mb-4">
-            <CircleCheck
+            <CheckboxField
               checked={deleteWorktreeDir}
               onChange={setDeleteWorktreeDir}
               label={
@@ -97,7 +97,7 @@ function DeleteTaskBody({ task, onConfirm }: DeleteTaskBodyProps) {
                 </>
               }
             />
-            <CircleCheck
+            <CheckboxField
               checked={deleteLocalBranch}
               onChange={setDeleteLocalBranch}
               label={
@@ -108,7 +108,7 @@ function DeleteTaskBody({ task, onConfirm }: DeleteTaskBodyProps) {
               }
             />
             {hasRemoteBranch && (
-              <CircleCheck
+              <CheckboxField
                 checked={deleteRemoteBranch}
                 onChange={setDeleteRemoteBranch}
                 label={

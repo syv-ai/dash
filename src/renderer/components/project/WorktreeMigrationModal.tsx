@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { X, FolderGit2, Loader2, AlertCircle, Check } from 'lucide-react';
 import type { WorktreeMigrationProject, WorktreeMigrationResult } from '../../../shared/types';
 import { Modal, useModalClose } from '../ui/Modal';
+import { Checkbox } from '../ui/Checkbox';
+import { CheckboxField } from '../ui/CheckboxField';
 
 /** localStorage flag for "Don't ask again"; the plan is re-offered every launch otherwise. */
 export const WORKTREE_MIGRATION_DISMISSED_KEY = 'dash.worktreeMigration.dismissed';
@@ -148,12 +150,10 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
                   style={{ background: 'hsl(var(--surface-2))' }}
                 >
                   <label className="flex items-center gap-2 min-w-0 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={selected.has(project.projectId)}
                       disabled={busy}
                       onChange={() => toggleProject(project.projectId)}
-                      className="accent-primary"
                     />
                     <FolderGit2 size={13} strokeWidth={1.8} className="text-icon" />
                     <span className="text-base font-medium text-foreground truncate">
@@ -257,26 +257,13 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
         {phase.kind === 'confirm' && (
           <div className="flex flex-col gap-1.5">
             {staleCount > 0 && (
-              <label className="flex items-center gap-2 text-sm text-muted-foreground select-none cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={removeStale}
-                  onChange={(e) => setRemoveStale(e.target.checked)}
-                  className="accent-primary"
-                />
-                Remove the {staleCount} task{staleCount === 1 ? '' : 's'} whose folder is no longer
-                a worktree
-              </label>
-            )}
-            <label className="flex items-center gap-2 text-sm text-muted-foreground select-none cursor-pointer">
-              <input
-                type="checkbox"
-                checked={dontAsk}
-                onChange={(e) => setDontAsk(e.target.checked)}
-                className="accent-primary"
+              <CheckboxField
+                checked={removeStale}
+                onChange={setRemoveStale}
+                label={`Remove the ${staleCount} task${staleCount === 1 ? '' : 's'} whose folder is no longer a worktree`}
               />
-              Don&apos;t ask again
-            </label>
+            )}
+            <CheckboxField checked={dontAsk} onChange={setDontAsk} label="Don't ask again" />
           </div>
         )}
         <div className="flex gap-2.5 justify-end ml-auto">

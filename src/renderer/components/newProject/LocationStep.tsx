@@ -3,6 +3,7 @@ import { Loader2, FolderOpen } from 'lucide-react';
 import { CLONE_METHODS } from '@shared/cloneMethods';
 import { ScaffoldTerminal } from './ScaffoldTerminal';
 import type { ProjectSource } from './SourceStep';
+import { CheckboxField } from '../ui/CheckboxField';
 
 interface LocationStepProps {
   source: ProjectSource;
@@ -99,15 +100,7 @@ export function LocationStep({ source, onResolved }: LocationStepProps) {
             </button>
           </div>
         </div>
-        <label className="flex items-center gap-2 text-base text-fg-fade-90 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={initGit}
-            onChange={(e) => setInitGit(e.target.checked)}
-            className="accent-primary"
-          />
-          Initialize git repo
-        </label>
+        <CheckboxField checked={initGit} onChange={setInitGit} label="Initialize git repo" />
         {error && <p className="text-sm text-destructive">{error}</p>}
         <button
           disabled={!canCreate || busy}

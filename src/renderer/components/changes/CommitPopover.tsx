@@ -3,7 +3,7 @@ import { GitCommitHorizontal, Upload, X } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent, PopoverArrow } from '../ui/Popover';
 import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
-import { CircleCheck } from '../ui/CircleCheck';
+import { CheckboxField } from '../ui/CheckboxField';
 import { Textarea } from '../ui/Textarea';
 import { Kbd } from '../ui/Kbd';
 import { Tooltip } from '../ui/Tooltip';
@@ -142,7 +142,7 @@ export function CommitPopover({ run }: { run: CommitRun }) {
             placeholder="Describe the change…"
             className="min-h-0 flex-1 resize-none"
           />
-          <CircleCheck
+          <CheckboxField
             checked={allowEmpty}
             onChange={setAllowEmpty}
             label={
