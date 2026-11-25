@@ -11,6 +11,7 @@ import type {
   SubmitResult,
   TaskPrs,
 } from '../../shared/types';
+import type { GeneralReplyTarget } from '../../shared/prGeneralReply';
 
 /** PR review in the diff editor, on the project's provider (GitHub or Azure DevOps). */
 export interface PrReviewApi {
@@ -59,6 +60,15 @@ export interface PrReviewApi {
     threadId: string;
     body: string;
     draftId?: string;
+  }) => Promise<IpcResponse<PrReviewComment>>;
+  /** Reply to general comment `to` of PR `number` at once (a quoting PR
+   *  comment on GitHub, a reply in its thread on ADO). Answers the posted comment. */
+  prReviewReplyGeneral: (args: {
+    projectId: string;
+    cwd: string;
+    number: number;
+    to: GeneralReplyTarget;
+    body: string;
   }) => Promise<IpcResponse<PrReviewComment>>;
   /** Where the checkout at `cwd` stands against PR head `head`; null when
    *  `head` isn't in the checkout. */

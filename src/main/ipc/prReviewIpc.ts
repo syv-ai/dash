@@ -12,6 +12,7 @@ import { checkoutVsHead } from '../services/prReview/localCommits';
 import { taskReviews } from '../services/prReview/taskReview';
 import { prViewedFilesRepo } from '../services/prViewedFilesRepo';
 import { PR_REACTIONS } from '@shared/prReactions';
+import type { GeneralReplyTarget } from '@shared/prGeneralReply';
 import type { PrProvider, PrReactionContent, PrRef, PrVerdict } from '@shared/types';
 
 const where = { projectId: z.string(), cwd: z.string() };
@@ -294,6 +295,42 @@ export function registerPrReviewIpc(): void {
           { threadId: args.threadId, body: args.body, draftId: args.draftId },
         );
         return { success: true, data: posted };
+      } catch (err) {
+        return errorResponse(err);
+      }
+    },
+  );
+
+  /** Reply to a general comment (the PR's conversation) at once, on the
+   *  person's Post reply; no draft is kept. Answers the posted comment. */
+  ipcMain.handle(
+    'prReview:replyGeneral',
+    async (
+      _e,
+      args: {
+        projectId: string;
+        cwd: string;
+        number: number;
+        to: GeneralReplyTarget;
+        body: string;
+      },
+    ) => {
+      try {
+        parseArgs(
+          'prReview:replyGeneral',
+          z.looseObject({
+            ...where,
+            number: z.number(),
+            to: z.object({ id: z.string().min(1), author: z.string(), body: z.string() }),
+            body: z.string().trim().min(1),
+          }),
+          args,
+        );
+        const { adapter, ctx } = prContextFor(args.projectId, args.cwd, appDeps);
+        return {
+          success: true,
+          data: await adapter.replyGeneral(ctx, args.number, args.to, args.body),
+        };
       } catch (err) {
         return errorResponse(err);
       }

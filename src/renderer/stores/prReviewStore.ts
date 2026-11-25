@@ -13,9 +13,14 @@ import type {
   TaskPrs,
 } from '../../shared/types';
 import { toggleReaction } from '../../shared/prReactions';
+import { generalReplyBody } from '../../shared/prGeneralReply';
 
 /** The store key of a PR's review. */
 export const prKey = (provider: PrProvider, number: number): string => `${provider}:${number}`;
+
+/** A general reply still posting (`replyGeneral`), shown before the PR has it. */
+export const isPendingComment = (c: Pick<PrReviewComment, 'id'>): boolean =>
+  c.id.startsWith('pending:');
 
 /** The key of a task's review of a PR. */
 export const reviewKey = (taskId: string, provider: PrProvider, number: number): string =>
@@ -130,6 +135,20 @@ interface PrReviewState {
     draft: Pick<DiffComment, 'id' | 'replyTo' | 'text'>,
     resolve: boolean,
   ) => Promise<PrWriteResult>;
+  /**
+   * Reply to general comment `to` (the PR's conversation) at once, on the
+   * person's Post reply: shown at the conversation's end straight away (as
+   * it will post: quoted on GitHub), swapped for the posted comment, taken
+   * out again if the PR refuses. Pending under `posting[to.id]`; a second
+   * reply while one posts is left alone.
+   */
+  replyGeneral: (
+    projectId: string,
+    cwd: string,
+    review: Pick<PrReview, 'provider' | 'number'>,
+    to: PrReviewComment,
+    text: string,
+  ) => Promise<PrWriteResult>;
   /** Submit the task's drafts for the PR with a verdict; refetches the review
    *  when anything reached the PR, and drops the summary when everything did. */
   submit: (
@@ -178,6 +197,12 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
         [key]: { ...review, threads, conversation: each(review.conversation) },
       },
     });
+  };
+  /** Put `fn` of the PR's conversation in its place. */
+  const mapConversation = (key: string, fn: (list: PrReviewComment[]) => PrReviewComment[]) => {
+    const review = get().byPr[key];
+    if (!review) return;
+    set({ byPr: { ...get().byPr, [key]: { ...review, conversation: fn(review.conversation) } } });
   };
   const setPosting = (id: string, on: boolean) => {
     const posting = { ...get().posting };
@@ -401,6 +426,43 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
       } finally {
         setPosting(draft.id, false);
       }
+    },
+
+    replyGeneral: async (projectId, cwd, review, to, text) => {
+      if (get().posting[to.id]) return { ok: true };
+      const key = prKey(review.provider, review.number);
+      const pending: PrReviewComment = {
+        id: `pending:${crypto.randomUUID()}`,
+        author: 'You',
+        authorUrl: null,
+        body: generalReplyBody(review.provider, to, text),
+        createdAt: new Date().toISOString(),
+        url: '',
+        reactions: [],
+      };
+      mapConversation(key, (list) => [...list, pending]);
+      setPosting(to.id, true);
+      let error: PrWriteError | null = null;
+      try {
+        const resp = await window.electronAPI.prReviewReplyGeneral({
+          projectId,
+          cwd,
+          number: review.number,
+          to: { id: to.id, author: to.author, body: to.body },
+          body: text,
+        });
+        if (resp.success && resp.data) {
+          const posted = resp.data;
+          mapConversation(key, (list) => list.map((c) => (c.id === pending.id ? posted : c)));
+        } else error = ipcError(resp.error ?? 'unknown error');
+      } catch (err) {
+        error = ipcError(String(err));
+      } finally {
+        setPosting(to.id, false);
+      }
+      if (!error) return { ok: true };
+      mapConversation(key, (list) => list.filter((c) => c.id !== pending.id));
+      return { ok: false, error };
     },
 
     submit: async (projectId, cwd, taskId, review, verdict, body) => {

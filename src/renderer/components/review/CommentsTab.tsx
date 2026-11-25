@@ -1,6 +1,8 @@
-import { useMemo, type ReactNode } from 'react';
-import { Pencil } from 'lucide-react';
-import type { DiffComment, PrReview, PrReviewThread } from '../../../shared/types';
+import { useMemo, useState, type ReactNode } from 'react';
+import { Pencil, Reply } from 'lucide-react';
+import type { DiffComment, PrReview, PrReviewComment, PrReviewThread } from '../../../shared/types';
+import { isPendingComment, usePrReviews } from '../../stores/prReviewStore';
+import { CommentInputBar } from '../diffEditor/comments/CommentInputBar';
 import { openFileAt } from '../diffEditor/openFileAt';
 import {
   CommentFrame,
@@ -15,10 +17,12 @@ import {
   type PrThreadContext,
 } from '../diffEditor/prReview/usePrThreadContext';
 import { Avatar } from '../ui/Avatar';
+import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { DetailSection } from '../ui/DetailList';
 import { Markdown } from '../ui/Markdown';
 import { TextLink } from '../ui/TextLink';
+import { Composer } from './DraftActions';
 import { commentGroups, draftPlace, threadRange, type CommentItem } from './outline';
 import { useSectionOpen } from './useSectionOpen';
 
@@ -26,7 +30,7 @@ type Navigate = (scope: string, path: string, commentId: string) => void;
 
 /**
  * The Comments tab's Comments: every exchange with the author, each a card.
- * General (the PR's conversation, with reactions, and the review's summary
+ * General (the PR's conversation, with reactions and Reply, and the review's summary
  * while it is a draft), Unresolved (open threads, on the code or off it,
  * with the person's draft comments among them by file and line) and
  * Resolved (folded). A thread's card is the one drawn under its line
@@ -70,9 +74,7 @@ export function CommentsTab({
           <Cards>
             {summary && <SummaryCard text={summary} />}
             {review.conversation.map((c) => (
-              <Card key={c.id}>
-                <PostedComment comment={c} context={context} />
-              </Card>
+              <GeneralCard key={c.id} comment={c} context={context} />
             ))}
           </Cards>
         </DetailSection>
@@ -180,6 +182,51 @@ function DraftCard({
           </span>
         }
       />
+    </Card>
+  );
+}
+
+/**
+ * A general comment, the PR's conversation: the comment and a Reply that
+ * opens a composer (`@` mentions) whose Post reply posts at once (D225) —
+ * no draft, not part of Finish review. A reply posting shows at the
+ * conversation's end; a refused one leaves the composer with its text.
+ */
+function GeneralCard({ comment, context }: { comment: PrReviewComment; context: PrThreadContext }) {
+  const [replying, setReplying] = useState(false);
+  const posting = usePrReviews((s) => !!s.posting[comment.id]);
+  const pending = isPendingComment(comment);
+  const post = async (text: string) => {
+    if (await context.replyGeneral(comment, text)) setReplying(false);
+  };
+  return (
+    <Card>
+      <div className="grid gap-3">
+        <PostedComment comment={comment} context={context} />
+        {replying ? (
+          <Composer>
+            <CommentInputBar
+              lineRange={null}
+              initialText=""
+              placeholder="Reply… (@ to mention)"
+              submitLabel="Post reply"
+              mentions={context.mentions}
+              busy={posting}
+              onSubmit={(text) => void post(text)}
+              onCancel={() => setReplying(false)}
+            />
+          </Composer>
+        ) : (
+          !pending && (
+            <footer className="flex">
+              <Button variant="secondary" size="sm" onClick={() => setReplying(true)}>
+                <Reply size={14} strokeWidth={1.8} />
+                Reply
+              </Button>
+            </footer>
+          )
+        )}
+      </div>
     </Card>
   );
 }

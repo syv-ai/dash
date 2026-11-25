@@ -29,6 +29,9 @@ export function makeElectronApiMock(overrides: Record<string, unknown> = {}) {
     prReviewSetResolved: vi.fn(() => ok(undefined)),
     prReviewSubmit: vi.fn(() => ok({ postedDraftIds: [] })),
     prReviewReply: vi.fn(() => ok({ id: 'c', author: 'me', body: 'b', createdAt: '', url: '' })),
+    prReviewReplyGeneral: vi.fn(() =>
+      ok({ id: 'c', author: 'me', body: 'b', createdAt: '', url: '' }),
+    ),
     prReviewCheckout: vi.fn(() => ok(null)),
     prReviewSetMode: vi.fn(() => ok(undefined)),
     prReviewViewed: vi.fn(() => ok({})),

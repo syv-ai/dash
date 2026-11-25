@@ -28,6 +28,9 @@ export interface PrThreadContext {
   setResolved: (thread: PrReviewThread, resolved: boolean) => void;
   /** Type the thread into the task's prompt ("Ask agent"). */
   ask: (thread: PrReviewThread) => void;
+  /** Reply to a general comment (the PR's conversation): posts at once, on
+   *  the person's Post reply (D225). Answers whether it posted; a refusal toasts. */
+  replyGeneral: (comment: PrReviewComment, text: string) => Promise<boolean>;
   /** Give or take back the viewer's reaction: posts at once (D194). */
   react: (comment: PrReviewComment, content: PrReactionContent, on: boolean) => void;
 }
@@ -78,6 +81,12 @@ export function usePrThreadContext({
           }),
       ask: (thread) => {
         if (taskId) void typeIntoTask(taskId, buildReviewPrompt(review, [thread]));
+      },
+      replyGeneral: async (comment, text) => {
+        const r = await store().replyGeneral(projectId, cwd, review, comment, text);
+        if (r.ok) toast.success('Reply posted');
+        else toast.error(`Could not post the reply: ${why(r.error, 'the PR refused it')}`);
+        return r.ok;
       },
       react: (comment, content, on) =>
         void store()

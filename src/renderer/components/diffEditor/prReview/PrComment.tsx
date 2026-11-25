@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { Bot, ExternalLink, Pencil } from 'lucide-react';
 import { formatTimeAgo } from '../../../../shared/relativeTime';
 import type { DiffComment, PrReactionContent, PrReviewComment } from '../../../../shared/types';
-import type { ReplyPoster } from '../../../stores/prReviewStore';
+import { isPendingComment, type ReplyPoster } from '../../../stores/prReviewStore';
 import { DraftActions, DraftEditor } from '../../review/DraftActions';
 import { commentRole, commentRoleTip, providerName } from '../../review/labels';
 import { Avatar } from '../../ui/Avatar';
@@ -106,18 +106,21 @@ export function PostedComment({
         )
       }
       actions={
-        <>
-          <AddReaction comment={c} provider={provider} onReact={react} />
-          {c.url && (
-            <IconButton
-              size="sm"
-              title={`Open on ${providerName(provider)}`}
-              onClick={() => void window.electronAPI.openExternal(c.url)}
-            >
-              <ExternalLink size={14} strokeWidth={1.8} />
-            </IconButton>
-          )}
-        </>
+        // A reply still posting has nothing on the forge to react to yet.
+        !isPendingComment(c) && (
+          <>
+            <AddReaction comment={c} provider={provider} onReact={react} />
+            {c.url && (
+              <IconButton
+                size="sm"
+                title={`Open on ${providerName(provider)}`}
+                onClick={() => void window.electronAPI.openExternal(c.url)}
+              >
+                <ExternalLink size={14} strokeWidth={1.8} />
+              </IconButton>
+            )}
+          </>
+        )
       }
       footer={c.reactions.length > 0 && <ReactionChips comment={c} onReact={react} />}
     >

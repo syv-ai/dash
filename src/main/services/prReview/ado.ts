@@ -350,20 +350,29 @@ export const adoSummaryBody = (body: string) => ({
   status: CLOSED,
 });
 
+/** The thread and comment of a comment id (`thread:comment`, as
+ *  `commentFrom` makes it); throws on anything else. */
+export function adoCommentRef(commentId: string): { threadId: string; commentId: string } {
+  const [tid, cid, ...rest] = commentId.split(':');
+  if (!tid || !cid || rest.length > 0 || !/^\d+$/.test(tid) || !/^\d+$/.test(cid))
+    throw new Error(`Not an Azure DevOps comment id: ${commentId}`);
+  return { threadId: tid, commentId: cid };
+}
+
 /**
- * Like (`on`) or unlike a comment, by its id (`thread:comment`, as
- * `commentFrom` makes it): PUT / DELETE on the comment's likes, under the PR
- * at `prPath`.
+ * Like (`on`) or unlike a comment, by its id (see `adoCommentRef`): PUT /
+ * DELETE on the comment's likes, under the PR at `prPath`.
  */
 export function adoLikeRequest(
   prPath: string,
   commentId: string,
   on: boolean,
 ): { path: string; method: 'PUT' | 'DELETE' } {
-  const [tid, cid] = commentId.split(':');
-  if (!tid || !cid || !/^\d+$/.test(tid) || !/^\d+$/.test(cid))
-    throw new Error(`Not an Azure DevOps comment id: ${commentId}`);
-  return { path: `${prPath}/threads/${tid}/comments/${cid}/likes`, method: on ? 'PUT' : 'DELETE' };
+  const ref = adoCommentRef(commentId);
+  return {
+    path: `${prPath}/threads/${ref.threadId}/comments/${ref.commentId}/likes`,
+    method: on ? 'PUT' : 'DELETE',
+  };
 }
 
 const VOTES: Partial<Record<PrVerdict, number>> = {
@@ -453,6 +462,18 @@ const repoPath = (ado: NonNullable<PrContext['ado']>) =>
 export function makeAdoProvider(deps: AdoDeps = defaultDeps): PrReviewProvider {
   const prPath = (ctx: PrContext, n: number) => `${repoPath(adoOf(ctx))}/pullRequests/${n}`;
 
+  /** A reply under the thread's first comment, posted at once. */
+  const reply: PrReviewProvider['reply'] = async (ctx, number, threadId, body) => {
+    const ado = adoOf(ctx);
+    const at = `${prPath(ctx, number)}/threads/${threadId}`;
+    const thread = (await deps.request(ado, at)) as RawThread;
+    const posted = (await deps.request(ado, `${at}/comments`, {
+      method: 'POST',
+      body: adoReplyBody(body, adoRootCommentId(thread)),
+    })) as RawComment;
+    return commentFrom(posted, threadId, threadUrl(prUrl(repoContext(ado), number), thread));
+  };
+
   return {
     async list(ctx, filter) {
       const ado = adoOf(ctx);
@@ -487,16 +508,11 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): PrReviewProvider {
       };
     },
 
-    async reply(ctx, number, threadId, body) {
-      const ado = adoOf(ctx);
-      const at = `${prPath(ctx, number)}/threads/${threadId}`;
-      const thread = (await deps.request(ado, at)) as RawThread;
-      const posted = (await deps.request(ado, `${at}/comments`, {
-        method: 'POST',
-        body: adoReplyBody(body, adoRootCommentId(thread)),
-      })) as RawComment;
-      return commentFrom(posted, threadId, threadUrl(prUrl(repoContext(ado), number), thread));
-    },
+    reply,
+
+    // A general comment is a thread without a file: the reply goes in it.
+    replyGeneral: async (ctx, number, to, body) =>
+      reply(ctx, number, adoCommentRef(to.id).threadId, body),
 
     async react(ctx, number, commentId, content: PrReactionContent, on) {
       if (content !== 'LIKE') throw new Error('Azure DevOps has only likes');

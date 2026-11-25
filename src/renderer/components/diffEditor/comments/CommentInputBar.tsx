@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Bot, MessageSquare, Send } from 'lucide-react';
+import { Bot, Loader2, MessageSquare, Send } from 'lucide-react';
 import type { DiffCommentKind } from '../../../../shared/types';
 import { Button } from '../../ui/Button';
 import { Kbd } from '../../ui/Kbd';
@@ -31,6 +31,8 @@ interface Props {
   onSendNow?: (text: string) => void;
   /** People `@` completes from (a PR's participants); none, no completion. */
   mentions?: readonly string[];
+  /** What it submits is under way (a reply posting): submit waits. */
+  busy?: boolean;
 }
 
 const PLACEHOLDERS: Record<DiffCommentKind | 'none', string> = {
@@ -51,13 +53,14 @@ export function CommentInputBar({
   kind,
   onSendNow,
   mentions,
+  busy = false,
 }: Props) {
   const [text, setText] = useState(initialText);
   const field = useRef<HTMLTextAreaElement | null>(null);
   const mention = useMentions({ field, text, setText, candidates: mentions });
   const trimmed = text.trim();
   const submit = () => {
-    if (trimmed) onSubmit(trimmed);
+    if (trimmed && !busy) onSubmit(trimmed);
   };
   const sendNow = onSendNow && (kind?.value ?? 'note') === 'note' ? onSendNow : null;
   const rangeLabel = lineRange
@@ -173,7 +176,8 @@ export function CommentInputBar({
             Send now
           </Button>
         )}
-        <Button size="sm" onClick={submit} disabled={!trimmed}>
+        <Button size="sm" onClick={submit} disabled={!trimmed || busy}>
+          {busy && <Loader2 size={14} strokeWidth={1.8} className="animate-spin" />}
           {submitLabel}
         </Button>
       </div>

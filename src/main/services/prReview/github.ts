@@ -15,6 +15,7 @@ import type {
   RelevantPr,
 } from '@shared/types';
 import { GITHUB_REACTIONS } from '@shared/prReactions';
+import { quoteReply, type GeneralReplyTarget } from '@shared/prGeneralReply';
 import { githubChecks } from '../prRelevance';
 import { ensureCommits, runGit } from './localCommits';
 import type { ForgeReview, PrReviewProvider } from './types';
@@ -416,7 +417,24 @@ export const githubReplyRequest = (number: number, rootCommentId: number, body: 
   fields: { body },
 });
 
-/** The PrReviewComment of a REST review comment (ids are GraphQL node ids, as `load`'s are). */
+/**
+ * A reply to a general comment, posted at once: GitHub's PR conversation
+ * isn't threaded, so it is a new PR (issue) comment quoting the original and
+ * mentioning its author (`quoteReply`), as GitHub's own "Quote reply" does.
+ * REST "Create an issue comment"
+ * (https://docs.github.com/en/rest/issues/comments#create-an-issue-comment).
+ */
+export const githubGeneralReplyRequest = (
+  number: number,
+  to: GeneralReplyTarget,
+  text: string,
+) => ({
+  method: 'POST' as const,
+  path: `repos/{owner}/{repo}/issues/${number}/comments`,
+  fields: { body: quoteReply(to, text) },
+});
+
+/** The PrReviewComment of a REST review or issue comment (ids are GraphQL node ids, as `load`'s are). */
 export function restCommentFrom(c: unknown): PrReviewComment {
   const r = (c && typeof c === 'object' ? c : {}) as Node;
   return {
@@ -468,6 +486,11 @@ export function makeGithubProvider(gql: Gql = ghGql, rest: Rest = ghRest): PrRev
       const root = num(nodes(pick(data, 'node', 'comments'))[0]?.databaseId);
       if (root === null) throw new Error('The thread has no comment to reply to');
       const req = githubReplyRequest(number, root, body);
+      return restCommentFrom(await rest(ctx.cwd, req.method, req.path, req.fields));
+    },
+
+    async replyGeneral(ctx, number, to, body) {
+      const req = githubGeneralReplyRequest(number, to, body);
       return restCommentFrom(await rest(ctx.cwd, req.method, req.path, req.fields));
     },
 

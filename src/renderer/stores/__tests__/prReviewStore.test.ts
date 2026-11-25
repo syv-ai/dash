@@ -200,6 +200,53 @@ describe('prReviewStore writes', () => {
     ).toEqual({ ok: false, error: { kind: 'other', message: 'nope' }, posted: 1 });
   });
 
+  const said = {
+    id: 'IC1',
+    author: 'ada',
+    authorUrl: null,
+    body: 'Split this?',
+    createdAt: '',
+    url: '',
+    reactions: [],
+  };
+  const withConversation = (): PrReview => ({ ...review(4), conversation: [said] });
+
+  it('shows a general reply at once as it will post, then swaps in the posted one', async () => {
+    api.prReviewLoad = vi.fn(() => Promise.resolve({ success: true, data: withConversation() }));
+    let answer: (v: unknown) => void = () => {};
+    api.prReviewReplyGeneral = vi.fn(() => new Promise((r) => (answer = r)));
+    const { usePrReviews, prKey } = await freshStore();
+    await usePrReviews.getState().load('p1', '/wt', 4);
+    const conversation = () => usePrReviews.getState().byPr[prKey('github', 4)]!.conversation;
+
+    const pending = usePrReviews.getState().replyGeneral('p1', '/wt', review(4), said, 'Yes');
+    expect(conversation()[1]).toMatchObject({ author: 'You', body: '> Split this?\n\n@ada Yes' });
+    expect(usePrReviews.getState().posting).toEqual({ IC1: true });
+    expect(api.prReviewReplyGeneral).toHaveBeenCalledWith({
+      projectId: 'p1',
+      cwd: '/wt',
+      number: 4,
+      to: { id: 'IC1', author: 'ada', body: 'Split this?' },
+      body: 'Yes',
+    });
+    answer({ success: true, data: posted });
+    expect(await pending).toEqual({ ok: true });
+    expect(conversation()).toEqual([said, posted]);
+    expect(usePrReviews.getState().posting).toEqual({});
+  });
+
+  it('takes a general reply back out when the PR refuses it', async () => {
+    api.prReviewLoad = vi.fn(() => Promise.resolve({ success: true, data: withConversation() }));
+    api.prReviewReplyGeneral = vi.fn(() => Promise.resolve({ success: false, error: 'Forbidden' }));
+    const { usePrReviews, prKey } = await freshStore();
+    await usePrReviews.getState().load('p1', '/wt', 4);
+    expect(await usePrReviews.getState().replyGeneral('p1', '/wt', review(4), said, 'Yes')).toEqual(
+      { ok: false, error: { kind: 'other', message: 'Forbidden' } },
+    );
+    expect(usePrReviews.getState().byPr[prKey('github', 4)]!.conversation).toEqual([said]);
+    expect(usePrReviews.getState().posting).toEqual({});
+  });
+
   it('refetches the review after a submit that posted', async () => {
     api.prReviewSubmit = vi.fn(() =>
       Promise.resolve({ success: true, data: { postedDraftIds: ['d1'] } }),

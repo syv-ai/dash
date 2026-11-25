@@ -262,6 +262,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     body: string;
     draftId?: string;
   }) => ipcRenderer.invoke('prReview:reply', args),
+  prReviewReplyGeneral: (args: {
+    projectId: string;
+    cwd: string;
+    number: number;
+    to: { id: string; author: string; body: string };
+    body: string;
+  }) => ipcRenderer.invoke('prReview:replyGeneral', args),
   prReviewCheckout: (args: { cwd: string; head: string }) =>
     ipcRenderer.invoke('prReview:checkout', args),
   prReviewSetMode: (args: { taskId: string; pr: { provider: string; number: number } | null }) =>

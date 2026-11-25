@@ -4,6 +4,7 @@ import prFixture from './fixtures/ado-pr.json';
 import type { PrSubmission } from '../../../../shared/types';
 import { AdoRequestError } from '../../AzureDevOpsService';
 import {
+  adoCommentRef,
   adoLikeRequest,
   adoLikes,
   adoReplyBody,
@@ -166,6 +167,14 @@ describe('adoReviewFrom', () => {
     expect(review.conversation[0]!.url).toContain('_a=overview&discussionId=106');
   });
 
+  it("keeps each general comment's thread in its id, which a reply goes to", () => {
+    expect(review.conversation.map((c) => adoCommentRef(c.id).threadId)).toEqual([
+      '106',
+      '105',
+      '105',
+    ]);
+  });
+
   it('lists the paths threads sit on', () => {
     expect(threadPaths(threadsFixture)).toEqual([
       'src/app/moved.ts',
@@ -182,6 +191,14 @@ describe('adoLikes', () => {
     expect(adoLikes(users, '')).toEqual([{ content: 'LIKE', count: 2, viewerReacted: false }]);
     expect(adoLikes({ usersLiked: [] }, 'me')).toEqual([]);
     expect(adoLikes({}, 'me')).toEqual([]);
+  });
+});
+
+describe('adoCommentRef', () => {
+  it('splits a comment id into its thread and comment, refusing any other', () => {
+    expect(adoCommentRef('106:2')).toEqual({ threadId: '106', commentId: '2' });
+    for (const id of ['PRRC_x', '106', '106:', ':2', '1:2:3', 'a:2'])
+      expect(() => adoCommentRef(id)).toThrow('Not an Azure DevOps comment id');
   });
 });
 
@@ -432,6 +449,27 @@ describe('adoProvider', () => {
       createdAt: '2026-11-24T10:00:00Z',
       url: 'https://dev.azure.com/org/My Proj/_git/repo/pullrequest/7204?_a=files&discussionId=101',
     });
+  });
+
+  it("replies to a general comment in its thread, under the thread's first comment", async () => {
+    const { deps, calls } = fakeDeps();
+    const to = { id: '105:2', author: 'Bo Author', body: 'Thanks!' };
+    const comment = await makeAdoProvider(deps).replyGeneral(pctx, 7204, to, 'agreed');
+    expect(calls).toEqual([
+      { path: `${base}/threads/105`, method: 'GET', body: undefined },
+      { path: `${base}/threads/105/comments`, method: 'POST', body: adoReplyBody('agreed', 1) },
+    ]);
+    expect(comment).toMatchObject({ id: '105:5', body: 'agreed' });
+    expect(comment.url).toContain('_a=overview&discussionId=105');
+  });
+
+  it('refuses a general reply to a comment id it did not make, posting nothing', async () => {
+    const { deps, calls } = fakeDeps();
+    const to = { id: 'IC_1', author: 'a', body: 'b' };
+    await expect(makeAdoProvider(deps).replyGeneral(pctx, 7204, to, 'x')).rejects.toThrow(
+      'Not an Azure DevOps comment id',
+    );
+    expect(calls).toEqual([]);
   });
 
   it("likes and unlikes a comment, by its thread's and its own id", async () => {

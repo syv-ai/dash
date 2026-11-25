@@ -3,6 +3,7 @@ import type { PrSubmission } from '../../../../shared/types';
 import prFixture from './fixtures/github-pr.json';
 import relevantFixture from './fixtures/github-relevant-prs.json';
 import {
+  githubGeneralReplyRequest,
   githubReactionRequest,
   githubRelevantPrsFrom,
   githubReplyRequest,
@@ -106,6 +107,15 @@ describe('githubReviewFrom', () => {
       },
     };
     expect(githubReviewFrom(pr, at).conversation.map((c) => c.id)).toEqual(['IC1', 'R1', 'IC2']);
+  });
+
+  it('keeps what a reply to a conversation item quotes: its id, author and text', () => {
+    const pr = { comments: { nodes: [comment('IC_1', 'bo', 'Split this?')] } };
+    expect(githubReviewFrom(pr, at).conversation[0]).toMatchObject({
+      id: 'IC_1',
+      author: 'bo',
+      body: 'Split this?',
+    });
   });
 
   it('describes the PR and offers only "comment" on your own PR', () => {
@@ -455,6 +465,49 @@ describe('githubProvider.reply', () => {
 
   it('reads a deleted account as ghost', () => {
     expect(restCommentFrom({ node_id: 'X', user: null }).author).toBe('ghost');
+  });
+});
+
+describe('githubProvider.replyGeneral', () => {
+  const to = { id: 'IC_kwDO1', author: 'ada', body: 'Can we split this?\nIt is big.' };
+  const quoted = '> Can we split this?\n> It is big.\n\n@ada Yes, will do.';
+
+  it('posts a PR (issue) comment quoting the original and mentioning its author', () => {
+    expect(githubGeneralReplyRequest(4, to, 'Yes, will do.')).toEqual({
+      method: 'POST',
+      path: 'repos/{owner}/{repo}/issues/4/comments',
+      fields: { body: quoted },
+    });
+  });
+
+  it('posts once, without GraphQL, and answers the comment', async () => {
+    const { gql, calls } = fakeGql();
+    const posts: Parameters<Rest>[] = [];
+    const rest: Rest = async (...args) => {
+      posts.push(args);
+      return {
+        id: 7,
+        node_id: 'IC_kwDO7',
+        user: { login: 'me', html_url: 'https://github.com/me' },
+        body: quoted,
+        created_at: '2026-11-25T10:00:00Z',
+        html_url: 'https://github.com/o/r/pull/4#issuecomment-7',
+      };
+    };
+    const comment = await makeGithubProvider(gql, rest).replyGeneral(ctx, 4, to, 'Yes, will do.');
+    expect(calls).toEqual([]);
+    expect(posts).toEqual([
+      ['/repo', 'POST', 'repos/{owner}/{repo}/issues/4/comments', { body: quoted }],
+    ]);
+    expect(comment).toEqual({
+      id: 'IC_kwDO7',
+      author: 'me',
+      authorUrl: 'https://github.com/me',
+      reactions: [],
+      body: quoted,
+      createdAt: '2026-11-25T10:00:00Z',
+      url: 'https://github.com/o/r/pull/4#issuecomment-7',
+    });
   });
 });
 

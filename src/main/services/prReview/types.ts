@@ -8,6 +8,7 @@ import type {
   RelevantPr,
   SubmitResult,
 } from '@shared/types';
+import type { GeneralReplyTarget } from '@shared/prGeneralReply';
 
 /** Where a PR call runs: the checkout, its project, and (ADO) the credentials. */
 export interface PrContext {
@@ -38,6 +39,14 @@ export interface PrReviewProvider {
   submit(ctx: PrContext, number: number, submission: PrSubmission): Promise<SubmitResult>;
   /** Post a reply to a thread at once, outside any review. */
   reply(ctx: PrContext, number: number, threadId: string, body: string): Promise<PrReviewComment>;
+  /** Post a reply to general comment `to` (the PR's conversation) at once:
+   *  a quoting PR comment on GitHub, a reply in its thread on ADO. */
+  replyGeneral(
+    ctx: PrContext,
+    number: number,
+    to: GeneralReplyTarget,
+    body: string,
+  ): Promise<PrReviewComment>;
   /** Give (`on`) or take back the viewer's reaction on comment `commentId`, at once. */
   react(
     ctx: PrContext,
