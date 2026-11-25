@@ -5,6 +5,9 @@ import {
   loadListWidth,
   saveListWidth,
   loadInspectorWidths,
+  narrowFromList,
+  planExpand,
+  SIDEBAR_GUTTER_PX,
   saveInspectorWidth,
   widthOnExpandedToggle,
   widthOnShow,
@@ -135,5 +138,39 @@ describe('list column widths', () => {
     });
     expect(loadListWidth('review')).toBe(50);
     expect(loadListWidth('normal')).toBe(30);
+  });
+});
+
+describe('planExpand', () => {
+  const base = { groupPx: 1400, listPx: 300, expandedPct: 46, freedPx: 0, listMaxPct: 50 };
+
+  it('eases to the remembered width, the list keeping its px', () => {
+    const plan = planExpand({ ...base, maxPx: 1100 });
+    expect(plan.panelPx).toBe(644);
+    expect((plan.listPct / 100) * (plan.panelPx - SIDEBAR_GUTTER_PX)).toBeCloseTo(300);
+  });
+
+  it('adds the room the collapsing left sidebar frees', () => {
+    expect(planExpand({ ...base, freedPx: 210, maxPx: 1100 }).panelPx).toBe(854);
+  });
+
+  it('is wide enough for the editor beside a wide list', () => {
+    const plan = planExpand({ ...base, listPx: 400, maxPx: 1100 });
+    expect(plan.panelPx).toBe(808);
+    expect(plan.listPct).toBe(50);
+  });
+
+  it('stops at the room there is, the list giving way only then', () => {
+    const plan = planExpand({ ...base, listPx: 400, maxPx: 700 });
+    expect(plan.panelPx).toBe(700);
+    expect(plan.listPct).toBe(50);
+  });
+});
+
+describe('narrowFromList', () => {
+  it('is as wide as the list panel, within bounds', () => {
+    expect(narrowFromList({ groupPx: 1400, listPx: 350, min: 14, max: 40 })).toBe(25);
+    expect(narrowFromList({ groupPx: 1400, listPx: 100, min: 14, max: 40 })).toBe(14);
+    expect(narrowFromList({ groupPx: 1400, listPx: 700, min: 14, max: 40 })).toBe(40);
   });
 });

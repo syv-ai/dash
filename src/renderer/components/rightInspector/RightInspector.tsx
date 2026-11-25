@@ -79,11 +79,14 @@ type Segment = CodeSegment | 'details';
 /** The sidebar between narrow and expanded: its content is held at `width`
  *  (px, the expanded width) in the expanded layout, first still (`held`: the
  *  layout paints, the editor mounts clear), then while the width eases
- *  (`easing`), the editor fading in or out with it. */
+ *  (`easing`), the editor fading in or out with it. The list splits at
+ *  `listPct` of it, as wide as the narrow column was (where it was, going
+ *  narrow), so only the panel's edge and the editor move (D258). */
 export interface SidebarMotion {
   width: number;
   to: 'expanded' | 'narrow';
   phase: 'held' | 'easing';
+  listPct?: number;
 }
 
 /** The editor's look mid-motion: shown before the ease going narrow and once
@@ -93,7 +96,9 @@ function editorMotionClass(motion: SidebarMotion | null): string | false {
   const easing = motion.phase === 'easing';
   const shown = motion.to === 'expanded' ? easing : !easing;
   return cn(
-    easing && 'transition-opacity duration-280 ease-panel motion-reduce:transition-none',
+    // The panels' ease (App sets both while the sidebar moves).
+    easing &&
+      'transition-opacity duration-(--panel-ease) ease-(--panel-curve) motion-reduce:transition-none',
     !shown && 'opacity-0',
   );
 }
@@ -422,7 +427,20 @@ export function RightInspector({
     };
   }, []);
   const listPanelRef = treePanel.panelRef;
-  const listWidth = loadListWidth(listMode);
+  // Where the list splits: mid-motion (`motion.listPct`, D258), as wide as
+  // the narrow column was, or (going narrow) where it was, so it doesn't
+  // move; otherwise the mode's own.
+  // Kept while split (`splitAt`): the library re-sizes a panel whose default
+  // changes, so the motion's end must not hand it another. The motion's
+  // width arrives a render after the split (App plans it in a layout
+  // effect, before the paint) and wins.
+  const motionListPct = motion?.listPct;
+  const motionListPctRef = useRef(motionListPct);
+  motionListPctRef.current = motionListPct;
+  const [splitAt, setSplitAt] = useState<number | null>(null);
+  const listWidth = motionListPct ?? splitAt ?? loadListWidth(listMode);
+  if (!split && splitAt !== null) setSplitAt(null);
+  if (split && splitAt !== listWidth) setSplitAt(listWidth);
   // As the mode changes while split (the column splits at it already: the
   // group's `defaultLayout`). The group registers its panels after this
   // render's effects, so the resize waits a frame.
@@ -431,7 +449,8 @@ export function RightInspector({
     listDragged.current = false;
     const frame = requestAnimationFrame(() => {
       const panel = listPanelRef.current;
-      if (panel && !panel.isCollapsed()) panel.resize(`${loadListWidth(listMode)}%`);
+      const pct = motionListPctRef.current ?? loadListWidth(listMode);
+      if (panel && !panel.isCollapsed()) panel.resize(`${pct}%`);
     });
     return () => cancelAnimationFrame(frame);
   }, [split, listMode, listPanelRef]);
@@ -679,8 +698,9 @@ export function RightInspector({
             <>
               <ResizablePanel
                 id="list"
-                // The divider's double click goes back to it.
-                defaultSize={`${LIST_DEFAULTS[listMode]}%`}
+                // Where it splits (`listWidth`); the divider's double click
+                // goes back to the mode's default.
+                defaultSize={`${listWidth}%`}
                 // Review mode's header and rows need room for their counts and
                 // actions beside their text (the tree and commits do with less),
                 // and the view tabs need theirs in full.

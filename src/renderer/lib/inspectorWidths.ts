@@ -169,3 +169,60 @@ export function widthOnShow({
   if (!expanded && restored > narrowMax) return widths.narrow;
   return null;
 }
+
+/*
+ * Narrow ⇄ expanded as one planned motion (D258): the list column keeps its
+ * width throughout, so only the panel's edge moves and the editor fades in
+ * or out beside the list. Expanding also collapses the left sidebar, its
+ * room going to the editor; going narrow gives it back.
+ */
+
+/** The task sidebar's padding at its end (px): the narrow column is the
+ *  panel less it, and the split's list panel is the column plus the same
+ *  gutter before the editor. */
+export const SIDEBAR_GUTTER_PX = 8;
+
+/**
+ * Where expanding eases to: the remembered expanded width plus the room the
+ * left sidebar frees (`freedPx`), never so narrow that the list (`listPx`,
+ * the split's list panel, as wide as the narrow panel) passes `listMaxPct`
+ * of the split, nor wider than `maxPx`. `listPct`: the list's share of the
+ * split there, so it keeps `listPx` (less only where `maxPx` forbids).
+ */
+export function planExpand({
+  groupPx,
+  listPx,
+  expandedPct,
+  freedPx,
+  maxPx,
+  listMaxPct,
+}: {
+  groupPx: number;
+  listPx: number;
+  expandedPct: number;
+  freedPx: number;
+  maxPx: number;
+  listMaxPct: number;
+}): { panelPx: number; panelPct: number; listPct: number } {
+  const want = (expandedPct / 100) * groupPx + freedPx;
+  const floor = (listPx * 100) / listMaxPct + SIDEBAR_GUTTER_PX;
+  const panelPx = Math.round(Math.min(maxPx, Math.max(want, floor)));
+  const listPct = Math.min(listMaxPct, (listPx / (panelPx - SIDEBAR_GUTTER_PX)) * 100);
+  return { panelPx, panelPct: (panelPx / groupPx) * 100, listPct };
+}
+
+/** Where going narrow eases to (%): as wide as the split's list panel
+ *  (`listPx`), so the column keeps its width, within `min`–`max`. */
+export function narrowFromList({
+  groupPx,
+  listPx,
+  min,
+  max,
+}: {
+  groupPx: number;
+  listPx: number;
+  min: number;
+  max: number;
+}): number {
+  return Math.min(max, Math.max(min, (listPx / groupPx) * 100));
+}

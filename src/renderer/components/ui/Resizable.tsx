@@ -16,11 +16,15 @@ export type { PanelImperativeHandle };
 /** How long an animated panel eases (see `[data-animating]` in index.css,
  *  which must match). */
 export const PANEL_EASE_MS = 280;
+/** The task sidebar's narrow ⇄ expanded ease, slower and calmer: the panels
+ *  take it while an ancestor sets `--panel-ease` to it (D258). */
+export const EXPAND_EASE_MS = 440;
 
-/** The ease's length now: 0 when the user prefers reduced motion (the CSS
- *  drops the transition then too). Clear an `animate` flag after this. */
-export function panelEaseMs(): number {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : PANEL_EASE_MS;
+/** The ease's length now (`ms`, the panels' own by default): 0 when the user
+ *  prefers reduced motion (the CSS drops the transition then too). Clear an
+ *  `animate` flag after this. */
+export function panelEaseMs(ms: number = PANEL_EASE_MS): number {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : ms;
 }
 
 /*

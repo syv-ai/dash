@@ -14,6 +14,7 @@ import {
   ResizablePanel,
   ResizableHandle,
   panelEaseMs,
+  EXPAND_EASE_MS,
   type PanelImperativeHandle,
 } from './components/ui/Resizable';
 import { LeftSidebar } from './components/leftSidebar/LeftSidebar';
@@ -22,7 +23,10 @@ import { openInIde } from './lib/openInIde';
 import {
   handOffWidth,
   loadInspectorWidths,
+  narrowFromList,
+  planExpand,
   saveInspectorWidth,
+  SIDEBAR_GUTTER_PX,
   widthOnExpandedToggle,
   widthOnShow,
 } from './lib/inspectorWidths';
@@ -96,6 +100,14 @@ const INSPECTOR_MAX_PCT = 85;
 /** The centre (the agent's terminal) at its narrowest, in px: its header's
  *  name, branch and actions still fit, and the TUI reflows to it. */
 const MAIN_MIN_PX = 280;
+/** The left sidebar collapsed (%): its rail. */
+const SIDEBAR_COLLAPSED_PCT = 3;
+/** The shell's two resize handles and rounding, in px: what an expanding
+ *  task sidebar leaves beside the centre's MAIN_MIN_PX. */
+const SHELL_SLACK_PX = 8;
+/** The split's list column at its widest share (%), as `RightInspector`
+ *  bounds it in normal mode (review mode's 60 is looser). */
+const LIST_MAX_PCT = 50;
 /** The shell group's panels; the task sidebar mounts only with an active task. */
 const SHELL_PANELS = ['sidebar', 'main'];
 const SHELL_PANELS_TASK = ['sidebar', 'main', 'changes'];
@@ -976,6 +988,17 @@ export function App() {
   // comes back from it: the centre keeps its width. Otherwise the centre
   // gives and takes, as the library does.
   const inspectorExpandedRef = useRef(false);
+  // While expanding collapsed the left sidebar (D259): the room it freed (%
+  // of the shell), given back as the sidebar goes narrow. Null once the user
+  // toggles the left sidebar themselves.
+  const leftFreedByExpandRef = useRef<number | null>(null);
+  // The panels' ease now: the slower expand ease while the task sidebar goes
+  // narrow or expanded, so no panel's `animate` flag clears mid-ease.
+  const expandMotionRef = useRef(false);
+  const easeNow = useCallback(
+    () => panelEaseMs(expandMotionRef.current ? EXPAND_EASE_MS : undefined),
+    [],
+  );
   const toggleSidebar = useCallback(() => {
     const panel = sidebarPanelRef.current;
     if (!panel) return;
@@ -983,6 +1006,8 @@ export function App() {
     const handOff = inspectorExpandedRef.current && !!inspector && !inspector.isCollapsed();
     const leftBefore = panel.getSize().asPercentage;
     const inspectorBefore = inspector?.getSize().asPercentage ?? 0;
+    // The user's call now: going narrow leaves the left sidebar as it is.
+    leftFreedByExpandRef.current = null;
     setSidebarAnimating(true);
     if (panel.isCollapsed()) {
       panel.expand();
@@ -1050,14 +1075,19 @@ export function App() {
   // to its narrow one, each remembered. One panel, resized: swapping panels
   // re-registers them, and the width jumps.
   //
-  // The motion is planned so nothing arrives mid-ease (D177): the sidebar
-  // takes its expanded layout first (split, the editor mounted but clear),
-  // held at the expanded width and clipped by the panel, so its content
-  // slides with the panel's edge instead of reflowing every frame. The ease
-  // then starts, and the editor fades in over it (out, going narrow). Going
-  // narrow, the split holds until the ease ends. An editor opening for the
-  // first time is waited for (up to EDITOR_MOUNT_WAIT_MS), so Monaco's
-  // start-up lands before the ease, not in it.
+  // The motion is planned so nothing arrives mid-ease (D177, D258, D259): the
+  // sidebar takes its expanded layout first (split, the editor mounted but
+  // clear), held at the expanded width and clipped by the panel, its list
+  // exactly as wide as the narrow column was, so the list never moves and
+  // only the panel's edge does. Expanding collapses the left sidebar in the
+  // same ease, its room going to the editor; going narrow gives it back
+  // unless the user has toggled it since. The ease (EXPAND_EASE_MS,
+  // `ease-calm`, for every panel and the editor's fade) then starts, and the
+  // editor fades in over it (out, going narrow). Going narrow, the split
+  // holds until the ease ends, the narrow column taking the list's width. An
+  // editor opening for the first time is waited for (up to
+  // EDITOR_MOUNT_WAIT_MS), so Monaco's start-up lands before the ease, not
+  // in it.
   useEffect(() => {
     inspectorExpandedRef.current = expanded;
   }, [expanded]);
@@ -1069,49 +1099,109 @@ export function App() {
     if (mounted) onEditorMounted.current?.();
   }, []);
   const prevExpandedRef = useRef(expanded);
+  // What the sidebar was told last: it keeps its split through the commit
+  // that goes narrow, so the list is still there to measure here.
+  const [expandedShown, setExpandedShown] = useState(expanded);
   // A layout effect: the held layout must land with the render that
   // expands, or the editor shows for a frame before it clears.
   useLayoutEffect(() => {
     if (prevExpandedRef.current === expanded) return;
     prevExpandedRef.current = expanded;
+    setExpandedShown(expanded);
     const panel = changesPanelRef.current;
-    if (!panel) return;
+    const left = sidebarPanelRef.current;
+    if (!panel || !left) return;
     const collapsed = panel.isCollapsed();
-    if (!collapsed) {
-      saveInspectorWidth(expanded ? 'narrow' : 'expanded', panel.getSize().asPercentage);
-    }
-    const width = widthOnExpandedToggle({
-      expanded,
-      collapsed,
-      widths: loadInspectorWidths(),
-    });
-    if (width === null) {
-      setSidebarMotion(null);
-      return;
-    }
     const groupPx =
       inspectorBodyRef.current?.closest('[data-slot="resizable-panel-group"]')?.clientWidth ??
       window.innerWidth;
+    const widths = loadInspectorWidths();
+    // Expanding collapses the left sidebar; going narrow restores it if
+    // expanding did.
+    const collapseLeft = expanded && !left.isCollapsed();
+    const restoreLeft = !expanded && leftFreedByExpandRef.current !== null && left.isCollapsed();
+    const freedPct = collapseLeft ? left.getSize().asPercentage - SIDEBAR_COLLAPSED_PCT : 0;
+    if (!collapsed) {
+      // The expanded width is kept without the room the left sidebar lent it.
+      saveInspectorWidth(
+        expanded ? 'narrow' : 'expanded',
+        panel.getSize().asPercentage - (restoreLeft ? (leftFreedByExpandRef.current ?? 0) : 0),
+      );
+    }
+    if (!expanded) leftFreedByExpandRef.current = null;
+    let width = widthOnExpandedToggle({ expanded, collapsed, widths });
+    let listPct: number | undefined;
+    if (width !== null && expanded) {
+      // The narrow column's width, which the split's list keeps.
+      const listPx = collapsed ? (widths.narrow / 100) * groupPx : panel.getSize().inPixels;
+      const leftAfterPx = collapseLeft
+        ? (SIDEBAR_COLLAPSED_PCT / 100) * groupPx
+        : left.getSize().inPixels;
+      const plan = planExpand({
+        groupPx,
+        listPx,
+        expandedPct: widths.expanded,
+        freedPx: (freedPct / 100) * groupPx,
+        maxPx: Math.min(
+          (INSPECTOR_MAX_PCT / 100) * groupPx,
+          groupPx - leftAfterPx - MAIN_MIN_PX - SHELL_SLACK_PX,
+        ),
+        listMaxPct: LIST_MAX_PCT,
+      });
+      width = plan.panelPct;
+      listPct = plan.listPct;
+    } else if (width !== null) {
+      // The list panel, which the narrow column keeps.
+      const list = inspectorBodyRef.current?.querySelector('[data-panel][id="list"]');
+      const listPx = list?.getBoundingClientRect().width;
+      if (listPx) {
+        width = narrowFromList({ groupPx, listPx, min: TUI_PANEL_MIN_PCT, max: TUI_PANEL_MAX_PCT });
+        // The split holds till the ease ends, its list where it was.
+        listPct = (listPx / (panel.getSize().inPixels - SIDEBAR_GUTTER_PX)) * 100;
+      }
+    }
+    if (width === null) {
+      expandMotionRef.current = false;
+      setSidebarMotion(null);
+      // Narrow behind a collapsed task sidebar: nothing to move with.
+      if (restoreLeft) {
+        setSidebarAnimating(true);
+        left.expand();
+      }
+      return;
+    }
+    const targetWidth = width;
     // The expanded width: where expanding goes, where narrowing comes from.
-    const heldPx = Math.round(Math.max(panel.getSize().inPixels, (groupPx * width) / 100));
+    const heldPx = Math.round(Math.max(panel.getSize().inPixels, (groupPx * targetWidth) / 100));
     const to = expanded ? 'expanded' : 'narrow';
-    setSidebarMotion({ width: heldPx, to, phase: 'held' });
+    expandMotionRef.current = true;
+    setSidebarMotion({ width: heldPx, to, phase: 'held', listPct });
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     let cancelSettle = () => {};
     const ease = () => {
       setChangesAnimating(true);
-      panel.resize(`${width}%`);
-      setSidebarMotion({ width: heldPx, to, phase: 'easing' });
+      if (collapseLeft || restoreLeft) setSidebarAnimating(true);
+      // Room is freed before it is taken, so the centre's minimum never
+      // clamps a panel mid-plan.
+      if (collapseLeft) {
+        left.collapse();
+        leftFreedByExpandRef.current = freedPct;
+      }
+      panel.resize(`${targetWidth}%`);
+      if (restoreLeft) left.expand();
+      setSidebarMotion({ width: heldPx, to, phase: 'easing', listPct });
       timer = setTimeout(() => {
+        expandMotionRef.current = false;
         setChangesAnimating(false);
+        setSidebarAnimating(false);
         setSidebarMotion(null);
-      }, panelEaseMs());
+      }, panelEaseMs(EXPAND_EASE_MS));
     };
     // The ease starts once the held layout has painted and the long frames
     // that lay it out (and mount the editor) are over, from a task of its
     // own (D112): a transition's clock starts at the frame its style change
-    // lands in, and an ease-out covers half its distance in its first third.
+    // lands in.
     const settleThenEase = () => {
       cancelSettle = whenFramesSettle(ease, SIDEBAR_SETTLE_CAP_MS);
     };
@@ -1129,7 +1219,7 @@ export function App() {
       cancelSettle();
       clearTimeout(timer);
     };
-  }, [expanded, setChangesAnimating]);
+  }, [expanded, setChangesAnimating, setSidebarAnimating]);
   const narrowEditor = useCallback(() => {
     if (activeTask) useEditors.getState().hide(activeTask.path);
   }, [activeTask]);
@@ -1306,7 +1396,18 @@ export function App() {
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden">
+    <div
+      className="h-screen w-screen flex flex-col overflow-hidden"
+      // The task sidebar's narrow ⇄ expanded ease, for every panel it moves.
+      style={
+        sidebarMotion
+          ? ({
+              '--panel-ease': `${panelEaseMs(EXPAND_EASE_MS)}ms`,
+              '--panel-curve': 'var(--ease-calm)',
+            } as React.CSSProperties)
+          : undefined
+      }
+    >
       <ResizablePanelGroup
         orientation="horizontal"
         className="flex-1"
@@ -1321,14 +1422,14 @@ export function App() {
           minSize="12%"
           maxSize="28%"
           collapsible
-          collapsedSize="3%"
+          collapsedSize={`${SIDEBAR_COLLAPSED_PCT}%`}
           onCollapse={() => {
             setSidebarCollapsed(true);
-            setTimeout(() => setSidebarAnimating(false), panelEaseMs());
+            setTimeout(() => setSidebarAnimating(false), easeNow());
           }}
           onExpand={() => {
             setSidebarCollapsed(false);
-            setTimeout(() => setSidebarAnimating(false), panelEaseMs());
+            setTimeout(() => setSidebarAnimating(false), easeNow());
           }}
         >
           <LeftSidebar
@@ -1445,11 +1546,11 @@ export function App() {
               onCollapse={() => {
                 expandedAtCollapseRef.current = inspectorExpandedRef.current;
                 setChangesPanelCollapsed(true);
-                setTimeout(() => setChangesAnimating(false), panelEaseMs());
+                setTimeout(() => setChangesAnimating(false), easeNow());
               }}
               onExpand={() => {
                 setChangesPanelCollapsed(false);
-                setTimeout(() => setChangesAnimating(false), panelEaseMs());
+                setTimeout(() => setChangesAnimating(false), easeNow());
                 // The panel comes back at the width it collapsed from, unless
                 // it went narrow or expanded meanwhile, or the layout was
                 // saved expanded (Dash quit with the editor shown).
@@ -1470,7 +1571,9 @@ export function App() {
                   keyboard; Monaco and xterm re-lay out once shown. */}
               {/* Held at the expanded width while it eases (`sidebarMotion`),
                   clipped here (the panel itself would scroll). */}
-              <div className="h-full overflow-hidden">
+              {/* `overflow-clip`, not hidden: a clip can't be scrolled, so the
+                  editor taking focus mid-motion can't slide the held layout. */}
+              <div className="h-full overflow-clip">
                 <div
                   ref={inspectorBodyRef}
                   className={cn(
@@ -1494,7 +1597,7 @@ export function App() {
                     paces={paces}
                     contextUsage={contextUsage[activeTask.id]}
                     diff={inlineEditor?.target ?? null}
-                    expanded={expanded}
+                    expanded={expanded || expandedShown}
                     motion={sidebarMotion}
                     onEditorMounted={handleEditorMounted}
                     terminalTheme={resolvedTerminalTheme}
