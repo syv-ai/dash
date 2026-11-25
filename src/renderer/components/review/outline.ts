@@ -193,6 +193,19 @@ export function threadHeadline(t: PrReviewThread): string {
   );
 }
 
+/** A folded thread's tally: "2 replies · 1 draft · Resolved", each part
+ *  only when it applies ('' for a lone open comment). */
+export function threadTally(t: PrReviewThread, drafts: number): string {
+  const replies = Math.max(0, t.comments.length - 1);
+  return [
+    replies > 0 ? `${replies} ${replies === 1 ? 'reply' : 'replies'}` : '',
+    drafts > 0 ? `${drafts} ${drafts === 1 ? 'draft' : 'drafts'}` : '',
+    t.resolved ? 'Resolved' : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
 /** Where a thread sits, split for a narrow row: the file's name with its
  *  line(s) ("a.ts:3-5", "a.ts (outdated)"), and its folder ("" at the root). */
 export function threadPlace(t: PrReviewThread): { name: string; dir: string } {

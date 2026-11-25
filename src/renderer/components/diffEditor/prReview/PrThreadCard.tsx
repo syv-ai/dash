@@ -1,114 +1,51 @@
 import { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import {
-  Check,
-  ChevronDown,
-  CircleCheck,
-  ExternalLink,
-  Pencil,
-  Reply,
-  RotateCcw,
-  Send,
-  Trash2,
-} from 'lucide-react';
-import type { DiffComment, PrProvider, PrReviewThread } from '../../../../shared/types';
-import { Button } from '../../ui/Button';
-import { IconButton } from '../../ui/IconButton';
+import { Bot, CircleCheck, Reply, RotateCcw } from 'lucide-react';
+import type { DiffComment, PrReviewThread } from '../../../../shared/types';
 import { replyAnchor } from '../../../../shared/diffComments';
 import { useCommentsStore } from '../../../stores/commentsStore';
-import { threadLocation } from '../../../utils/prReviewNotices';
+import { Composer } from '../../review/DraftActions';
+import { threadHeadline, threadPlace, threadTally } from '../../review/outline';
+import { Avatar } from '../../ui/Avatar';
+import { Button } from '../../ui/Button';
+import { Card } from '../../ui/Card';
+import { DisclosureButton } from '../../ui/DisclosureButton';
+import { IconButton } from '../../ui/IconButton';
+import { TextLink } from '../../ui/TextLink';
 import { CommentInputBar } from '../comments/CommentInputBar';
-import { Markdown } from '../../ui/Markdown';
-import { providerName } from '../../review/labels';
-import type { ReplyPoster } from '../../../stores/prReviewStore';
-import { PostReplyButtons } from './PostReplyButtons';
-
-interface Props {
-  thread: PrReviewThread;
-  provider: PrProvider;
-  /** The PR's draft scope, or null when there's no task to own drafts. */
-  draftScope: string | null;
-  /** Show the file and line above the comments (for threads listed off the code). */
-  showLocation?: boolean;
-  onSend: (thread: PrReviewThread) => void;
-  onSetResolved: (thread: PrReviewThread, resolved: boolean) => void;
-  /** On the own PR: where draft replies post from (Post reply / Post & resolve). */
-  replyPoster?: ReplyPoster | null;
-}
+import { DraftComment, PostedComment } from './PrComment';
+import type { PrThreadContext } from './usePrThreadContext';
 
 const EMPTY: DiffComment[] = [];
 
-/** The composer, sized for a card (CommentInputBar fills its container). */
-function Composer(props: {
-  initialText: string;
-  onSubmit: (t: string) => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="mt-2.5 flex flex-col gap-2 rounded-lg border border-edge/10 bg-[hsl(var(--surface-1))] px-2.5 py-2">
-      <CommentInputBar lineRange={null} placeholder="Reply…" submitLabel="Save draft" {...props} />
-    </div>
-  );
-}
-
-/** One of the task's unsent replies to the thread; on the own PR, postable. */
-function ReplyDraft({ draft, poster }: { draft: DiffComment; poster: ReplyPoster | null }) {
-  const [editing, setEditing] = useState(false);
-  if (editing) {
-    return (
-      <Composer
-        initialText={draft.text}
-        onSubmit={(text) => {
-          useCommentsStore.getState().updateText(draft.id, text);
-          setEditing(false);
-        }}
-        onCancel={() => setEditing(false)}
-      />
-    );
-  }
-  return (
-    // A reply is a comment: a solid rule (D10), never a note's dashed one.
-    <div className="min-w-0 rounded-lg border border-line px-2.5 py-2">
-      <div className="flex items-center gap-1.5 text-xs text-muted-fade-70">
-        <span className="font-medium text-primary">Draft reply</span>
-        {draft.author === 'agent' && <span>· by the agent</span>}
-        <span className="flex-1" />
-        <IconButton title="Edit draft" size="sm" onClick={() => setEditing(true)}>
-          <Pencil size={14} strokeWidth={1.8} />
-        </IconButton>
-        <IconButton
-          title="Delete draft"
-          size="sm"
-          onClick={() => useCommentsStore.getState().remove(draft.id)}
-        >
-          <Trash2 size={14} strokeWidth={1.8} />
-        </IconButton>
-      </div>
-      <Markdown text={draft.text} className="text-foreground" />
-      {poster && (
-        <div className="mt-2 flex justify-end gap-1">
-          <PostReplyButtons draft={draft} poster={poster} />
-        </div>
-      )}
-    </div>
-  );
-}
-
 /**
- * One PR review thread: its comments, the task's draft replies, a reply box,
- * Resolve / Reactivate, and "Send to task". A resolved thread starts collapsed
- * to a one-line pill and expands on click.
+ * One PR review thread, the same card under its line in the editor and in
+ * the Comments tab: a header (fold, status, where, Ask agent), then its
+ * posted comments, the task's draft replies (marked not posted), a reply
+ * box, and Reply / Resolve. Folded, it shows who started it, its first line
+ * and how many replies follow.
  */
 export function PrThreadCard({
   thread,
-  provider,
-  draftScope,
-  showLocation,
-  onSend,
-  onSetResolved,
-  replyPoster = null,
-}: Props) {
-  const [expanded, setExpanded] = useState(false);
+  context,
+  defaultOpen,
+  elevated = false,
+  showLocation = false,
+  onOpenLocation,
+}: {
+  thread: PrReviewThread;
+  context: PrThreadContext;
+  /** Open on first render; a resolved thread usually starts folded. */
+  defaultOpen: boolean;
+  /** Drawn over the code: the floating shadow. */
+  elevated?: boolean;
+  /** Listed off the code: the header names its file and line. */
+  showLocation?: boolean;
+  /** Opens its file at its line, from the named place (a thread on a line). */
+  onOpenLocation?: () => void;
+}) {
+  const { draftScope, replyPoster, mentions } = context;
+  const [open, setOpen] = useState(defaultOpen);
   const [replying, setReplying] = useState(false);
   const drafts = useCommentsStore(
     useShallow((s) =>
@@ -121,26 +58,7 @@ export function PrThreadCard({
         : EMPTY,
     ),
   );
-  const url = thread.comments[0]?.url;
-  const n = thread.comments.length;
-
-  if (thread.resolved && !expanded) {
-    return (
-      <button
-        type="button"
-        onClick={() => setExpanded(true)}
-        className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-edge/10 bg-[hsl(var(--surface-2))] px-2.5 py-1 text-xs text-muted-fade-70 shadow-sm shadow-shade/10 hover:text-foreground transition-colors"
-      >
-        <CircleCheck size={14} strokeWidth={1.8} className="shrink-0" />
-        <span className="truncate">
-          Resolved · @{thread.comments[0]?.author ?? 'ghost'} · {n}{' '}
-          {n === 1 ? 'comment' : 'comments'}
-          {drafts.length > 0 ? ` · ${drafts.length} draft` : ''}
-          {showLocation ? ` · ${threadLocation(thread)}` : ''}
-        </span>
-      </button>
-    );
-  }
+  const first = thread.comments[0];
 
   const addReply = (text: string) => {
     if (!draftScope) return;
@@ -154,73 +72,116 @@ export function PrThreadCard({
     setReplying(false);
   };
 
+  const author = first?.author ?? 'ghost';
+  const place = showLocation ? threadPlace(thread).name : null;
+  const tally = [threadTally(thread, drafts.length), place].filter(Boolean).join(' · ');
   return (
-    <div className="rounded-xl border border-edge/10 bg-[hsl(var(--surface-2))] shadow-lg shadow-shade/20 px-3.5 py-3 text-sm leading-normal">
-      {(showLocation || thread.resolved) && (
-        <div className="mb-2 flex items-center gap-1.5 text-xs text-muted-fade-70">
-          {thread.resolved && (
-            <button
-              type="button"
-              onClick={() => setExpanded(false)}
-              className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
-            >
-              <CircleCheck size={14} strokeWidth={1.8} />
-              Resolved
-              <ChevronDown size={14} strokeWidth={1.8} />
-            </button>
+    <Card elevated={elevated} padding="none" aria-label={`Thread by ${author}`}>
+      <header className="flex min-w-0 items-start gap-1.5 p-1.5">
+        <DisclosureButton open={open} onOpenChange={setOpen}>
+          {open ? (
+            <span className="flex h-7 items-center">
+              <ThreadStatus resolved={thread.resolved} />
+            </span>
+          ) : (
+            <span className="flex min-w-0 flex-1 items-start gap-2.5 pb-1">
+              <span className="flex h-7 items-center">
+                <Avatar name={author} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex h-7 min-w-0 items-center gap-2">
+                  <span className="type-heading shrink-0">{author}</span>
+                  {tally && <span className="type-caption truncate tabular-nums">{tally}</span>}
+                </span>
+                <span className="type-body line-clamp-2 wrap-break-word">
+                  {threadHeadline(thread) || '(no text)'}
+                </span>
+              </span>
+            </span>
           )}
-          {showLocation && <span className="truncate">{threadLocation(thread)}</span>}
-        </div>
-      )}
-      <div className="flex flex-col gap-2.5">
-        {thread.comments.map((c) => (
-          <div key={c.id} className="min-w-0">
-            <div className="text-xs font-medium text-fg-fade-80">@{c.author}</div>
-            <Markdown text={c.body.trim()} className="text-foreground" />
-          </div>
-        ))}
-        {drafts.map((d) => (
-          <ReplyDraft key={d.id} draft={d} poster={replyPoster} />
-        ))}
-      </div>
-      {replying && (
-        <Composer initialText="" onSubmit={addReply} onCancel={() => setReplying(false)} />
-      )}
-      <div className="mt-2.5 flex items-center justify-end gap-1">
-        {url && (
-          <IconButton
-            title={`Open on ${providerName(provider)}`}
-            size="sm"
-            onClick={() => void window.electronAPI.openExternal(url)}
-          >
-            <ExternalLink size={14} strokeWidth={1.8} />
-          </IconButton>
+        </DisclosureButton>
+        {open && place && (
+          <span className="type-caption flex h-8 min-w-0 items-center truncate" title={thread.path}>
+            {onOpenLocation ? (
+              <TextLink quiet title={`Open ${thread.path} there`} onClick={onOpenLocation}>
+                {place}
+              </TextLink>
+            ) : (
+              place
+            )}
+          </span>
         )}
         <IconButton
-          title={thread.resolved ? 'Reactivate thread' : 'Resolve thread'}
-          aria-label={thread.resolved ? 'Reactivate thread' : 'Resolve thread'}
           size="sm"
-          onClick={() => onSetResolved(thread, !thread.resolved)}
+          className="mt-1"
+          title="Ask agent"
+          description="Type this thread into the task's prompt"
+          onClick={() => context.ask(thread)}
         >
-          {thread.resolved ? (
-            <RotateCcw size={14} strokeWidth={1.8} />
-          ) : (
-            <Check size={14} strokeWidth={1.8} />
-          )}
+          <Bot size={14} strokeWidth={1.8} />
         </IconButton>
-        {draftScope && !replying && (
-          <Button variant="secondary" size="sm" onClick={() => setReplying(true)}>
-            <Reply size={14} strokeWidth={1.8} />
-            Reply
-          </Button>
-        )}
-        {!thread.resolved && (
-          <Button variant="secondary" size="sm" onClick={() => onSend(thread)}>
-            <Send size={14} strokeWidth={1.8} />
-            Send to task
-          </Button>
-        )}
-      </div>
-    </div>
+      </header>
+      {open && (
+        <div className="grid gap-4 border-t border-line px-4 pt-3.5 pb-3">
+          {thread.comments.map((c) => (
+            <PostedComment key={c.id} comment={c} context={context} />
+          ))}
+          {drafts.map((d) => (
+            <div key={d.id} className="rounded-lg border border-line bg-well p-3">
+              <DraftComment draft={d} poster={replyPoster} mentions={mentions} />
+            </div>
+          ))}
+          {replying && (
+            <Composer>
+              <CommentInputBar
+                lineRange={null}
+                initialText=""
+                placeholder="Reply… (@ to mention)"
+                submitLabel="Save draft"
+                mentions={mentions}
+                onSubmit={addReply}
+                onCancel={() => setReplying(false)}
+              />
+            </Composer>
+          )}
+          <footer className="flex flex-wrap items-center gap-1.5">
+            {draftScope && !replying && (
+              <Button variant="secondary" size="sm" onClick={() => setReplying(true)}>
+                <Reply size={14} strokeWidth={1.8} />
+                Reply
+              </Button>
+            )}
+            <span className="flex-1" />
+            {thread.resolved ? (
+              <Button variant="ghost" size="sm" onClick={() => context.setResolved(thread, false)}>
+                <RotateCcw size={14} strokeWidth={1.8} />
+                Reactivate
+              </Button>
+            ) : (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => context.setResolved(thread, true)}
+              >
+                <CircleCheck size={14} strokeWidth={1.8} />
+                Resolve
+              </Button>
+            )}
+          </footer>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** Open or Resolved, in words with its icon: neutral, as every non-agent state. */
+function ThreadStatus({ resolved }: { resolved: boolean }) {
+  return resolved ? (
+    <span className="type-label inline-flex items-center gap-1">
+      <CircleCheck size={14} strokeWidth={1.8} className="text-icon" />
+      Resolved
+    </span>
+  ) : (
+    <span className="type-label">Open thread</span>
   );
 }

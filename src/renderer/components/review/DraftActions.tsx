@@ -1,3 +1,4 @@
+import type * as React from 'react';
 import { Bot, Pencil, Trash2 } from 'lucide-react';
 import { canDemote } from '../../../shared/diffComments';
 import type { DiffComment } from '../../../shared/types';
@@ -38,12 +39,22 @@ export function DraftActions({ comment: c, onEdit }: { comment: DiffComment; onE
 }
 
 /** A draft's text in the composer, in a well: Save keeps it a draft. */
-export function DraftEditor({ comment: c, onDone }: { comment: DiffComment; onDone: () => void }) {
+export function DraftEditor({
+  comment: c,
+  mentions,
+  onDone,
+}: {
+  comment: DiffComment;
+  /** Who `@` completes from. */
+  mentions?: readonly string[];
+  onDone: () => void;
+}) {
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-line bg-well px-2.5 py-2">
+    <Composer>
       <CommentInputBar
         lineRange={null}
         initialText={c.text}
+        mentions={mentions}
         submitLabel="Save"
         onSubmit={(text) => {
           useCommentsStore.getState().updateText(c.id, text);
@@ -51,6 +62,15 @@ export function DraftEditor({ comment: c, onDone }: { comment: DiffComment; onDo
         }}
         onCancel={onDone}
       />
+    </Composer>
+  );
+}
+
+/** The composer's well, for a draft written or edited in a list or card. */
+export function Composer({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-line bg-well px-3 py-2.5">
+      {children}
     </div>
   );
 }

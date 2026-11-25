@@ -593,16 +593,12 @@ export function EditorPane({
                   </>
                 );
               })()}
-            {isPrView && (
+            {isPrView && pr.threadContext && (
               <PrThreadOverlay
                 threads={pr.inlineThreads}
-                provider={view.kind === 'pr' ? view.provider : 'github'}
-                draftScope={pr.draftScope}
-                onSetResolved={pr.setThreadResolved}
+                context={pr.threadContext}
                 modifiedEditor={modifiedEditor}
                 area={editorAreaEl}
-                onSend={pr.sendThread}
-                replyPoster={pr.replyPoster}
               />
             )}
             <ReviewRail

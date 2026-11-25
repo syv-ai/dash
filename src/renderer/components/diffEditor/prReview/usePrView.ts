@@ -1,12 +1,10 @@
 import { useCallback, useMemo } from 'react';
-import { toast } from 'sonner';
 import type { DiffCommentKind, PrReview, PrReviewThread } from '../../../../shared/types';
 import { useCommentsStore } from '../../../stores/commentsStore';
-import { prKey, usePrReviews, type ReplyPoster } from '../../../stores/prReviewStore';
-import { buildReviewPrompt } from '../../../utils/agentPrompt';
-import { typeIntoTask } from '../../../utils/typeIntoTask';
+import { prKey, usePrReviews } from '../../../stores/prReviewStore';
 import type { EditorView } from '../types';
 import { composerKind, isInlineThread } from './prViewPolicy';
+import { usePrThreadContext, type PrThreadContext } from './usePrThreadContext';
 
 export interface PrView {
   /** The PR's review as last fetched; null outside a PR view, or until loaded. */
@@ -22,11 +20,8 @@ export interface PrView {
   inlineThreads: PrReviewThread[];
   /** A note can be promoted to a PR comment here. */
   canPromote: boolean;
-  setThreadResolved: (thread: PrReviewThread, resolved: boolean) => void;
-  /** Type a thread into the task's prompt ("Ask agent"). */
-  sendThread: (thread: PrReviewThread) => void;
-  /** On the own PR, with a task to own drafts: where draft replies post from. */
-  replyPoster: ReplyPoster | null;
+  /** What the thread cards under the lines work with; null until the review loads. */
+  threadContext: PrThreadContext | null;
 }
 
 /**
@@ -66,33 +61,15 @@ export function usePrView({
     [review, filePath, isFileLoaded],
   );
 
-  const setThreadResolved = useCallback(
-    async (thread: PrReviewThread, resolved: boolean) => {
-      if (!review || !projectId) return;
-      const r = await usePrReviews
-        .getState()
-        .setResolved(projectId, cwd, review, thread.id, resolved);
-      if (!r.ok) {
-        const why = r.error.kind === 'other' ? r.error.message : 'the PR refused the change';
-        toast.error(`Could not ${resolved ? 'resolve' : 'reactivate'} the thread: ${why}`);
-      }
-    },
-    [review, projectId, cwd],
-  );
-  const sendThread = useCallback(
-    (thread: PrReviewThread) => {
-      if (activeTaskId && review)
-        void typeIntoTask(activeTaskId, buildReviewPrompt(review, [thread]));
-    },
-    [activeTaskId, review],
-  );
-  const replyPoster = useMemo<ReplyPoster | null>(
-    () =>
-      review?.viewerIsAuthor && projectId && activeTaskId && !commentsDisabled
-        ? { projectId, cwd, taskId: activeTaskId, review }
-        : null,
-    [review, projectId, cwd, activeTaskId, commentsDisabled],
-  );
+  // PR drafts need a task to own them.
+  const draftScope = review && !commentsDisabled ? scope : null;
+  const threadContext = usePrThreadContext({
+    review,
+    projectId,
+    cwd,
+    taskId: activeTaskId,
+    draftScope,
+  });
   const setNewKind = useCallback(
     (kind: DiffCommentKind) => {
       if (view.kind === 'pr') usePrReviews.getState().pickKind(view.provider, view.number, kind);
@@ -109,12 +86,9 @@ export function usePrView({
       picked,
     }),
     setNewKind: isPrView ? setNewKind : null,
-    // PR drafts need a task to own them.
-    draftScope: review && !commentsDisabled ? scope : null,
+    draftScope,
     inlineThreads,
     canPromote: isPrView && !commentsDisabled,
-    setThreadResolved: (t, r) => void setThreadResolved(t, r),
-    sendThread,
-    replyPoster,
+    threadContext,
   };
 }

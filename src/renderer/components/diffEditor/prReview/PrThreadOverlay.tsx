@@ -1,28 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
-import type { PrProvider, PrReviewThread } from '../../../../shared/types';
-import type { ReplyPoster } from '../../../stores/prReviewStore';
+import type { PrReviewThread } from '../../../../shared/types';
 import { PrThreadCard } from './PrThreadCard';
+import type { PrThreadContext } from './usePrThreadContext';
 
 const PAD_PX = 8;
 // Before a card is measured: close enough that the first paint barely shifts.
 const INITIAL_HEIGHT_PX = 120;
-// A resolved thread starts as a one-line pill.
-const INITIAL_PILL_PX = 28;
+// A resolved thread starts folded to its one-line header.
+const INITIAL_FOLDED_PX = 44;
 const MIN_CARD_PX = 320;
 const MAX_CARD_PX = 640;
 
 interface Props {
   /** Threads on this file's PR-side lines (`line` set, side RIGHT). */
   threads: PrReviewThread[];
-  provider: PrProvider;
-  draftScope: string | null;
-  onSetResolved: (thread: PrReviewThread, resolved: boolean) => void;
+  context: PrThreadContext;
   modifiedEditor: monacoEditor.ICodeEditor | null;
   area: HTMLDivElement | null;
-  onSend: (thread: PrReviewThread) => void;
-  /** On the own PR: where draft replies post from. */
-  replyPoster: ReplyPoster | null;
 }
 
 /**
@@ -31,16 +26,7 @@ interface Props {
  * the editor area, moved to the zone's top from Monaco's layout callback (the
  * pattern the local comment bubbles use, minus editing and animation).
  */
-export function PrThreadOverlay({
-  threads,
-  provider,
-  draftScope,
-  onSetResolved,
-  modifiedEditor,
-  area,
-  onSend,
-  replyPoster,
-}: Props) {
+export function PrThreadOverlay({ threads, context, modifiedEditor, area }: Props) {
   const wrappers = useRef(new Map<string, HTMLDivElement>());
   const tops = useRef(new Map<string, number>());
   const zones = useRef(new Map<string, { id: string; zone: monacoEditor.IViewZone }>());
@@ -68,7 +54,7 @@ export function PrThreadOverlay({
         const zone: monacoEditor.IViewZone = {
           afterLineNumber: t.line ?? 0,
           heightInPx:
-            (heights.current.get(t.id) ?? (t.resolved ? INITIAL_PILL_PX : INITIAL_HEIGHT_PX)) +
+            (heights.current.get(t.id) ?? (t.resolved ? INITIAL_FOLDED_PX : INITIAL_HEIGHT_PX)) +
             PAD_PX * 2,
           domNode: Object.assign(document.createElement('div'), { style: 'pointer-events:none' }),
           onDomNodeTop: (top) => {
@@ -142,14 +128,7 @@ export function PrThreadOverlay({
           className="absolute pointer-events-auto"
           style={{ top: -9999, left, width }}
         >
-          <PrThreadCard
-            thread={t}
-            provider={provider}
-            draftScope={draftScope}
-            onSend={onSend}
-            onSetResolved={onSetResolved}
-            replyPoster={replyPoster}
-          />
+          <PrThreadCard thread={t} context={context} elevated defaultOpen={!t.resolved} />
         </div>
       ))}
     </div>

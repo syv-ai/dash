@@ -6,6 +6,7 @@ import { BubbleShell } from './BubbleShell';
 import { Markdown } from '../../ui/Markdown';
 import { Badge } from '../../ui/Badge';
 import { IconButton } from '../../ui/IconButton';
+import { DraftBadge } from '../prReview/PrComment';
 
 interface Props {
   shade: Shade;
@@ -144,6 +145,8 @@ export function CommentBubble({
           <div className="mb-0.5 flex items-center gap-1.5">
             <KindLabel kind={kind} />
             <span className="type-caption tabular-nums">{meta}</span>
+            {/* A comment for the author is only here until the review posts. */}
+            {kind === 'comment' && <DraftBadge />}
             {scopeLabel && <Badge size="sm">{scopeLabel}</Badge>}
             {byAgent && <Badge size="sm">Agent</Badge>}
             {sent && <Badge size="sm">Sent</Badge>}

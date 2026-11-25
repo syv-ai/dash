@@ -18,6 +18,7 @@ import {
   reviewTally,
   threadHeadline,
   threadPlace,
+  threadTally,
   threadRange,
   trayNotes,
   treeBadges,
@@ -160,6 +161,22 @@ describe('commentGroups', () => {
   it('keeps a reply whose thread is gone as its own draft row', () => {
     const g = commentGroups([], [draft('lost', { replyTo: 'gone' })]);
     expect(g.unresolved).toEqual([{ kind: 'draft', draft: draft('lost', { replyTo: 'gone' }) }]);
+  });
+});
+
+describe('threadTally', () => {
+  const two = thread('T', { comments: [...thread('a').comments, ...thread('b').comments] });
+
+  it('counts replies after the first comment, drafts, and says resolved', () => {
+    expect(threadTally(two, 0)).toBe('1 reply');
+    expect(threadTally(two, 2)).toBe('1 reply · 2 drafts');
+    expect(threadTally({ ...two, resolved: true }, 1)).toBe('1 reply · 1 draft · Resolved');
+  });
+
+  it('is empty for a lone open comment', () => {
+    expect(threadTally(thread('T'), 0)).toBe('');
+    const three = thread('T', { comments: [...two.comments, ...thread('c').comments] });
+    expect(threadTally(three, 0)).toBe('2 replies');
   });
 });
 
