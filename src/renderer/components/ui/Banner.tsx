@@ -10,7 +10,8 @@ import { prStatusTint } from './prStatusColors';
  * optional leading icon, the label, and a ✕ that ends it (its tooltip names
  * what ✕ does). Neutral (the select tint) or, with `tone`, a PR state's
  * GitHub colour as a tint with its text; icon and ✕ take the text's colour.
- * 32px high, rounded-lg as a row.
+ * The label is a `type-heading`; a tone's colour replaces its ink, the one
+ * colour beside a type role (D133's exception). 32px high, rounded-lg as a row.
  */
 export function Banner({
   icon,
@@ -33,7 +34,7 @@ export function Banner({
     <div
       role="status"
       className={cn(
-        'flex h-8 min-w-0 items-center gap-1.5 rounded-lg bg-select pr-1 pl-2.5 text-sm font-medium text-ink [&_svg]:shrink-0',
+        'type-heading flex h-8 min-w-0 items-center gap-1.5 rounded-lg bg-select pr-1 pl-2.5 [&_svg]:shrink-0',
         tone && prStatusTint(tone),
         className,
       )}

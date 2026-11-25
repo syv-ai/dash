@@ -79,7 +79,7 @@ function Reviewers({ reviewers }: { reviewers: PrReviewer[] }) {
     <div className="grid gap-0.5">
       {reviewerGroups(reviewers).map((g) => (
         <p key={g.lead}>
-          <span className="text-ink-2">{g.lead}</span>{' '}
+          <span className="type-label">{g.lead}</span>{' '}
           {g.reviewers.map((r, i) => (
             <Fragment key={r.name}>
               {i > 0 && ', '}

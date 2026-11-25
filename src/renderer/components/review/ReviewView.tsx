@@ -11,6 +11,7 @@ import type { CodeSegment } from '../rightInspector/sidebarState';
 import { Button } from '../ui/Button';
 import { DockedPanel } from '../ui/DockedPanel';
 import { EmptyState } from '../ui/EmptyState';
+import { Notice } from '../ui/Notice';
 import { finishOffered, unsentNoteCount } from './finishReview';
 import { FinishReviewSheet } from './FinishReviewSheet';
 import { communicationCounts } from './labels';
@@ -130,13 +131,9 @@ function Review({
           onShowCommits={onShowCommits}
         />
         {notice && (
-          <p
-            className="type-caption mx-2.5 my-1 flex items-start gap-2 rounded-lg border border-line bg-well px-2.5 py-1.5"
-            role="status"
-          >
-            <GitCompareArrows size={14} strokeWidth={1.8} className="shrink-0" />
-            <span className="min-w-0 flex-1 tabular-nums">{notice}</span>
-          </p>
+          <Notice icon={<GitCompareArrows size={14} strokeWidth={1.8} />} className="mx-2.5 my-1">
+            {notice}
+          </Notice>
         )}
         <div className="min-h-0 flex-1">
           {tab === 'overview' ? (

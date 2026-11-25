@@ -105,7 +105,7 @@ function PrGroup({
           onSelect={() => onPick(p)}
           description={`${p.author ? `@${p.author} · ` : ''}${p.headRefName} → ${p.baseRefName}`}
         >
-          <span className="shrink-0 text-ink-3 tabular-nums">#{p.number}</span>
+          <span className="type-label shrink-0 tabular-nums">#{p.number}</span>
           <span className="truncate">{p.title}</span>
         </CommandItem>
       ))}

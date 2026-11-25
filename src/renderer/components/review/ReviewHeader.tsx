@@ -60,7 +60,7 @@ export function ReviewHeader({
           <TextLink href={review.url} quiet title={`Open on ${providerName(review.provider)}`}>
             {review.title}
           </TextLink>{' '}
-          <span className="text-ink-3 tabular-nums">#{review.number}</span>
+          <span className="type-label tabular-nums">#{review.number}</span>
         </h2>
         <IconButton
           size="sm"
