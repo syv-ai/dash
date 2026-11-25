@@ -11,9 +11,10 @@
      icons (between ink-2 and ink-3), hover/select = row states,
      btn/btn-ink = the neutral primary button. Colour means agent
      state only: needs (amber), fail (red), work (blue), done (green).
-     Contrast floor, both themes, on ground and well: ink-2 ≥ 4.5:1 (body
-     text), ink-3 ≥ 3:1 (faint text); icon ≥ 4:1 (dark ≥ 5.3:1 on every
-     surface). */
+     Contrast floor, both themes, on ground, well and raised: ink-2 ≥ 4.5:1
+     (body text), ink-3 ≥ 3:1 (faint text), icon ≥ 4:1. Dark sits well above
+     it (ink-2 ≥ 8.8, icon ≥ 7.3, ink-3 ≥ 5.3): near-black ground makes thin
+     grey text look fainter than its ratio says. */
   --color-ground: hsl(var(--ground));
   --color-well: hsl(var(--well));
   --color-raised: hsl(var(--raised));
@@ -260,10 +261,12 @@
     --raised: 220 5% 9.5%;
     --line: 0 0% 100% / 0.06;
     --ink: 220 6% 91%;
-    --ink-2: 220 5% 63%;
-    --ink-3: 220 4% 47%;
-    /* 6.0:1 on ground, 5.7:1 on well, 5.4:1 on raised (ink-3: 4.4 / 4.2 / 3.9). */
-    --icon: 220 4.5% 56%;
+    /* On ground / well / raised — ink-2 9.8 / 9.4 / 8.8, icon 8.2 / 7.9 / 7.4,
+       ink-3 6.0 / 5.7 / 5.4 (were ink-2 7.5 / 7.2 / 6.7, icon 6.0 / 5.7 / 5.4,
+       ink-3 4.4 / 4.2 / 3.9: compliant, yet too faint to read). */
+    --ink-2: 220 5% 72%;
+    --ink-3: 220 4% 56%;
+    --icon: 220 4.5% 66%;
     --hover: 0 0% 100% / 0.035;
     --select: 0 0% 100% / 0.06;
     --btn: 220 6% 91%;
@@ -293,8 +296,8 @@
 
     --shadow-card: 0 0 0 1px hsl(var(--line)), 0 12px 28px hsl(0 0% 0% / 0.45);
 
-    /* 8.7:1 on ground, 8.4:1 on well (was 4.9 / 4.7, too dim to scan). */
-    --git-untracked: 220 5% 68%;
+    /* 12.2:1 on ground, 11.7:1 on well: between ink and ink-2, as in light. */
+    --git-untracked: 220 5% 80%;
     --git-conflicted: 25 85% 60%;
     --pr-merged: 262 70% 72%;
 
