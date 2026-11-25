@@ -74,13 +74,18 @@ export function threadsLine(threads: readonly Pick<PrReviewThread, 'resolved'>[]
 export const prDateTime = (iso: string, clock?: ClockOptions): string =>
   formatResetAt(Math.floor(Date.parse(iso) / 1000) || 0, clock);
 
-/** The Communication bar's counts: "5 open · 2 drafts · 1 note", the empty
- *  ones left out; '' with nothing in it. */
-export const communicationCounts = (n: { open: number; drafts: number; notes: number }): string =>
+/** Communication's counts, read one way in its bar ("5 open · 2 drafts ·
+ *  1 note") and in each of its sections ("Your drafts · 2 drafts"): the
+ *  empty or absent ones left out; '' with nothing to count. */
+export const communicationCounts = (n: {
+  open?: number;
+  drafts?: number;
+  notes?: number;
+}): string =>
   [
-    n.open > 0 && `${n.open} open`,
-    n.drafts > 0 && plural(n.drafts, 'draft'),
-    n.notes > 0 && plural(n.notes, 'note'),
+    !!n.open && `${n.open} open`,
+    !!n.drafts && plural(n.drafts, 'draft'),
+    !!n.notes && plural(n.notes, 'note'),
   ]
     .filter(Boolean)
     .join(' · ');

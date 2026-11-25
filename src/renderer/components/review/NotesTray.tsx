@@ -10,6 +10,7 @@ import { DetailSection } from '../ui/DetailList';
 import { Expandable } from '../ui/Expandable';
 import { IconButton } from '../ui/IconButton';
 import { ListRow } from '../ui/ListRow';
+import { communicationCounts } from './labels';
 import { groupByPath, lineLabel, trayNotes } from './outline';
 import { rowAction, rowKeys } from './rowAction';
 
@@ -36,6 +37,7 @@ export function NotesTray({
   return (
     <DetailSection
       title="Notes to agent"
+      summary={communicationCounts({ notes: unsent.length })}
       collapsible
       action={
         unsent.length > 0 && (

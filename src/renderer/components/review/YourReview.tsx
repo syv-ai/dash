@@ -8,6 +8,7 @@ import { Badge } from '../ui/Badge';
 import { DetailSection } from '../ui/DetailList';
 import { ListRow } from '../ui/ListRow';
 import { DraftActions, DraftEditor } from './DraftActions';
+import { communicationCounts } from './labels';
 import { groupByPath, lineLabel } from './outline';
 import { rowKeys } from './rowAction';
 
@@ -41,7 +42,11 @@ export function YourReview({
     : null;
 
   return (
-    <DetailSection title="Your drafts" summary={`${comments.length}`} collapsible>
+    <DetailSection
+      title="Your drafts"
+      summary={communicationCounts({ drafts: comments.length })}
+      collapsible
+    >
       {groupByPath(comments).map(([path, list]) => (
         <div key={path} className="grid gap-px">
           <h4 className="type-subheading truncate px-2.5 pt-1" title={path}>

@@ -13,6 +13,7 @@ import { DetailSection } from '../ui/DetailList';
 import { Expandable } from '../ui/Expandable';
 import { IconButton } from '../ui/IconButton';
 import { ListRow } from '../ui/ListRow';
+import { communicationCounts } from './labels';
 import { threadGroups, threadHeadline, threadPlace } from './outline';
 import { rowAction, rowKeys } from './rowAction';
 
@@ -69,7 +70,7 @@ export function ReviewThreads({
   return (
     <DetailSection
       title="Threads"
-      summary={`${groups.unresolved.length + groups.offCode.length} open`}
+      summary={communicationCounts({ open: groups.unresolved.length + groups.offCode.length })}
       collapsible
     >
       <ThreadGroup title="Unresolved" threads={groups.unresolved} {...actions} />
