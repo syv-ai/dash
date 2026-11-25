@@ -79,8 +79,12 @@ const TUI_PANEL_WIDTH_SCALE = 0.85;
  *  widest a narrow sidebar opens at. */
 const TUI_PANEL_MIN_PCT = 14;
 const TUI_PANEL_MAX_PCT = 40;
-/** The task sidebar's widest (expanded). */
-const INSPECTOR_MAX_PCT = 65;
+/** The task sidebar's widest (expanded): wide enough that the centre can go
+ *  down to its own floor, MAIN_MIN_PX, beside a review. */
+const INSPECTOR_MAX_PCT = 85;
+/** The centre (the agent's terminal) at its narrowest, in px: its header's
+ *  name, branch and actions still fit, and the TUI reflows to it. */
+const MAIN_MIN_PX = 280;
 /** The shell group's panels; the task sidebar mounts only with an active task. */
 const SHELL_PANELS = ['sidebar', 'main'];
 const SHELL_PANELS_TASK = ['sidebar', 'main', 'changes'];
@@ -1327,7 +1331,11 @@ export function App() {
         </ResizablePanel>
         <ResizableHandle disabled={sidebarCollapsed} />
 
-        <ResizablePanel id="main" animate={sidebarAnimating || changesAnimating} minSize="20%">
+        <ResizablePanel
+          id="main"
+          animate={sidebarAnimating || changesAnimating}
+          minSize={MAIN_MIN_PX}
+        >
           <MainContent
             activeTask={activeTask}
             activeProject={activeProject}
