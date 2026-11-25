@@ -49,6 +49,14 @@ export function formatSpan(ms: number): string {
   return h % 24 > 0 ? `${d}d ${h % 24}h` : `${d}d`;
 }
 
+/** What "TTR" stands for, for a tooltip that shows one. */
+export const TTR_MEANING = 'TTR = Time To Reset.';
+
+/** The time to a reset `ms` ahead, "TTR 2d 20h"; "TTR now" once it is due. */
+export function formatTtr(ms: number): string {
+  return ms <= 0 ? 'TTR now' : `TTR ${formatSpan(ms)}`;
+}
+
 /** Relative reset time from an epoch-seconds timestamp: `now`, `in 30m`, `in 2d 3h`. */
 export function formatResetTime(epochSeconds: number, nowMs = Date.now()): string {
   if (!epochSeconds) return '';

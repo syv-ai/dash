@@ -218,13 +218,13 @@ describe('formatting', () => {
     expect(formatRate(12.6)).toBe('+13%/h');
   });
 
-  it('says when the pace reaches the limit, and when the window resets', () => {
+  it('says when the pace reaches the limit, and the time to its reset', () => {
     const over = { perHour: 20, toLimitMs: 2 * HOUR + 10 * MIN, resetsInMs: 3 * HOUR + 44 * MIN };
     expect(formatProjection({ ...over, atResetPct: 130 })).toBe(
-      "At this rate you'd reach 100% in 2h 10m; resets in 3h 44m",
+      "At this rate you'd reach 100% in 2h 10m; TTR 3h 44m",
     );
     const clear = { perHour: 5, toLimitMs: null, resetsInMs: 3 * HOUR, atResetPct: 61.6 };
-    expect(formatProjection(clear)).toBe("At this rate you'd reach 62% by then; resets in 3h 0m");
+    expect(formatProjection(clear)).toBe("At this rate you'd reach 62% by then; TTR 3h 0m");
     const unknown = { perHour: 5, toLimitMs: 40 * MIN, resetsInMs: null, atResetPct: Infinity };
     expect(formatProjection(unknown)).toBe("At this rate you'd reach 100% in 40m");
   });

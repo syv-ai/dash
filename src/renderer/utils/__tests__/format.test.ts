@@ -5,6 +5,7 @@ import {
   formatDuration,
   formatResetAt,
   formatResetTime,
+  formatTtr,
 } from '../format';
 
 describe('formatTokens', () => {
@@ -133,6 +134,22 @@ describe('formatResetTime with an explicit now', () => {
   it('reads the reset against the given clock, not the system one', () => {
     expect(formatResetTime(now / 1000 + 3 * 3600 + 12 * 60, now)).toBe('in 3h 12m');
     expect(formatResetTime(now / 1000 + 2 * 86400 + 4 * 3600, now)).toBe('in 2d 4h');
+  });
+});
+
+describe('formatTtr', () => {
+  const MIN = 60_000;
+
+  it('reads the span ahead as TTR, to the minute', () => {
+    expect(formatTtr(30 * MIN)).toBe('TTR 30m');
+    expect(formatTtr(3 * 60 * MIN + 12 * MIN)).toBe('TTR 3h 12m');
+    expect(formatTtr((2 * 24 + 20) * 60 * MIN)).toBe('TTR 2d 20h');
+    expect(formatTtr(3 * 24 * 60 * MIN)).toBe('TTR 3d');
+  });
+
+  it('says now once the reset is due or past', () => {
+    expect(formatTtr(0)).toBe('TTR now');
+    expect(formatTtr(-5 * MIN)).toBe('TTR now');
   });
 });
 

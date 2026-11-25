@@ -1,5 +1,5 @@
 import type { ContextUsage, RateLimitInfo, RateLimits } from '../../../shared/types';
-import { formatResetAt, formatResetTime, formatTokens } from '../../utils/format';
+import { formatResetAt, formatTokens, formatTtr, TTR_MEANING } from '../../utils/format';
 import {
   BURN_WINDOW_MS,
   burnOutlook,
@@ -37,10 +37,10 @@ const LIMIT_LABELS: Record<LimitKey, string> = {
 
 /*
  * Fixed-width columns, centred as a group with a fixed gap, each a ring (or
- * the burn's figure) over its label and a limit's reset countdown: an
+ * the burn's figure) over its label and a limit's time to reset: an
  * expanded sidebar leaves them where they are instead of spreading them
  * apart. The row never wraps or overflows: it gives way by its measured
- * width (`fitUsage`), dropping the burn rate, then the rings and countdowns.
+ * width (`fitUsage`), dropping the burn rate, then the rings and TTRs.
  * Details (the exact reset time) live in tooltips at every density.
  */
 const COLUMNS = [
@@ -52,7 +52,7 @@ const COLUMNS = [
 
 /** One column's content: a level (the session's context, a limit) or the burn. */
 type Cell = { key: string; tooltip: RichTooltip; label: string } & (
-  | { kind: 'level'; pct: number | null; aria: string; countdown?: string }
+  | { kind: 'level'; pct: number | null; aria: string; ttr?: string }
   | { kind: 'burn'; rate: string; outlook: BurnOutlook }
 );
 
@@ -67,15 +67,14 @@ const OUTLOOK_TEXT: Record<BurnOutlook, string> = {
 /** One column: the figure on top, its label below, then any caption. Its
  *  tooltip, unless it is a measuring copy (`bare`). */
 function Column({ cell, density, bare }: { cell: Cell; density: UsageDensity; bare?: boolean }) {
-  const caption =
-    cell.kind === 'level' && cell.countdown && density !== 'compact' ? cell.countdown : null;
+  const caption = cell.kind === 'level' && density !== 'compact' ? cell.ttr : undefined;
   const column = (
-    <div className="flex min-w-0 flex-col items-center gap-1">
+    <div className="flex min-w-0 flex-col items-center gap-2">
       <Figure cell={cell} density={density} />
       <span className="flex w-full flex-col items-center">
         <span className="max-w-full truncate type-caption text-ink-2">{cell.label}</span>
         {caption && (
-          <span className="max-w-full truncate type-caption tabular-nums">resets {caption}</span>
+          <span className="max-w-full truncate type-caption tabular-nums">{caption}</span>
         )}
       </span>
     </div>
@@ -86,10 +85,10 @@ function Column({ cell, density, bare }: { cell: Cell; density: UsageDensity; ba
 /** A level as a ring with its percent inside, or (compact) the percent alone,
  *  coloured by how close it is to full; the burn's rate in a ring-sized box. */
 function Figure({ cell, density }: { cell: Cell; density: UsageDensity }) {
-  const figure = 'text-sm font-semibold tabular-nums';
+  const figure = 'text-lg font-semibold tabular-nums';
   if (cell.kind === 'burn') {
     return (
-      <span className={cn('grid size-11 place-items-center', OUTLOOK_TEXT[cell.outlook], figure)}>
+      <span className={cn('grid size-16 place-items-center', OUTLOOK_TEXT[cell.outlook], figure)}>
         {cell.rate}
       </span>
     );
@@ -105,7 +104,7 @@ function Figure({ cell, density }: { cell: Cell; density: UsageDensity }) {
     );
   }
   return (
-    <ProgressRing value={pct} size={44} stroke={4} color={color} aria-label={aria}>
+    <ProgressRing value={pct} size={64} stroke={6} color={color} aria-label={aria}>
       <span className={cn(figure, pct === null ? 'text-ink-3' : 'text-ink')}>{reading}</span>
     </ProgressRing>
   );
@@ -119,15 +118,14 @@ function limitCell(limit: LimitKey, info: RateLimitInfo | undefined, now: number
   const long = LIMIT_LABELS[limit];
   const pct = info ? Math.round(info.usedPercentage) : null;
   const resetsAt = info?.resetsAt ?? 0;
-  const countdown = formatResetTime(resetsAt, now);
+  const ttr = resetsAt ? formatTtr(resetsAt * 1000 - now) : undefined;
   const tooltip: RichTooltip = info
     ? {
         title: `${long} limit`,
+        ...(ttr ? { body: TTR_MEANING } : {}),
         rows: [
           { label: 'Used', value: `${pct}%` },
-          ...(countdown
-            ? [{ label: 'Resets', value: `${formatResetAt(resetsAt)} (${countdown})` }]
-            : []),
+          ...(ttr ? [{ label: 'Resets', value: `${formatResetAt(resetsAt)} (${ttr})` }] : []),
         ],
       }
     : { title: `${long} limit`, body: 'No window running; the next message starts one.' };
@@ -136,7 +134,7 @@ function limitCell(limit: LimitKey, info: RateLimitInfo | undefined, now: number
     kind: 'level',
     pct,
     aria: `${long} limit used`,
-    countdown: countdown || undefined,
+    ttr,
     tooltip,
     label: long,
   };
@@ -185,9 +183,11 @@ function burnRow(limit: LimitKey, burn: Burn | null | undefined) {
 /** The most pressing limit's burn, "+6%/h", coloured by its outlook; both
  *  limits in the tooltip. */
 function burnCell(burns: LimitBurns, burn: Burn): Cell {
-  const rows = (Object.keys(LIMIT_LABELS) as LimitKey[])
-    .filter((k) => k in burns)
-    .map((k) => burnRow(k, burns[k]));
+  const keys = (Object.keys(LIMIT_LABELS) as LimitKey[]).filter((k) => k in burns);
+  const rows = keys.map((k) => burnRow(k, burns[k]));
+  const legend = `Green: the limit resets first. Amber: ${CLOSE_AT_PCT}% or more by the reset. Red: the limit comes first.`;
+  // A row names a TTR wherever its limit's reset is known.
+  const ttr = keys.some((k) => (burns[k]?.resetsInMs ?? null) !== null);
   return {
     key: 'burn',
     kind: 'burn',
@@ -196,7 +196,7 @@ function burnCell(burns: LimitBurns, burn: Burn): Cell {
     label: 'Burn',
     tooltip: {
       title: 'Burn rate',
-      body: `Green: the limit resets first. Amber: ${CLOSE_AT_PCT}% or more by the reset. Red: the limit comes first.`,
+      body: ttr ? `${legend} ${TTR_MEANING}` : legend,
       rows,
     },
   };

@@ -1,5 +1,5 @@
 import type { RateLimitInfo, RateLimits } from '../../shared/types';
-import { formatSpan } from '../utils/format';
+import { formatSpan, formatTtr } from '../utils/format';
 
 /*
  * Burn rate: how fast a usage limit is being used (%/hour, the first
@@ -188,9 +188,9 @@ export function formatRate(perHour: number): string {
 }
 
 /** Where the pace takes a limit: "At this rate you'd reach 100% in 2h 10m;
- *  resets in 3h 44m", or the % it would reach by its reset. */
+ *  TTR 3h 44m", or the % it would reach by its reset. */
 export function formatProjection(burn: Burn): string {
-  const resets = burn.resetsInMs === null ? '' : `; resets in ${formatSpan(burn.resetsInMs)}`;
+  const resets = burn.resetsInMs === null ? '' : `; ${formatTtr(burn.resetsInMs)}`;
   if (burn.toLimitMs !== null) {
     return `At this rate you'd reach 100% in ${formatSpan(burn.toLimitMs)}${resets}`;
   }
