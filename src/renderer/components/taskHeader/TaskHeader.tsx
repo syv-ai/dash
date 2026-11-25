@@ -7,6 +7,7 @@ import {
   PanelLeft,
   PanelRight,
 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import type { Project, Task } from '../../../shared/types';
 import { branchUrl } from '../../../shared/urls';
 import { useGit } from '../../stores/gitStore';
@@ -29,7 +30,10 @@ import {
 } from '../ui/DropdownMenu';
 import { TaskMenuItems, onTaskMenuCloseAutoFocus } from '../task/TaskMenuItems';
 import { SetupStatus } from '../task/SetupStatus';
+import { useFittedDensity } from '../ui/useFittedDensity';
+import { cn } from '../../lib/cn';
 import { LinkedItemBadges } from './LinkedItemBadges';
+import { HEADER_LABELS, type HeaderLabel, fitTaskHeader, labelShows } from './headerFit';
 
 interface TaskHeaderProps {
   task: Task;
@@ -50,9 +54,10 @@ interface TaskHeaderProps {
 
 /**
  * The task sheet's title row: name, branch, setup status and linked issues
- * on the left; the model and token badge, then open in IDE, pull request,
+ * on the left; the model, token badge and pull request, then open in IDE,
  * "…" (remote control, commit graph, the task's actions) and the
- * right-sidebar toggle on the right. Ahead/behind live in Files' sync row.
+ * right-sidebar toggle on the right. The labels fit by measurement
+ * (`headerFit`). Ahead/behind live in Files' sync row.
  * The row drags the window; its controls don't.
  */
 export function TaskHeader({
@@ -77,6 +82,12 @@ export function TaskHeader({
   const keybindings = useSettings((s) => s.keybindings);
   const showTokens = useSettings((s) => s.showTaskTokens);
   const { ideId, openLabel } = usePreferredIde();
+  const {
+    rootRef,
+    sizerRef,
+    density: hidden,
+    needs,
+  } = useFittedDensity<number>(fitTaskHeader, 0, null);
 
   const branch = gitStatus?.branch || task.branch;
   const branchHref =
@@ -85,18 +96,68 @@ export function TaskHeader({
       : null;
   const BranchIcon = task.useWorktree ? FolderGit2 : GitBranch;
 
-  const branchLabel = (
+  const branchText = (
     <>
       <BranchIcon size={14} strokeWidth={1.8} className="shrink-0 text-icon" />
-      {/* The icon stays when the header is narrow; the tooltip names the branch. */}
-      <span className="truncate @max-[24rem]/taskhead:hidden">{branch}</span>
+      {/* Capped so a long branch doesn't crowd the row; the tooltip names it. */}
+      <span className="max-w-64 truncate">{branch}</span>
     </>
   );
 
+  // Each label once, rendered in the row and as its invisible measuring copy.
+  const labels: Record<HeaderLabel, ReactNode> = {
+    branch: branch && (
+      <Tooltip
+        content={
+          branchHref
+            ? `${branch} · open the branch on the remote`
+            : gitStatus?.hasUpstream === false
+              ? `${branch} (no upstream)`
+              : branch
+        }
+      >
+        {branchHref ? (
+          <a
+            href={branchHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 transition-colors hover:text-ink"
+          >
+            {branchText}
+          </a>
+        ) : (
+          <span className="inline-flex items-center gap-1.5">{branchText}</span>
+        )}
+      </Tooltip>
+    ),
+    setup: task.useWorktree && <SetupStatus worktreePath={task.path} variant="pill" />,
+    linked: task.linkedItems && task.linkedItems.length > 0 && (
+      <LinkedItemBadges items={task.linkedItems} gitRemote={project.gitRemote ?? null} />
+    ),
+    model: modelName && (
+      <Tooltip content="Model">
+        <span className="whitespace-nowrap">{modelName}</span>
+      </Tooltip>
+    ),
+    tokens: showTokens && (
+      <TokenBadge totalTokens={task.totalTokens} totalCostUsd={task.totalCostUsd} size="sm" />
+    ),
+    pr: <PrBadge prs={prs} allPrs={allPrs} taskId={task.id} variant="button" />,
+  };
+  // A label that renders nothing (no setup run, no tokens, no PR) measures 0
+  // and takes no slot, so it leaves no stray gap. Unmeasured, all show.
+  const label = (name: HeaderLabel) =>
+    labelShows(name, hidden) &&
+    needs[HEADER_LABELS.indexOf(name) + 1] !== 0 && (
+      <div className="titlebar-no-drag flex shrink-0 items-center">{labels[name]}</div>
+    );
+  const nameClass = cn(
+    'min-w-0 truncate text-base font-semibold text-ink',
+    !sidebarCollapsed && 'pl-2',
+  );
+
   return (
-    // A container: as it narrows, the model goes first, then the token badge,
-    // then the branch's name, so the task's own name stays readable.
-    <div className="titlebar-drag @container/taskhead flex h-11 shrink-0 items-center gap-2.5 pl-3 pr-2">
+    <div className="titlebar-drag flex h-11 shrink-0 items-center gap-2.5 pl-3 pr-2">
       {sidebarCollapsed && (
         <div className="titlebar-no-drag -mr-1">
           <IconButton
@@ -108,70 +169,39 @@ export function TaskHeader({
           </IconButton>
         </div>
       )}
-      <h1
-        className={`min-w-16 max-w-1/2 shrink-0 truncate text-base font-semibold text-ink @max-[20rem]/taskhead:shrink ${
-          sidebarCollapsed ? '' : 'pl-2'
-        }`}
+      {/* The name and the labels, fitted by measurement (`headerFit`): the
+          name truncates down to NAME_MIN_PX, then the labels give way one at
+          a time, the token count first, the pull request last. */}
+      <div
+        ref={rootRef}
+        className="relative flex min-w-0 flex-1 items-center gap-2.5 text-sm text-ink-3"
       >
-        {task.name}
-      </h1>
-      <div className="titlebar-no-drag flex min-w-0 shrink items-center gap-2.5 text-sm text-ink-3">
-        {branch && (
-          <Tooltip
-            content={
-              branchHref
-                ? `${branch} · open the branch on the remote`
-                : gitStatus?.hasUpstream === false
-                  ? `${branch} (no upstream)`
-                  : branch
-            }
-          >
-            {branchHref ? (
-              <a
-                href={branchHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex min-w-0 items-center gap-1.5 transition-colors hover:text-ink"
-              >
-                {branchLabel}
-              </a>
-            ) : (
-              <span className="inline-flex min-w-0 items-center gap-1.5">{branchLabel}</span>
-            )}
-          </Tooltip>
-        )}
-        {task.useWorktree && <SetupStatus worktreePath={task.path} variant="pill" />}
-        {task.linkedItems && task.linkedItems.length > 0 && (
-          <LinkedItemBadges items={task.linkedItems} gitRemote={project.gitRemote ?? null} />
-        )}
-      </div>
-
-      <div className="flex-1" />
-
-      {(modelName || showTokens) && (
-        <div className="titlebar-no-drag flex min-w-0 shrink items-center gap-2.5 text-sm text-ink-3">
-          {modelName && (
-            <Tooltip content="Model">
-              <span className="truncate @max-[44rem]/taskhead:hidden">{modelName}</span>
-            </Tooltip>
-          )}
-          {showTokens && (
-            <span className="contents @max-[32rem]/taskhead:hidden">
-              <TokenBadge
-                totalTokens={task.totalTokens}
-                totalCostUsd={task.totalCostUsd}
-                size="sm"
-              />
-            </span>
-          )}
+        <h1 className={nameClass}>{task.name}</h1>
+        {label('branch')}
+        {label('setup')}
+        {label('linked')}
+        <div className="flex-1" />
+        {label('model')}
+        {label('tokens')}
+        {label('pr')}
+        <div
+          ref={sizerRef}
+          aria-hidden
+          className="invisible absolute inset-x-0 top-0 h-0 overflow-hidden"
+        >
+          <div className={cn(nameClass, 'w-max')}>{task.name}</div>
+          {HEADER_LABELS.map((name) => (
+            <div key={name} className="flex w-max">
+              {labels[name]}
+            </div>
+          ))}
         </div>
-      )}
+      </div>
 
       <div className="titlebar-no-drag flex shrink-0 items-center gap-0.5">
         <IconButton title={openLabel} onClick={onOpenIde}>
           <IdeIcon ideId={ideId} />
         </IconButton>
-        <PrBadge prs={prs} allPrs={allPrs} taskId={task.id} variant="button" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <IconButton title="More">
