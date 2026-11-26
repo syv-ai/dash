@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import './index.css';
 import { installErrorReporting, reportError } from './lib/telemetry';
+import { installPrOutcomeTelemetry } from './lib/prOutcomeTelemetry';
 import { resolveTerminalFontValue, DEFAULT_FONT_MONO_STACK } from './terminal/terminalFonts';
 
 // Apply the persisted terminal font before React renders so xterm reads the
@@ -15,6 +16,7 @@ if (resolvedFont !== DEFAULT_FONT_MONO_STACK) {
 }
 
 installErrorReporting();
+installPrOutcomeTelemetry();
 
 // React 19 hands render errors here instead of logging them itself, so log
 // as it would, then report (no error boundary renders a fallback yet).

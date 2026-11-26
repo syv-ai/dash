@@ -11,7 +11,7 @@ const rendererErrorSchema = z.object({
 });
 
 // Events the renderer is allowed to send (docs/telemetry.md).
-const RENDERER_ALLOWED_EVENTS = new Set(['file_opened']);
+const RENDERER_ALLOWED_EVENTS = new Set(['file_opened', 'pr_opened', 'branch_merged']);
 
 export function registerTelemetryIpc(): void {
   ipcMain.handle(

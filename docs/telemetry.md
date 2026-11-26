@@ -92,6 +92,15 @@ The source of truth for what Dash sends to PostHog. Change this file in the same
 | `pr_review_submitted` | a review is submitted to the forge    | `provider`, `verdict`, `comment_count`, `ok` |
 | `file_opened`         | a file opens in the editor (renderer) |                                              |
 
+### Task outcomes
+
+| Event           | When                                                                          | Properties                   |
+| --------------- | ----------------------------------------------------------------------------- | ---------------------------- |
+| `pr_opened`     | a PR new to a task's branch shows up in Dash's PR polling (renderer)          | `provider` (`github`, `ado`) |
+| `branch_merged` | a PR from a task's branch that Dash saw in another state is merged (renderer) | `provider`                   |
+
+Dash doesn't open PRs itself (the agent or the user does, with `gh` or on the forge), so both come from the polling behind the PR badge (`prOutcomes`, last states kept per task branch in localStorage). A branch listed for the first time says nothing, so PRs older than Dash's first look, or on a branch a task switched to (review mode), don't count. A PR opened and merged between two looks counts as both. A merge Dash can't see through a PR (a local merge, a push to main) isn't counted; there is no `via`, since a PR is the only way it is seen.
+
 ### Claude Code
 
 | Event                             | When                                                                                            | Properties                                                                     |

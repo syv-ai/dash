@@ -75,6 +75,10 @@ const ALLOWED_EVENTS = new Set([
   'pr_review_submitted',
   'file_opened',
 
+  // Task outcomes (renderer, from PR polling)
+  'pr_opened',
+  'branch_merged',
+
   // Claude Code updates
   'claude_update_detected',
   'claude_update_restart_requested',
