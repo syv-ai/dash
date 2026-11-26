@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useState } from 'react';
-import { toast } from 'sonner';
+import { toast } from '../ui/toast';
 import {
   Activity,
   AlertCircle,

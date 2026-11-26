@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { toast } from 'sonner';
+import { toast } from '../ui/toast';
 import { AdoConnectionForm } from '../vcs/ado/AdoConnectionForm';
 import { isAdoRemote } from '../../../shared/urls';
 import type { Project } from '../../../shared/types';
