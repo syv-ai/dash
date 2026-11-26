@@ -1,5 +1,6 @@
 import React from 'react';
-import { FolderOpen, Download, Plus } from 'lucide-react';
+import { Download, FolderOpen, Plus } from 'lucide-react';
+import { ListRow } from '../ui/ListRow';
 
 export type ProjectSource = 'local' | 'clone' | 'empty';
 
@@ -7,44 +8,34 @@ interface SourceStepProps {
   onPick: (source: ProjectSource) => void;
 }
 
-const CARDS: { id: ProjectSource; icon: React.ReactNode; title: string; subtitle: string }[] = [
+const SOURCES: { id: ProjectSource; icon: React.ReactNode; title: string; subtitle: string }[] = [
   {
     id: 'local',
-    icon: <FolderOpen size={18} className="text-icon" strokeWidth={1.8} />,
+    icon: <FolderOpen size={14} strokeWidth={1.8} />,
     title: 'Local folder',
-    subtitle: 'Open an existing directory',
+    subtitle: 'A folder already on this Mac.',
   },
   {
     id: 'clone',
-    icon: <Download size={18} className="text-icon" strokeWidth={1.8} />,
-    title: 'Clone repository',
-    subtitle: 'From a Git URL or template — you pick where',
+    icon: <Download size={14} strokeWidth={1.8} />,
+    title: 'Clone a repository',
+    subtitle: 'From a git URL or a template, into a folder you pick.',
   },
   {
     id: 'empty',
-    icon: <Plus size={18} className="text-icon" strokeWidth={1.8} />,
+    icon: <Plus size={14} strokeWidth={1.8} />,
     title: 'Empty project',
-    subtitle: 'New directory, optional git init',
+    subtitle: 'A new folder, with git if you like.',
   },
 ];
 
 export function SourceStep({ onPick }: SourceStepProps) {
   return (
-    <div className="flex flex-col gap-3">
-      {CARDS.map((card) => (
-        <button
-          key={card.id}
-          onClick={() => onPick(card.id)}
-          className="flex items-center gap-3 px-4 py-3.5 rounded-lg border border-border/60 hover:border-border hover:bg-accent/40 transition-all duration-150 text-left group"
-        >
-          <div className="w-9 h-9 rounded-lg bg-accent/80 flex items-center justify-center shrink-0 group-hover:bg-accent">
-            {card.icon}
-          </div>
-          <div>
-            <div className="text-base font-medium text-foreground">{card.title}</div>
-            <div className="text-xs text-muted-fade-50">{card.subtitle}</div>
-          </div>
-        </button>
+    <div className="-mx-2.5 grid gap-0.5">
+      {SOURCES.map((s) => (
+        <ListRow key={s.id} leading={s.icon} description={s.subtitle} onClick={() => onPick(s.id)}>
+          {s.title}
+        </ListRow>
       ))}
     </div>
   );

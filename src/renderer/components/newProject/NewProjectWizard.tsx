@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { X } from 'lucide-react';
-import { Modal, useModalClose } from '../ui/Modal';
+import { ArrowLeft, Loader2 } from 'lucide-react';
+import { Button } from '../ui/Button';
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from '../ui/Dialog';
+import { useModalClose } from '../ui/Modal';
+import { Segmented } from '../ui/Segmented';
 import { SourceStep, type ProjectSource } from './SourceStep';
 import { LocationStep } from './LocationStep';
 import { ConfigureForm } from './ConfigureForm';
@@ -25,12 +28,17 @@ const STEP_TITLE: Record<Step, string> = {
   location: 'Location',
   configure: 'Configure',
 };
+const STEP_HINT: Record<Step, string> = {
+  source: 'Where the project comes from.',
+  location: 'Where it lives on disk.',
+  configure: 'Optional: defaults for its tasks. You can change them later.',
+};
 
 export function NewProjectWizard({ onClose, onCreated }: NewProjectWizardProps) {
   return (
-    <Modal onClose={onClose} size="w-[640px] max-h-[85vh]">
+    <Dialog size="lg" onClose={onClose}>
       <WizardBody onCreated={onCreated} />
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -87,42 +95,23 @@ function WizardBody({ onCreated }: { onCreated: (id: string) => void }) {
     }
   }
 
+  const stepIndex = STEP_ORDER.indexOf(step);
   return (
     <>
-      <div className="flex items-center justify-between px-5 h-12 border-b border-border/40">
-        <h2 className="type-title">New Project</h2>
-        <button
-          onClick={close}
-          className="p-1.5 rounded-lg hover:bg-accent text-icon hover:text-foreground transition-all"
-        >
-          <X size={14} strokeWidth={2} />
-        </button>
-      </div>
-
-      {/* Stepper */}
-      <div className="flex items-center gap-2 px-5 py-3 text-xs border-b border-border/30">
-        {STEP_ORDER.map((s, i) => (
-          <React.Fragment key={s}>
-            {i > 0 && <span className="text-muted-fade-30">—</span>}
-            <button
-              disabled={!reached(s)}
-              onClick={() => setStep(s)}
-              className={`px-2.5 py-1 rounded-full transition-colors ${
-                step === s
-                  ? 'bg-primary text-primary-foreground'
-                  : reached(s)
-                    ? 'text-muted-foreground hover:text-foreground'
-                    : 'text-muted-fade-30'
-              }`}
-            >
-              {i + 1} · {STEP_TITLE[s]}
-              {s === 'configure' ? ' (optional)' : ''}
-            </button>
-          </React.Fragment>
-        ))}
-      </div>
-
-      <div className="p-5 overflow-y-auto">
+      <DialogHeader title="New project" description={STEP_HINT[step]} />
+      <DialogBody>
+        <Segmented<Step>
+          aria-label="Steps"
+          size="sm"
+          fullWidth={false}
+          value={step}
+          onChange={setStep}
+          options={STEP_ORDER.map((s, i) => ({
+            value: s,
+            label: `${i + 1}. ${STEP_TITLE[s]}`,
+            disabled: !reached(s),
+          }))}
+        />
         {step === 'source' && (
           <SourceStep
             onPick={(s) => {
@@ -136,28 +125,26 @@ function WizardBody({ onCreated }: { onCreated: (id: string) => void }) {
           <LocationStep source={source} onResolved={(info) => void handleResolved(info)} />
         )}
         {step === 'configure' && values && <ConfigureForm value={values} onChange={setValues} />}
-      </div>
-
-      {/* Footer */}
-      <div className="flex items-center justify-between px-5 py-3 border-t border-border/40">
-        <button
-          onClick={() => {
-            const idx = STEP_ORDER.indexOf(step);
-            if (idx > 0) setStep(STEP_ORDER[idx - 1]!);
-          }}
-          disabled={step === 'source'}
-          className="text-base text-muted-fade-60 hover:text-foreground disabled:opacity-30"
-        >
-          ← Back
-        </button>
-        <button
-          onClick={() => void handleCreate()}
-          disabled={resolved === null || saving}
-          className="px-5 py-2 rounded-lg text-base font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 transition-all"
-        >
+      </DialogBody>
+      <DialogFooter
+        divided={step === 'configure'}
+        start={
+          stepIndex > 0 && (
+            <Button variant="ghost" onClick={() => setStep(STEP_ORDER[stepIndex - 1]!)}>
+              <ArrowLeft size={14} strokeWidth={1.8} />
+              Back
+            </Button>
+          )
+        }
+      >
+        <Button variant="ghost" onClick={close}>
+          Cancel
+        </Button>
+        <Button onClick={() => void handleCreate()} disabled={resolved === null || saving}>
+          {saving && <Loader2 size={14} strokeWidth={1.8} className="animate-spin" />}
           {saving ? 'Creating…' : 'Create project'}
-        </button>
-      </div>
+        </Button>
+      </DialogFooter>
     </>
   );
 }
