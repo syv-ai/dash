@@ -2,14 +2,10 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus,
   Trash2,
-  Archive,
   ArchiveRestore,
-  Settings,
-  GitGraph,
   ChevronRight,
   ChevronDown,
   MoreHorizontal,
-  Brain,
   FolderPlus,
 } from 'lucide-react';
 import {
@@ -19,6 +15,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/DropdownMenu';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '../ui/ContextMenu';
+import type { MenuParts } from '../task/TaskMenuItems';
+import { ProjectMenuItems } from './ProjectMenuItems';
 import type { Project, Task } from '../../../shared/types';
 import { useDragReorder } from '../../hooks/useDragReorder';
 import { IconButton } from '../ui/IconButton';
@@ -42,6 +47,9 @@ import { useRuntime } from '../../stores/runtimeStore';
 import { useProjects } from '../../stores/projectsStore';
 import { useGit } from '../../stores/gitStore';
 import { useUi } from '../../stores/uiStore';
+
+const DROPDOWN_PARTS: MenuParts = { Item: DropdownMenuItem, Separator: DropdownMenuSeparator };
+const CONTEXT_PARTS: MenuParts = { Item: ContextMenuItem, Separator: ContextMenuSeparator };
 
 /** How often the sidebar re-checks visible tasks for PRs. */
 const SIDEBAR_PR_REFRESH_MS = 5 * 60_000;
@@ -283,119 +291,115 @@ export function ProjectsSection({
             stats.taskCount
           } task${stats.taskCount === 1 ? '' : 's'}`
         : null;
+    const menu = {
+      project,
+      onShowCommitGraph: () => onShowCommitGraph(project.id),
+      onSettings: () => onProjectSettings(project.id),
+      onOpenMemory: () => setMemoryProjectId(project.id),
+      onArchive: () => void archiveProject(project.id),
+      onDelete: () => onDeleteProject(project.id),
+    };
     return (
-      <TreeRow
-        ctx={ctx}
-        {...projectDrag(project)}
-        className="group/swap"
-        dragging={draggingId === project.id}
-        dimmed={!isActive && isProjectCollapsed && !activityDot}
-        strong={isActive}
-        // A click selects and opens; Enter or Space selects and toggles.
-        onActivate={(e) => {
-          onSelectProject(project.id);
-          if (e.type !== 'click' || isProjectCollapsed) toggleCollapse(project.id);
-        }}
-        leading={
-          <IconButton
-            size="sm"
-            title={isProjectCollapsed ? 'Expand' : 'Collapse'}
-            className="-ml-1.5"
-            tabIndex={-1}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleCollapse(project.id);
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <TreeRow
+            ctx={ctx}
+            {...projectDrag(project)}
+            className="group/swap"
+            dragging={draggingId === project.id}
+            dimmed={!isActive && isProjectCollapsed && !activityDot}
+            strong={isActive}
+            // A click selects and opens; Enter or Space selects and toggles.
+            onActivate={(e) => {
+              onSelectProject(project.id);
+              if (e.type !== 'click' || isProjectCollapsed) toggleCollapse(project.id);
             }}
-          >
-            {isProjectCollapsed ? (
-              <ChevronRight size={14} strokeWidth={1.8} />
-            ) : (
-              <ChevronDown size={14} strokeWidth={1.8} />
-            )}
-          </IconButton>
-        }
-        trailing={
-          <>
-            <NewMemoryCount
-              count={newMemoryCounts[project.id] ?? 0}
-              onOpen={() => setMemoryProjectId(project.id)}
-            />
-            {/* The dot at rest; on hover (or while its menu is open)
+            leading={
+              <IconButton
+                size="sm"
+                title={isProjectCollapsed ? 'Expand' : 'Collapse'}
+                className="-ml-1.5"
+                tabIndex={-1}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleCollapse(project.id);
+                }}
+              >
+                {isProjectCollapsed ? (
+                  <ChevronRight size={14} strokeWidth={1.8} />
+                ) : (
+                  <ChevronDown size={14} strokeWidth={1.8} />
+                )}
+              </IconButton>
+            }
+            trailing={
+              <>
+                <NewMemoryCount
+                  count={newMemoryCounts[project.id] ?? 0}
+                  onOpen={() => setMemoryProjectId(project.id)}
+                />
+                {/* The dot at rest; on hover (or while its menu is open)
                   "New task" and a "…" menu slide in over it. */}
-            <HoverSwapSlot
-              revealed={menuOpenProjectId === project.id}
-              rest={
-                <span className="flex w-2.5 items-center justify-center">
-                  {isProjectCollapsed && activityDot && (
-                    <StatusDot state={activityDot.state} label={activityDot.label} />
-                  )}
-                </span>
-              }
-              actions={
-                <>
-                  <IconButton
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onNewTask(project.id);
-                    }}
-                    title="New task"
-                    size="sm"
-                  >
-                    <Plus size={14} strokeWidth={1.8} />
-                  </IconButton>
-                  <DropdownMenu
-                    onOpenChange={(open) => setMenuOpenProjectId(open ? project.id : null)}
-                  >
-                    <DropdownMenuTrigger asChild>
+                <HoverSwapSlot
+                  revealed={menuOpenProjectId === project.id}
+                  rest={
+                    <span className="flex w-2.5 items-center justify-center">
+                      {isProjectCollapsed && activityDot && (
+                        <StatusDot state={activityDot.state} label={activityDot.label} />
+                      )}
+                    </span>
+                  }
+                  actions={
+                    <>
                       <IconButton
-                        onClick={(e) => e.stopPropagation()}
-                        title="More actions"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onNewTask(project.id);
+                        }}
+                        title="New task"
                         size="sm"
                       >
-                        <MoreHorizontal size={14} strokeWidth={1.8} />
+                        <Plus size={14} strokeWidth={1.8} />
                       </IconButton>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenuItem onSelect={() => onShowCommitGraph(project.id)}>
-                        <GitGraph size={13} strokeWidth={1.8} />
-                        Commit graph
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => onProjectSettings(project.id)}>
-                        <Settings size={13} strokeWidth={1.8} />
-                        Project settings
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => setMemoryProjectId(project.id)}>
-                        <Brain size={13} strokeWidth={1.8} />
-                        Claude memory
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => void archiveProject(project.id)}>
-                        <Archive size={13} strokeWidth={1.8} />
-                        Archive project
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onSelect={() => onDeleteProject(project.id)}
+                      <DropdownMenu
+                        onOpenChange={(open) => setMenuOpenProjectId(open ? project.id : null)}
                       >
-                        <Trash2 size={13} strokeWidth={1.8} />
-                        Delete project
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </>
-              }
-            />
-          </>
-        }
-      >
-        {tokenTip ? (
-          <Tooltip content={tokenTip}>
-            <span>{project.name}</span>
-          </Tooltip>
-        ) : (
-          project.name
-        )}
-      </TreeRow>
+                        <DropdownMenuTrigger asChild>
+                          <IconButton
+                            onClick={(e) => e.stopPropagation()}
+                            title="More actions"
+                            size="sm"
+                          >
+                            <MoreHorizontal size={14} strokeWidth={1.8} />
+                          </IconButton>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                          <ProjectMenuItems {...menu} parts={DROPDOWN_PARTS} />
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </>
+                  }
+                />
+              </>
+            }
+          >
+            {tokenTip ? (
+              <Tooltip content={tokenTip}>
+                <span>{project.name}</span>
+              </Tooltip>
+            ) : (
+              project.name
+            )}
+          </TreeRow>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ProjectMenuItems
+            {...menu}
+            parts={CONTEXT_PARTS}
+            onNewTask={() => onNewTask(project.id)}
+          />
+        </ContextMenuContent>
+      </ContextMenu>
     );
   };
 

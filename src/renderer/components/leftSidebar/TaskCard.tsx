@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Globe } from 'lucide-react';
 import type { Task, ActivityInfo, PullRequestInfo } from '../../../shared/types';
 import { TaskActions } from '../task/TaskActions';
+import { TaskContextMenu } from '../task/TaskContextMenu';
 import { TreeRow, type TreeRowContext } from '../ui/Tree';
 import { StatusDot, type AgentState } from '../ui/StatusDot';
 import { Tooltip } from '../ui/Tooltip';
@@ -46,7 +47,8 @@ function dotTooltip(state: AgentState, info: ActivityInfo | undefined): string {
 /** A project's tasks sit 16px in, where its name starts past the chevron. */
 export const TASK_INDENT_PX = 16;
 
-/** A task row in the project tree: state dot, name, badges, and its actions on hover. */
+/** A task row in the project tree: state dot, name, badges, its actions on
+ *  hover, and the task menu on right-click. */
 export function TaskCard({
   task,
   ctx,
@@ -69,58 +71,67 @@ export function TaskCard({
   const state = agentState(activityInfo, isUnseen);
 
   return (
-    <TreeRow
-      ctx={ctx}
-      indentStep={TASK_INDENT_PX}
-      draggable
-      {...dragHandlers}
-      className="group/task"
-      dragging={isDragging}
-      dimmed={isAtRest(state)}
-      strong={ctx.selected}
-      onActivate={onSelect}
-      leading={
-        state === 'asleep' ? (
-          <StatusDot state={state} />
-        ) : (
-          <Tooltip content={dotTooltip(state, activityInfo)}>
-            <span className="flex">
-              <StatusDot state={state} label={STATE_LABELS[state]} />
-            </span>
-          </Tooltip>
-        )
-      }
-      trailing={
-        <>
-          {hasRemoteControl && (
-            <Tooltip content="Remote control on">
+    <TaskContextMenu
+      taskId={task.id}
+      onOpenIde={onOpenIde}
+      onSleep={onClose}
+      onSettings={onSettings}
+      onArchive={onArchive}
+      onDelete={onDelete}
+    >
+      <TreeRow
+        ctx={ctx}
+        indentStep={TASK_INDENT_PX}
+        draggable
+        {...dragHandlers}
+        className="group/task"
+        dragging={isDragging}
+        dimmed={isAtRest(state)}
+        strong={ctx.selected}
+        onActivate={onSelect}
+        leading={
+          state === 'asleep' ? (
+            <StatusDot state={state} />
+          ) : (
+            <Tooltip content={dotTooltip(state, activityInfo)}>
               <span className="flex">
-                <Globe size={12} strokeWidth={1.8} />
+                <StatusDot state={state} label={STATE_LABELS[state]} />
               </span>
             </Tooltip>
-          )}
-          {task.useWorktree && <SetupStatus worktreePath={task.path} variant="inline" />}
-          {/* Runs in the project's own checkout, not a worktree */}
-          {!task.useWorktree && <MainRepoBadge task={task} />}
-          {(prs || allPrs) && (
-            <PrBadge prs={prs ?? []} allPrs={allPrs} variant="icon" taskId={task.id} />
-          )}
-          <div className={menuOpen ? 'flex' : 'hidden group-hover/task:flex'}>
-            <TaskActions
-              taskId={task.id}
-              activityState={activityInfo?.state}
-              onOpenIde={onOpenIde}
-              onClose={onClose}
-              onSettings={onSettings}
-              onArchive={onArchive}
-              onDelete={onDelete}
-              onMenuOpenChange={setMenuOpen}
-            />
-          </div>
-        </>
-      }
-    >
-      {task.name}
-    </TreeRow>
+          )
+        }
+        trailing={
+          <>
+            {hasRemoteControl && (
+              <Tooltip content="Remote control on">
+                <span className="flex">
+                  <Globe size={12} strokeWidth={1.8} />
+                </span>
+              </Tooltip>
+            )}
+            {task.useWorktree && <SetupStatus worktreePath={task.path} variant="inline" />}
+            {/* Runs in the project's own checkout, not a worktree */}
+            {!task.useWorktree && <MainRepoBadge task={task} />}
+            {(prs || allPrs) && (
+              <PrBadge prs={prs ?? []} allPrs={allPrs} variant="icon" taskId={task.id} />
+            )}
+            <div className={menuOpen ? 'flex' : 'hidden group-hover/task:flex'}>
+              <TaskActions
+                taskId={task.id}
+                activityState={activityInfo?.state}
+                onOpenIde={onOpenIde}
+                onClose={onClose}
+                onSettings={onSettings}
+                onArchive={onArchive}
+                onDelete={onDelete}
+                onMenuOpenChange={setMenuOpen}
+              />
+            </div>
+          </>
+        }
+      >
+        {task.name}
+      </TreeRow>
+    </TaskContextMenu>
   );
 }

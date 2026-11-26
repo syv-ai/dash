@@ -1,23 +1,14 @@
 import { useMemo, type ReactNode } from 'react';
-import { FolderPlus, Power } from 'lucide-react';
+import { FolderPlus } from 'lucide-react';
 import type { ContextUsage, Project, Task } from '../../../shared/types';
 import { Tree, TreeHeading, TreeRow, ownNode, type TreeRowContext } from '../ui/Tree';
 import { HoverSwapSlot } from '../ui/HoverSwapSlot';
 import { StatusDot, type AgentState } from '../ui/StatusDot';
 import { EmptyState } from '../ui/EmptyState';
 import { Button } from '../ui/Button';
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from '../ui/ContextMenu';
-import { TaskMenuItems, onTaskMenuCloseAutoFocus, type MenuParts } from '../task/TaskMenuItems';
-import { hasLiveSession } from '../task/TaskActions';
 import { FavoriteButton } from '../task/FavoriteButton';
+import { TaskContextMenu } from '../task/TaskContextMenu';
 import { openInIde } from '../../lib/openInIde';
-import { useRuntime } from '../../stores/runtimeStore';
 import { useSettings } from '../../stores/settingsStore';
 import {
   STATE_LABELS,
@@ -28,8 +19,6 @@ import {
 } from './taskStates';
 import { taskTreeRows, type TaskTreeRow } from './taskTree';
 import { ContextRing } from './ContextRing';
-
-const CONTEXT_PARTS: MenuParts = { Item: ContextMenuItem, Separator: ContextMenuSeparator };
 
 export interface TaskRowActions {
   onSelectTask: (projectId: string, taskId: string) => void;
@@ -146,56 +135,41 @@ function TaskStateRowItem({
   projectPath?: string;
 }) {
   const { task, state, reason, projectName } = row;
-  const activityState = useRuntime((s) => s.taskActivity[task.id]?.state);
   return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <TreeRow
-          ctx={ctx}
-          className="group/swap"
-          dimmed={isAtRest(state)}
-          strong={ctx.selected}
-          leading={<StatusDot state={state} label={STATE_LABELS[state]} />}
-          description={
-            (projectName || reason) && (
-              <>
-                {projectName}
-                {projectName && reason && ' · '}
-                {reason && <ReasonText state={state}>{reason}</ReasonText>}
-              </>
-            )
-          }
-          trailing={
-            <HoverSwapSlot
-              rest={state !== 'asleep' && <ContextRing usage={usage} />}
-              actions={<FavoriteButton task={task} />}
-            />
-          }
-          onActivate={() => onSelectTask(task.projectId, task.id)}
-        >
-          {task.name}
-        </TreeRow>
-      </ContextMenuTrigger>
-      <ContextMenuContent onCloseAutoFocus={onTaskMenuCloseAutoFocus}>
-        {hasLiveSession(activityState) && (
-          <>
-            <ContextMenuItem onSelect={() => onCloseTask(task.id)}>
-              <Power size={13} strokeWidth={1.8} />
-              Put to sleep
-            </ContextMenuItem>
-            <ContextMenuSeparator />
-          </>
-        )}
-        <TaskMenuItems
-          taskId={task.id}
-          parts={CONTEXT_PARTS}
-          onOpenIde={() => void openInIde(task.path || projectPath || '')}
-          onSettings={() => onTaskSettings(task.id)}
-          onArchive={() => onArchiveTask(task.id)}
-          onDelete={() => onDeleteTask(task.id)}
-        />
-      </ContextMenuContent>
-    </ContextMenu>
+    <TaskContextMenu
+      taskId={task.id}
+      onOpenIde={() => void openInIde(task.path || projectPath || '')}
+      onSleep={() => onCloseTask(task.id)}
+      onSettings={() => onTaskSettings(task.id)}
+      onArchive={() => onArchiveTask(task.id)}
+      onDelete={() => onDeleteTask(task.id)}
+    >
+      <TreeRow
+        ctx={ctx}
+        className="group/swap"
+        dimmed={isAtRest(state)}
+        strong={ctx.selected}
+        leading={<StatusDot state={state} label={STATE_LABELS[state]} />}
+        description={
+          (projectName || reason) && (
+            <>
+              {projectName}
+              {projectName && reason && ' · '}
+              {reason && <ReasonText state={state}>{reason}</ReasonText>}
+            </>
+          )
+        }
+        trailing={
+          <HoverSwapSlot
+            rest={state !== 'asleep' && <ContextRing usage={usage} />}
+            actions={<FavoriteButton task={task} />}
+          />
+        }
+        onActivate={() => onSelectTask(task.projectId, task.id)}
+      >
+        {task.name}
+      </TreeRow>
+    </TaskContextMenu>
   );
 }
 

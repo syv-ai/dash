@@ -1,5 +1,17 @@
 import type * as React from 'react';
-import { Settings, Archive, Trash2, AtSign, Brain, ScrollText, RotateCw, Star } from 'lucide-react';
+import {
+  Settings,
+  Archive,
+  Trash2,
+  AtSign,
+  Brain,
+  ScrollText,
+  RotateCw,
+  Star,
+  FolderOpen,
+  GitBranch,
+  Link2,
+} from 'lucide-react';
 import { DropdownMenuItem, DropdownMenuSeparator } from '../ui/DropdownMenu';
 import { IdeIcon } from '../ui/IdeIcon';
 import { usePreferredIde } from '../../hooks/usePreferredIde';
@@ -9,6 +21,7 @@ import { useUi } from '../../stores/uiStore';
 import { sessionRegistry } from '../../terminal/SessionRegistry';
 import { useSetup } from '../../stores/setupStore';
 import { favoriteLabel } from './FavoriteButton';
+import { copyText, revealLabel } from '../diffEditor/fileActions';
 
 let focusTerminalOnClose = false;
 
@@ -52,8 +65,9 @@ export interface TaskMenuHandlers {
 }
 
 /**
- * The items every task menu shows: the task cards' "…" menu, the task
- * header's, and the task list's right-click menu. All render this list, so
+ * The items every task menu shows, in groups (favourite; open, reveal and
+ * copy; the task's own settings and tools; archive; delete last): the task
+ * cards' "…" menu, the task header's, and both task lists' right-click menu. All render this list, so
  * they can't drift apart; a menu adds its own extras around it.
  */
 export function TaskMenuItems({
@@ -75,10 +89,13 @@ export function TaskMenuItems({
   return (
     <>
       {task && (
-        <Item onSelect={() => void setFavorite(task, !task.favorite)}>
-          <Star size={13} strokeWidth={1.8} />
-          {favoriteLabel(task.favorite)}
-        </Item>
+        <>
+          <Item onSelect={() => void setFavorite(task, !task.favorite)}>
+            <Star size={13} strokeWidth={1.8} />
+            {favoriteLabel(task.favorite)}
+          </Item>
+          <Separator />
+        </>
       )}
       <Item onSelect={onOpenIde}>
         <span className="inline-flex w-3.25 justify-center text-icon">
@@ -86,6 +103,23 @@ export function TaskMenuItems({
         </span>
         {openLabel}
       </Item>
+      {task && (
+        <>
+          <Item onSelect={() => window.electronAPI.showItemInFolder(task.path)}>
+            <FolderOpen size={13} strokeWidth={1.8} />
+            {revealLabel()}
+          </Item>
+          <Item onSelect={() => copyText(task.branch, 'branch')}>
+            <GitBranch size={13} strokeWidth={1.8} />
+            Copy branch
+          </Item>
+          <Item onSelect={() => copyText(task.path, 'path')}>
+            <Link2 size={13} strokeWidth={1.8} />
+            Copy path
+          </Item>
+        </>
+      )}
+      <Separator />
       <Item onSelect={onSettings}>
         <Settings size={13} strokeWidth={1.8} />
         Task settings
@@ -117,6 +151,7 @@ export function TaskMenuItems({
           Memories
         </Item>
       )}
+      <Separator />
       <Item onSelect={onArchive}>
         <Archive size={13} strokeWidth={1.8} />
         Archive
