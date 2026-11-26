@@ -43,6 +43,7 @@ export function VirtualList({
   className,
   handleRef,
   gapAbove = false,
+  gap,
   ...props
 }: {
   count: number;
@@ -54,6 +55,8 @@ export function VirtualList({
   handleRef?: React.Ref<VirtualListHandle>;
   /** 8px above the first item, when nothing heads the list. */
   gapAbove?: boolean;
+  /** Pixels between items. */
+  gap?: number;
 } & Omit<React.ComponentProps<'div'>, 'children' | 'style'>) {
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
@@ -62,6 +65,7 @@ export function VirtualList({
     estimateSize,
     getItemKey: itemKey,
     overscan: 12,
+    gap,
     measureElement: measureShown,
   });
   React.useImperativeHandle(

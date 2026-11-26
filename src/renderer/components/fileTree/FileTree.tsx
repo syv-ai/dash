@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { VirtualList, type VirtualListHandle } from '../ui/VirtualList';
+import { Tree, type TreeHandle } from '../ui/Tree';
 import { useEditorTabs } from '../../stores/editorTabsStore';
 import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
 import {
@@ -10,7 +10,7 @@ import {
   openKey,
   revealKeys,
   treeColumns,
-  treeKey,
+  treeNode,
   type FileBadges,
   type ItemRow,
   type Listing,
@@ -51,13 +51,12 @@ export interface FileTreeProps {
 const estimate = (row: TreeRow | undefined) => (row?.kind === 'section' ? 28 : 32);
 
 /**
- * The app's one file tree (Files, a PR's files, the editor modal):
- * its sections' folders (folded) and files, depth first, windowed so a
- * repo-sized tree stays light. It owns which folders are open (changed ones
- * and the selection's by default; lazy folders read when opened), the
- * selection highlight, the arrow keys and every row's look. Trees differ
- * only in what they pass: sections, hover actions, a Space action, badges
- * and quiet paths.
+ * The app's one file tree (Files, a PR's files, the editor modal), on the
+ * shared `ui/Tree` (windowing, focus, the arrow keys): its sections' folders
+ * (folded) and files, depth first. It owns which folders are open (changed
+ * ones and the selection's by default; lazy folders read when opened) and
+ * every row's look (`TreeItem`). Trees differ only in what they pass:
+ * sections, hover actions, a Space action, badges and quiet paths.
  */
 export function FileTree({
   sections,
@@ -73,7 +72,6 @@ export function FileTree({
 }: FileTreeProps) {
   const [open, setOpen] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const [listings, setListings] = useState<ReadonlyMap<string, Listing>>(() => new Map());
-  const [focusKey, setFocusKey] = useState<string | null>(null);
 
   const rows = useMemo(
     () => flattenTree(sections, { open, listings, selected }),
@@ -105,29 +103,7 @@ export function FileTree({
     }
   }, [rows, cwd]);
 
-  // ── Focus: one tab stop, moved by the arrow keys ──
-  const listRef = useRef<VirtualListHandle>(null);
-  const elements = useRef(new Map<string, HTMLElement>());
-  /** A row to focus once it renders (it may be scrolled out of the window). */
-  const pendingFocus = useRef<string | null>(null);
-  const focusRow = (index: number) => {
-    const key = rows[index]!.key;
-    setFocusKey(key);
-    pendingFocus.current = key;
-    listRef.current?.scrollToIndex(index);
-  };
-  useEffect(() => {
-    const key = pendingFocus.current;
-    const el = key && elements.current.get(key);
-    if (!el) return;
-    pendingFocus.current = null;
-    el.focus();
-  });
-  const selectedIndex = rows.findIndex((r) => isSelected(r, selected));
-  const tabStop =
-    (focusKey !== null && rows.some((r) => r.key === focusKey) && focusKey) ||
-    rows[selectedIndex]?.key ||
-    rows.find((r) => r.kind === 'folder' || r.kind === 'file')?.key;
+  const treeRef = useRef<TreeHandle>(null);
 
   // A tab that names a folder asked to show it: open it and the folders
   // holding it, then bring its row into view, focused.
@@ -150,58 +126,39 @@ export function FileTree({
     const index = folderRowIndex(rows, path);
     if (index < 0) return;
     revealing.current = null;
-    focusRow(index);
+    treeRef.current?.focusRow(index);
   });
 
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.altKey || e.metaKey || e.ctrlKey) return;
-    const index = rows.findIndex((r) => r.key === (e.target as HTMLElement).dataset.key);
-    if (index < 0) return;
-    const action = treeKey(rows, index, e.key);
-    if (!action) return;
-    e.preventDefault();
-    if ('focus' in action) focusRow(action.focus);
-    else toggle(rows[action.toggle] as Extract<TreeRow, { kind: 'folder' }>);
-  };
-
   return (
-    <VirtualList
-      role="tree"
-      handleRef={listRef}
-      onKeyDown={onKeyDown}
+    <Tree
+      rows={rows}
+      nodeOf={treeNode}
+      handleRef={treeRef}
       className="min-h-0 flex-1"
       gapAbove={gapAbove}
-      count={rows.length}
-      itemKey={(i) => rows[i]!.key}
-      estimateSize={(i) => estimate(rows[i])}
-    >
-      {(i) => {
-        const row = rows[i]!;
+      isSelected={(row) => isSelected(row, selected)}
+      onToggle={(row) => row.kind === 'folder' && toggle(row)}
+      estimateSize={estimate}
+      renderRow={(row, ctx) => {
         if (row.kind === 'section') return <SectionHeader label={row.label} />;
         if (row.kind === 'note') return <TreeNote row={row} />;
         const path = row.kind === 'file' ? row.file.path : row.folder.path;
         return (
           <TreeItem
             row={row}
+            ctx={ctx}
             cwd={cwd}
             cols={cols}
-            selected={i === selectedIndex || isSelected(row, selected)}
             quiet={row.kind === 'file' && (row.file.ignored || !!quiet?.has(path))}
             badges={row.kind === 'file' ? badges?.get(path) : undefined}
-            tabStop={row.key === tabStop}
             actions={actions?.(row) ?? null}
             onSpace={spaceAction?.(row) ?? undefined}
             canOpenToSide={canOpenToSide}
             onActivate={(opts) => (row.kind === 'file' ? onOpenFile(row, opts) : toggle(row))}
-            onFocusRow={() => setFocusKey(row.key)}
-            rowRef={(el) => {
-              if (el) elements.current.set(row.key, el);
-              else elements.current.delete(row.key);
-            }}
           />
         );
       }}
-    </VirtualList>
+    />
   );
 }
 

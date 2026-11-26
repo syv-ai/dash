@@ -1,7 +1,7 @@
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { FolderPlus, Power } from 'lucide-react';
 import type { Project, Task } from '../../../shared/types';
-import { ListRow } from '../ui/ListRow';
+import { Tree, TreeRow, ownNode, type TreeRowContext } from '../ui/Tree';
 import { StatusDot, type AgentState } from '../ui/StatusDot';
 import { EmptyState } from '../ui/EmptyState';
 import { Button } from '../ui/Button';
@@ -17,13 +17,12 @@ import { hasLiveSession } from '../task/TaskActions';
 import { openInIde } from '../../lib/openInIde';
 import { useRuntime } from '../../stores/runtimeStore';
 import {
-  IDLE_LIMIT,
   STATE_LABELS,
   isAtRest,
-  visibleIdleRows,
   type TaskStateList as Rows,
   type TaskStateRow,
 } from './taskStates';
+import { taskTreeRows, type TaskTreeRow } from './taskTree';
 
 const CONTEXT_PARTS: MenuParts = { Item: ContextMenuItem, Separator: ContextMenuSeparator };
 
@@ -50,15 +49,17 @@ interface TaskStateListProps extends TaskRowActions {
  * task menu.
  */
 export function TaskStateList({
-  rows,
+  rows: list,
   projects,
   activeTaskId,
   onOpenFolder,
   ...actions
 }: TaskStateListProps) {
   const [showAllIdle, setShowAllIdle] = useState(false);
-  const idle = visibleIdleRows(rows.idle, showAllIdle, activeTaskId);
-  const hiddenIdle = rows.idle.length - idle.length;
+  const rows = useMemo(
+    () => taskTreeRows(list, showAllIdle, activeTaskId),
+    [list, showAllIdle, activeTaskId],
+  );
 
   if (projects.length === 0) {
     return (
@@ -73,73 +74,83 @@ export function TaskStateList({
       />
     );
   }
-  if (rows.active.length === 0 && rows.idle.length === 0) {
+  if (list.active.length === 0 && list.idle.length === 0) {
     return <EmptyState title="No tasks yet" />;
   }
 
   const projectPath = (task: Task) => projects.find((p) => p.id === task.projectId)?.path;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-2 pt-1 pb-3">
-      {rows.active.map((row) => (
-        <TaskStateRowItem
-          key={row.task.id}
-          row={row}
-          selected={row.task.id === activeTaskId}
-          projectPath={projectPath(row.task)}
-          {...actions}
-        />
-      ))}
-      {rows.active.length > 0 && idle.length > 0 && <div className="h-4 shrink-0" />}
-      {idle.map((row) => (
-        <TaskStateRowItem
-          key={row.task.id}
-          row={row}
-          selected={row.task.id === activeTaskId}
-          projectPath={projectPath(row.task)}
-          {...actions}
-        />
-      ))}
-      {rows.idle.length > IDLE_LIMIT && (
-        <ListRow
-          dimmed
-          size="sm"
-          leading={<StatusDot state="asleep" />}
-          onClick={() => setShowAllIdle((v) => !v)}
-        >
-          {showAllIdle ? 'Less' : `More (${hiddenIdle})`}
-        </ListRow>
-      )}
-    </div>
+    <Tree
+      aria-label="Tasks"
+      rows={rows}
+      nodeOf={ownNode}
+      variant="sidebar"
+      className="min-h-0 flex-1"
+      isSelected={(r) => r.kind === 'task' && r.row.task.id === activeTaskId}
+      onToggle={() => {}}
+      estimateSize={estimate}
+      renderRow={(r, ctx) => {
+        if (r.kind === 'gap') return <div className="h-4" />;
+        if (r.kind === 'more') {
+          return (
+            <TreeRow
+              ctx={ctx}
+              dimmed
+              size="sm"
+              leading={<StatusDot state="asleep" />}
+              onActivate={() => setShowAllIdle((v) => !v)}
+            >
+              {r.expanded ? 'Less' : `More (${r.hidden})`}
+            </TreeRow>
+          );
+        }
+        return (
+          <TaskStateRowItem
+            row={r.row}
+            ctx={ctx}
+            projectPath={projectPath(r.row.task)}
+            {...actions}
+          />
+        );
+      }}
+    />
   );
+}
+
+/** A row's height before it is measured: a reason adds a line. */
+function estimate(r: TaskTreeRow): number {
+  if (r.kind === 'gap') return 16;
+  if (r.kind === 'more') return 32;
+  return r.row.reason ? 54 : 36;
 }
 
 function TaskStateRowItem({
   row,
-  selected,
+  ctx,
   projectPath,
   onSelectTask,
   onCloseTask,
   onTaskSettings,
   onArchiveTask,
   onDeleteTask,
-}: TaskRowActions & { row: TaskStateRow; selected: boolean; projectPath?: string }) {
+}: TaskRowActions & { row: TaskStateRow; ctx: TreeRowContext; projectPath?: string }) {
   const { task, state, reason, projectName } = row;
   const activityState = useRuntime((s) => s.taskActivity[task.id]?.state);
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <ListRow
-          selected={selected}
+        <TreeRow
+          ctx={ctx}
           dimmed={isAtRest(state)}
           leading={<StatusDot state={state} label={STATE_LABELS[state]} />}
           description={reason && <ReasonText state={state}>{reason}</ReasonText>}
           // The name truncates first; the project keeps up to 6rem.
           trailing={projectName && <span className="max-w-24 truncate">{projectName}</span>}
-          onClick={() => onSelectTask(task.projectId, task.id)}
+          onActivate={() => onSelectTask(task.projectId, task.id)}
         >
           {task.name}
-        </ListRow>
+        </TreeRow>
       </ContextMenuTrigger>
       <ContextMenuContent onCloseAutoFocus={onTaskMenuCloseAutoFocus}>
         {hasLiveSession(activityState) && (

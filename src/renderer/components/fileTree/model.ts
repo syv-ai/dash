@@ -7,6 +7,9 @@
  */
 import type { DirEntry, FileChange, RepoListing } from '../../../shared/types';
 import { treeOrder, folderOrder } from './treeOrder';
+import { treeKey as navKey, type TreeKeyAction, type TreeNode } from '../ui/treeNav';
+
+export type { TreeKeyAction };
 
 export interface TreeFile {
   name: string;
@@ -449,46 +452,24 @@ export function treeColumns(
 
 // ── Keys ─────────────────────────────────────────────────────
 
-/** What a key does on the focused row (index into the rows): focus another,
- *  or open/close a folder. Null: not the tree's key. */
-export type TreeKeyAction = { focus: number } | { toggle: number } | null;
-
-const focusable = (r: TreeRow | undefined) => r?.kind === 'folder' || r?.kind === 'file';
-
-/** Arrow keys walk the rows (headers and notes skipped), Home and End jump
- *  to the ends; Right opens a folder (then steps in), Left closes it (or
- *  steps out to its folder). */
-export function treeKey(rows: readonly TreeRow[], index: number, key: string): TreeKeyAction {
-  const step = (from: number, dir: 1 | -1) => {
-    for (let i = from + dir; i >= 0 && i < rows.length; i += dir) if (focusable(rows[i])) return i;
-    return null;
-  };
-  const to = (i: number | null) => (i === null ? null : { focus: i });
-  const row = rows[index];
-  switch (key) {
-    case 'ArrowDown':
-      return to(step(index, 1));
-    case 'ArrowUp':
-      return to(step(index, -1));
-    case 'Home':
-      return to(step(-1, 1));
-    case 'End':
-      return to(step(rows.length, -1));
-    case 'ArrowRight':
-      if (row?.kind !== 'folder') return null;
-      return row.open ? to(step(index, 1)) : { toggle: index };
-    case 'ArrowLeft': {
-      if (row?.kind === 'folder' && row.open) return { toggle: index };
-      if (!row || !focusable(row)) return null;
-      const depth = (row as ItemRow).depth;
-      for (let i = index - 1; i >= 0; i--) {
-        const r = rows[i]!;
-        if (r.section !== row.section) return null;
-        if (r.kind === 'folder' && r.depth < depth) return { focus: i };
-      }
-      return null;
-    }
-    default:
-      return null;
+/** A row as the shared tree's keyboard sees it (`ui/treeNav`): a section's
+ *  header sits outside the levels, a note is passed over, a folder is a branch. */
+export function treeNode(row: TreeRow): TreeNode {
+  switch (row.kind) {
+    case 'section':
+      return { key: row.key, depth: -1, focusable: false };
+    case 'note':
+      return { key: row.key, depth: row.depth, focusable: false };
+    case 'folder':
+      return { key: row.key, depth: row.depth, open: row.open, focusable: true };
+    case 'file':
+      return { key: row.key, depth: row.depth, focusable: true };
   }
+}
+
+/** What a key does on the focused file-tree row: `ui/treeNav`'s `treeKey`
+ *  over these rows (headers and notes skipped; Right opens a folder, Left
+ *  closes it or steps out to its folder). */
+export function treeKey(rows: readonly TreeRow[], index: number, key: string): TreeKeyAction {
+  return navKey(rows.map(treeNode), index, key);
 }

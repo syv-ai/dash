@@ -1,8 +1,6 @@
 import * as React from 'react';
 import {
   Check,
-  ChevronDown,
-  ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
   Columns2,
@@ -26,13 +24,20 @@ import { IdeIcon } from '../ui/IdeIcon';
 import { LineStats } from '../ui/LineStats';
 import { ListRow } from '../ui/ListRow';
 import { Tooltip } from '../ui/Tooltip';
+import { TreeRow, type TreeRowContext } from '../ui/Tree';
 import { usePreferredIde } from '../../hooks/usePreferredIde';
 import { openInIde } from '../../lib/openInIde';
 import { absolutePath } from '../diffEditor/editor/fileRef';
 import { copyText, revealLabel } from '../diffEditor/fileActions';
 import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
 import type { FileChangeStatus } from '../../../shared/types';
-import { isChanged, type FileBadges, type ItemRow, type TreeColumns, type TreeRow } from './model';
+import {
+  isChanged,
+  type FileBadges,
+  type ItemRow,
+  type TreeColumns,
+  type TreeRow as FileTreeRow,
+} from './model';
 
 const STATUS_LETTER: Record<FileChangeStatus, string> = {
   modified: 'M',
@@ -46,14 +51,13 @@ const STATUS_LETTER: Record<FileChangeStatus, string> = {
 
 export interface TreeItemProps {
   row: ItemRow;
+  /** From `Tree`: the row's node, selection, tab stop and focus wiring. */
+  ctx: TreeRowContext;
   cwd: string;
   cols: TreeColumns;
-  selected: boolean;
   /** Shown quietly: viewed, or ignored. */
   quiet: boolean;
   badges: FileBadges | undefined;
-  /** The roving tab stop: the one row Tab lands on. */
-  tabStop: boolean;
   /** Hover actions; null: the default (copy the relative path). */
   actions: React.ReactNode;
   /** Space: the row's own toggle (Files' stage); absent, Space opens it. */
@@ -61,62 +65,37 @@ export interface TreeItemProps {
   canOpenToSide: boolean;
   /** A file: open it (a click previews, ⌥ to the side). A folder: toggle. */
   onActivate: (opts?: OpenOptions) => void;
-  onFocusRow: () => void;
-  rowRef: (el: HTMLElement | null) => void;
 }
 
-/** A tree row: its nesting, chevron, name, line and status columns, badges,
- *  hover actions and right-click menu. Everything a tree varies comes in as
- *  `actions` (and `badges`). */
+/** A file tree's row (a `TreeRow`): its name, line and status columns,
+ *  badges, hover actions and right-click menu. Everything a file tree varies
+ *  comes in as `actions` (and `badges`). */
 export function TreeItem({
   row,
+  ctx,
   cwd,
   cols,
-  selected,
   quiet,
   badges,
-  tabStop,
   actions,
   onSpace,
   canOpenToSide,
   onActivate,
-  onFocusRow,
-  rowRef,
 }: TreeItemProps) {
   const folder = row.kind === 'folder';
   const path = folder ? row.folder.path : row.file.path;
-  const Chevron = folder && row.open ? ChevronDown : ChevronRight;
+  // A file starts where its level's chevrons do (D268): no leading slot.
   const item = (
-    <ListRow
-      as="div"
+    <TreeRow
+      ctx={ctx}
       size="sm"
-      ref={rowRef}
-      role="treeitem"
-      aria-level={row.depth + 1}
-      aria-expanded={folder ? row.open : undefined}
-      aria-selected={folder ? undefined : selected}
-      tabIndex={tabStop ? 0 : -1}
-      data-key={row.key}
-      selected={selected}
       dimmed={quiet}
       changed={isChanged(row)}
-      indent={row.depth}
       title={folder ? undefined : path}
       className="group/swap relative cursor-pointer"
-      onFocus={(e: React.FocusEvent) => e.target === e.currentTarget && onFocusRow()}
-      onClick={(e: React.MouseEvent) =>
-        onActivate(folder ? undefined : { toSide: e.altKey, preview: true })
-      }
+      onActivate={(e) => onActivate(folder ? undefined : { toSide: e.altKey, preview: true })}
+      onSpace={onSpace}
       onDoubleClick={folder ? undefined : () => onActivate()}
-      onKeyDown={(e: React.KeyboardEvent) => {
-        // A control in the row (a tick, an action) handles its own keys.
-        if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
-        e.preventDefault();
-        if (e.key === ' ' && onSpace) onSpace();
-        else onActivate(folder ? undefined : { toSide: e.altKey, preview: true });
-      }}
-      // A file starts where its level's chevrons do (D268).
-      leading={folder ? <Chevron size={14} strokeWidth={1.8} /> : undefined}
       trailing={
         <HoverSwapSlot
           rest={<Columns row={row} cols={cols} badges={badges} />}
@@ -125,7 +104,7 @@ export function TreeItem({
       }
     >
       {folder ? row.name : row.file.name}
-    </ListRow>
+    </TreeRow>
   );
   return (
     <ContextMenu>
@@ -143,7 +122,7 @@ export function TreeItem({
 
 /** A lazy folder's state in place of its rows: reading, empty, or why not,
  *  under the folder's name. */
-export function TreeNote({ row }: { row: Extract<TreeRow, { kind: 'note' }> }) {
+export function TreeNote({ row }: { row: Extract<FileTreeRow, { kind: 'note' }> }) {
   return (
     <ListRow
       as="div"

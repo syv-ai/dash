@@ -19,9 +19,11 @@ const listRowVariants = cva(
       },
       // A changed file's name (G1); a dimmed row stays dimmed.
       changed: { true: '', false: '' },
+      // The row being dragged to a new place: faded where it will land.
+      dragging: { true: 'opacity-40', false: '' },
     },
     compoundVariants: [{ changed: true, dimmed: false, className: 'text-changed' }],
-    defaultVariants: { size: 'md', twoLine: false, dimmed: false, changed: false },
+    defaultVariants: { size: 'md', twoLine: false, dimmed: false, changed: false, dragging: false },
   },
 );
 
@@ -36,6 +38,8 @@ export type ListRowProps = Omit<React.ComponentProps<'button'>, 'children'> &
     dimmed?: boolean;
     /** A changed file or folder: its label in the `changed` gold (G1). */
     changed?: boolean;
+    /** Being dragged to reorder: faded. */
+    dragging?: boolean;
     /** Before the label: a StatusDot, a file icon. An icon that doesn't
      *  colour itself rests in the icon token. */
     leading?: React.ReactNode;
@@ -45,8 +49,10 @@ export type ListRowProps = Omit<React.ComponentProps<'button'>, 'children'> &
     /** `div` when `trailing` holds buttons (buttons can't nest); the caller
      *  then owns the row's role, focus and keyboard handling. */
     as?: 'button' | 'div';
-    /** Tree depth: each level indents the row by TREE_INDENT_PX. */
+    /** Tree depth: each level indents the row by `indentStep`. */
     indent?: number;
+    /** Pixels per tree level; TREE_INDENT_PX unless a tree spaces its levels wider. */
+    indentStep?: number;
   };
 
 /** Horizontal step per tree level in an indented `ListRow`. */
@@ -62,11 +68,13 @@ export function ListRow({
   description,
   dimmed = false,
   changed = false,
+  dragging = false,
   leading,
   trailing,
   size,
   as = 'button',
   indent,
+  indentStep = TREE_INDENT_PX,
   className,
   style,
   children,
@@ -79,9 +87,12 @@ export function ListRow({
       type={as === 'button' ? type : undefined}
       data-selected={selected}
       aria-current={selected ? 'true' : undefined}
-      className={cn(listRowVariants({ size, dimmed, changed, twoLine: !!description }), className)}
+      className={cn(
+        listRowVariants({ size, dimmed, changed, dragging, twoLine: !!description }),
+        className,
+      )}
       // px-2.5 is 10px; a tree row adds its depth to the left of it.
-      style={indent ? { ...style, paddingLeft: 10 + indent * TREE_INDENT_PX } : style}
+      style={indent ? { ...style, paddingLeft: 10 + indent * indentStep } : style}
       {...(props as React.HTMLAttributes<HTMLElement>)}
     >
       {leading && <span className="flex h-5 shrink-0 items-center text-icon">{leading}</span>}
