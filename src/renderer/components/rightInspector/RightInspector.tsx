@@ -24,6 +24,7 @@ import { TaskDetails } from './TaskDetails';
 import { IconButton } from '../ui/IconButton';
 import { cn } from '../../lib/cn';
 import { FolderTabs } from '../ui/FolderTabs';
+import { MovableSlot, useMovable } from '../ui/Movable';
 import { folderSheet, folderStripSlot } from '../ui/FolderTab';
 import { CountBadge } from '../ui/CountBadge';
 import {
@@ -681,6 +682,21 @@ export function RightInspector({
     </PortsDrawerWrapper>
   );
 
+  // The column's top (usage, banner, view row) and its sheet move between
+  // the one column (narrow) and the split's list column (expanded) without
+  // remounting (D265): a remount re-measured them in the list panel before
+  // it had a width (headers wrapping, usage dropping its rings), painting a
+  // jump before the motion, and reset the tree's open folders and scroll.
+  // Split, `list` is the tree.
+  const top = useMovable(
+    <>
+      {usage}
+      {banner}
+      {header}
+    </>,
+  );
+  const sheet = useMovable(withPorts(onSheet(list)));
+
   return (
     // pb-2: the terminal sheet keeps the same 8px gutter from the window's
     // bottom edge as the main sheet.
@@ -689,6 +705,8 @@ export function RightInspector({
       className="flex h-full min-w-0 flex-col bg-ground pt-2 pr-2 pb-2"
       style={{ '--sheet-bg': terminalTheme.background } as CSSProperties}
     >
+      {top.portal}
+      {sheet.portal}
       <div className="min-h-0 flex-1">
         <ResizablePanelGroup
           orientation="horizontal"
@@ -718,10 +736,10 @@ export function RightInspector({
                 {...treePanel}
               >
                 <div className="flex h-full min-h-0 flex-col pr-2">
-                  {usage}
-                  {banner}
-                  {header}
-                  <div className="min-h-0 flex-1">{withPorts(onSheet(tree))}</div>
+                  <MovableSlot host={top.host} />
+                  <div className="min-h-0 flex-1">
+                    <MovableSlot host={sheet.host} />
+                  </div>
                 </div>
               </ResizablePanel>
               {/* A press (a drag, the double click that resets) or a key on
@@ -742,9 +760,7 @@ export function RightInspector({
                 the list's, and the editor runs the full height. They sit
                 ahead of the terminals, which keep their place either way. */}
             <div className="flex h-full min-h-0 flex-col">
-              {!split && usage}
-              {!split && banner}
-              {!split && header}
+              {!split && <MovableSlot host={top.host} />}
               <div className="min-h-0 flex-1">
                 <ShellDrawerWrapper
                   taskId={task.id}
@@ -785,7 +801,7 @@ export function RightInspector({
                       </EditorSheet>
                     </div>
                   )}
-                  {!split && withPorts(onSheet(list))}
+                  {!split && <MovableSlot host={sheet.host} />}
                 </ShellDrawerWrapper>
               </div>
             </div>
