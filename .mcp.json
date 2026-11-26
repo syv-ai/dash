@@ -2,7 +2,7 @@
   "mcpServers": {
     "posthog": {
       "type": "http",
-      "url": "https://mcp.posthog.com/mcp?features=dashboards,product_analytics,insights,events,data_schema,sql,error_tracking&resources=none"
+      "url": "https://mcp.posthog.com/mcp?tools=dashboards-get-all,dashboard-get,dashboard-create,dashboard-update,dashboard-create-tile,insights-list,insight-get,insight-create,insight-update,insight-query,query-trends,query-retention,query-stickiness,query-lifecycle,execute-sql,read-data-schema,query-error-tracking-issues-list,query-error-tracking-issue&resources=none"
     }
   }
 }
