@@ -95,7 +95,8 @@ function SyncPart({
   density,
 }: {
   count: number;
-  words: string;
+  /** What follows the count at the `words` density. */
+  words?: string;
   side: 'ahead' | 'behind';
   density: SyncDensity;
 }) {
@@ -144,6 +145,17 @@ function SyncLine({
       {ahead > 0 && part('ahead', ahead, 'Show the unpushed commits', links?.onShowUnpushed)}
       {ahead > 0 && behind > 0 && (density === 'words' ? ', ' : ' ')}
       {behind > 0 && part('behind', behind, "Show the upstream's commits", links?.onShowUpstream)}
+    </span>
+  );
+}
+
+/** The compact counts stacked, "↑3" over "↓1", a zero side left out: the
+ *  collapsed task sidebar's rail, too narrow for them side by side. */
+export function SyncArrowsStacked({ ahead, behind }: { ahead: number; behind: number }) {
+  return (
+    <span className="flex flex-col items-center tabular-nums">
+      {ahead > 0 && <SyncPart count={ahead} side="ahead" density="arrows" />}
+      {behind > 0 && <SyncPart count={behind} side="behind" density="arrows" />}
     </span>
   );
 }

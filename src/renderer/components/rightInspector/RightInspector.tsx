@@ -18,6 +18,7 @@ import { useCommitRun } from '../changes/useCommitRun';
 import { ShellDrawerWrapper } from '../terminal/ShellDrawerWrapper';
 import { PortsDrawerWrapper } from './PortsDrawerWrapper';
 import { UsageSection } from './UsageSection';
+import { TaskRail } from './TaskRail';
 import { ViewRow, type ViewRowExtra } from './ViewRow';
 import { viewRowMinPx } from './viewRowFit';
 import { TaskDetails } from './TaskDetails';
@@ -148,6 +149,12 @@ interface RightInspectorProps {
   /** The narrowest the sidebar may go (px) so its view tabs read in full;
    *  reported once measured, and again as the views change. */
   onMinWidth?: (px: number) => void;
+  /** Collapsed (and not mid-motion): it shows its rail (`TaskRail`), the rest
+   *  kept mounted out of sight (the editor's tabs and unsaved edits, the
+   *  terminals) and out of reach of the keyboard. */
+  railed: boolean;
+  /** Show the sidebar narrow, from the rail. */
+  onShow: () => void;
 }
 
 /** The list column's narrowest in review mode, in px (D81). */
@@ -185,6 +192,8 @@ export function RightInspector({
   onTuiActiveChange,
   onTaskSettings,
   onMinWidth,
+  railed,
+  onShow,
 }: RightInspectorProps) {
   const gitStatus = useGit((s) => s.gitStatus);
   const gitLoading = useGit((s) => s.gitLoading);
@@ -336,6 +345,11 @@ export function RightInspector({
     const path = firstTreeFile(ws.data.repoPaths);
     if (path) openFile(path, { preview: true });
     else openEditor();
+  };
+  // The rail's clicks: the view tabs' own pick (a single click), then show.
+  const showFromRail = (on: CodeSegment | null) => {
+    if (on) onPickSegment(on, false);
+    onShow();
   };
   const toggleDetails = () => {
     if (segment === 'details') selectSegment(lastCodeSegment);
@@ -698,117 +712,128 @@ export function RightInspector({
   const sheet = useMovable(withPorts(onSheet(list)));
 
   return (
-    // pb-2: the terminal sheet keeps the same 8px gutter from the window's
-    // bottom edge as the main sheet.
-    // The sheets (list, editor, terminals) share the terminal palette's ground.
-    <div
-      className="flex h-full min-w-0 flex-col bg-ground pt-2 pr-2 pb-2"
-      style={{ '--sheet-bg': terminalTheme.background } as CSSProperties}
-    >
-      {top.portal}
-      {sheet.portal}
-      <div className="min-h-0 flex-1">
-        <ResizablePanelGroup
-          orientation="horizontal"
-          defaultLayout={split ? { list: listWidth, main: 100 - listWidth } : undefined}
-          onLayoutChanged={(layout) => {
-            const list = layout.list;
-            if (!listDragged.current || list === undefined) return;
-            listDragged.current = false;
-            saveListWidth(listMode, list);
-          }}
-        >
-          {/* Mounted only while split, ahead of "main", which keeps its place
+    <>
+      {railed && (
+        <div className="h-full bg-ground pt-2 pr-2 pb-2">
+          <TaskRail
+            rateLimits={rateLimits}
+            status={statusIsOwn ? gitStatus : null}
+            onShow={showFromRail}
+          />
+        </div>
+      )}
+      {/* pb-2: the terminal sheet keeps the same 8px gutter from the window's
+          bottom edge as the main sheet. The sheets (list, editor, terminals)
+          share the terminal palette's ground. */}
+      <div
+        className={cn('flex h-full min-w-0 flex-col bg-ground pt-2 pr-2 pb-2', railed && 'hidden')}
+        style={{ '--sheet-bg': terminalTheme.background } as CSSProperties}
+      >
+        {top.portal}
+        {sheet.portal}
+        <div className="min-h-0 flex-1">
+          <ResizablePanelGroup
+            orientation="horizontal"
+            defaultLayout={split ? { list: listWidth, main: 100 - listWidth } : undefined}
+            onLayoutChanged={(layout) => {
+              const list = layout.list;
+              if (!listDragged.current || list === undefined) return;
+              listDragged.current = false;
+              saveListWidth(listMode, list);
+            }}
+          >
+            {/* Mounted only while split, ahead of "main", which keeps its place
               in the tree either way: the terminals below never remount. */}
-          {split && (
-            <>
-              <ResizablePanel
-                id="list"
-                // Where it splits (`listWidth`); the divider's double click
-                // goes back to the mode's default.
-                defaultSize={`${listWidth}%`}
-                // Review mode's header and rows need room for their counts and
-                // actions beside their text (the tree and commits do with less),
-                // and the view tabs need theirs in full.
-                minSize={Math.max(listMinPx ?? 0, reviewing ? REVIEW_LIST_MIN_PX : 0) || '15%'}
-                // Review mode's wider default needs more room.
-                maxSize={reviewing ? '60%' : '50%'}
-                {...treePanel}
-              >
-                <div className="flex h-full min-h-0 flex-col pr-2">
-                  <MovableSlot host={top.host} />
-                  <div className="min-h-0 flex-1">
-                    <MovableSlot host={sheet.host} />
+            {split && (
+              <>
+                <ResizablePanel
+                  id="list"
+                  // Where it splits (`listWidth`); the divider's double click
+                  // goes back to the mode's default.
+                  defaultSize={`${listWidth}%`}
+                  // Review mode's header and rows need room for their counts and
+                  // actions beside their text (the tree and commits do with less),
+                  // and the view tabs need theirs in full.
+                  minSize={Math.max(listMinPx ?? 0, reviewing ? REVIEW_LIST_MIN_PX : 0) || '15%'}
+                  // Review mode's wider default needs more room.
+                  maxSize={reviewing ? '60%' : '50%'}
+                  {...treePanel}
+                >
+                  <div className="flex h-full min-h-0 flex-col pr-2">
+                    <MovableSlot host={top.host} />
+                    <div className="min-h-0 flex-1">
+                      <MovableSlot host={sheet.host} />
+                    </div>
                   </div>
-                </div>
-              </ResizablePanel>
-              {/* A press (a drag, the double click that resets) or a key on
+                </ResizablePanel>
+                {/* A press (a drag, the double click that resets) or a key on
                   it makes the width that follows the user's. */}
-              <ResizableHandle
-                onPointerDown={listGesture}
-                onKeyDown={listGesture}
-                // Back to the mode's default, kept as the user's choice.
-                onDoubleClick={() => {
-                  listDragged.current = true;
-                  listPanelRef.current?.resize(`${LIST_DEFAULTS[listMode]}%`);
-                }}
-              />
-            </>
-          )}
-          <ResizablePanel id="main" minSize="40%">
-            {/* The usage and view row lead the one column; split, they lead
+                <ResizableHandle
+                  onPointerDown={listGesture}
+                  onKeyDown={listGesture}
+                  // Back to the mode's default, kept as the user's choice.
+                  onDoubleClick={() => {
+                    listDragged.current = true;
+                    listPanelRef.current?.resize(`${LIST_DEFAULTS[listMode]}%`);
+                  }}
+                />
+              </>
+            )}
+            <ResizablePanel id="main" minSize="40%">
+              {/* The usage and view row lead the one column; split, they lead
                 the list's, and the editor runs the full height. They sit
                 ahead of the terminals, which keep their place either way. */}
-            <div className="flex h-full min-h-0 flex-col">
-              {!split && <MovableSlot host={top.host} />}
-              <div className="min-h-0 flex-1">
-                <ShellDrawerWrapper
-                  taskId={task.id}
-                  cwd={task.path}
-                  collapsed={shellDrawerCollapsed}
-                  label={task.useWorktree ? 'Worktree' : 'Terminal'}
-                  terminalBg={terminalTheme.background}
-                  panelRef={shellDrawerRef}
-                  animating={shellDrawerAnimating}
-                  onAnimate={() => setShellDrawerAnimating(true)}
-                  onCollapse={() => settleShellDrawer(true)}
-                  onExpand={() => settleShellDrawer(false)}
-                  onTuiActiveChange={onTuiActiveChange}
-                >
-                  {/* Mounted while open, out of sight while narrow: its tabs,
+              <div className="flex h-full min-h-0 flex-col">
+                {!split && <MovableSlot host={top.host} />}
+                <div className="min-h-0 flex-1">
+                  <ShellDrawerWrapper
+                    taskId={task.id}
+                    cwd={task.path}
+                    collapsed={shellDrawerCollapsed}
+                    label={task.useWorktree ? 'Worktree' : 'Terminal'}
+                    terminalBg={terminalTheme.background}
+                    panelRef={shellDrawerRef}
+                    animating={shellDrawerAnimating}
+                    onAnimate={() => setShellDrawerAnimating(true)}
+                    onCollapse={() => settleShellDrawer(true)}
+                    onExpand={() => settleShellDrawer(false)}
+                    onTuiActiveChange={onTuiActiveChange}
+                  >
+                    {/* Mounted while open, out of sight while narrow: its tabs,
                     scroll and unsaved edits wait for the next file to open. */}
-                  {editorMounted && (
-                    <div className={cn(split ? 'h-full' : 'hidden', editorMotionClass(motion))}>
-                      <EditorSheet closeBinding={keybindings.closeDiff} onClose={onCloseDiff}>
-                        <Suspense fallback={null}>
-                          <EditorGroups
-                            ws={ws}
-                            terminalTheme={terminalTheme}
-                            isDark={isDark}
-                            actions={
-                              <IconButton
-                                size="sm"
-                                title="Close editor"
-                                shortcut={keybindings.closeDiff}
-                                onClick={onCloseDiff}
-                              >
-                                <X size={14} strokeWidth={1.8} />
-                              </IconButton>
-                            }
-                          />
-                          <OnMount onMount={onEditorMounted} />
-                        </Suspense>
-                      </EditorSheet>
-                    </div>
-                  )}
-                  {!split && <MovableSlot host={sheet.host} />}
-                </ShellDrawerWrapper>
+                    {editorMounted && (
+                      <div className={cn(split ? 'h-full' : 'hidden', editorMotionClass(motion))}>
+                        <EditorSheet closeBinding={keybindings.closeDiff} onClose={onCloseDiff}>
+                          <Suspense fallback={null}>
+                            <EditorGroups
+                              ws={ws}
+                              terminalTheme={terminalTheme}
+                              isDark={isDark}
+                              actions={
+                                <IconButton
+                                  size="sm"
+                                  title="Close editor"
+                                  shortcut={keybindings.closeDiff}
+                                  onClick={onCloseDiff}
+                                >
+                                  <X size={14} strokeWidth={1.8} />
+                                </IconButton>
+                              }
+                            />
+                            <OnMount onMount={onEditorMounted} />
+                          </Suspense>
+                        </EditorSheet>
+                      </div>
+                    )}
+                    {!split && <MovableSlot host={sheet.host} />}
+                  </ShellDrawerWrapper>
+                </div>
               </div>
-            </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 

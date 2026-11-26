@@ -8,6 +8,7 @@ import React, {
   Suspense,
   lazy,
 } from 'react';
+import { flushSync } from 'react-dom';
 import { TUI_FEATURE_IDS } from '@shared/tuiProtocol';
 import {
   ResizablePanelGroup,
@@ -102,6 +103,9 @@ const INSPECTOR_MAX_PCT = 85;
 const MAIN_MIN_PX = 280;
 /** The left sidebar collapsed (%): its rail. */
 const SIDEBAR_COLLAPSED_PCT = 3;
+/** The task sidebar collapsed (px): its rail (`TaskRail`), as wide as its
+ *  figures need ("100%", "Weekly") whatever the window's width. */
+const TASK_RAIL_PX = 48;
 /** The shell's two resize handles and rounding, in px: what an expanding
  *  task sidebar leaves beside the centre's MAIN_MIN_PX. */
 const SHELL_SLACK_PX = 8;
@@ -1055,12 +1059,12 @@ export function App() {
     if (prev && prev !== activeTask?.path) useEditors.getState().park(prev);
   }, [activeTask?.path]);
 
-  // Collapsing hides the task sidebar without closing the editor: it stays
-  // mounted out of sight (tabs, panes, unsaved edits) and expanding brings
-  // it back at the width it left. Collapsing takes the keyboard from it
-  // back to the task's Claude Code TUI. `expandedAtCollapseRef`: whether the
-  // width the panel comes back at is the expanded one (set however it
-  // collapsed).
+  // Collapsing (to its rail) hides the task sidebar without closing the
+  // editor: it stays mounted out of sight (tabs, panes, unsaved edits) and
+  // expanding brings it back at the width it left. Collapsing takes the
+  // keyboard from it back to the task's Claude Code TUI.
+  // `expandedAtCollapseRef`: whether the width the panel comes back at is
+  // the expanded one (set however it collapsed).
   const expandedAtCollapseRef = useRef(false);
   // The task sidebar's least width (px), which its view tabs report.
   const [inspectorMinPx, setInspectorMinPx] = useState<number>();
@@ -1075,13 +1079,15 @@ export function App() {
   // as it is, clipped by the closing panel, until it has closed; showing, it
   // is there at the width the panel opens to before it opens. The editor,
   // expanded, keeps its width and doesn't fade.
-  const toggleInspector = useCallback(() => {
-    const panel = changesPanelRef.current;
-    if (!panel) return;
-    const groupPx =
-      inspectorBodyRef.current?.closest('[data-slot="resizable-panel-group"]')?.clientWidth ??
-      window.innerWidth;
-    if (panel.isCollapsed()) {
+  // Showing; `restoreLeft`: the left sidebar comes back in the same ease
+  // (the rail's show, narrowing a sidebar whose expanding collapsed it).
+  const showInspector = useCallback(
+    (restoreLeft: boolean) => {
+      const panel = changesPanelRef.current;
+      if (!panel?.isCollapsed()) return;
+      const groupPx =
+        inspectorBodyRef.current?.closest('[data-slot="resizable-panel-group"]')?.clientWidth ??
+        window.innerWidth;
       const expanded = inspectorExpandedRef.current;
       const widths = loadInspectorWidths();
       const restored = shownPctRef.current ?? (expanded ? widths.expanded : widths.narrow);
@@ -1095,12 +1101,22 @@ export function App() {
         }) ?? restored;
       runMotion({
         hold: { width: Math.round((groupPx * pct) / 100), to: 'shown' },
+        movesLeft: restoreLeft,
         // The library clamps the width (its bounds, the centre's least).
         move: () => {
+          if (restoreLeft) sidebarPanelRef.current?.expand();
           panel.resize(`${pct}%`);
           return Math.round((groupPx * panel.getSize().asPercentage) / 100);
         },
       });
+    },
+    [runMotion],
+  );
+  const toggleInspector = useCallback(() => {
+    const panel = changesPanelRef.current;
+    if (!panel) return;
+    if (panel.isCollapsed()) {
+      showInspector(false);
       return;
     }
     shownPctRef.current = panel.getSize().asPercentage;
@@ -1118,7 +1134,7 @@ export function App() {
     });
     const id = useProjects.getState().activeTaskId;
     if (hadFocus && id) requestAnimationFrame(() => sessionRegistry.get(id)?.focus());
-  }, [runMotion]);
+  }, [runMotion, showInspector]);
 
   // Expanding eases the task sidebar to its expanded width, going narrow back
   // to its narrow one, each remembered. One panel, resized: swapping panels
@@ -1137,7 +1153,9 @@ export function App() {
   // editor opening for the first time is waited for (up to
   // EDITOR_MOUNT_WAIT_MS), so Monaco's start-up lands before the ease, not
   // in it.
-  useEffect(() => {
+  // A layout effect, ahead of the one below: a show that narrows first
+  // (`showInspectorNarrow`) reads it right after that commit.
+  useLayoutEffect(() => {
     inspectorExpandedRef.current = expanded;
   }, [expanded]);
   const editorMounted = useRef(false);
@@ -1265,6 +1283,24 @@ export function App() {
   const narrowEditor = useCallback(() => {
     if (activeTask) useEditors.getState().hide(activeTask.path);
   }, [activeTask]);
+  // The rail's clicks show the sidebar narrow. Hidden expanded, it goes
+  // narrow behind the rail first (committed at once, so the show plans from
+  // the narrow width and layout), then shows; the left sidebar, if
+  // expanding collapsed it, comes back in the show's ease, not on its own.
+  const showInspectorNarrow = useCallback(() => {
+    if (!changesPanelRef.current?.isCollapsed()) return;
+    const wasExpanded = inspectorExpandedRef.current;
+    const restoreLeft =
+      wasExpanded &&
+      leftFreedByExpandRef.current !== null &&
+      !!sidebarPanelRef.current?.isCollapsed();
+    if (wasExpanded) {
+      // Restored below, by the show.
+      leftFreedByExpandRef.current = null;
+      flushSync(narrowEditor);
+    }
+    showInspector(restoreLeft);
+  }, [narrowEditor, showInspector]);
 
   // A Setup tab request shows the drawer: a collapsed task sidebar hides
   // it, so open the sidebar. Once per request: a later collapse must not
@@ -1585,12 +1621,12 @@ export function App() {
               id="changes"
               panelRef={changesPanelRef}
               animate={changesAnimating}
-              defaultSize={startedCollapsed.inspector ? '0%' : '26%'}
+              defaultSize={startedCollapsed.inspector ? TASK_RAIL_PX : '26%'}
               // Never narrower than its view tabs' labels, once measured.
               minSize={inspectorMinPx ?? `${TUI_PANEL_MIN_PCT}%`}
               maxSize={`${INSPECTOR_MAX_PCT}%`}
               collapsible
-              collapsedSize="0%"
+              collapsedSize={TASK_RAIL_PX}
               onCollapse={() => {
                 expandedAtCollapseRef.current = inspectorExpandedRef.current;
                 setChangesPanelCollapsed(true);
@@ -1614,9 +1650,9 @@ export function App() {
                 if (width !== null) panel.resize(`${width}%`);
               }}
             >
-              {/* Collapsed, it stays mounted out of sight (the editor's tabs
-                  and unsaved edits, the terminals) and out of reach of the
-                  keyboard; Monaco and xterm re-lay out once shown. */}
+              {/* Collapsed, it shows its rail once it has closed and until it
+                  opens (`railed`), the rest mounted out of sight; Monaco and
+                  xterm re-lay out once shown. */}
               {/* Held at the expanded width while it eases (`sidebarMotion`),
                   clipped here (the panel itself would scroll). */}
               {/* `overflow-clip`, not hidden: a clip can't be scrolled, so the
@@ -1624,11 +1660,7 @@ export function App() {
               <div className="h-full overflow-clip">
                 <div
                   ref={inspectorBodyRef}
-                  className={cn(
-                    // Hidden once it has closed, shown before it opens.
-                    changesPanelCollapsed && !sidebarMotion ? 'hidden' : 'h-full',
-                    sidebarMotion && 'w-(--held-width)',
-                  )}
+                  className={cn('h-full', sidebarMotion && 'w-(--held-width)')}
                   style={
                     sidebarMotion
                       ? ({ '--held-width': `${sidebarMotion.width}px` } as React.CSSProperties)
@@ -1662,6 +1694,8 @@ export function App() {
                     onTuiActiveChange={handleTuiPanelActive}
                     onTaskSettings={() => handleTaskSettings(activeTask.id)}
                     onMinWidth={setInspectorMinPx}
+                    railed={changesPanelCollapsed && !sidebarMotion}
+                    onShow={showInspectorNarrow}
                   />
                 </div>
               </div>

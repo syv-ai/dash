@@ -1,6 +1,6 @@
 /*
- * The task sidebar's states (see CLAUDE.md): collapsed (not shown; only the
- * Hide control or ⌘⌥B), narrow (one column, no editor pane) and expanded
+ * The task sidebar's states (see CLAUDE.md): collapsed (its rail, `rail.ts`;
+ * only the Hide control or ⌘⌥B), narrow (one column, no editor pane) and expanded
  * (editor panes beside the tree or list). Opening a file expands it; these
  * decide what the view switch does to it.
  *

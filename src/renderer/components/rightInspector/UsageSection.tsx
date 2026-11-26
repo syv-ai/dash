@@ -33,7 +33,7 @@ interface UsageSectionProps {
   paces: LimitPaces;
 }
 
-const LIMIT_LABELS: Record<LimitKey, string> = {
+export const LIMIT_LABELS: Record<LimitKey, string> = {
   fiveHour: '5-hour',
   sevenDay: 'Weekly',
 };
@@ -59,6 +59,9 @@ type Cell = { key: string; tooltip: RichTooltip; label: string; caption?: string
   | { kind: 'level'; pct: number | null; aria: string }
   | { kind: 'pace'; rate: string; outlook: PaceOutlook | null }
 );
+
+/** A level's column: the session's context, or a limit. */
+export type LevelCell = Extract<Cell, { kind: 'level' }>;
 
 /** The pace's figure by its outlook: green, it resets first; amber, close;
  *  red, the limit comes first; plain ink with no projection yet. */
@@ -103,16 +106,10 @@ function Figure({ cell, density }: { cell: Cell; density: UsageDensity }) {
       </span>
     );
   }
+  if (density === 'compact') return <LevelReading cell={cell} />;
   const { pct, aria } = cell;
   const reading = pct === null ? '—' : `${pct}%`;
   const color = pct === null ? undefined : usageColor(pct);
-  if (density === 'compact') {
-    return (
-      <LevelText value={pct} color={color} aria-label={aria}>
-        {reading}
-      </LevelText>
-    );
-  }
   return (
     <ProgressRing value={pct} size={64} stroke={6} color={color} aria-label={aria}>
       <span className={cn(LEVEL_FIGURE, pct === null ? 'text-ink-3' : 'text-ink')}>{reading}</span>
@@ -120,11 +117,25 @@ function Figure({ cell, density }: { cell: Cell; density: UsageDensity }) {
   );
 }
 
+/** A level as its percent alone, coloured by how close it is to full: the
+ *  compact row's figure, and the collapsed sidebar's rail's. */
+export function LevelReading({ cell: { pct, aria } }: { cell: LevelCell }) {
+  return (
+    <LevelText value={pct} color={pct === null ? undefined : usageColor(pct)} aria-label={aria}>
+      {pct === null ? '—' : `${pct}%`}
+    </LevelText>
+  );
+}
+
 /** The cells at `density`: the pace only where there is room for it. */
 const shown = (cells: Cell[], density: UsageDensity) =>
   density === 'full' ? cells : cells.filter((c) => c.kind !== 'pace');
 
-function limitCell(limit: LimitKey, info: RateLimitInfo | undefined, now: number): Cell {
+export function limitCell(
+  limit: LimitKey,
+  info: RateLimitInfo | undefined,
+  now: number,
+): LevelCell {
   const long = LIMIT_LABELS[limit];
   const pct = info ? Math.round(info.usedPercentage) : null;
   const resetsAt = info?.resetsAt ?? 0;
