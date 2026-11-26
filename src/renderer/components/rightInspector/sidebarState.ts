@@ -20,6 +20,10 @@ import { treeOrder } from '../fileTree/treeOrder';
  *  Overview, Files, Comments and History. */
 export type CodeSegment = 'overview' | 'files' | 'comments' | 'history';
 
+/** What the sidebar's list shows: a view, or the task's details (an icon
+ *  toggle at the view row's end, read least often). */
+export type SidebarView = CodeSegment | 'details';
+
 /** What picking a view does to the sidebar. */
 export type SegmentPick =
   /** Go narrow, the editor kept out of sight (on the picked view). */

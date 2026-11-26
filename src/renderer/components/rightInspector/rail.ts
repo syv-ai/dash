@@ -1,12 +1,13 @@
 /*
  * The collapsed task sidebar is a rail (see CLAUDE.md's sidebar states): the
- * usage row's levels (`levelCells`), how far the branch and its upstream have moved apart, and
- * the changed files, stacked. These decide what it shows and where a click
- * on it leads.
+ * usage row's levels (`levelCells`), how far the branch and its upstream have
+ * moved apart, the changed files and the PRs, stacked; Details and the
+ * terminal at its foot. These decide what it shows and where a click on it
+ * leads.
  */
 
 import type { GitStatus } from '../../../shared/types';
-import type { CodeSegment } from './sidebarState';
+import type { SidebarView } from './sidebarState';
 
 type Status = Pick<GitStatus, 'hasUpstream' | 'ahead' | 'behind' | 'files'>;
 
@@ -27,16 +28,32 @@ export function railParts(status: Status | null): RailParts {
   };
 }
 
-/** What can be clicked on the rail: a part, or the space around them. */
-export type RailTarget = 'changes' | 'sync' | 'space';
+/** What leads off the rail: a part, a PR picked from its list, an action at
+ *  its foot, or the space around them. */
+export type RailTarget = 'changes' | 'sync' | 'pr' | 'details' | 'terminal' | 'space';
+
+/** How the sidebar shows, narrow, from the rail. */
+export interface RailShow {
+  /** The view it shows on; null: the view it has. */
+  view: SidebarView | null;
+  /** The terminal drawer opens, its active terminal taking the keyboard. */
+  terminal: boolean;
+}
+
+const show = (view: SidebarView | null, terminal = false): RailShow => ({ view, terminal });
 
 /**
- * The view a click on the rail shows the sidebar on, narrow: the changes on
- * Files, ahead/behind on History; its own space as it was (null). A limit
- * isn't a target: it only has its tooltip.
+ * Where each rail target shows the sidebar, narrow (R3): the changes on
+ * Files, ahead/behind on History, Details on Details; a PR picked from the
+ * rail's list as review mode has it (entering it shows Overview, R10); the
+ * terminal and the space on the view it has, the terminal drawer opened
+ * (R11). A limit isn't a target: it only has its tooltip.
  */
-export const RAIL_VIEW: Record<RailTarget, CodeSegment | null> = {
-  changes: 'files',
-  sync: 'history',
-  space: null,
+export const RAIL_SHOW: Record<RailTarget, RailShow> = {
+  changes: show('files'),
+  sync: show('history'),
+  pr: show(null),
+  details: show('details'),
+  terminal: show(null, true),
+  space: show(null),
 };

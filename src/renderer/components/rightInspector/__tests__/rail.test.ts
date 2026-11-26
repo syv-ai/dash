@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { FileChange, GitStatus } from '../../../../shared/types';
-import { railParts, RAIL_VIEW } from '../rail';
+import { railParts, RAIL_SHOW } from '../rail';
 
 const file = (path: string, staged = false): FileChange => ({
   path,
@@ -47,8 +47,21 @@ describe('railParts', () => {
   });
 });
 
-describe('RAIL_VIEW', () => {
-  it('opens the changes on Files and ahead/behind on History; its space leaves the view be', () => {
-    expect(RAIL_VIEW).toEqual({ changes: 'files', sync: 'history', space: null });
+describe('RAIL_SHOW', () => {
+  it('shows the changes on Files, ahead/behind on History and Details on Details', () => {
+    expect(RAIL_SHOW.changes).toEqual({ view: 'files', terminal: false });
+    expect(RAIL_SHOW.sync).toEqual({ view: 'history', terminal: false });
+    expect(RAIL_SHOW.details).toEqual({ view: 'details', terminal: false });
+  });
+
+  it('leaves the view be for its space and a PR picked (review mode picks its own)', () => {
+    expect(RAIL_SHOW.space).toEqual({ view: null, terminal: false });
+    expect(RAIL_SHOW.pr).toEqual({ view: null, terminal: false });
+  });
+
+  it('opens the terminal only from its own button, on the view the sidebar has', () => {
+    expect(RAIL_SHOW.terminal).toEqual({ view: null, terminal: true });
+    const others = Object.entries(RAIL_SHOW).filter(([target]) => target !== 'terminal');
+    expect(others.every(([, show]) => !show.terminal)).toBe(true);
   });
 });

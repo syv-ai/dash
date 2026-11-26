@@ -19,6 +19,7 @@ import { ShellDrawerWrapper } from '../terminal/ShellDrawerWrapper';
 import { PortsDrawerWrapper } from './PortsDrawerWrapper';
 import { UsageSection } from './UsageSection';
 import { TaskRail } from './TaskRail';
+import type { RailShow } from './rail';
 import { ViewRow, type ViewRowExtra } from './ViewRow';
 import { viewRowMinPx } from './viewRowFit';
 import { TaskDetails } from './TaskDetails';
@@ -39,7 +40,13 @@ import { HistoryList } from '../diffEditor/HistoryList';
 import { useEditorWorkspace, type EditorTarget } from '../diffEditor/useEditorWorkspace';
 import { activePath, type OpenOptions } from '../diffEditor/tabs/editorLayout';
 import { useTreePanel } from '../diffEditor/TreeToggle';
-import { firstListedChange, firstTreeFile, pickSegment, type CodeSegment } from './sidebarState';
+import {
+  firstListedChange,
+  firstTreeFile,
+  pickSegment,
+  type CodeSegment,
+  type SidebarView,
+} from './sidebarState';
 import { defaultFilesScope, loadFilesScope, saveFilesScope, type FilesScope } from './filesScope';
 import { viewOfSection } from '../changes/changeSections';
 import {
@@ -74,9 +81,8 @@ const EditorGroups = lazy(() =>
 
 /** What the sidebar's list shows: the files (the changes, or the whole repo
  *  with them) and the commits, or in review mode the PR's overview, files, comments and commits
- *  (the view switch, always in words), or the task's details (an icon toggle
- *  at the row's end, read least often). */
-type Segment = CodeSegment | 'details';
+ *  (the view switch, always in words), or the task's details. */
+type Segment = SidebarView;
 
 /** The sidebar mid-motion (App's `usePlannedMotion`): its content is held at
  *  `width` (px), first still (`held`: the layout paints), then while the
@@ -153,8 +159,9 @@ interface RightInspectorProps {
    *  kept mounted out of sight (the editor's tabs and unsaved edits, the
    *  terminals) and out of reach of the keyboard. */
   railed: boolean;
-  /** Show the sidebar narrow, from the rail. */
-  onShow: () => void;
+  /** Show the sidebar narrow, from the rail; `terminal`: its drawer opened,
+   *  the active terminal focused once the show is over. */
+  onShow: (opts: { terminal: boolean }) => void;
 }
 
 /** The list column's narrowest in review mode, in px (D81). */
@@ -346,10 +353,12 @@ export function RightInspector({
     if (path) openFile(path, { preview: true });
     else openEditor();
   };
-  // The rail's clicks: the view tabs' own pick (a single click), then show.
-  const showFromRail = (on: CodeSegment | null) => {
-    if (on) onPickSegment(on, false);
-    onShow();
+  // The rail's clicks: the view tabs' own pick (a single click), or Details,
+  // then show.
+  const showFromRail = ({ view: on, terminal }: RailShow) => {
+    if (on === 'details') setSegment('details');
+    else if (on) onPickSegment(on, false);
+    onShow({ terminal });
   };
   const toggleDetails = () => {
     if (segment === 'details') selectSegment(lastCodeSegment);
@@ -500,20 +509,16 @@ export function RightInspector({
       ),
     });
   }
-  if (!reviewing) {
-    extras.push({
-      key: 'pr',
-      trailing: true,
-      node: (
-        <PrButton
-          relevant={review.relevant}
-          own={review.own}
-          onOpen={review.refreshPrs}
-          onPick={review.enter}
-        />
-      ),
-    });
-  }
+  // The PR button's state, for the row and the rail; normal mode only.
+  const prs = reviewing
+    ? null
+    : {
+        relevant: review.relevant,
+        own: review.own,
+        onOpen: review.refreshPrs,
+        onPick: review.enter,
+      };
+  if (prs) extras.push({ key: 'pr', trailing: true, node: <PrButton {...prs} /> });
 
   // The commit actions are Files' footer (`CommitBar`), not the row's.
   const header = (
@@ -720,6 +725,7 @@ export function RightInspector({
             contextUsage={contextUsage}
             rateLimits={rateLimits}
             status={statusIsOwn ? gitStatus : null}
+            prs={prs}
             onShow={showFromRail}
           />
         </div>

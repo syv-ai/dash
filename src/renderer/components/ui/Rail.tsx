@@ -5,16 +5,18 @@ import { focusRing } from './styles';
 import { Tooltip, type TooltipContent } from './Tooltip';
 
 /**
- * A collapsed sidebar's rail: its items stacked from the top, centred, and
- * its own space one button under them (`label`, its tooltip `tooltip`), so a
- * click between or below the items still does the rail's job (shows the
- * sidebar). The space tints on hover; an item hovered tints alone.
+ * A collapsed sidebar's rail: its items stacked from the top, centred, its
+ * `footer` at the foot, and its own space one button under them (`label`,
+ * its tooltip `tooltip`), so a click between or below the items still does
+ * the rail's job (shows the sidebar). The space tints on hover; an item
+ * hovered tints alone.
  */
 export function Rail({
   label,
   tooltip,
   onClick,
   children,
+  footer,
 }: {
   /** The space's accessible name. */
   label: string;
@@ -23,6 +25,8 @@ export function Rail({
   onClick: () => void;
   /** `RailItem`s and other figures, top to bottom. */
   children: React.ReactNode;
+  /** Actions at the foot (`IconButton`s), top to bottom. */
+  footer?: React.ReactNode;
 }) {
   return (
     <div className="relative h-full w-full">
@@ -38,8 +42,15 @@ export function Rail({
         />
       </Tooltip>
       {/* Over the space, letting its clicks through but for the items'. */}
-      <div className="pointer-events-none relative flex w-full flex-col items-center gap-3 px-0.5 pt-4 *:pointer-events-auto">
-        {children}
+      <div className="pointer-events-none relative flex h-full w-full flex-col items-center px-0.5 pt-4 pb-1">
+        <div className="flex w-full flex-col items-center gap-3 *:pointer-events-auto">
+          {children}
+        </div>
+        {footer && (
+          <div className="mt-auto flex flex-col items-center gap-0.5 pt-3 *:pointer-events-auto">
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -61,23 +72,34 @@ export function RailItem({
   onClick?: () => void;
   children: React.ReactNode;
 }) {
-  const layout = 'flex w-full flex-col items-center gap-0.5 py-1';
   return (
     <Tooltip content={tooltip} side="left">
       {onClick ? (
-        <button
-          type="button"
-          aria-label={ariaLabel}
-          onClick={onClick}
-          className={cn(buttonVariants({ variant: 'ghost' }), 'h-auto px-0', layout)}
-        >
+        <RailItemButton aria-label={ariaLabel} onClick={onClick}>
           {children}
-        </button>
+        </RailItemButton>
       ) : (
-        <div aria-label={ariaLabel} className={cn('cursor-default', layout)}>
+        <div aria-label={ariaLabel} className={cn('cursor-default', ITEM_LAYOUT)}>
           {children}
         </div>
       )}
     </Tooltip>
+  );
+}
+
+const ITEM_LAYOUT = 'flex w-full flex-col items-center gap-0.5 py-1';
+
+/**
+ * A `RailItem`'s button alone, without its tooltip: spreads its props and ref
+ * onto the `<button>`, so it can be the `asChild` target of a Radix trigger
+ * (a popover the item opens), under the caller's own `Tooltip side="left"`.
+ */
+export function RailItemButton({ className, ...props }: React.ComponentProps<'button'>) {
+  return (
+    <button
+      type="button"
+      className={cn(buttonVariants({ variant: 'ghost' }), 'h-auto px-0', ITEM_LAYOUT, className)}
+      {...props}
+    />
   );
 }

@@ -18,6 +18,7 @@ import {
   EXPAND_EASE_MS,
   type PanelImperativeHandle,
 } from './components/ui/Resizable';
+import { expandShellDrawer } from './components/terminal/ShellDrawerWrapper';
 import { LeftSidebar } from './components/leftSidebar/LeftSidebar';
 import { MainContent } from './components/MainContent';
 import { openInIde } from './lib/openInIde';
@@ -34,6 +35,7 @@ import {
 import { headerModelName } from './lib/modelName';
 import { RightInspector } from './components/rightInspector/RightInspector';
 import { usePlannedMotion } from './lib/usePlannedMotion';
+import { whenFramesSettle } from './lib/framesSettled';
 import { cn } from './lib/cn';
 const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
 import { useSetup } from './stores/setupStore';
@@ -119,6 +121,9 @@ const isMac = window.electronAPI.getPlatform() === 'darwin';
 /** How long expanding waits for an editor opening for the first time to
  *  mount before it eases anyway (it then fades in when it arrives). */
 const EDITOR_MOUNT_WAIT_MS = 300;
+/** The most a show opening the terminal waits for its held layout to lay
+ *  out before it opens the drawer. */
+const SHOW_LAYOUT_WAIT_MS = 250;
 
 export function App() {
   // Projects/tasks domain state lives in projectsStore; subscribe via selectors.
@@ -1080,9 +1085,12 @@ export function App() {
   // is there at the width the panel opens to before it opens. The editor,
   // expanded, keeps its width and doesn't fade.
   // Showing; `restoreLeft`: the left sidebar comes back in the same ease
-  // (the rail's show, narrowing a sidebar whose expanding collapsed it).
+  // (the rail's show, narrowing a sidebar whose expanding collapsed it);
+  // `withTerminal`: the terminal drawer opens in the held layout, before the
+  // ease, so the content the panel opens on is its end layout, and the active
+  // terminal takes the keyboard once the motion is over.
   const showInspector = useCallback(
-    (restoreLeft: boolean) => {
+    (restoreLeft: boolean, withTerminal = false) => {
       const panel = changesPanelRef.current;
       if (!panel?.isCollapsed()) return;
       const groupPx =
@@ -1101,6 +1109,16 @@ export function App() {
         }) ?? restored;
       runMotion({
         hold: { width: Math.round((groupPx * pct) / 100), to: 'shown' },
+        // Once the held layout has laid out: the drawer's group, hidden
+        // behind the rail till now, has its height to open in.
+        ready: withTerminal
+          ? (go) =>
+              whenFramesSettle(() => {
+                const drawer = shellDrawerPanelRef.current;
+                if (drawer?.isCollapsed()) expandShellDrawer(drawer);
+                go();
+              }, SHOW_LAYOUT_WAIT_MS)
+          : undefined,
         movesLeft: restoreLeft,
         // The library clamps the width (its bounds, the centre's least).
         move: () => {
@@ -1108,6 +1126,13 @@ export function App() {
           panel.resize(`${pct}%`);
           return Math.round((groupPx * panel.getSize().asPercentage) / 100);
         },
+        // As the `focusTerminal` shortcut does, in the drawer.
+        done: withTerminal
+          ? () =>
+              inspectorBodyRef.current
+                ?.querySelector<HTMLElement>('.terminal-drawer .xterm-helper-textarea')
+                ?.focus()
+          : undefined,
       });
     },
     [runMotion],
@@ -1287,20 +1312,23 @@ export function App() {
   // narrow behind the rail first (committed at once, so the show plans from
   // the narrow width and layout), then shows; the left sidebar, if
   // expanding collapsed it, comes back in the show's ease, not on its own.
-  const showInspectorNarrow = useCallback(() => {
-    if (!changesPanelRef.current?.isCollapsed()) return;
-    const wasExpanded = inspectorExpandedRef.current;
-    const restoreLeft =
-      wasExpanded &&
-      leftFreedByExpandRef.current !== null &&
-      !!sidebarPanelRef.current?.isCollapsed();
-    if (wasExpanded) {
-      // Restored below, by the show.
-      leftFreedByExpandRef.current = null;
-      flushSync(narrowEditor);
-    }
-    showInspector(restoreLeft);
-  }, [narrowEditor, showInspector]);
+  const showInspectorNarrow = useCallback(
+    ({ terminal }: { terminal: boolean }) => {
+      if (!changesPanelRef.current?.isCollapsed()) return;
+      const wasExpanded = inspectorExpandedRef.current;
+      const restoreLeft =
+        wasExpanded &&
+        leftFreedByExpandRef.current !== null &&
+        !!sidebarPanelRef.current?.isCollapsed();
+      if (wasExpanded) {
+        // Restored below, by the show.
+        leftFreedByExpandRef.current = null;
+        flushSync(narrowEditor);
+      }
+      showInspector(restoreLeft, terminal);
+    },
+    [narrowEditor, showInspector],
+  );
 
   // A Setup tab request shows the drawer: a collapsed task sidebar hides
   // it, so open the sidebar. Once per request: a later collapse must not

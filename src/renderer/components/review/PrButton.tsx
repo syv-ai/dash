@@ -16,6 +16,7 @@ import { CountBadge } from '../ui/CountBadge';
 import { IconButton } from '../ui/IconButton';
 import { LineStats } from '../ui/LineStats';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
+import { RailItemButton } from '../ui/Rail';
 import { Tooltip } from '../ui/Tooltip';
 import { prStateIcon, prStatusText } from '../ui/prStatusColors';
 import { ChecksRollupIcon } from './ChecksRollupIcon';
@@ -29,13 +30,16 @@ const SEARCH_FROM = 8;
  * a button counting the open PRs from and into the task's branch (hidden at
  * none), badged with the unresolved threads on the branch's own PR; it opens
  * the list, grouped "From this branch" / "Into this branch". Normal mode
- * only: review mode says itself, and exits, in the PR's header.
+ * only: review mode says itself, and exits, in the PR's header. On the
+ * collapsed sidebar's rail (`rail`) it is a rail item, the icon over the
+ * count, its list opening beside the rail.
  */
 export function PrButton({
   relevant,
   own,
   onOpen,
   onPick,
+  rail = false,
 }: {
   relevant: RelevantPrs | null;
   /** The branch's own PR and its unresolved threads (0: no badge). */
@@ -43,6 +47,8 @@ export function PrButton({
   /** The list is opening: list the PRs again. */
   onOpen: () => void;
   onPick: (pr: PullRequest) => void;
+  /** On the rail: a `RailItemButton`, its tooltip and list to its left. */
+  rail?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const from = relevant?.from ?? [];
@@ -55,6 +61,7 @@ export function PrButton({
     setOpen(false);
     onPick(pr);
   };
+  const badge = own && own.threads > 0 && <CountBadge count={own.threads} tone="outline" />;
 
   return (
     <Popover
@@ -65,6 +72,7 @@ export function PrButton({
       }}
     >
       <Tooltip
+        side={rail ? 'left' : undefined}
         content={{
           icon: GitPullRequestArrow,
           title: plural(count, 'pull request'),
@@ -78,16 +86,26 @@ export function PrButton({
         }}
       >
         <PopoverTrigger asChild>
-          <Button variant="ghost" size="sm" aria-label={label}>
-            <GitPullRequestArrow size={14} strokeWidth={1.8} />
-            <span className="tabular-nums">{count}</span>
-            {own && own.threads > 0 && <CountBadge count={own.threads} tone="outline" />}
-          </Button>
+          {rail ? (
+            <RailItemButton aria-label={label}>
+              <GitPullRequestArrow size={14} strokeWidth={1.8} className="text-icon" aria-hidden />
+              <span className="type-body flex items-center gap-0.5 tabular-nums">
+                {count}
+                {badge}
+              </span>
+            </RailItemButton>
+          ) : (
+            <Button variant="ghost" size="sm" aria-label={label}>
+              <GitPullRequestArrow size={14} strokeWidth={1.8} />
+              <span className="tabular-nums">{count}</span>
+              {badge}
+            </Button>
+          )}
         </PopoverTrigger>
       </Tooltip>
       <PopoverContent
-        side="bottom"
-        align="end"
+        side={rail ? 'left' : 'bottom'}
+        align={rail ? 'start' : 'end'}
         className="w-100"
         onOpenAutoFocus={(e) => {
           if (searchable) return;

@@ -37,6 +37,13 @@ const COLLAPSED_PX = 44;
 const MIN_PX = 120;
 const EXPANDED_DEFAULT = '40%';
 
+/** Opens the drawer to the size it had, or to its default when it has none
+ *  (collapsed since launch). Eases only if the caller set its `animate`. */
+export function expandShellDrawer(panel: PanelImperativeHandle) {
+  panel.expand();
+  if (panel.getSize().inPixels <= MIN_PX) panel.resize(EXPANDED_DEFAULT);
+}
+
 /**
  * The task sidebar's vertical split: `children` on top, the task's terminals
  * below on their own sheet, resizable and collapsible down to the tab bar.
@@ -119,9 +126,7 @@ export function ShellDrawerWrapper({
                   const panel = panelRef.current;
                   if (!panel) return;
                   onAnimate();
-                  panel.expand();
-                  // Collapsed since launch, it has no size to go back to.
-                  if (panel.getSize().inPixels <= MIN_PX) panel.resize(EXPANDED_DEFAULT);
+                  expandShellDrawer(panel);
                 }}
                 onEnsureHeight={ensureHeight}
                 onTuiActiveChange={onTuiActiveChange}
