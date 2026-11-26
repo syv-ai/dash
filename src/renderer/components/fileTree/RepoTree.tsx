@@ -8,6 +8,7 @@ import type { EditorView } from '../diffEditor/types';
 import type { FileChange, RepoListing } from '../../../shared/types';
 import { FilesTopRow } from './FilesTopRow';
 import { FileTree } from './FileTree';
+import { useTreeVersion } from './useTreeVersion';
 import {
   buildTree,
   withViewed,
@@ -100,6 +101,9 @@ export function RepoTree({
   // fully ignored folders to one entry (quiet, read when opened), which keeps
   // `node_modules/` from flooding the tree.
   const showIgnored = git && !changedOnly && view.kind === 'working';
+  // The disk changed under the tree: its ignored files and open lazy folders
+  // read again.
+  const treeVersion = useTreeVersion(cwd, !changedOnly && view.kind === 'working');
   const [ignored, setIgnored] = useState<RepoListing>(NO_LISTING);
   useEffect(() => {
     if (!showIgnored) {
@@ -113,7 +117,7 @@ export function RepoTree({
     return () => {
       cancelled = true;
     };
-  }, [showIgnored, cwd]);
+  }, [showIgnored, cwd, treeVersion]);
 
   const tree = useMemo(
     () =>
@@ -145,6 +149,7 @@ export function RepoTree({
         <FileTree
           sections={sections}
           cwd={cwd}
+          listingVersion={treeVersion}
           selected={selected}
           onOpenFile={(row, opts) => onOpenFile(row.file.path, opts)}
           canOpenToSide={canOpenToSide}

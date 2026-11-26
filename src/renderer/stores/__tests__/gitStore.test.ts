@@ -263,6 +263,22 @@ describe('gitStore.watchActiveTask', () => {
     expect(api.gitGetStatus).toHaveBeenCalledTimes(1);
   });
 
+  it('refreshes when the all-files tree sees a file come or go under the task', async () => {
+    let onTreeChanged: ((e: { cwd: string }) => void) | null = null;
+    api.onEditorTreeChanged = vi.fn((cb: (e: { cwd: string }) => void) => {
+      onTreeChanged = cb;
+      return vi.fn();
+    });
+    const { useGit } = await freshStores();
+    useGit.getState().watchActiveTask(task('t1', 'p1'));
+    api.gitGetStatus.mockClear();
+
+    onTreeChanged!({ cwd: '/wt/other' }); // another folder → ignored
+    expect(api.gitGetStatus).not.toHaveBeenCalled();
+    onTreeChanged!({ cwd: '/wt/t1' });
+    expect(api.gitGetStatus).toHaveBeenCalledTimes(1);
+  });
+
   it('null task clears status and stops watching the previous task', async () => {
     const { useGit } = await freshStores();
     useGit.getState().watchActiveTask(task('t1', 'p1'));

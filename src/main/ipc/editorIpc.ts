@@ -10,6 +10,7 @@ import { DatabaseService } from '../services/DatabaseService';
 import { isProjectMemoryDir } from '../services/MemoryService';
 import { listPlainFolder } from '../services/plainFolder';
 import { isServedScratchpad } from '../services/ScratchpadService';
+import { unwatchWorkingTree, watchWorkingTree } from '../services/WorkingTreeWatcher';
 import type {
   DirEntry,
   EditorBlameResult,
@@ -847,6 +848,28 @@ export function registerEditorIpc(): void {
       }
     },
   );
+
+  // ── editor:watchTree / editor:unwatchTree ─────────────────────
+  // The all-files tree is showing `cwd`: 'editor:treeChanged' tells it when a
+  // file or folder under it comes, goes or is renamed, so its listings reload.
+  ipcMain.handle('editor:watchTree', (_event, args: { cwd: string }): IpcResponse<void> => {
+    try {
+      parseArgs('editor:watchTree', z.looseObject({ cwd: z.string() }), args);
+      watchWorkingTree(args.cwd);
+      return { success: true };
+    } catch (err) {
+      return errorResponse(err);
+    }
+  });
+  ipcMain.handle('editor:unwatchTree', (_event, args: { cwd: string }): IpcResponse<void> => {
+    try {
+      parseArgs('editor:unwatchTree', z.looseObject({ cwd: z.string() }), args);
+      unwatchWorkingTree(args.cwd);
+      return { success: true };
+    } catch (err) {
+      return errorResponse(err);
+    }
+  });
 
   // ── editor:listDir ────────────────────────────────────────────
   // One directory's entries, when the tree expands a folder git lists as one

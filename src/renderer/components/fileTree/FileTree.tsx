@@ -28,6 +28,8 @@ export interface FileTreeProps {
   sections: readonly TreeSection[];
   /** The folder the paths are in: for the menus, and lazy folders' reads. */
   cwd: string;
+  /** Moves when the disk changed under `cwd`: lazy folders read again. */
+  listingVersion?: number;
   /** The row that reads as current (the editor's file). */
   selected: TreeSelection | null;
   /** Open a file: a click previews it (`preview`), ⌥-click opens it beside
@@ -61,6 +63,7 @@ const estimate = (row: TreeRow | undefined) => (row?.kind === 'section' ? 28 : 3
 export function FileTree({
   sections,
   cwd,
+  listingVersion = 0,
   selected,
   onOpenFile,
   canOpenToSide,
@@ -83,12 +86,18 @@ export function FileTree({
     setOpen((m) => new Map(m).set(openKey(row.section, row.folder.path), !row.open));
   }, []);
 
-  // Lazy folders read when they open, once per folder (per `cwd`).
+  // Lazy folders read when they open, once per folder (per `cwd` and
+  // `listingVersion`).
   const requested = useRef(new Set<string>());
   useEffect(() => {
     requested.current = new Set();
     setListings(new Map());
   }, [cwd]);
+  // The disk changed: open lazy folders read again (showing what they held
+  // until then), closed ones when they next open.
+  useEffect(() => {
+    requested.current = new Set();
+  }, [listingVersion]);
   useEffect(() => {
     for (const row of rows) {
       if (row.kind !== 'folder' || !row.open || !row.folder.lazy) continue;
@@ -101,7 +110,7 @@ export function FileTree({
         setListings((m) => new Map(m).set(dirPath, listing));
       });
     }
-  }, [rows, cwd]);
+  }, [rows, cwd, listingVersion]);
 
   const treeRef = useRef<TreeHandle>(null);
 

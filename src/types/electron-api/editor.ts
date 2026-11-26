@@ -55,6 +55,12 @@ export interface EditorApi {
   editorListIgnoredFiles: (args: { cwd: string }) => Promise<IpcResponse<RepoListing>>;
   /** One directory's entries, for a folder the tree lists lazily. */
   editorListDir: (args: { cwd: string; dirPath: string }) => Promise<IpcResponse<DirEntry[]>>;
+  /** Watch `cwd`'s files while the all-files tree shows them (ref-counted:
+   *  pair each call with `editorUnwatchTree`). */
+  editorWatchTree: (args: { cwd: string }) => Promise<IpcResponse<void>>;
+  editorUnwatchTree: (args: { cwd: string }) => Promise<IpcResponse<void>>;
+  /** A file or folder under a watched `cwd` came, went or was renamed. */
+  onEditorTreeChanged: (callback: (event: { cwd: string }) => void) => () => void;
   /** A file's text at `base` (left) and on disk (right): a live PR view. */
   editorReadAgainstBase: (args: {
     cwd: string;

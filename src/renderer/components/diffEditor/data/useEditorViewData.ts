@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { frozenCommit, type EditorView, type CommitSummary } from '../types';
 import type { FileChange, RepoListing } from '../../../../shared/types';
+import { useTreeVersion } from '../../fileTree/useTreeVersion';
 import { useAsyncResource } from './useAsyncResource';
 
 const NO_FILES: FileChange[] = [];
@@ -60,6 +61,10 @@ export function useEditorViewData(
   const repoSource = isCommit
     ? ({ kind: 'commit', hash: commitHash } as const)
     : ({ kind: 'working' } as const);
+  // The working tree's listing follows the disk: a file made, deleted or
+  // moved out by anyone reloads it (git status alone misses a listed path
+  // going away, and ignored files entirely).
+  const treeVersion = useTreeVersion(cwd, enabled.files && !isCommit);
   const repoListing = useAsyncResource<RepoListing>(
     () =>
       window.electronAPI
@@ -68,6 +73,7 @@ export function useEditorViewData(
     [cwd, isCommit ? commitHash : 'working', enabled.files],
     NO_LISTING,
     enabled.files,
+    isCommit ? 0 : treeVersion,
   );
 
   const commits = useAsyncResource<CommitSummary[]>(

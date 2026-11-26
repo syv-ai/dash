@@ -484,6 +484,14 @@ app.on('before-quit', (event) => {
       // Best effort
     }
 
+    // Stop the all-files tree's watchers
+    try {
+      const { stopWorkingTreeWatches } = await import('./services/WorkingTreeWatcher');
+      stopWorkingTreeWatches();
+    } catch {
+      // Best effort
+    }
+
     // Write the drift log
     try {
       const { flushDriftLog } = await import('./claudeContract/driftReporter');

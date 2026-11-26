@@ -243,12 +243,18 @@ export const useGit = create<GitStore>((set, get) => ({
     const { id, path: cwd } = task;
     void get().refreshGitStatus(cwd);
     void window.electronAPI.gitWatch({ id, cwd });
-    const unsubscribe = window.electronAPI.onGitFileChanged((changedId) => {
+    const offGit = window.electronAPI.onGitFileChanged((changedId) => {
       if (changedId === id) void get().refreshGitStatus(cwd);
+    });
+    // While the all-files tree watches the task's files, a file made, deleted
+    // or moved updates its status too, not only at the next poll.
+    const offTree = window.electronAPI.onEditorTreeChanged((e) => {
+      if (e.cwd === cwd) void get().refreshGitStatus(cwd);
     });
     const timer = setInterval(() => void get().refreshGitStatus(cwd), GIT_POLL_INTERVAL);
     watchTeardown = () => {
-      unsubscribe();
+      offGit();
+      offTree();
       void window.electronAPI.gitUnwatch(id);
       clearInterval(timer);
     };

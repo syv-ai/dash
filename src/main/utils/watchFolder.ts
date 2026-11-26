@@ -13,11 +13,13 @@ export function nearestExisting(dir: string): string | null {
  * Watch a folder and everything under it, calling `onChange` once events
  * settle. A folder that doesn't exist yet (or is deleted) is waited for: its
  * nearest existing ancestor is watched, without recursion, until it appears,
- * which counts as a change. Never throws; returns `close` (idempotent).
+ * which counts as a change. `ignore` drops events for paths under the folder
+ * (relative to it) that don't count. Never throws; returns `close`
+ * (idempotent).
  */
 export function watchFolder(
   dir: string,
-  opts: { debounceMs: number; onChange: () => void },
+  opts: { debounceMs: number; onChange: () => void; ignore?: (relPath: string) => boolean },
 ): () => void {
   let watcher: fs.FSWatcher | null = null;
   let watched: string | null = null;
@@ -50,7 +52,8 @@ export function watchFolder(
     disarm();
     const own = target === dir;
     try {
-      watcher = fs.watch(target, { recursive: own }, (event) => {
+      watcher = fs.watch(target, { recursive: own }, (event, filename) => {
+        if (own && filename && opts.ignore?.(filename)) return;
         const before = watched;
         if (!own || event === 'rename') arm(false);
         if (own || watched !== before) schedule();
