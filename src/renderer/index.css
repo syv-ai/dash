@@ -43,10 +43,6 @@
      gold, like VS Code's, user-requested (G1). Not warn amber, which
      means caution. */
   --color-changed: hsl(var(--changed));
-  /* A favourite task's star (FavoriteStar): a calm yellow, user-requested
-     (T12). Yellower and softer than the `changed` gold (hue 40) and far
-     from warn amber (caution) and state-work amber (working). */
-  --color-favorite: hsl(var(--favorite));
   --color-hover: hsl(var(--hover));
   --color-select: hsl(var(--select));
   --color-btn: hsl(var(--btn));
@@ -211,9 +207,6 @@
     /* Desaturated gold: 5.3:1 on ground, 6.4:1 on well (warn is
        34 78% 41%). */
     --changed: 40 48% 31%;
-    /* Calm yellow, darkened to read on light grounds: 3.7 / 4.5 / 3.2:1
-       on ground / well / a selected row (an icon needs 3:1). */
-    --favorite: 48 60% 34%;
     --hover: 225 20% 20% / 0.05;
     --select: 225 20% 20% / 0.09;
     --btn: 225 14% 22%;
@@ -333,9 +326,6 @@
     /* Soft gold: 10.7 / 9.9 / 8.9:1 on ground / well / raised, under ink
        (warn is 40 75% 62%). */
     --changed: 40 50% 68%;
-    /* Calm yellow: 11.2 / 10.4 / 9.3 / 9.3:1 on ground / well / raised /
-       a selected row. */
-    --favorite: 50 85% 63%;
     --hover: 0 0% 100% / 0.05;
     --select: 0 0% 100% / 0.09;
     --btn: 220 6% 91%;
