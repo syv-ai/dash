@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { Bot, Check, Copy, Loader2, MessageSquare } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '../ui/toast';
 import type { DiffComment, PrReview, PrVerdict, PrWriteError } from '../../../shared/types';
 import { usePrReviews } from '../../stores/prReviewStore';
 import { useTaskReview } from '../diffEditor/prReview/useTaskReview';

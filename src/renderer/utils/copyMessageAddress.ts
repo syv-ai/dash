@@ -1,4 +1,4 @@
-import { toast } from 'sonner';
+import { toast } from '../components/ui/toast';
 
 /**
  * Copy where another Claude Code session's SendMessage reaches this task:
@@ -12,12 +12,12 @@ export async function copyTaskMessageAddress(taskId: string): Promise<void> {
     return;
   }
   if (!resp.data) {
-    toast('No running session to message', {
+    toast.info('No running session to message', {
       description: 'Open the task to start its session, then copy again.',
     });
     return;
   }
   const text = `${resp.data.ref}\n${resp.data.uds}`;
   window.electronAPI.clipboardWriteText(text);
-  toast.success('Message address copied', { description: text });
+  toast.copied('message address', text);
 }

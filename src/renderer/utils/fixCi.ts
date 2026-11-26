@@ -1,4 +1,4 @@
-import { toast } from 'sonner';
+import { toast } from '../components/ui/toast';
 import { selectTaskById, useProjects } from '../stores/projectsStore';
 import { typeIntoTask } from './typeIntoTask';
 import type { PullRequestInfo } from '../../shared/types';
@@ -15,24 +15,37 @@ export async function fixCi(taskId: string, pr: PullRequestInfo): Promise<void> 
   const cwd = task?.path || projects.find((p) => p.id === task?.projectId)?.path;
   if (!task || !cwd) return;
 
-  const loading = toast.loading(`Fetching the failed checks of PR #${pr.number}…`);
-  const resp = await window.electronAPI.githubWriteCiReport({
-    cwd,
-    number: pr.number,
-    url: pr.url,
-    headSha: pr.headSha,
-  });
-  toast.dismiss(loading);
-  if (!resp.success) {
-    toast.error(`Could not fetch the checks of PR #${pr.number}`, { description: resp.error });
-    return;
-  }
-  if (!resp.data) {
-    toast(`No failed checks on PR #${pr.number}`, { description: 'They may have been re-run.' });
-    return;
-  }
+  // One toast: the spinner becomes the failure or the "nothing failed" note,
+  // or goes away once there is a prompt to type.
+  const failed = `Could not fetch the checks of PR #${pr.number}`;
+  const report = await toast
+    .progress(
+      window.electronAPI.githubWriteCiReport({
+        cwd,
+        number: pr.number,
+        url: pr.url,
+        headSha: pr.headSha,
+      }),
+      {
+        loading: `Fetching the failed checks of PR #${pr.number}…`,
+        success: (resp) => {
+          if (!resp.success) return { kind: 'error', title: failed, description: resp.error };
+          if (!resp.data)
+            return {
+              kind: 'info',
+              title: `No failed checks on PR #${pr.number}`,
+              description: 'They may have been re-run.',
+            };
+          return null;
+        },
+        error: (err) => ({ kind: 'error', title: failed, description: String(err) }),
+      },
+    )
+    .then((resp) => (resp.success ? resp.data : null))
+    .catch(() => null);
+  if (!report) return;
 
-  if (!(await typeIntoTask(taskId, resp.data.prompt))) return;
+  if (!(await typeIntoTask(taskId, report.prompt))) return;
   toast.success(`Fix CI prompt typed into ${task.name}`, {
     description: 'Review it, then press Enter to send.',
   });

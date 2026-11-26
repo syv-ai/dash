@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Brain, Copy, FileText, FolderOpen, List } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '../ui/toast';
 import { MEMORY_INDEX_FILE } from '../../../shared/types';
 import type { Task } from '../../../shared/types';
 import type { TaskScratchpad } from '../../../shared/agent';
@@ -26,7 +26,7 @@ function openPlainFile(dir: string, filePath: string): void {
 
 function copyPath(path: string): void {
   window.electronAPI.clipboardWriteText(path);
-  toast('Copied path', { description: path.length > 80 ? undefined : path, duration: 1800 });
+  toast.copied('path', path);
 }
 
 /**

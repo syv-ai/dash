@@ -1,9 +1,9 @@
-import { toast } from 'sonner';
+import { toast } from '../ui/toast';
 
 /** Put `text` on the clipboard and say so (`what`: "relative path"). */
 export function copyText(text: string, what: string): void {
   window.electronAPI.clipboardWriteText(text);
-  toast(`Copied ${what}`, { description: text.length > 80 ? undefined : text, duration: 1800 });
+  toast.copied(what, text);
 }
 
 /** "Reveal in Finder", in the platform's words. */

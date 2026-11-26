@@ -1,5 +1,5 @@
 import { CheckCheck, Loader2, Send } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '../../ui/toast';
 import type { DiffComment, PrWriteError } from '../../../../shared/types';
 import { usePrReviews, type ReplyPoster } from '../../../stores/prReviewStore';
 import { Button } from '../../ui/Button';

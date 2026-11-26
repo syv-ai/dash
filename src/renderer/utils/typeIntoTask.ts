@@ -1,4 +1,4 @@
-import { toast } from 'sonner';
+import { toast } from '../components/ui/toast';
 import { selectTaskById, useProjects } from '../stores/projectsStore';
 import { sessionRegistry } from '../terminal/SessionRegistry';
 

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { EyeOff, FileDiff, Minus, Plus, Undo2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '../ui/toast';
 import { EmptyState } from '../ui/EmptyState';
 import { IconButton } from '../ui/IconButton';
 import { Popover, PopoverArrow, PopoverContent, PopoverTrigger } from '../ui/Popover';

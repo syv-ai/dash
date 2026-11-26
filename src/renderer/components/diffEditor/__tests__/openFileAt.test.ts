@@ -10,7 +10,9 @@ import type { Task } from '../../../../shared/types';
 vi.mock('../../../terminal/SessionRegistry', () => ({
   sessionRegistry: { dispose: vi.fn(), disposeByPrefix: vi.fn(), restartAllForTask: vi.fn() },
 }));
-vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
+vi.mock('../../ui/toast', () => ({
+  toast: { info: vi.fn(), success: vi.fn(), warning: vi.fn(), error: vi.fn() },
+}));
 vi.mock('../../../sounds', () => ({ playPeonSound: vi.fn(), playNotificationSound: vi.fn() }));
 
 const task = { id: 't1', projectId: 'p1', path: '/wt/t1', archivedAt: null } as Task;

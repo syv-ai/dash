@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { toast } from '../ui/toast';
 import type { DiffComment, FileChange, PrRef } from '../../../shared/types';
 import { needsAttention } from '../../../shared/diffComments';
 import { parsePrScope } from '../../../shared/prScope';

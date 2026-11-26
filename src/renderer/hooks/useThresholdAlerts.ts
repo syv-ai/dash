@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { toast } from 'sonner';
+import { toast } from '../components/ui/toast';
 import type { RateLimits, StatusLineData, UsageThresholds } from '../../shared/types';
 
 export function useThresholdAlerts(
@@ -29,7 +29,7 @@ export function useThresholdAlerts(
       }
       if (value >= threshold && !firedRef.current.has(key)) {
         firedRef.current.add(key);
-        toast.warning(label);
+        toast.warning(label, { key: `threshold:${key}` });
       }
     };
 
