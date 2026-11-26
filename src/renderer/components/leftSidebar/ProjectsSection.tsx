@@ -305,7 +305,9 @@ export function ProjectsSection({
           <TreeRow
             ctx={ctx}
             {...projectDrag(project)}
-            className="group/swap"
+            // 32px, the file tree's rhythm: a list of closed projects reads
+            // as one block, the name keeps the row's 13px (T25).
+            className="group/swap h-8"
             dragging={draggingId === project.id}
             dimmed={!isActive && isProjectCollapsed && !activityDot}
             strong={isActive}
@@ -517,6 +519,7 @@ export function ProjectsSection({
 function estimate(row: ProjectTreeRow): number {
   switch (row.kind) {
     case 'project':
+      return 32;
     case 'task':
       return 36;
     case 'gap':
