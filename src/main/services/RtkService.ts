@@ -24,6 +24,7 @@ import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import { app } from 'electron';
 import type { WebContents } from 'electron';
 import { shellQuote } from '@shared/shellQuote';
+import { toastRenderer } from '../utils/toast';
 import type { RtkStatus, RtkSource, RtkDownloadProgress, RtkTestResult } from '@shared/types';
 
 const execFileAsync = promisify(execFile);
@@ -86,22 +87,21 @@ export class RtkService {
       // The user toggled RTK on at some point; a corrupt config now silently
       // means hooks stop firing in every spawn. Surface it instead of letting
       // the toggle keep showing ON while reality says OFF.
-      RtkService.notifyCorruptConfig(
-        `RTK config is unreadable (${err instanceof Error ? err.message : String(err)}) — RTK is off until you re-toggle it in Settings.`,
-      );
+      RtkService.notifyCorruptConfig(err instanceof Error ? err.message : String(err));
       RtkService.enabledCache = false;
       return false;
     }
   }
 
   /** Toast a corrupt-config warning once per process lifetime. */
-  private static notifyCorruptConfig(message: string): void {
+  private static notifyCorruptConfig(reason: string): void {
     if (RtkService.corruptConfigToasted) return;
     RtkService.corruptConfigToasted = true;
-    const sender = RtkService.sender;
-    if (sender && !sender.isDestroyed()) {
-      sender.send('app:toast', { message });
-    }
+    toastRenderer({
+      kind: 'warning',
+      title: 'RTK config is unreadable',
+      description: `${reason}. RTK is off until you re-toggle it in Settings.`,
+    });
   }
 
   /**

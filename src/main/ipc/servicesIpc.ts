@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import { broadcast } from '../utils/broadcast';
+import { toastRenderer } from '../utils/toast';
 import { execFile, spawn } from 'child_process';
 import { z } from 'zod';
 import { parseArgs } from './validate';
@@ -90,7 +91,7 @@ export function getServiceRunner(): ServiceRunner {
       },
       liveness: (taskId, hostPort) => portLivenessService.getStates(taskId)[hostPort] ?? 'unknown',
       notifyChanged: (taskId) => broadcast('ports:service:changed', { taskId }),
-      toast: (message) => broadcast('app:toast', { message }),
+      toast: toastRenderer,
       focusTab: (taskId, tabId, opts) =>
         broadcast('ports:service:focusTab', { taskId, tabId, reset: opts?.reset ?? false }),
       shell: process.env.SHELL || '/bin/sh',

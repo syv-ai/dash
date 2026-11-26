@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { broadcast } from '../utils/broadcast';
+import { toastRenderer } from '../utils/toast';
 import { hookServer, getHookPortFilePath } from './HookServer';
 import { RtkService } from './RtkService';
 import { DatabaseService } from './DatabaseService';
@@ -108,9 +108,8 @@ function buildPreToolUseHooks(
   return entries;
 }
 
-function broadcastToast(message: string): void {
-  broadcast('app:toast', { message });
-}
+/** One toast for hook-write trouble, however many tasks hit it at once. */
+const HOOKS_TOAST_KEY = 'hooks:settings.local.json';
 
 export type HookWriteResult = { ok: true } | { ok: false; settingsPath: string; error: string };
 
@@ -143,9 +142,12 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
       '[writeHookSettings] HookServer port not bound — settings.local.json not updated. ' +
         `Likely a startup-ordering bug (caller invoked before hookServer.start() resolved). cwd=${cwd}`,
     );
-    broadcastToast(
-      `Hook server not ready — task hooks couldn't be written for ${path.basename(cwd)}. Restart Dash to recover.`,
-    );
+    toastRenderer({
+      kind: 'error',
+      key: HOOKS_TOAST_KEY,
+      title: 'Hook server not ready',
+      description: `Task hooks couldn't be written for ${path.basename(cwd)}. Restart Dash to recover.`,
+    });
     return { ok: false, settingsPath, error: 'HookServer port not bound' };
   }
 
@@ -329,17 +331,22 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
             `[writeHookSettings] settings.local.json corrupt at ${settingsPath}; backed up to ${backupPath}`,
             err,
           );
-          broadcastToast(
-            `settings.local.json was unreadable — backed up to ${path.basename(backupPath)} and rewritten.`,
-          );
+          toastRenderer({
+            kind: 'warning',
+            title: 'settings.local.json was unreadable',
+            description: `Backed up to ${path.basename(backupPath)} and rewritten.`,
+          });
         } catch (renameErr) {
           console.error(
             '[writeHookSettings] Failed to back up corrupt file; leaving on-disk file intact:',
             renameErr,
           );
-          broadcastToast(
-            `settings.local.json is corrupt and could not be backed up — hooks are off for this task. Fix or remove ${path.basename(settingsPath)} manually.`,
-          );
+          toastRenderer({
+            kind: 'error',
+            key: HOOKS_TOAST_KEY,
+            title: "settings.local.json is corrupt and couldn't be backed up",
+            description: `Hooks are off for this task. Fix or remove ${path.basename(settingsPath)} manually.`,
+          });
           return {
             ok: false,
             settingsPath,
@@ -395,7 +402,12 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
     return { ok: true };
   } catch (err) {
     console.error('[writeHookSettings] Failed:', err);
-    broadcastToast(`Could not write ${path.basename(settingsPath)} — hooks are off for this task.`);
+    toastRenderer({
+      kind: 'error',
+      key: HOOKS_TOAST_KEY,
+      title: `Couldn't write ${path.basename(settingsPath)}`,
+      description: 'Hooks are off for this task.',
+    });
     return {
       ok: false,
       settingsPath,

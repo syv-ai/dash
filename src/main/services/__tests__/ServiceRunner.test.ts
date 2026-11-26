@@ -140,7 +140,9 @@ describe('stop chain', () => {
     expect(deps.exec).toHaveBeenCalledWith('docker compose stop web', '/wt');
     expect(r.ok).toBe(false);
     expect(deps.lsofPids).not.toHaveBeenCalled();
-    expect(deps.toast).toHaveBeenCalled();
+    expect(deps.toast).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'error', key: 'service:Web', description: 'boom' }),
+    );
   });
 
   it('not owned, no stop command -> SIGTERMs PIDs on the port', async () => {
@@ -149,12 +151,15 @@ describe('stop chain', () => {
     expect(deps.lsofPids).toHaveBeenCalledWith(3100);
     expect(deps.killPid).toHaveBeenCalledWith(4242);
     expect(r.ok).toBe(true);
+    expect(deps.toast).toHaveBeenCalledWith(expect.objectContaining({ kind: 'info' }));
   });
 
-  it('no PIDs found -> informational toast, ok:false', async () => {
+  it('no PIDs found -> error toast keyed by the service, ok:false', async () => {
     const r = await runner.stop('t1', port({}));
     expect(r.ok).toBe(false);
-    expect(deps.toast).toHaveBeenCalled();
+    expect(deps.toast).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'error', key: 'service:Web' }),
+    );
   });
 
   it('owned but PTY dead -> falls through to stop command', async () => {
@@ -206,6 +211,12 @@ describe('startAll', () => {
     expect(deps.startPty).toHaveBeenCalledTimes(2);
     expect(r.failed).toEqual(['A']);
     expect(deps.sleep).toHaveBeenCalled(); // stagger between starts
+    expect(deps.toast).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'error', key: 'service:A', description: 'spawn fail' }),
+    );
+    expect(deps.toast).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'error', title: 'Run all: failed to start A' }),
+    );
   });
 });
 

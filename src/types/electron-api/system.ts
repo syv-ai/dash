@@ -1,4 +1,5 @@
 import type { ControlInfo, IpcResponse } from '../../shared/types';
+import type { ToastPayload } from '../../shared/toast';
 
 /** App info, dialogs, external/editor/IDE launch, app-lifecycle events, and
  *  settings mutations — the cross-cutting "shell" surface. */
@@ -43,7 +44,7 @@ export interface SystemApi {
   ) => () => void;
   /** The person's Allow / Deny for an `onOrchestratorAccessRequest`. */
   answerOrchestratorAccess: (answer: { id: string; allowed: boolean }) => void;
-  onToast: (callback: (data: { message: string; url?: string }) => void) => () => void;
+  onToast: (callback: (payload: ToastPayload) => void) => () => void;
 
   // Settings
   setDesktopNotification: (opts: { enabled: boolean }) => void;

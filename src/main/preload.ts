@@ -201,7 +201,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   answerOrchestratorAccess: (answer: { id: string; allowed: boolean }) =>
     ipcRenderer.send('app:orchestratorAccessAnswer', answer),
-  onToast: listen<{ message: string; url?: string }>('app:toast'),
+  // TOAST_CHANNEL (@shared/toast): the sandboxed preload can import types only.
+  onToast: listen<import('@shared/toast').ToastPayload>('app:toast'),
 
   // Settings
   setDesktopNotification: (opts: { enabled: boolean }) =>

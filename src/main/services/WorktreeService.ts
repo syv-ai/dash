@@ -3,7 +3,7 @@ import { promisify } from 'util';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
-import { broadcast } from '../utils/broadcast';
+import { toastRenderer } from '../utils/toast';
 import type { WorktreeInfo, RemoveWorktreeOptions } from '@shared/types';
 import { branchSlug, slugify } from '@shared/slug';
 import { GithubService } from './GithubService';
@@ -287,9 +287,10 @@ export class WorktreeService {
     for (const num of issueNumbers) {
       try {
         const issueUrl = await GithubService.linkBranch(cwd, num, branch);
-        broadcast('app:toast', {
-          message: `Issue #${num} linked to branch '${branch}'`,
-          url: issueUrl,
+        toastRenderer({
+          kind: 'success',
+          title: `Issue #${num} linked to branch '${branch}'`,
+          action: { type: 'openUrl', label: 'Open', url: issueUrl },
         });
       } catch {
         // Best effort — gh may not be available
@@ -364,8 +365,10 @@ export class WorktreeService {
           ? String((error as { stderr: unknown }).stderr).trim()
           : '';
       const msg = stderr || (error instanceof Error ? error.message : String(error));
-      broadcast('app:toast', {
-        message: `Workspace teardown failed: ${msg.slice(0, 200)}`,
+      toastRenderer({
+        kind: 'error',
+        title: 'Workspace teardown failed',
+        description: msg.slice(0, 200),
       });
     }
   }

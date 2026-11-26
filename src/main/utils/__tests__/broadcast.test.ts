@@ -53,7 +53,7 @@ describe('broadcast', () => {
     const bad = fakeWin({ throws: true });
     const good = fakeWin();
     windows.push(bad, good);
-    expect(() => broadcast('app:toast', { message: 'hi' })).not.toThrow();
+    expect(() => broadcast('app:toast', { kind: 'info', title: 'hi' })).not.toThrow();
     expect(good.webContents.send).toHaveBeenCalledOnce();
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();

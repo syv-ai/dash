@@ -17,6 +17,7 @@ import {
 import { DatabaseService } from '../../services/DatabaseService';
 import { worktreeService } from '../../services/WorktreeService';
 import { setInitialPrompt } from '../../services/ptyManager';
+import { toastRenderer } from '../../utils/toast';
 
 const FEATURE_ID = 'ports';
 
@@ -185,12 +186,11 @@ async function handleMigrate(args: {
     // The renderer has already switched to the new task, so the old TUI's
     // error screen (rendered by our caller's exit('error')) is off-screen.
     // Surface the failure where the user is actually looking.
-    const w = args.getMainWindow();
-    if (w && !w.isDestroyed()) {
-      w.webContents.send('app:toast', {
-        message: `Port-setup TUI failed to start: ${err instanceof Error ? err.message : String(err)}`,
-      });
-    }
+    toastRenderer({
+      kind: 'error',
+      title: 'Port-setup TUI failed to start',
+      description: err instanceof Error ? err.message : String(err),
+    });
     throw err;
   }
 }

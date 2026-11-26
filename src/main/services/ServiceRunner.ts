@@ -1,5 +1,6 @@
 import path from 'path';
 import type { TaskPort, PortLiveness } from '@shared/types';
+import type { ToastPayload } from '@shared/toast';
 // Service tab ids derive from the label via the shared slugifier (50-char cap is
 // inconsequential for short port labels and keeps tabId/ownership in lockstep).
 import { slugify as slug } from '@shared/slug';
@@ -50,7 +51,7 @@ export interface RunnerDeps {
   killPid(pid: number): void;
   liveness(taskId: string, hostPort: number): PortLiveness;
   notifyChanged(taskId: string): void;
-  toast(message: string): void;
+  toast(payload: ToastPayload): void;
   /**
    * Surface a service tab. `reset` tells the renderer the backing PTY was just
    * respawned under the same id (Run-again): it must re-link its cached session
@@ -194,10 +195,10 @@ export class ServiceRunner {
       this.deps.focusTab(taskId, tabId, { reset: true });
       return { ok: true };
     } catch (err) {
-      const message = `Couldn't start ${port.label}: ${err instanceof Error ? err.message : String(err)}`;
+      const reason = errorText(err);
       console.error('[ServiceRunner] start failed', taskId, port.label, err);
-      this.deps.toast(message);
-      return { ok: false, message };
+      this.deps.toast(serviceError(port, `Couldn't start ${port.label}`, reason));
+      return { ok: false, message: `Couldn't start ${port.label}: ${reason}` };
     }
   }
 
@@ -240,9 +241,9 @@ export class ServiceRunner {
       const cwd = port.cwd ? path.join(taskPath, port.cwd) : taskPath;
       const { code, stderrTail } = await this.deps.exec(port.stopCommand, cwd);
       if (code !== 0) {
-        const message = `Stop command for ${port.label} exited ${code}${stderrTail ? `: ${stderrTail}` : ''}`;
-        this.deps.toast(message);
-        return { ok: false, message };
+        const title = `Stop command for ${port.label} exited ${code}`;
+        this.deps.toast(serviceError(port, title, stderrTail || undefined));
+        return { ok: false, message: stderrTail ? `${title}: ${stderrTail}` : title };
       }
       return { ok: true };
     }
@@ -252,13 +253,14 @@ export class ServiceRunner {
     const pids = await this.deps.lsofPids(port.hostPort);
     if (pids.length === 0) {
       const message = `Nothing listening on :${port.hostPort}`;
-      this.deps.toast(message);
+      this.deps.toast(serviceError(port, message));
       return { ok: false, message };
     }
     for (const pid of pids) this.deps.killPid(pid);
-    this.deps.toast(
-      `Sent SIGTERM to ${pids.map((p) => `PID ${p}`).join(', ')} (:${port.hostPort})`,
-    );
+    this.deps.toast({
+      kind: 'info',
+      title: `Sent SIGTERM to ${pids.map((p) => `PID ${p}`).join(', ')} (:${port.hostPort})`,
+    });
     return { ok: true };
   }
 
@@ -291,9 +293,9 @@ export class ServiceRunner {
       this.deps.focusTab(taskId, tab.id, { reset: true });
       return { ok: true };
     } catch (err) {
-      const message = `Couldn't open logs for ${port.label}: ${err instanceof Error ? err.message : String(err)}`;
-      this.deps.toast(message);
-      return { ok: false, message };
+      const reason = errorText(err);
+      this.deps.toast(serviceError(port, `Couldn't open logs for ${port.label}`, reason));
+      return { ok: false, message: `Couldn't open logs for ${port.label}: ${reason}` };
     }
   }
 
@@ -311,7 +313,7 @@ export class ServiceRunner {
       (r.ok ? started : failed).push(p.label);
     }
     if (failed.length > 0) {
-      this.deps.toast(`Run all: failed to start ${failed.join(', ')}`);
+      this.deps.toast({ kind: 'error', title: `Run all: failed to start ${failed.join(', ')}` });
     }
     return { started, failed };
   }
@@ -331,8 +333,15 @@ export class ServiceRunner {
       (r.ok ? stopped : failed).push(p.label);
     }
     if (failed.length > 0) {
-      this.deps.toast(`Stop all: failed to stop ${failed.join(', ')}`);
+      this.deps.toast({ kind: 'error', title: `Stop all: failed to stop ${failed.join(', ')}` });
     }
     return { stopped, failed };
   }
+}
+
+const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/** One toast per service: a retry that fails again updates it in place. */
+function serviceError(port: TaskPort, title: string, description?: string): ToastPayload {
+  return { kind: 'error', title, description, key: `service:${port.label}` };
 }

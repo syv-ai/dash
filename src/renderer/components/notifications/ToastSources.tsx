@@ -12,16 +12,6 @@ export function ToastSources() {
   useReleaseNotesToast();
   useMergedPrToast();
   useReviewCommentsToast();
-  useEffect(
-    () =>
-      window.electronAPI.onToast(({ message, url }) =>
-        toast.info(message, {
-          action: url
-            ? { label: 'Open', onClick: () => void window.electronAPI.openExternal(url) }
-            : undefined,
-        }),
-      ),
-    [],
-  );
+  useEffect(() => window.electronAPI.onToast(toast.fromMain), []);
   return null;
 }
