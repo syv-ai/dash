@@ -86,6 +86,23 @@ describe('hooks for a wait on the user', () => {
     }
   });
 
+  it('observes permission requests the moment they open, asynchronously', () => {
+    expect(hooks.PermissionRequest).toHaveLength(1);
+    const [hook] = hooks.PermissionRequest![0]!.hooks;
+    expect(hook!.command).toContain('/hook/permission-request?ptyId=task-1');
+    // async: Claude Code reads no decision from it, so the user's prompt
+    // always appears and decides.
+    expect(hook!.async).toBe(true);
+  });
+
+  it('a permission request hook prints nothing and exits 0, whatever Dash answers', async () => {
+    const { command } = hooks.PermissionRequest![0]!.hooks[0]!;
+    const { got, out, code } = await run(command, '{"tool_name":"Bash","tool_input":{}}');
+    expect(got).toEqual(['/hook/permission-request?ptyId=task-1']);
+    expect(out).toBe('');
+    expect(code).toBe(0);
+  });
+
   it('an elicitation hook prints nothing and exits 0, whatever Dash answers', async () => {
     const { command } = hooks.Elicitation![0]!.hooks[0]!;
     const { got, out, code } = await run(command, '{"mcp_server_name":"s","message":"m"}');

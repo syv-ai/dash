@@ -33,6 +33,8 @@ interface PtyActivity {
   lastSubagentTime: number;
   /** A pending turn end (TURN_SETTLE_MS), or null. */
   settle: ReturnType<typeof setTimeout> | null;
+  /** When the current `waiting` began. */
+  waitSince: number;
 }
 
 /** How long a turn's end waits before the task shows idle. A finished
@@ -40,6 +42,11 @@ interface PtyActivity {
  *  SubagentStop, and a queued report right after a Stop: without the wait,
  *  each would flash idle (a chime, a blue dot) between two busy spells. */
 export const TURN_SETTLE_MS = 1000;
+
+/** A listing reading taken this soon after a wait began may predate the
+ *  prompt, so it doesn't end the wait. The listing reported a fresh
+ *  permission prompt as waiting within ~2 s (live, H3). */
+export const WAIT_LISTING_GRACE_MS = 3_000;
 
 /** The supervisor listing may end in-flight subagents (a missed
  *  SubagentStop) only once none has spoken for this long. */
@@ -137,6 +144,7 @@ class ActivityMonitorImpl {
       subagents: new Set(),
       lastSubagentTime: 0,
       settle: null,
+      waitSince: 0,
     };
   }
 
@@ -188,7 +196,13 @@ class ActivityMonitorImpl {
     }
     const now = Date.now();
     a.lastSupervisorTime = now;
-    const hooksFresh = now - a.lastHookTime < pollIntervalMs;
+    // No hook says a wait ended when the user denies the prompt (an
+    // interrupt) or approves it (nothing until the tool finishes), so for a
+    // wait only its first moments keep the listing out (H3).
+    const hooksFresh =
+      a.state === 'waiting'
+        ? now - a.waitSince < WAIT_LISTING_GRACE_MS
+        : now - a.lastHookTime < pollIntervalMs;
     const hookDriven = a.state === 'busy' || a.state === 'idle' || a.state === 'waiting';
     const next = activity.state;
     if ((next === 'busy' || next === 'idle') && hooksFresh && hookDriven) return;
@@ -218,6 +232,7 @@ class ActivityMonitorImpl {
     this.cancelSettle(a);
     // A waiting reading can be a subagent's permission prompt: they run on.
     if (next !== 'busy' && next !== 'waiting') this.endWork(a);
+    if (next === 'waiting' && a.state !== 'waiting') a.waitSince = now;
     a.state = next;
     a.error = nextError;
     a.detail = nextDetail;
@@ -288,6 +303,7 @@ class ActivityMonitorImpl {
     a.lastHookTime = Date.now();
     this.cancelSettle(a);
     if (a.state === 'waiting') return;
+    a.waitSince = a.lastHookTime;
     a.state = 'waiting';
     a.tool = null;
     a.detail = null;
@@ -366,7 +382,8 @@ class ActivityMonitorImpl {
     if (running) a.subagents = new Set(running);
     if (a.subagents.size > 0) {
       this.cancelSettle(a);
-      if (a.state !== 'busy') {
+      // A wait outliving the main turn is a subagent's prompt (H3).
+      if (a.state !== 'busy' && a.state !== 'waiting') {
         a.state = 'busy';
         a.detail = null;
       }

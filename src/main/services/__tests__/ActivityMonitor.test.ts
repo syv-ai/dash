@@ -9,6 +9,7 @@ import {
   activityEvents,
   SUBAGENT_QUIET_MS,
   TURN_SETTLE_MS,
+  WAIT_LISTING_GRACE_MS,
 } from '../ActivityMonitor';
 
 const mockSender = {
@@ -59,6 +60,29 @@ describe('ActivityMonitor — state transitions (hooks-only)', () => {
     activityMonitor.setBusy('pty1');
     activityMonitor.setWaitingForPermission('pty1');
     expect(activityMonitor.getAll()['pty1']!.state).toBe('waiting');
+  });
+
+  // H3, live: a background subagent's permission prompt shows in the main
+  // pane (PermissionRequest carries its agent_id). The main turn's Stop
+  // that followed flipped the task to busy while the prompt still waited.
+  it("the main turn ending leaves a subagent's prompt waiting", () => {
+    activityMonitor.register('pty1', 12345);
+    activityMonitor.setBusy('pty1');
+    activityMonitor.subagentStart('pty1', 'a1');
+    activityMonitor.setWaitingForPermission('pty1');
+    activityMonitor.endTurn('pty1', ['a1']);
+    expect(activityMonitor.getAll()['pty1']!.state).toBe('waiting');
+  });
+
+  // PermissionRequest sets waiting at once; the permission_prompt
+  // notification for the same prompt follows ~6 s later.
+  it('a second signal for the same wait does not emit again', () => {
+    activityMonitor.register('pty1', 12345);
+    activityMonitor.setBusy('pty1');
+    activityMonitor.setWaitingForPermission('pty1');
+    mockSender.send.mockClear();
+    activityMonitor.setWaitingForPermission('pty1');
+    expect(mockSender.send).not.toHaveBeenCalled();
   });
 
   it('resumeFromWait lifts a waiting task to busy once its prompt is answered', () => {
@@ -332,6 +356,40 @@ describe('ActivityMonitor — supervisor reconcile (applySupervisor)', () => {
     vi.advanceTimersByTime(POLL + 1);
     activityMonitor.applySupervisor('t1', { state: 'busy' }, POLL);
     expect(activityMonitor.getAll()['t1']!.state).toBe('busy');
+  });
+
+  // H3, live: denying a permission prompt is an interrupt and fires no
+  // hook, so only the listing can say the wait is over. A hook spoke
+  // seconds earlier (PermissionRequest, the permission_prompt notification),
+  // which kept that reading out for a whole poll: a minute of false purple.
+  describe('a wait the listing ends (H3)', () => {
+    it('ends a hook-set wait when the listing says idle, though a hook just spoke', () => {
+      activityMonitor.register('t1', 1);
+      activityMonitor.setToolStart('t1', 'Bash', { command: 'touch x' });
+      activityMonitor.setWaitingForPermission('t1');
+      vi.advanceTimersByTime(WAIT_LISTING_GRACE_MS + 1);
+      activityMonitor.setWaitingForPermission('t1'); // the ~6 s notification
+      activityMonitor.applySupervisor('t1', { state: 'idle' }, POLL);
+      expect(activityMonitor.getAll()['t1']!.state).toBe('idle');
+    });
+
+    it('lifts it to busy when the listing says the prompt was approved', () => {
+      activityMonitor.register('t1', 1);
+      activityMonitor.setToolStart('t1', 'Bash', { command: 'make' });
+      activityMonitor.setWaitingForPermission('t1');
+      vi.advanceTimersByTime(WAIT_LISTING_GRACE_MS + 1);
+      activityMonitor.applySupervisor('t1', { state: 'busy' }, POLL);
+      expect(activityMonitor.getAll()['t1']!.state).toBe('busy');
+    });
+
+    it('ignores a reading taken as the wait began: it may predate the prompt', () => {
+      activityMonitor.register('t1', 1);
+      activityMonitor.setToolStart('t1', 'Bash', { command: 'touch x' });
+      activityMonitor.setWaitingForPermission('t1');
+      vi.advanceTimersByTime(WAIT_LISTING_GRACE_MS - 1);
+      activityMonitor.applySupervisor('t1', { state: 'busy' }, POLL);
+      expect(activityMonitor.getAll()['t1']!.state).toBe('waiting');
+    });
   });
 
   it('still drives busy for a listing-only task that has no hooks', () => {

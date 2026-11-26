@@ -67,6 +67,7 @@ describe('the inbox hooks', () => {
       'SubagentStop',
       'Elicitation',
       'ElicitationResult',
+      'PermissionRequest',
     ]);
     for (const [event, entries] of Object.entries(hooks)) {
       expect(known.has(event), event).toBe(true);

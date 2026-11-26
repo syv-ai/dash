@@ -312,6 +312,18 @@ class HookServerImpl {
             return;
           }
 
+          // A permission prompt opened (H3). The desktop alert waits for
+          // the permission_prompt notification: Claude Code sends it only
+          // once the user seems away.
+          if (pathname === '/hook/permission-request') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+              activityMonitor.setWaitingForPermission(ptyId);
+              res.writeHead(200);
+              res.end();
+            });
+            return;
+          }
+
           // An MCP server asks the user for input (H2).
           if (pathname === '/hook/elicitation') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {

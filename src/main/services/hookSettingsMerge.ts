@@ -20,11 +20,11 @@ export type HookEntry = { matcher: string; hooks: Hook[] };
  * All hook event names Dash has ever written. Used to decide which existing
  * entries are candidates for replacement vs. preservation.
  *
- * Includes legacy event names (`PostToolUseFailure`, `PermissionRequest`)
- * that older Dash versions wrote but the current code does not — kept here
- * so the merge/cleanup paths drop stale entries forward for users updating
- * from those versions. `SubagentStart`/`SubagentStop` were legacy too, and
- * are written again since S3.
+ * Includes the legacy event name `PostToolUseFailure` that older Dash
+ * versions wrote but the current code does not — kept here so the
+ * merge/cleanup paths drop stale entries forward for users updating from
+ * those versions. `SubagentStart`/`SubagentStop` were legacy too, and are
+ * written again since S3; `PermissionRequest` since H3.
  */
 export const DASH_HOOK_EVENTS = [
   'Stop',

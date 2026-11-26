@@ -234,6 +234,11 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
     // never answer, decline or rewrite the elicitation for the user. Both
     // predate MIN_CLAUDE_VERSION.
     Elicitation: [{ matcher: '', hooks: [dashCmd('elicitation', true)] }],
+    // A permission prompt turns the task to needs the moment it opens; the
+    // permission_prompt notification only comes ~6 s later (H3). Async, so
+    // Claude Code reads no decision from it and the user's prompt decides.
+    // It doesn't fire for calls a rule or mode allows (verified live).
+    PermissionRequest: [{ matcher: '', hooks: [dashCmd('permission-request', true)] }],
     ElicitationResult: [{ matcher: '', hooks: [dashCmd('elicitation-result', true)] }],
   };
 
