@@ -66,6 +66,7 @@ import type { Task, WorktreeMigrationProject, WorktreeMigrationResult } from '..
 import type { CreateTaskOptions, TaskModalDefaults } from './components/task/TaskModal';
 import { matchesBinding } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
+import { useTerminalHibernation } from './terminal/useTerminalHibernation';
 import { resolveTheme } from './terminal/terminalThemes';
 import { resolveTerminalFontValue } from './terminal/terminalFonts';
 import { setWebglHeldLimit } from './terminal/WebglLifecycle';
@@ -182,6 +183,7 @@ export function App() {
   // Store-level live subscriptions + reactive bootstrap (runtime init, token rollups,
   // git watcher/poll, PR detection). React schedules WHEN; the stores own HOW.
   useAppBootstrap();
+  useTerminalHibernation();
 
   // One-shot localStorage → SQLite migration for drawer tabs. After upgrading
   // past commit 3, per-task tab state lives in the drawer_tabs table owned by

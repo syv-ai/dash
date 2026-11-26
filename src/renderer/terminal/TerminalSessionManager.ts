@@ -26,6 +26,7 @@ import { repaintOnCanvasResize } from './webglCanvasRepaint';
 import { MouseModeTracker } from './mouseModeFilter';
 import { macShellKeySequence } from './shellKeys';
 import { TUI_COLS, TUI_ROWS } from '../../shared/tuiProtocol';
+import type { TerminalRest } from './hibernation';
 
 // Heap mark above which a terminal trims its own scrollback to relieve pressure.
 // `performance.memory.usedJSHeapSize` is the WHOLE renderer heap (React, Monaco,
@@ -86,6 +87,8 @@ export class TerminalSessionManager {
   private lastPtyRows = 0;
   private lastMemoryCheckAt = 0;
   private savedViewportY: number | null = null;
+  /** When it was last hidden, or created (see hibernation). */
+  private hiddenSince = Date.now();
   // WebGL renderer, kept on the most recently attached terminals (see
   // WebglLifecycle). Null for terminals that always use xterm's DOM renderer
   // (see createGpu).
@@ -605,9 +608,13 @@ export class TerminalSessionManager {
         // no snapshot or mirror state to restore — a renderer reload simply
         // attaches again.
         if (!this.reconnecting) this.setDetached(null);
+        // Veil the pane until the new client paints (K4).
+        this.onActivity?.('attach');
         const result = await this.startPty();
         if (gen !== this.attachGeneration) return;
         isDirectSpawn = result.isDirectSpawn;
+        // A failed start wrote its message: lift the veil off it.
+        if (!this.lastStartOk) this.onActivity?.('output');
       }
     }
 
@@ -629,6 +636,7 @@ export class TerminalSessionManager {
         for (const chunk of buffered) {
           this.terminal.write(chunk);
         }
+        if (buffered.length > 0) this.onActivity?.('output');
       }
 
       // Re-attach path: listeners weren't set up above, connect them now
@@ -699,6 +707,7 @@ export class TerminalSessionManager {
 
   detach() {
     this.savedViewportY = this.terminal.buffer.active.viewportY;
+    this.hiddenSince = Date.now();
 
     // Stop timers
     if (this.readyFallbackTimer) {
@@ -762,6 +771,17 @@ export class TerminalSessionManager {
   /** Connected to its PTY, so input reaches the process. */
   get isLive(): boolean {
     return this.ptyStarted && !this.disposed;
+  }
+
+  /** How it stands for the hibernation check (remote control is the
+   *  caller's to add). */
+  get rest(): Omit<TerminalRest, 'remoteControl'> {
+    return {
+      taskPane: !this.shellOnly && !this.isTui && !foreignSessionJobId(this.id),
+      shown: this.currentContainer !== null,
+      hiddenAt: this.hiddenSince,
+      busy: this._isRestarting || this.reconnecting,
+    };
   }
 
   get isDetached(): boolean {

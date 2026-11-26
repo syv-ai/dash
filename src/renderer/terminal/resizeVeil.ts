@@ -3,6 +3,8 @@
  * through a panel ease, the fit lands once it settles (FitScheduler), and the
  * program (Claude Code's TUI) redraws for the new size. A veil covers that,
  * shown as the grid's size starts to change and lifted once it has settled.
+ * It also covers an agent pane while a fresh `claude attach` client starts
+ * (a woken hibernated terminal, K4), until the client's first paint settles.
  */
 
 /** Lifted this long after the fit that follows the last resize... */
@@ -12,6 +14,9 @@ export const VEIL_QUIET_MS = 100;
 /** ...or this long after the last resize or fit, however busy the output
  *  (a program that streams never goes quiet). */
 export const VEIL_CAP_MS = 600;
+/** An attach that hasn't painted lifts after this long anyway (a failed
+ *  start writes its own message). */
+export const VEIL_WAKE_CAP_MS = 4_000;
 
 /** What a terminal session reports to its veil. */
 export type TerminalActivity =
@@ -20,7 +25,9 @@ export type TerminalActivity =
   /** It fitted its grid (and the PTY) to its box. */
   | 'fit'
   /** The program wrote output. */
-  | 'output';
+  | 'output'
+  /** A fresh attach client is starting; nothing is painted yet. */
+  | 'attach';
 
 /**
  * When to show the veil, from a session's activity: `onChange` hears each
@@ -29,6 +36,8 @@ export type TerminalActivity =
 export class ResizeVeil {
   private shown = false;
   private fitted = false;
+  /** Covering an attach that hasn't painted yet. */
+  private waking = false;
   private lastSize = 0;
   private lastOutput = -Infinity;
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -42,9 +51,14 @@ export class ResizeVeil {
     const t = this.now();
     if (activity === 'output') {
       this.lastOutput = t;
-      return;
-    }
-    if (activity === 'resize') {
+      if (!this.waking) return;
+      // The client's first paint: lift once its redraw settles, as after a fit.
+      this.waking = false;
+      this.fitted = true;
+    } else if (activity === 'attach') {
+      this.waking = true;
+      if (!this.shown) this.set(true);
+    } else if (activity === 'resize') {
       this.fitted = false;
       if (!this.shown) this.set(true);
     } else {
@@ -67,6 +81,7 @@ export class ResizeVeil {
 
   /** When the veil may lift, on what is known now. */
   private dueAt(): number {
+    if (this.waking) return this.lastSize + VEIL_WAKE_CAP_MS;
     const cap = this.lastSize + VEIL_CAP_MS;
     if (!this.fitted) return cap;
     const settled = Math.max(this.lastSize + VEIL_STABLE_MS, this.lastOutput + VEIL_QUIET_MS);

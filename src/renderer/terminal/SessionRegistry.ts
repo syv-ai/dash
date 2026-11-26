@@ -1,6 +1,7 @@
 import { TerminalSessionManager } from './TerminalSessionManager';
 import type { TerminalActivity } from './resizeVeil';
 import type { PermissionMode } from '../../shared/types';
+import { shouldHibernate } from './hibernation';
 
 interface AttachOptions {
   id: string;
@@ -78,6 +79,25 @@ class SessionRegistryImpl {
       session.dispose();
       this.sessions.delete(id);
     }
+  }
+
+  /**
+   * Hibernate every task terminal unseen for longer than `afterMs`: dispose
+   * its xterm and close its attach client. The session keeps running; the
+   * next pane mount creates the terminal again and re-attaches. Returns the
+   * ids it hibernated.
+   */
+  hibernateIdle(now: number, afterMs: number, remoteControl: (id: string) => boolean): string[] {
+    const out: string[] = [];
+    for (const [id, session] of this.sessions) {
+      if (!shouldHibernate({ ...session.rest, remoteControl: remoteControl(id) }, now, afterMs)) {
+        continue;
+      }
+      session.dispose();
+      this.sessions.delete(id);
+      out.push(id);
+    }
+    return out;
   }
 
   async disposeByPrefix(prefix: string): Promise<void> {

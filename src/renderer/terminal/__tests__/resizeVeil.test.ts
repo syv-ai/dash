@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ResizeVeil } from '../resizeVeil';
+import { ResizeVeil, VEIL_WAKE_CAP_MS } from '../resizeVeil';
 
 describe('ResizeVeil', () => {
   let shown: boolean[];
@@ -78,5 +78,37 @@ describe('ResizeVeil', () => {
     veil.report('output');
     vi.advanceTimersByTime(1000);
     expect(shown).toEqual([]);
+  });
+
+  it('covers an attach until the client paints, then lifts once it goes quiet', () => {
+    veil.report('attach');
+    expect(shown).toEqual([true]);
+    veil.report('fit');
+    vi.advanceTimersByTime(900);
+    expect(shown).toEqual([true]);
+    veil.report('output');
+    vi.advanceTimersByTime(60);
+    veil.report('output');
+    vi.advanceTimersByTime(99);
+    expect(shown).toEqual([true]);
+    vi.advanceTimersByTime(1);
+    expect(shown).toEqual([true, false]);
+  });
+
+  it('lifts an attach that never paints on the wake cap', () => {
+    veil.report('attach');
+    vi.advanceTimersByTime(VEIL_WAKE_CAP_MS - 1);
+    expect(shown).toEqual([true]);
+    vi.advanceTimersByTime(1);
+    expect(shown).toEqual([true, false]);
+  });
+
+  it('keeps covering an attach through a resize before the first paint', () => {
+    veil.report('attach');
+    vi.advanceTimersByTime(100);
+    veil.report('resize');
+    veil.report('fit');
+    vi.advanceTimersByTime(1000);
+    expect(shown).toEqual([true]);
   });
 });
