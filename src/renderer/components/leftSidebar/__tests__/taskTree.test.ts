@@ -25,8 +25,8 @@ describe('taskTreeRows', () => {
     inactive: [row('s1', 'asleep'), row('s2', 'asleep')],
   });
 
-  it('puts the favourites first, unheaded, gaps the groups, and folds the sleeping ones under a count', () => {
-    expect(keys(all)).toEqual(['f', 'g:news', 'w', 'g:resting', 'i', 'g:inactive', 'inactive']);
+  it('puts the favourites first, unheaded and ungapped, gaps the other groups, and folds the sleeping ones under a count', () => {
+    expect(keys(all)).toEqual(['f', 'w', 'g:resting', 'i', 'g:inactive', 'inactive']);
     expect(taskTreeRows(all, false).at(-1)).toMatchObject({
       kind: 'inactive',
       count: 2,
@@ -47,6 +47,15 @@ describe('taskTreeRows', () => {
     expect(keys(groups({ inactive: [row('s', 'asleep')] }))).toEqual(['inactive']);
     expect(keys(groups({ resting: [row('i', 'idle')] }))).toEqual(['i']);
     expect(keys(groups())).toEqual([]);
+  });
+
+  it('keeps the gap before the inactive group after favourites alone', () => {
+    const favs = groups({ favorites: [row('f', 'idle')], inactive: [row('s', 'asleep')] });
+    expect(keys(favs)).toEqual(['f', 'g:inactive', 'inactive']);
+    expect(keys(groups({ favorites: [row('f', 'idle')], resting: [row('i', 'idle')] }))).toEqual([
+      'f',
+      'i',
+    ]);
   });
 
   it('lets the keys land on tasks and the inactive group only', () => {

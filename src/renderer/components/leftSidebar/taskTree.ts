@@ -23,12 +23,17 @@ const taskRow = (row: TaskStateRow, depth = 0): TaskTreeRow => ({
   row,
 });
 
-/** The rows on show: each non-empty group, a gap between them; the sleeping
- *  tasks only while `inactiveOpen`. */
+/** The rows on show: the favourites run straight into the live tasks (their
+ *  star marks them), a gap between the other groups; the sleeping tasks only
+ *  while `inactiveOpen`. */
 export function taskTreeRows(groups: TaskGroups, inactiveOpen: boolean): TaskTreeRow[] {
   const rows: TaskTreeRow[] = [];
-  const gap = (key: string) => {
-    if (rows.length > 0) rows.push({ kind: 'gap', key, depth: 0, focusable: false });
+  const favorites = groups.favorites.length;
+  // A gap only after a non-favourite group, or before "Inactive sessions".
+  const gap = (key: string, afterFavorites = false) => {
+    if (rows.length > (afterFavorites ? 0 : favorites)) {
+      rows.push({ kind: 'gap', key, depth: 0, focusable: false });
+    }
   };
   rows.push(...groups.favorites.map((r) => taskRow(r)));
   if (groups.news.length > 0) {
@@ -40,7 +45,7 @@ export function taskTreeRows(groups: TaskGroups, inactiveOpen: boolean): TaskTre
     rows.push(...groups.resting.map((r) => taskRow(r)));
   }
   if (groups.inactive.length > 0) {
-    gap('g:inactive');
+    gap('g:inactive', true);
     rows.push({
       kind: 'inactive',
       key: 'inactive',

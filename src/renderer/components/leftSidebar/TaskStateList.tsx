@@ -140,6 +140,7 @@ function TaskStateRowItem({
       // Flush at every depth: an inactive task lines up with the live ones
       // (the tree still nests it under "Inactive sessions" for keys and AT).
       indentStep={0}
+      spacedEnd
       description={
         (projectName || reason) && (
           <>

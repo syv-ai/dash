@@ -16,6 +16,7 @@ import { useRuntime } from '../../stores/runtimeStore';
 import { useGit } from '../../stores/gitStore';
 import { STATE_LABELS, failureReason, isAtRest } from './taskStates';
 import { ContextLevel } from './ContextLevel';
+import { cn } from '../../lib/cn';
 
 interface TaskCardProps {
   task: Task;
@@ -31,6 +32,9 @@ interface TaskCardProps {
   indentStep?: number;
   /** Drag to reorder (the Projects view). */
   drag?: { isDragging: boolean; handlers: DragHandlers };
+  /** Set the percent column apart from the name and its marks (the Tasks
+   *  view, whose rows lead with the name; T28). */
+  spacedEnd?: boolean;
   onSelect: () => void;
   onOpenIde: () => void;
   onClose: () => void;
@@ -70,6 +74,7 @@ export function TaskCard({
   usage,
   indentStep,
   drag,
+  spacedEnd = false,
   onSelect,
   onOpenIde,
   onClose,
@@ -110,15 +115,19 @@ export function TaskCard({
         strong={ctx.selected}
         onActivate={onSelect}
         leading={
-          state === 'asleep' ? (
-            <StatusDot state={state} />
-          ) : (
-            <Tooltip content={dotTooltip(state, activityInfo)}>
-              <span className="flex">
-                <StatusDot state={state} label={STATE_LABELS[state]} />
-              </span>
-            </Tooltip>
-          )
+          // A little more room than the row's gap between the orb and the
+          // name and project (T28).
+          <span className="flex pr-1">
+            {state === 'asleep' ? (
+              <StatusDot state={state} />
+            ) : (
+              <Tooltip content={dotTooltip(state, activityInfo)}>
+                <span className="flex">
+                  <StatusDot state={state} label={STATE_LABELS[state]} />
+                </span>
+              </Tooltip>
+            )}
+          </span>
         }
         badges={badges}
         description={description}
@@ -142,11 +151,15 @@ export function TaskCard({
                 before it (T26); right-aligned, the column lines up down the
                 list. */}
             {state !== 'asleep' && (
-              <HoverSwapSlot
-                reserve
-                rest={<ContextLevel usage={usage} />}
-                actions={<SleepTaskButton activityState={activityInfo?.state} onClose={onClose} />}
-              />
+              <span className={cn('flex', spacedEnd && 'pl-2')}>
+                <HoverSwapSlot
+                  reserve
+                  rest={<ContextLevel usage={usage} />}
+                  actions={
+                    <SleepTaskButton activityState={activityInfo?.state} onClose={onClose} />
+                  }
+                />
+              </span>
             )}
           </>
         }
