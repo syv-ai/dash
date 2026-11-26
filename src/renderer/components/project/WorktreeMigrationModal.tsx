@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
-import { X, FolderGit2, Loader2, AlertCircle, Check } from 'lucide-react';
+import { FolderGit2, Loader2, AlertCircle, Check } from 'lucide-react';
 import type { WorktreeMigrationProject, WorktreeMigrationResult } from '../../../shared/types';
-import { Modal, useModalClose } from '../ui/Modal';
+import { Badge } from '../ui/Badge';
+import { Button } from '../ui/Button';
+import { Code } from '../ui/Code';
+import { DetailItem, DetailList } from '../ui/DetailList';
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from '../ui/Dialog';
+import { useModalClose } from '../ui/Modal';
+import { Notice } from '../ui/Notice';
 import { Checkbox } from '../ui/Checkbox';
 import { CheckboxField } from '../ui/CheckboxField';
 
@@ -39,9 +45,9 @@ interface WorktreeMigrationModalProps {
  */
 export function WorktreeMigrationModal(props: WorktreeMigrationModalProps) {
   return (
-    <Modal onClose={props.onClose} size="w-[560px] max-h-[80vh]">
+    <Dialog size="lg" onClose={props.onClose}>
       <WorktreeMigrationBody plan={props.plan} onMigrated={props.onMigrated} />
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -112,83 +118,65 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
 
   const busy = phase.kind === 'running';
 
+  const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
   return (
     <>
-      <div className="flex items-center justify-between px-5 h-12 border-b border-border/40 shrink-0">
-        <h2 className="type-title">Move task worktrees</h2>
-        <button
-          onClick={close}
-          disabled={busy}
-          className="p-1.5 rounded-lg hover:bg-accent text-icon hover:text-foreground transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none"
-        >
-          <X size={14} strokeWidth={2} />
-        </button>
-      </div>
-
-      <div className="px-5 py-4 overflow-y-auto min-h-0 flex-1 space-y-4">
+      <DialogHeader title="Move task worktrees" closeDisabled={busy} />
+      <DialogBody>
         {phase.kind !== 'done' ? (
           <>
-            <p className="text-base text-muted-foreground leading-relaxed">
-              Dash now keeps each task&apos;s worktree inside its project at{' '}
-              <code className="px-1 py-0.5 rounded-md bg-accent/80 text-xs font-mono text-fg-fade-75">
-                .claude/worktrees/
-              </code>
-              , where Claude Code expects it. {taskCount} worktree{taskCount === 1 ? '' : 's'} in{' '}
-              {plan.length} project{plan.length === 1 ? '' : 's'} still{' '}
+            <p className="type-body">
+              Dash now keeps each task&rsquo;s worktree inside its project, at{' '}
+              <Code>.claude/worktrees/</Code>, where Claude Code expects it.{' '}
+              {count(taskCount, 'worktree')} in {count(plan.length, 'project')} still{' '}
               {taskCount === 1 ? 'lives' : 'live'} at the old location. Moving keeps every branch,
               file and setting; running task terminals restart afterwards. Untick a project to leave
               it for a later launch.
             </p>
 
-            <div className="space-y-3">
+            <div className="grid gap-3">
               {plan.map((project) => (
                 <div
                   key={project.projectId}
-                  className={`rounded-xl border border-border/40 p-3.5 transition-opacity ${
-                    selected.has(project.projectId) ? '' : 'opacity-50'
-                  }`}
-                  style={{ background: 'hsl(var(--surface-2))' }}
+                  className={
+                    selected.has(project.projectId)
+                      ? 'grid gap-2 rounded-lg border border-line p-3'
+                      : 'grid gap-2 rounded-lg border border-line p-3 opacity-50'
+                  }
                 >
-                  <label className="flex items-center gap-2 min-w-0 cursor-pointer select-none">
+                  <label className="flex min-w-0 cursor-pointer items-center gap-2 select-none">
                     <Checkbox
                       checked={selected.has(project.projectId)}
                       disabled={busy}
                       onChange={() => toggleProject(project.projectId)}
                     />
-                    <FolderGit2 size={13} strokeWidth={1.8} className="text-icon" />
-                    <span className="text-base font-medium text-foreground truncate">
-                      {project.projectName}
-                    </span>
-                    <span className="text-xs text-muted-fade-70 ml-auto shrink-0">
-                      {project.tasks.length} task{project.tasks.length === 1 ? '' : 's'}
+                    <FolderGit2 size={14} strokeWidth={1.8} className="text-icon" />
+                    <span className="type-heading truncate">{project.projectName}</span>
+                    <span className="type-caption ml-auto shrink-0">
+                      {count(project.tasks.length, 'task')}
                     </span>
                   </label>
-                  <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs text-fg-fade-50">
-                    <dt className="text-muted-fade-60 select-none">from</dt>
-                    <dd className="break-all">{project.legacyDir}</dd>
-                    <dt className="text-muted-fade-60 select-none">to</dt>
-                    <dd className="break-all">{project.targetDir}</dd>
-                  </dl>
-                  <ul className="mt-2 space-y-1">
+                  <DetailList>
+                    <DetailItem label="From" title={project.legacyDir}>
+                      {project.legacyDir}
+                    </DetailItem>
+                    <DetailItem label="To" title={project.targetDir}>
+                      {project.targetDir}
+                    </DetailItem>
+                  </DetailList>
+                  <ul className="grid gap-1">
                     {project.tasks.map((t) => (
-                      <li
-                        key={t.taskId}
-                        className="flex items-center gap-2 text-sm text-fg-fade-80 min-w-0"
-                      >
-                        <span className="truncate">{t.taskName}</span>
-                        <span className="text-xs text-muted-fade-60 truncate">{t.branch}</span>
-                        {t.archived && (
-                          <span className="px-1.5 py-[1px] rounded-full bg-accent/80 text-xs text-muted-foreground shrink-0">
-                            archived
-                          </span>
-                        )}
+                      <li key={t.taskId} className="flex min-w-0 items-center gap-2">
+                        <span className="type-body truncate">{t.taskName}</span>
+                        <span className="type-caption truncate">{t.branch}</span>
+                        {t.archived && <Badge size="sm">Archived</Badge>}
                         {t.stale && (
-                          <span
-                            className="px-1.5 py-[1px] rounded-full bg-[hsl(var(--git-modified))]/15 text-[hsl(var(--git-modified))] text-xs shrink-0"
+                          <Badge
+                            size="sm"
                             title="The folder is no longer a git worktree; only leftover files remain"
                           >
-                            not a worktree
-                          </span>
+                            Not a worktree
+                          </Badge>
                         )}
                       </li>
                     ))}
@@ -198,51 +186,31 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
             </div>
           </>
         ) : (
-          <div className="space-y-3">
-            <div className="flex items-start gap-3">
-              <div
-                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                  failures.length === 0
-                    ? 'bg-[hsl(var(--git-added)/0.12)] text-[hsl(var(--git-added))]'
-                    : 'bg-[hsl(var(--git-modified)/0.12)] text-[hsl(var(--git-modified))]'
-                }`}
-              >
-                {failures.length === 0 ? (
-                  <Check size={14} strokeWidth={2} />
+          <div className="grid gap-3">
+            <Notice
+              icon={
+                failures.length === 0 ? (
+                  <Check size={14} strokeWidth={1.8} />
                 ) : (
-                  <AlertCircle size={14} strokeWidth={2} />
-                )}
-              </div>
-              <div className="min-w-0">
-                <p className="text-base font-medium text-foreground">
-                  Moved {movedCount} of {movableCount} worktree
-                  {movableCount === 1 ? '' : 's'}
-                  {removedCount > 0
-                    ? `, removed ${removedCount} stale task${removedCount === 1 ? '' : 's'}`
-                    : ''}
-                  {chosen.length < plan.length
-                    ? ` (${plan.length - chosen.length} project${
-                        plan.length - chosen.length === 1 ? '' : 's'
-                      } left for next launch)`
-                    : ''}
-                </p>
-                {failures.length > 0 && (
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    The tasks below stay at their old location and keep working. Fix the cause and
-                    Dash will offer the move again next launch.
-                  </p>
-                )}
-              </div>
-            </div>
+                  <AlertCircle size={14} strokeWidth={1.8} />
+                )
+              }
+            >
+              Moved {movedCount} of {count(movableCount, 'worktree')}
+              {removedCount > 0 ? `, removed ${count(removedCount, 'stale task')}` : ''}
+              {chosen.length < plan.length
+                ? ` (${count(plan.length - chosen.length, 'project')} left for next launch)`
+                : ''}
+              .
+              {failures.length > 0 &&
+                ' The tasks below stay where they were and keep working; fix the cause and Dash offers the move again next launch.'}
+            </Notice>
             {failures.length > 0 && (
-              <ul className="space-y-1.5">
+              <ul className="grid gap-1.5">
                 {failures.map((f) => (
-                  <li
-                    key={f.taskId}
-                    className="rounded-lg border border-border/40 px-3 py-2 text-sm"
-                  >
-                    <span className="font-medium text-foreground">{f.taskName}</span>
-                    <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs text-fg-fade-60">
+                  <li key={f.taskId} className="grid gap-1 rounded-lg border border-line px-3 py-2">
+                    <span className="type-body">{f.taskName}</span>
+                    <pre className="font-mono text-xs break-words whitespace-pre-wrap text-ink-2">
                       {f.error}
                     </pre>
                   </li>
@@ -251,61 +219,43 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
             )}
           </div>
         )}
-      </div>
+      </DialogBody>
 
-      <div className="px-5 py-3.5 border-t border-border/40 shrink-0 flex items-center gap-3">
-        {phase.kind === 'confirm' && (
-          <div className="flex flex-col gap-1.5">
-            {staleCount > 0 && (
-              <CheckboxField
-                checked={removeStale}
-                onChange={setRemoveStale}
-                label={`Remove the ${staleCount} task${staleCount === 1 ? '' : 's'} whose folder is no longer a worktree`}
-              />
-            )}
-            <CheckboxField checked={dontAsk} onChange={setDontAsk} label="Don't ask again" />
-          </div>
+      <DialogFooter
+        divided
+        start={
+          phase.kind === 'confirm' && (
+            <div className="grid gap-1.5">
+              {staleCount > 0 && (
+                <CheckboxField
+                  checked={removeStale}
+                  onChange={setRemoveStale}
+                  label={`Remove the ${count(staleCount, 'task')} whose folder is no longer a worktree`}
+                />
+              )}
+              <CheckboxField checked={dontAsk} onChange={setDontAsk} label="Don't ask again" />
+            </div>
+          )
+        }
+      >
+        {phase.kind === 'done' ? (
+          <Button onClick={close}>Done</Button>
+        ) : (
+          <>
+            <Button variant="ghost" onClick={handleLater} disabled={busy}>
+              Later
+            </Button>
+            <Button onClick={() => void handleMove()} disabled={busy || chosen.length === 0}>
+              {busy && <Loader2 size={14} strokeWidth={1.8} className="animate-spin" />}
+              {busy
+                ? `Moving ${phase.kind === 'running' ? phase.done : 0}/${chosen.length}…`
+                : chosen.length < plan.length
+                  ? `Move ${chosen.length} of ${plan.length}`
+                  : 'Move now'}
+            </Button>
+          </>
         )}
-        <div className="flex gap-2.5 justify-end ml-auto">
-          {phase.kind === 'done' ? (
-            <button
-              type="button"
-              onClick={close}
-              className="px-4 py-2 rounded-full text-base font-medium bg-primary text-primary-foreground hover:brightness-110 transition-all duration-150"
-            >
-              Done
-            </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={handleLater}
-                disabled={busy}
-                className="px-4 py-2 rounded-full text-base text-muted-fade-60 hover:text-foreground hover:bg-accent/60 transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none"
-              >
-                Later
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleMove()}
-                disabled={busy || chosen.length === 0}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-base font-medium bg-primary text-primary-foreground hover:brightness-110 transition-all duration-150 disabled:opacity-70 disabled:pointer-events-none"
-              >
-                {busy ? (
-                  <>
-                    <Loader2 size={13} strokeWidth={2} className="animate-spin" />
-                    Moving {phase.kind === 'running' ? phase.done : 0}/{chosen.length}…
-                  </>
-                ) : chosen.length < plan.length ? (
-                  `Move ${chosen.length} of ${plan.length}`
-                ) : (
-                  'Move now'
-                )}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
+      </DialogFooter>
     </>
   );
 }
