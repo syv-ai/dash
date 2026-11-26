@@ -120,6 +120,19 @@ describe('TelemetryService properties', () => {
   });
 });
 
+describe('captureDaily', () => {
+  it('sends an event once a day per key', async () => {
+    writeConfig(true);
+    app.isPackaged = true;
+    const { TelemetryService } = await import('../TelemetryService');
+    TelemetryService.initialize();
+    const props = { command: 'tasks.list', source: 'task' };
+    expect(TelemetryService.captureDaily('a', 'dashctl_called', props)).toBe(true);
+    expect(TelemetryService.captureDaily('a', 'dashctl_called', props)).toBe(false);
+    expect(TelemetryService.captureDaily('b', 'dashctl_called', props)).toBe(true);
+  });
+});
+
 describe('claude_contract_drift', () => {
   it('sends the shape of a drift, nothing else', async () => {
     writeConfig(true);

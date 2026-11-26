@@ -92,6 +92,14 @@ const ALLOWED_EVENTS = new Set([
   'app_update_installed',
   'app_update_failed',
 
+  // Feature use
+  'project_switched',
+  'sidebar_mode_changed',
+  'terminal_drawer_opened',
+  'task_finder_opened',
+  'dashctl_called',
+  'lsp_failed',
+
   // Errors ($exception goes through captureException, not this list)
   'ipc_failed',
 
@@ -144,6 +152,8 @@ const ALLOWED_PROPERTIES = new Set([
   'from_version',
   'to_version',
   'stage',
+  'command',
+  'language_id',
 ]);
 
 // ── Persisted State ───────────────────────────────────────────
@@ -177,6 +187,8 @@ export class TelemetryService {
   private static usage = new UsageLedger();
   private static usageSource: UsageSource | null = null;
   private static liveSessions = 0;
+  /** `captureDaily` keys sent, by day. */
+  private static dailySent = new Set<string>();
   /** One report per error per minute, 30 an hour in all. */
   private static readonly errors = new ErrorThrottle({ windowMs: 60_000, maxPerHour: 30 });
 
@@ -253,6 +265,18 @@ export class TelemetryService {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * At most once a day per `key` (in memory: a restart may send it again),
+   * for events whose every occurrence would only be volume.
+   */
+  static captureDaily(key: string, event: string, properties?: Record<string, unknown>): boolean {
+    const dayKey = `${today()}:${key}`;
+    if (this.dailySent.has(dayKey)) return false;
+    const sent = this.capture(event, properties);
+    if (sent) this.dailySent.add(dayKey);
+    return sent;
   }
 
   /** An IPC handler that answered with a failure: its channel and error code, no message. */

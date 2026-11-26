@@ -226,11 +226,16 @@ describe('LanguageServerManager (fake server)', () => {
 
   it('gives up after too many crashes and reports the server failed', async () => {
     const wt = worktree('w1');
-    make({ restart: { maxRestarts: 2, baseDelayMs: 5, maxDelayMs: 10 } });
+    const failed: string[] = [];
+    make({
+      restart: { maxRestarts: 2, baseDelayMs: 5, maxDelayMs: 10 },
+      onFailed: (id) => failed.push(id),
+    });
     const uri = uriIn(wt);
     manager.open(1, { worktree: wt, uri, version: 1, text: 'CRASH on every replay' });
     await waitFor(() => stateOf(wt) === 'failed');
     expect(manager.status(wt)[0]?.message).toMatch(/exited/);
+    expect(failed).toEqual([manager.status(wt)[0]?.serverId]);
     await expect(hover(uri)).rejects.toMatchObject({ code: 'UNAVAILABLE' });
 
     // Re-opening the file is the retry.

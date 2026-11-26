@@ -42,6 +42,8 @@ export interface LanguageServerManagerOptions {
   shutdownTimeoutMs?: number;
   onDiagnostics: (owner: number, event: LspDiagnosticsEvent) => void;
   onStatus?: (worktree: string, servers: LspServerStatus[]) => void;
+  /** A server gave up after its restarts (analytics: the spec id only). */
+  onFailed?: (serverId: string) => void;
 }
 
 export interface OpenDocumentArgs {
@@ -327,7 +329,10 @@ export class LanguageServerManager {
         [...this.docs.values()].filter((d) => d.key === key).map((d) => this.item(d)),
       onDiagnostics: (uri, version, diagnostics) =>
         this.routeDiagnostics(key, uri, version, diagnostics),
-      onStateChange: () => this.emitStatus(entry),
+      onStateChange: (state) => {
+        if (state === 'failed') this.opts.onFailed?.(spec.id);
+        this.emitStatus(entry);
+      },
     });
     this.entries.set(key, entry);
     this.touch(entry);

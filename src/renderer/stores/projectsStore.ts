@@ -8,6 +8,7 @@ import { playPeonSound } from '../sounds';
 import { useSettings } from './settingsStore';
 import { useEditors } from './editorsStore';
 import { notifyContextInjected } from './taskToasts';
+import { track } from '../lib/telemetry';
 
 export interface ProjectsState {
   /** Projects in the project list. Archived ones live in `archivedProjects`
@@ -157,8 +158,10 @@ export const useProjects = create<ProjectsStore>((set, get) => ({
   setTasksForProject: (projectId, tasks) =>
     set((s) => ({ tasksByProject: { ...s.tasksByProject, [projectId]: tasks } })),
   setActiveProject: (id) => {
+    const prev = get().activeProjectId;
     persistKey('activeProjectId', id);
     set({ activeProjectId: id });
+    if (id && prev && id !== prev) track('project_switched');
   },
   setActiveTask: (id) => {
     persistKey('activeTaskId', id);

@@ -1,5 +1,6 @@
 import { app } from 'electron';
 import { DatabaseService } from '../services/DatabaseService';
+import { TelemetryService } from '../services/TelemetryService';
 import { createRegistry, type Registry } from './registry';
 import { writeDashctl } from './dashctl';
 import { controlPaths } from './paths';
@@ -21,11 +22,21 @@ import type { ControlInfo } from '../../shared/types';
  */
 
 /** The app's capability registry, scoped against the real DB. */
-export const registry: Registry = createRegistry({
-  getProjects: () => DatabaseService.getProjects(),
-  getTask: (id) => DatabaseService.getTask(id),
-  isOrchestratorAllowed: () => orchestratorAccess,
-});
+export const registry: Registry = createRegistry(
+  {
+    getProjects: () => DatabaseService.getProjects(),
+    getTask: (id) => DatabaseService.getTask(id),
+    isOrchestratorAllowed: () => orchestratorAccess,
+  },
+  {
+    // Which commands get used, by whom: once per command and caller kind a day.
+    onCall: (name, callerKind) =>
+      TelemetryService.captureDaily(`dashctl:${name}:${callerKind}`, 'dashctl_called', {
+        command: name,
+        source: callerKind,
+      }),
+  },
+);
 
 let server: ControlServer | null = null;
 let tokensReady = false;

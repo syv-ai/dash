@@ -3,6 +3,7 @@ import type { Project, Task } from '../../shared/types';
 import type { DeleteProjectOptions } from '../components/project/DeleteProjectModal';
 import { parseAdoRemote } from '../../shared/urls';
 import { useProjects } from './projectsStore';
+import { track } from '../lib/telemetry';
 
 export interface AdoSetup {
   projectId: string;
@@ -137,7 +138,12 @@ export const useUi = create<UiStore>((set, get) => ({
     set((s) => ({ taskSettingsTarget: apply(v, s.taskSettingsTarget) })),
   setAdoSetup: (v) => set({ adoSetup: v }),
   setShowSettings: (v) => set((s) => ({ showSettings: apply(v, s.showSettings) })),
-  setTaskFinderOpen: (v) => set((s) => ({ taskFinderOpen: apply(v, s.taskFinderOpen) })),
+  setTaskFinderOpen: (v) =>
+    set((s) => {
+      const open = apply(v, s.taskFinderOpen);
+      if (open && !s.taskFinderOpen) track('task_finder_opened');
+      return { taskFinderOpen: open };
+    }),
   setClaudeUpdateOpen: (v) => set({ claudeUpdateOpen: v }),
   setMemoryProjectId: (v) =>
     set((s) => ({

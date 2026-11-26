@@ -131,7 +131,13 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * The capability registry. Lookups are injected so tests can pass fakes; the
  * app's instance (index.ts) uses DatabaseService.
  */
-export function createRegistry(deps: ScopeLookups): Registry {
+export function createRegistry(
+  deps: ScopeLookups,
+  hooks: {
+    /** Each call to a capability the caller may use (analytics: its name only). Never throws into the call. */
+    onCall?: (name: string, callerKind: CallerKind) => void;
+  } = {},
+): Registry {
   const caps = new Map<string, AnyCapability>();
 
   return {
@@ -176,6 +182,11 @@ export function createRegistry(deps: ScopeLookups): Registry {
       if (!cap) throw new ControlError(404, `unknown capability ${name}`);
       if (!cap.callers.includes(caller.kind)) {
         throw new ControlError(403, `${name} is not available to ${caller.kind} callers`);
+      }
+      try {
+        hooks.onCall?.(name, caller.kind);
+      } catch {
+        // Observing a call never fails it.
       }
 
       let raw: unknown = rawInput ?? {};

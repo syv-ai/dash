@@ -27,6 +27,8 @@ import { AgentView } from './AgentView';
 import type { AgentPane } from './agentTab';
 import { IconButton } from '../ui/IconButton';
 import { cn } from '../../lib/cn';
+import { track } from '../../lib/telemetry';
+import { useSettledTrack } from '../../lib/useSettledTrack';
 import { FolderTabs } from '../ui/FolderTabs';
 import { MovableSlot, useMovable } from '../ui/Movable';
 import { folderSheet, folderStripSlot } from '../ui/FolderTab';
@@ -232,6 +234,11 @@ export function RightInspector({
   const editorMounted = diff !== null;
   // Going narrow, the expanded layout holds until the ease ends.
   const expanded = (expandedProp || holdsSplit(motion)) && editorMounted;
+  useSettledTrack(
+    'sidebar_mode_changed',
+    'mode',
+    railed ? 'rail' : expandedProp ? 'expanded' : 'narrow',
+  );
   // A task in review mode opens on Overview.
   const [segment, setSegment] = useState<Segment>(() => initialSegment(task.id));
   // Expanded, Details takes the whole body over the terminals, as narrow;
@@ -429,6 +436,7 @@ export function RightInspector({
   // Collapse/expand animates; the flag drops once the ease is over.
   const settleShellDrawer = (collapsed: boolean) => {
     setShellDrawerCollapsed(collapsed);
+    if (!collapsed) track('terminal_drawer_opened');
     setTimeout(() => setShellDrawerAnimating(false), panelEaseMs());
   };
 

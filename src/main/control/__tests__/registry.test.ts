@@ -193,6 +193,29 @@ describe('registry.call', () => {
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
+  it('tells onCall each call to a capability the caller may use, never an unknown name', async () => {
+    const onCall = vi.fn((_name: string, _kind: string) => {
+      throw new Error('a failing listener never fails the call');
+    });
+    const registry = createRegistry(fakeLookups([pA, pB], tasks), { onCall });
+    registry.register(
+      defineCapability({
+        name: 'projects.list',
+        summary: 'List projects',
+        input: z.object({}),
+        callers: ['orchestrator'],
+        readOnly: true,
+        handler: async () => 'ok',
+      }),
+    );
+    expect(await registry.call(orch, 'projects.list', {})).toBe('ok');
+    await expect(registry.call(orch, 'no.such', {})).rejects.toMatchObject({ status: 404 });
+    await expect(registry.call(asTask('me'), 'projects.list', {})).rejects.toMatchObject({
+      status: 403,
+    });
+    expect(onCall.mock.calls).toEqual([['projects.list', 'orchestrator']]);
+  });
+
   it('hands untargeted handlers the scope view', async () => {
     const { registry } = setup();
     expect(await registry.call(orch, 'projects.list', {})).toEqual(['pA', 'pB']);
