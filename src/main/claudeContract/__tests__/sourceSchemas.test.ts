@@ -11,6 +11,10 @@ describe('statusLine', () => {
     expect(checkShape(statusLineSchema, statusLineDocs)).toEqual([]);
   });
 
+  it('knows scratchpad_dir, which 2.1.332 sends though the docs leave it out', () => {
+    expect(checkShape(statusLineSchema, { ...statusLineDocs, scratchpad_dir: '/s' })).toEqual([]);
+  });
+
   it('allows the documented nulls early in a session', () => {
     const early = {
       ...statusLineDocs,

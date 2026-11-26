@@ -23,6 +23,8 @@ export const statusLineSchema = z.strictObject({
   session_name: opt(str),
   prompt_id: opt(str),
   transcript_path: str,
+  // Not in the statusLine docs; sent by 2.1.332 (live, C6). Same as the hooks' field.
+  scratchpad_dir: opt(str),
   version: str,
   model: z.strictObject({ id: str, display_name: str }),
   workspace: z.strictObject({
