@@ -2,7 +2,6 @@ import {
   MEMORY_INDEX_FILE,
   MEMORY_INDEX_MAX_BYTES,
   MEMORY_INDEX_MAX_LINES,
-  MEMORY_TYPES,
 } from '../../../shared/types';
 import type { MemoryEntry, MemoryType, ProjectMemory, Task } from '../../../shared/types';
 
@@ -13,11 +12,6 @@ export const MEMORY_TYPE_LABELS: Record<MemoryType, string> = {
   reference: 'Reference',
   other: 'Untyped',
 };
-
-/** A type a memory can be filed under: `other` means "none", so it isn't one. */
-export type KnownMemoryType = Exclude<MemoryType, 'other'>;
-
-export const KNOWN_MEMORY_TYPES = MEMORY_TYPES.filter((t): t is KnownMemoryType => t !== 'other');
 
 /** What is off about a memory: Claude won't recall it, or it has no type to be filed under. */
 export type MemoryIssue = 'unindexed' | 'not-loaded' | 'untyped';

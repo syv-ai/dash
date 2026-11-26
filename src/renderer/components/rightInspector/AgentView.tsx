@@ -8,7 +8,6 @@ import {
   Link2,
   List,
   MoreHorizontal,
-  Plus,
   Trash2,
 } from 'lucide-react';
 import { toast } from '../ui/toast';
@@ -24,7 +23,6 @@ import { buildTree, type TreeSection } from '../fileTree/model';
 import { copyText, revealLabel } from '../diffEditor/fileActions';
 import { useProjectMemory } from '../memory/useProjectMemory';
 import {
-  KNOWN_MEMORY_TYPES,
   MEMORY_ISSUE_LABELS,
   MEMORY_TYPE_LABELS,
   listMemories,
@@ -32,7 +30,6 @@ import {
   memoryMatches,
   memoryMention,
   memoryNotices,
-  type KnownMemoryType,
 } from '../memory/memoryView';
 import { confirm } from '../ui/ConfirmHost';
 import {
@@ -45,7 +42,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '../ui/DropdownMenu';
 import { EmptyState } from '../ui/EmptyState';
@@ -86,8 +82,6 @@ export function AgentView({
   const scratchpad = useTaskScratchpad(task.id);
   const project = useProjects((s) => s.projects.find((p) => p.id === task.projectId) ?? null);
   const { memory, error } = useProjectMemory(pane === 'memory' ? (project?.path ?? null) : null);
-  // The type a memory is being named for, from "New memory".
-  const [creating, setCreating] = useState<KnownMemoryType | null>(null);
 
   const end =
     pane === 'scratchpad'
@@ -102,43 +96,26 @@ export function AgentView({
         )
       : project &&
         memory && (
-          <div className="flex items-center gap-0.5">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <IconButton size="sm" title="New memory">
-                  <Plus size={14} strokeWidth={1.8} />
-                </IconButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>New memory</DropdownMenuLabel>
-                {KNOWN_MEMORY_TYPES.map((type) => (
-                  <DropdownMenuItem key={type} onSelect={() => setCreating(type)}>
-                    {MEMORY_TYPE_LABELS[type]}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <IconButton size="sm" title="More">
-                  <MoreHorizontal size={14} strokeWidth={1.8} />
-                </IconButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  disabled={!memory.exists}
-                  onSelect={() => void revealMemoryFolder(project.path)}
-                >
-                  <FolderOpen size={14} strokeWidth={1.8} />
-                  {revealLabel()}
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => copyText(memory.dir, 'path')}>
-                  <Copy size={14} strokeWidth={1.8} />
-                  Copy folder path
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <IconButton size="sm" title="More">
+                <MoreHorizontal size={14} strokeWidth={1.8} />
+              </IconButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                disabled={!memory.exists}
+                onSelect={() => void revealMemoryFolder(project.path)}
+              >
+                <FolderOpen size={14} strokeWidth={1.8} />
+                {revealLabel()}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => copyText(memory.dir, 'path')}>
+                <Copy size={14} strokeWidth={1.8} />
+                Copy folder path
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         );
 
   return (
@@ -177,8 +154,6 @@ export function AgentView({
             repoPaths={repoPaths}
             activePath={activePath}
             onOpenFile={onOpenFile}
-            creating={creating}
-            onCreated={() => setCreating(null)}
           />
         )
       )}
@@ -186,23 +161,21 @@ export function AgentView({
   );
 }
 
-/** Surface a failed action instead of dropping it; resolves to its data, or null. */
-async function attempt<T>(
-  action: Promise<{ success: boolean; data?: T; error?: string }>,
+/** Surface a failed action instead of dropping it. */
+async function attempt(
+  action: Promise<{ success: boolean; error?: string }>,
   fallback: string,
-): Promise<T | null> {
+): Promise<void> {
   try {
     const res = await action;
-    if (res.success) return res.data ?? (null as T);
-    toast.error(res.error || fallback);
+    if (!res.success) toast.error(res.error || fallback);
   } catch (err) {
     console.error(fallback, err);
     toast.error(fallback);
   }
-  return null;
 }
 
-function revealMemoryFolder(projectPath: string): Promise<unknown> {
+function revealMemoryFolder(projectPath: string): Promise<void> {
   return attempt(
     window.electronAPI.memoryOpenDir({ projectPath }),
     'Could not reveal the memory folder',
@@ -307,8 +280,6 @@ function MemoryPane({
   repoPaths,
   activePath,
   onOpenFile,
-  creating,
-  onCreated,
 }: {
   task: Task;
   projectId: string;
@@ -320,8 +291,6 @@ function MemoryPane({
   repoPaths: readonly string[];
   activePath: string | null;
   onOpenFile: (path: string) => void;
-  creating: KnownMemoryType | null;
-  onCreated: () => void;
 }) {
   const [query, setQuery] = useState('');
   const issues = useMemo(
@@ -341,15 +310,6 @@ function MemoryPane({
   }, [markMemorySeen, projectId, entries]);
 
   const pathOf = (file: string) => `${dir}/${file}`;
-  const create = async (name: string) => {
-    if (!creating) return;
-    onCreated();
-    const made = await attempt(
-      window.electronAPI.memoryCreate({ projectPath, name, type: creating }),
-      'Could not make the memory',
-    );
-    if (made) onOpenFile(made.path);
-  };
   const remove = async (entry: MemoryEntry) => {
     const ok = await confirm({
       message: hasIndex
@@ -374,13 +334,6 @@ function MemoryPane({
           {notice}
         </Notice>
       ))}
-      {creating && (
-        <NewMemoryField
-          type={creating}
-          onSubmit={(name) => void create(name)}
-          onCancel={onCreated}
-        />
-      )}
       {entries.length > 0 && (
         <div className="mx-1 mb-1">
           <Input
@@ -397,11 +350,11 @@ function MemoryPane({
           />
         </div>
       )}
-      {noMemory && !creating ? (
+      {noMemory ? (
         <EmptyState
           illustration={Brain}
           title="No memories yet"
-          description="Claude writes memories here as it learns about the project. Add one with +."
+          description="Claude writes memories here as it learns about the project."
           className="flex-none"
         />
       ) : (
@@ -505,38 +458,6 @@ function MemoryPane({
           ))}
         </section>
       )}
-    </div>
-  );
-}
-
-/** "New memory"'s name, typed in place at the top of the list: Enter makes it, Escape or leaving drops it. */
-function NewMemoryField({
-  type,
-  onSubmit,
-  onCancel,
-}: {
-  type: KnownMemoryType;
-  onSubmit: (name: string) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState('');
-  return (
-    <div className="mx-1 mb-2">
-      <Input
-        autoFocus
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onBlur={onCancel}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && name.trim()) onSubmit(name.trim());
-          if (e.key === 'Escape') {
-            e.stopPropagation();
-            onCancel();
-          }
-        }}
-        placeholder={`Name the ${MEMORY_TYPE_LABELS[type].toLowerCase()} memory`}
-        aria-label="New memory name"
-      />
     </div>
   );
 }

@@ -9,14 +9,11 @@ import {
   countNewMemories,
   indexLinkFiles,
   isMemoryFileName,
-  newMemoryFile,
   readFrontmatter,
   readIndex,
   readMemoryFields,
-  withIndexLine,
   withoutIndexLinks,
   type MemoryIndexLine,
-  type NewMemoryType,
 } from './memoryFiles';
 
 /** The one read failure that means "not there": anything else is a real error. */
@@ -145,27 +142,6 @@ async function readIndexFile(dir: string): Promise<string | null> {
     if (isMissing(err)) return null;
     throw err;
   }
-}
-
-/**
- * Make a memory in the project's folder (made if missing) from the Agent
- * tab's "New memory", and point MEMORY.md at it so Claude finds it. Returns
- * the file's absolute path, for the editor.
- */
-export async function createMemory(
-  projectPath: string,
-  name: string,
-  type: NewMemoryType,
-): Promise<string> {
-  const dir = await resolveMemoryDir(projectPath);
-  await fs.promises.mkdir(dir, { recursive: true });
-  const { file, content } = newMemoryFile(name, type, await fs.promises.readdir(dir));
-  const full = path.join(dir, file);
-  // `wx`: never over a file that appeared since the listing.
-  await fs.promises.writeFile(full, content, { encoding: 'utf8', flag: 'wx' });
-  const index = await readIndexFile(dir);
-  await fs.promises.writeFile(path.join(dir, MEMORY_INDEX_FILE), withIndexLine(index, name, file));
-  return full;
 }
 
 /**

@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { claudeProjectDir } from '../../utils/claudePaths';
-import { createMemory, deleteMemory, readProjectMemory, resolveMemoryDir } from '../MemoryService';
+import { deleteMemory, readProjectMemory, resolveMemoryDir } from '../MemoryService';
 
 function git(cwd: string, ...args: string[]): void {
   execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd });
@@ -145,22 +145,22 @@ describe('what Claude will not see', () => {
   });
 });
 
-describe('making and removing a memory', () => {
+describe('removing a memory', () => {
   const unlink = (full: string) => fs.promises.unlink(full);
 
-  it('makes the folder, the file and its index line; Dash reads it back', async () => {
-    const full = await createMemory(repo, 'Prefer CI', 'feedback');
+  /** A memory folder holding `files`, each indexed on its own MEMORY.md line. */
+  async function seed(...files: string[]): Promise<void> {
     const dir = await resolveMemoryDir(repo);
-    expect(full).toBe(path.join(dir, 'feedback_prefer_ci.md'));
-    const memory = await readProjectMemory(repo);
-    expect(memory.entries).toMatchObject([
-      { file: 'feedback_prefer_ci.md', name: 'Prefer CI', type: 'feedback', inIndex: true },
-    ]);
-  });
+    fs.mkdirSync(dir, { recursive: true });
+    for (const file of files) fs.writeFileSync(path.join(dir, file), 'x');
+    fs.writeFileSync(
+      path.join(dir, 'MEMORY.md'),
+      `# Memory Index\n\n${files.map((f) => `- [${f}](${f})\n`).join('')}`,
+    );
+  }
 
   it('removes the memory and the index lines pointing at it alone', async () => {
-    await createMemory(repo, 'One', 'user');
-    await createMemory(repo, 'Two', 'user');
+    await seed('user_one.md', 'user_two.md');
     await deleteMemory(repo, 'user_one.md', unlink);
     const memory = await readProjectMemory(repo);
     expect(memory.entries.map((e) => e.file)).toEqual(['user_two.md']);
@@ -168,7 +168,7 @@ describe('making and removing a memory', () => {
   });
 
   it('refuses anything that is not a memory file of the folder', async () => {
-    await createMemory(repo, 'One', 'user');
+    await seed('user_one.md');
     const removed: string[] = [];
     const record = async (full: string) => void removed.push(full);
     for (const file of ['MEMORY.md', '../repo/README.md', 'sub/x.md', 'notes.txt']) {

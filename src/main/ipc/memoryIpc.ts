@@ -3,22 +3,12 @@ import * as path from 'path';
 import { ipcMain, shell } from 'electron';
 import { z } from 'zod';
 import { IpcError, parseArgs, errorResponse, ipcError } from './validate';
-import {
-  createMemory,
-  deleteMemory,
-  readProjectMemory,
-  resolveMemoryDir,
-} from '../services/MemoryService';
+import { deleteMemory, readProjectMemory, resolveMemoryDir } from '../services/MemoryService';
 import { DatabaseService } from '../services/DatabaseService';
 import { markMemorySeen, newMemoryCounts } from '../services/memoryBadge';
 
 export const memoryProjectArgsSchema = z.object({
   projectPath: z.string().refine((p) => path.isAbsolute(p), 'must be an absolute path'),
-});
-
-const memoryCreateArgsSchema = z.looseObject({
-  name: z.string().trim().min(1).max(200),
-  type: z.enum(['user', 'feedback', 'project', 'reference']),
 });
 
 /** A file of the memory folder itself, by name; MemoryService checks it is a memory. */
@@ -64,17 +54,6 @@ export function registerMemoryIpc(): void {
       const { projectId } = parseArgs('memory:markSeen', z.object({ projectId: z.string() }), raw);
       if (DatabaseService.getProjects().some((p) => p.id === projectId)) markMemorySeen(projectId);
       return { success: true, data: null };
-    } catch (error) {
-      return errorResponse(error);
-    }
-  });
-
-  // The Agent tab's "New memory": main names the file and writes it.
-  ipcMain.handle('memory:create', async (_event, raw: unknown) => {
-    try {
-      const { projectPath } = parseProjectArgs('memory:create', raw);
-      const { name, type } = parseArgs('memory:create', memoryCreateArgsSchema, raw);
-      return { success: true, data: { path: await createMemory(projectPath, name, type) } };
     } catch (error) {
       return errorResponse(error);
     }
