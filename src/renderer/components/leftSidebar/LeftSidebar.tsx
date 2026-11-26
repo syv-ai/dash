@@ -39,9 +39,9 @@ interface LeftSidebarProps {
 const isMac = window.electronAPI.getPlatform() === 'darwin';
 
 /**
- * The app sidebar: a title bar (find, new task), a Tasks | Projects switch
- * over the state-ordered task list or the project tree, and settings at the
- * foot.
+ * The app sidebar: a Tasks | Projects switch with find and create (a task
+ * or a project, after the view) at its end, over the state-ordered task list
+ * or the project tree, and settings at the foot.
  * Collapsed, it is a rail of state dots for the tasks that aren't idle.
  */
 export function LeftSidebar(props: LeftSidebarProps) {
@@ -90,39 +90,47 @@ export function LeftSidebar(props: LeftSidebarProps) {
     else props.onOpenFolder();
   };
 
+  const projectsView = view === 'projects';
+
   return (
     <div className="flex h-full min-w-0 flex-col bg-ground">
-      {/* Title bar: on macOS the traffic lights sit at its left; the strip
-          drags the window, its buttons don't. */}
-      <div className="titlebar-drag flex h-11 shrink-0 items-center justify-end gap-0.5 px-2">
-        <div className="titlebar-no-drag flex items-center gap-0.5">
-          <IconButton
-            title="Find a task"
-            shortcut={keybindings.findTask}
-            onClick={() => setTaskFinderOpen(true)}
-          >
-            <Search size={14} strokeWidth={1.8} />
-          </IconButton>
-          <IconButton title="New task" shortcut={keybindings.newTask} onClick={newTask}>
+      {/* On macOS the traffic lights sit in this strip; it drags the window. */}
+      <div className={isMac ? 'titlebar-drag h-11 shrink-0' : 'h-2 shrink-0'} />
+      <div className="flex h-9 shrink-0 items-center gap-0.5 px-2">
+        {/* The switch takes the room the actions leave, and fits itself to it. */}
+        <div className="min-w-0 flex-1">
+          <Segmented
+            aria-label="Sidebar view"
+            size="sm"
+            fullWidth={false}
+            value={view}
+            onChange={setView}
+            options={[
+              { value: 'tasks', label: 'Tasks' },
+              { value: 'projects', label: 'Projects' },
+            ]}
+          />
+        </div>
+        <IconButton
+          size="sm"
+          title="Find a task"
+          shortcut={keybindings.findTask}
+          onClick={() => setTaskFinderOpen(true)}
+        >
+          <Search size={14} strokeWidth={1.8} />
+        </IconButton>
+        {projectsView ? (
+          <IconButton size="sm" title="Create project" onClick={props.onOpenFolder}>
             <Plus size={14} strokeWidth={1.8} />
           </IconButton>
-        </div>
-      </div>
-      <div className="flex h-9 shrink-0 items-center px-2">
-        <Segmented
-          aria-label="Sidebar view"
-          size="sm"
-          fullWidth={false}
-          value={view}
-          onChange={setView}
-          options={[
-            { value: 'tasks', label: 'Tasks' },
-            { value: 'projects', label: 'Projects' },
-          ]}
-        />
+        ) : (
+          <IconButton size="sm" title="New task" shortcut={keybindings.newTask} onClick={newTask}>
+            <Plus size={14} strokeWidth={1.8} />
+          </IconButton>
+        )}
       </div>
 
-      {view === 'projects' ? (
+      {projectsView ? (
         <ProjectsSection
           projects={projects}
           activeProjectId={activeProjectId}

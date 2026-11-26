@@ -24,7 +24,6 @@ import { useDragReorder } from '../../hooks/useDragReorder';
 import { IconButton } from '../ui/IconButton';
 import { HoverSwapSlot } from '../ui/HoverSwapSlot';
 import { ListRow } from '../ui/ListRow';
-import { PanelHeader } from '../ui/PanelHeader';
 import { StatusDot } from '../ui/StatusDot';
 import { EmptyState } from '../ui/EmptyState';
 import { Button } from '../ui/Button';
@@ -221,272 +220,260 @@ export function ProjectsSection({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <PanelHeader
-        title="Projects"
-        actions={
-          <IconButton title="Create project" size="sm" onClick={onOpenFolder}>
-            <Plus size={14} strokeWidth={1.8} />
-          </IconButton>
-        }
-      />
-      <div className="scrollbar-thin-hover flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-3">
-        {projects.length === 0 && (
-          <EmptyState
-            icon={<FolderPlus size={14} strokeWidth={1.8} />}
-            title="Add a project to start"
-            action={
-              <Button size="sm" variant="secondary" onClick={onOpenFolder}>
-                Add project
-              </Button>
-            }
-          />
-        )}
+    <div className="scrollbar-thin-hover flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pt-1 pb-3">
+      {projects.length === 0 && (
+        <EmptyState
+          icon={<FolderPlus size={14} strokeWidth={1.8} />}
+          title="Add a project to start"
+          action={
+            <Button size="sm" variant="secondary" onClick={onOpenFolder}>
+              Add project
+            </Button>
+          }
+        />
+      )}
 
-        {projects.map((project) => {
-          const isActive = project.id === activeProjectId;
-          const isProjectCollapsed = !expandedProjects.has(project.id);
-          const allTasks = tasksByProject[project.id] || [];
-          const projectTasks = allTasks.filter((t) => !t.archivedAt);
-          const archivedTasks = allTasks.filter((t) => t.archivedAt);
-          const activityDot = projectActivityDot(getProjectActivity(projectTasks, taskActivity));
-          const stats = projectTokenStats[project.id];
-          const tokenTip =
-            showProjectTokens && stats && stats.totalTokens > 0
-              ? `${formatTokens(stats.totalTokens)} tokens · ${formatCost(stats.totalCostUsd)} across ${
-                  stats.taskCount
-                } task${stats.taskCount === 1 ? '' : 's'}`
-              : null;
+      {projects.map((project) => {
+        const isActive = project.id === activeProjectId;
+        const isProjectCollapsed = !expandedProjects.has(project.id);
+        const allTasks = tasksByProject[project.id] || [];
+        const projectTasks = allTasks.filter((t) => !t.archivedAt);
+        const archivedTasks = allTasks.filter((t) => t.archivedAt);
+        const activityDot = projectActivityDot(getProjectActivity(projectTasks, taskActivity));
+        const stats = projectTokenStats[project.id];
+        const tokenTip =
+          showProjectTokens && stats && stats.totalTokens > 0
+            ? `${formatTokens(stats.totalTokens)} tokens · ${formatCost(stats.totalCostUsd)} across ${
+                stats.taskCount
+              } task${stats.taskCount === 1 ? '' : 's'}`
+            : null;
 
-          return (
-            <div key={project.id} ref={project.id === justCreatedProjectId ? newRowRef : undefined}>
-              {/* Project row */}
-              <div
-                draggable
-                onDragStart={(e) => {
-                  dragIdRef.current = project.id;
-                  setDraggingId(project.id);
-                  e.dataTransfer.effectAllowed = 'move';
-                  const el = e.currentTarget;
-                  e.dataTransfer.setDragImage(el, el.offsetWidth / 2, el.offsetHeight / 2);
+        return (
+          <div key={project.id} ref={project.id === justCreatedProjectId ? newRowRef : undefined}>
+            {/* Project row */}
+            <div
+              draggable
+              onDragStart={(e) => {
+                dragIdRef.current = project.id;
+                setDraggingId(project.id);
+                e.dataTransfer.effectAllowed = 'move';
+                const el = e.currentTarget;
+                e.dataTransfer.setDragImage(el, el.offsetWidth / 2, el.offsetHeight / 2);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                const fromId = dragIdRef.current;
+                if (!fromId || fromId === project.id) return;
+                const fromIdx = projects.findIndex((p) => p.id === fromId);
+                const toIdx = projects.findIndex((p) => p.id === project.id);
+                if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+                const reordered = [...projects];
+                const [moved] = reordered.splice(fromIdx, 1);
+                reordered.splice(toIdx, 0, moved!);
+                onReorderProjects?.(reordered);
+              }}
+              onDrop={(e) => e.preventDefault()}
+              onDragEnd={() => {
+                dragIdRef.current = null;
+                setDraggingId(null);
+              }}
+              className={cn('group/swap', draggingId === project.id && 'opacity-40')}
+            >
+              <ListRow
+                as="div"
+                role="button"
+                tabIndex={0}
+                aria-expanded={!isProjectCollapsed}
+                dimmed={!isActive && isProjectCollapsed && !activityDot}
+                onClick={() => {
+                  onSelectProject(project.id);
+                  if (isProjectCollapsed) toggleCollapse(project.id);
                 }}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  e.dataTransfer.dropEffect = 'move';
-                  const fromId = dragIdRef.current;
-                  if (!fromId || fromId === project.id) return;
-                  const fromIdx = projects.findIndex((p) => p.id === fromId);
-                  const toIdx = projects.findIndex((p) => p.id === project.id);
-                  if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
-                  const reordered = [...projects];
-                  const [moved] = reordered.splice(fromIdx, 1);
-                  reordered.splice(toIdx, 0, moved!);
-                  onReorderProjects?.(reordered);
-                }}
-                onDrop={(e) => e.preventDefault()}
-                onDragEnd={() => {
-                  dragIdRef.current = null;
-                  setDraggingId(null);
-                }}
-                className={cn('group/swap', draggingId === project.id && 'opacity-40')}
-              >
-                <ListRow
-                  as="div"
-                  role="button"
-                  tabIndex={0}
-                  aria-expanded={!isProjectCollapsed}
-                  dimmed={!isActive && isProjectCollapsed && !activityDot}
-                  onClick={() => {
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
                     onSelectProject(project.id);
-                    if (isProjectCollapsed) toggleCollapse(project.id);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      onSelectProject(project.id);
+                    toggleCollapse(project.id);
+                  }
+                }}
+                leading={
+                  <IconButton
+                    size="sm"
+                    title={isProjectCollapsed ? 'Expand' : 'Collapse'}
+                    className="-ml-1.5"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       toggleCollapse(project.id);
-                    }
-                  }}
-                  leading={
-                    <IconButton
-                      size="sm"
-                      title={isProjectCollapsed ? 'Expand' : 'Collapse'}
-                      className="-ml-1.5"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleCollapse(project.id);
-                      }}
-                    >
-                      {isProjectCollapsed ? (
-                        <ChevronRight size={14} strokeWidth={1.8} />
-                      ) : (
-                        <ChevronDown size={14} strokeWidth={1.8} />
-                      )}
-                    </IconButton>
-                  }
-                  trailing={
-                    <>
-                      <NewMemoryCount
-                        count={newMemoryCounts[project.id] ?? 0}
-                        onOpen={() => setMemoryProjectId(project.id)}
-                      />
-                      {/* Dot and task count at rest; on hover (or while its menu
-                          is open) "New task" and a "…" menu slide in over them. */}
-                      <HoverSwapSlot
-                        revealed={menuOpenProjectId === project.id}
-                        rest={
-                          <>
-                            <span className="flex w-2.5 items-center justify-center">
-                              {isProjectCollapsed && activityDot && (
-                                <StatusDot state={activityDot.state} label={activityDot.label} />
-                              )}
-                            </span>
-                            <span className="w-4 text-right text-xs tabular-nums">
-                              {projectTasks.length > 0 ? projectTasks.length : ''}
-                            </span>
-                          </>
-                        }
-                        actions={
-                          <>
-                            <IconButton
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onNewTask(project.id);
-                              }}
-                              title="New task"
-                              size="sm"
-                            >
-                              <Plus size={14} strokeWidth={1.8} />
-                            </IconButton>
-                            <DropdownMenu
-                              onOpenChange={(open) =>
-                                setMenuOpenProjectId(open ? project.id : null)
-                              }
-                            >
-                              <DropdownMenuTrigger asChild>
-                                <IconButton
-                                  onClick={(e) => e.stopPropagation()}
-                                  title="More actions"
-                                  size="sm"
-                                >
-                                  <MoreHorizontal size={14} strokeWidth={1.8} />
-                                </IconButton>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                                <DropdownMenuItem onSelect={() => onShowCommitGraph(project.id)}>
-                                  <GitGraph size={13} strokeWidth={1.8} />
-                                  Commit graph
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => onProjectSettings(project.id)}>
-                                  <Settings size={13} strokeWidth={1.8} />
-                                  Project settings
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => setMemoryProjectId(project.id)}>
-                                  <Brain size={13} strokeWidth={1.8} />
-                                  Claude memory
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => void archiveProject(project.id)}>
-                                  <Archive size={13} strokeWidth={1.8} />
-                                  Archive project
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  variant="destructive"
-                                  onSelect={() => onDeleteProject(project.id)}
-                                >
-                                  <Trash2 size={13} strokeWidth={1.8} />
-                                  Delete project
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </>
-                        }
-                      />
-                    </>
-                  }
-                >
-                  {tokenTip ? (
-                    <Tooltip content={tokenTip}>
-                      <span>{project.name}</span>
-                    </Tooltip>
-                  ) : (
-                    project.name
-                  )}
-                </ListRow>
-              </div>
-
-              {/* Tasks nested under the project */}
-              <div className="collapse-grid" data-open={!isProjectCollapsed}>
-                <div>
-                  <div className="flex flex-col gap-px pt-px pb-3 pl-4">
-                    {projectTasks.map((task) => (
-                      <TaskCard
-                        key={task.id}
-                        task={task}
-                        isActive={task.id === activeTaskId}
-                        activityInfo={taskActivity[task.id]}
-                        prs={prByTask[task.id]}
-                        allPrs={branchPrsByTask[task.id]}
-                        isUnseen={!!unseenTaskIds?.has(task.id)}
-                        hasRemoteControl={!!remoteControlStates[task.id]}
-                        isDragging={draggingTaskId === task.id}
-                        dragHandlers={getTaskDragHandlers(task.id, projectTasks, project.id)}
-                        onSelect={() => onSelectTask(project.id, task.id)}
-                        onOpenIde={() => void openInIde(task.path || project.path)}
-                        onClose={() => onCloseTask(task.id)}
-                        onSettings={() => onTaskSettings(task.id)}
-                        onArchive={() => onArchiveTask(task.id)}
-                        onDelete={() => onDeleteTask(task.id)}
-                      />
-                    ))}
-
-                    {projectTasks.length === 0 && isActive && <EmptyState title="No tasks yet" />}
-
-                    {/* Sessions in this project that no task owns */}
-                    <ForeignSessionsSection project={project} onSelectTask={onSelectTask} />
-
-                    {archivedTasks.length > 0 && (
-                      <Disclosure
-                        label={`Archived (${archivedTasks.length})`}
-                        open={openArchived.has(project.id)}
-                        onToggle={() => toggleArchived(project.id)}
-                      >
-                        {archivedTasks.map((task) => (
-                          <ArchivedRow
-                            key={task.id}
-                            name={task.name}
-                            kind="task"
-                            onRestore={() => onRestoreTask(task.id)}
-                            onDelete={() => onDeleteTask(task.id)}
-                          />
-                        ))}
-                      </Disclosure>
+                    }}
+                  >
+                    {isProjectCollapsed ? (
+                      <ChevronRight size={14} strokeWidth={1.8} />
+                    ) : (
+                      <ChevronDown size={14} strokeWidth={1.8} />
                     )}
-                  </div>
+                  </IconButton>
+                }
+                trailing={
+                  <>
+                    <NewMemoryCount
+                      count={newMemoryCounts[project.id] ?? 0}
+                      onOpen={() => setMemoryProjectId(project.id)}
+                    />
+                    {/* Dot and task count at rest; on hover (or while its menu
+                          is open) "New task" and a "…" menu slide in over them. */}
+                    <HoverSwapSlot
+                      revealed={menuOpenProjectId === project.id}
+                      rest={
+                        <>
+                          <span className="flex w-2.5 items-center justify-center">
+                            {isProjectCollapsed && activityDot && (
+                              <StatusDot state={activityDot.state} label={activityDot.label} />
+                            )}
+                          </span>
+                          <span className="w-4 text-right text-xs tabular-nums">
+                            {projectTasks.length > 0 ? projectTasks.length : ''}
+                          </span>
+                        </>
+                      }
+                      actions={
+                        <>
+                          <IconButton
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onNewTask(project.id);
+                            }}
+                            title="New task"
+                            size="sm"
+                          >
+                            <Plus size={14} strokeWidth={1.8} />
+                          </IconButton>
+                          <DropdownMenu
+                            onOpenChange={(open) => setMenuOpenProjectId(open ? project.id : null)}
+                          >
+                            <DropdownMenuTrigger asChild>
+                              <IconButton
+                                onClick={(e) => e.stopPropagation()}
+                                title="More actions"
+                                size="sm"
+                              >
+                                <MoreHorizontal size={14} strokeWidth={1.8} />
+                              </IconButton>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenuItem onSelect={() => onShowCommitGraph(project.id)}>
+                                <GitGraph size={13} strokeWidth={1.8} />
+                                Commit graph
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => onProjectSettings(project.id)}>
+                                <Settings size={13} strokeWidth={1.8} />
+                                Project settings
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => setMemoryProjectId(project.id)}>
+                                <Brain size={13} strokeWidth={1.8} />
+                                Claude memory
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => void archiveProject(project.id)}>
+                                <Archive size={13} strokeWidth={1.8} />
+                                Archive project
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() => onDeleteProject(project.id)}
+                              >
+                                <Trash2 size={13} strokeWidth={1.8} />
+                                Delete project
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </>
+                      }
+                    />
+                  </>
+                }
+              >
+                {tokenTip ? (
+                  <Tooltip content={tokenTip}>
+                    <span>{project.name}</span>
+                  </Tooltip>
+                ) : (
+                  project.name
+                )}
+              </ListRow>
+            </div>
+
+            {/* Tasks nested under the project */}
+            <div className="collapse-grid" data-open={!isProjectCollapsed}>
+              <div>
+                <div className="flex flex-col gap-px pt-px pb-3 pl-4">
+                  {projectTasks.map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      isActive={task.id === activeTaskId}
+                      activityInfo={taskActivity[task.id]}
+                      prs={prByTask[task.id]}
+                      allPrs={branchPrsByTask[task.id]}
+                      isUnseen={!!unseenTaskIds?.has(task.id)}
+                      hasRemoteControl={!!remoteControlStates[task.id]}
+                      isDragging={draggingTaskId === task.id}
+                      dragHandlers={getTaskDragHandlers(task.id, projectTasks, project.id)}
+                      onSelect={() => onSelectTask(project.id, task.id)}
+                      onOpenIde={() => void openInIde(task.path || project.path)}
+                      onClose={() => onCloseTask(task.id)}
+                      onSettings={() => onTaskSettings(task.id)}
+                      onArchive={() => onArchiveTask(task.id)}
+                      onDelete={() => onDeleteTask(task.id)}
+                    />
+                  ))}
+
+                  {projectTasks.length === 0 && isActive && <EmptyState title="No tasks yet" />}
+
+                  {/* Sessions in this project that no task owns */}
+                  <ForeignSessionsSection project={project} onSelectTask={onSelectTask} />
+
+                  {archivedTasks.length > 0 && (
+                    <Disclosure
+                      label={`Archived (${archivedTasks.length})`}
+                      open={openArchived.has(project.id)}
+                      onToggle={() => toggleArchived(project.id)}
+                    >
+                      {archivedTasks.map((task) => (
+                        <ArchivedRow
+                          key={task.id}
+                          name={task.name}
+                          kind="task"
+                          onRestore={() => onRestoreTask(task.id)}
+                          onDelete={() => onDeleteTask(task.id)}
+                        />
+                      ))}
+                    </Disclosure>
+                  )}
                 </div>
               </div>
             </div>
-          );
-        })}
+          </div>
+        );
+      })}
 
-        {archivedProjects.length > 0 && (
-          <Disclosure
-            label={`Archived projects (${archivedProjects.length})`}
-            open={archivedProjectsOpen}
-            onToggle={() => setArchivedProjectsOpen((v) => !v)}
-          >
-            {archivedProjects.map((project) => (
-              <ArchivedRow
-                key={project.id}
-                name={project.name}
-                kind="project"
-                onRestore={() => void restoreProject(project.id)}
-                onDelete={() => onDeleteProject(project.id)}
-              />
-            ))}
-          </Disclosure>
-        )}
-      </div>
+      {archivedProjects.length > 0 && (
+        <Disclosure
+          label={`Archived projects (${archivedProjects.length})`}
+          open={archivedProjectsOpen}
+          onToggle={() => setArchivedProjectsOpen((v) => !v)}
+        >
+          {archivedProjects.map((project) => (
+            <ArchivedRow
+              key={project.id}
+              name={project.name}
+              kind="project"
+              onRestore={() => void restoreProject(project.id)}
+              onDelete={() => onDeleteProject(project.id)}
+            />
+          ))}
+        </Disclosure>
+      )}
     </div>
   );
 }
