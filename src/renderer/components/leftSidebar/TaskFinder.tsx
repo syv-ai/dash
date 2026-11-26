@@ -43,7 +43,7 @@ function TaskFinderList({ onSelectTask }: Pick<TaskFinderProps, 'onSelectTask'>)
   return (
     <Command loop filter={matchKeywords}>
       <CommandInput autoFocus placeholder="Find a task…" />
-      <CommandList>
+      <CommandList palette>
         <CommandEmpty>No matching task</CommandEmpty>
         {STATE_ORDER.map((state) => {
           const group = rows.filter((r) => r.state === state);

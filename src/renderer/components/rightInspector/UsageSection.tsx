@@ -296,7 +296,7 @@ export function UsageSection({ contextUsage, rateLimits, paces }: UsageSectionPr
       <div
         ref={rootRef}
         className={cn(
-          'relative grid items-start justify-center gap-x-2 pt-4 pb-4',
+          'relative grid items-start justify-center gap-x-2 pt-6 pb-4',
           COLUMNS[live.length - 1],
         )}
       >

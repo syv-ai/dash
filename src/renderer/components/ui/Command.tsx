@@ -38,12 +38,21 @@ export function CommandInput({
 }
 
 export function CommandList({
+  palette,
   className,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.List>) {
+}: React.ComponentProps<typeof CommandPrimitive.List> & {
+  /** The ⌘K palette's list: up to 70% of the window's height with its
+   *  input (h-10), not a combobox's short list. */
+  palette?: boolean;
+}) {
   return (
     <CommandPrimitive.List
-      className={cn('max-h-65 overflow-y-auto overflow-x-hidden p-1.5', className)}
+      className={cn(
+        'overflow-y-auto overflow-x-hidden p-1.5',
+        palette ? 'max-h-[calc(70vh-(--spacing(10)))]' : 'max-h-65',
+        className,
+      )}
       {...props}
     />
   );
