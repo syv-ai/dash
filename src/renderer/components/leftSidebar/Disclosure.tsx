@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
 import { ListRow } from '../ui/ListRow';
+import { BranchChevron } from '../ui/Tree';
 
 /** A quiet chevron row that shows and hides a list beneath it (archived tasks, other sessions). */
 export function Disclosure({
@@ -23,11 +23,7 @@ export function Disclosure({
         onClick={onToggle}
         leading={
           <span className="-ml-1.5 flex w-6 justify-center">
-            {open ? (
-              <ChevronDown size={14} strokeWidth={1.8} />
-            ) : (
-              <ChevronRight size={14} strokeWidth={1.8} />
-            )}
+            <BranchChevron open={open} />
           </span>
         }
       >

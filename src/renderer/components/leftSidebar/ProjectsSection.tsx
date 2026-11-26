@@ -1,13 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import {
-  Plus,
-  Trash2,
-  ArchiveRestore,
-  ChevronRight,
-  ChevronDown,
-  MoreHorizontal,
-  FolderPlus,
-} from 'lucide-react';
+import { Plus, Trash2, ArchiveRestore, MoreHorizontal, FolderPlus } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,7 +20,14 @@ import type { Project, Task } from '../../../shared/types';
 import { useDragReorder } from '../../hooks/useDragReorder';
 import { IconButton } from '../ui/IconButton';
 import { HoverSwapSlot } from '../ui/HoverSwapSlot';
-import { Tree, TreeRow, ownNode, type TreeHandle, type TreeRowContext } from '../ui/Tree';
+import {
+  BranchChevron,
+  Tree,
+  TreeRow,
+  ownNode,
+  type TreeHandle,
+  type TreeRowContext,
+} from '../ui/Tree';
 import { StatusDot } from '../ui/StatusDot';
 import { EmptyState } from '../ui/EmptyState';
 import { Button } from '../ui/Button';
@@ -325,11 +324,7 @@ export function ProjectsSection({
                   toggleCollapse(project.id);
                 }}
               >
-                {isProjectCollapsed ? (
-                  <ChevronRight size={14} strokeWidth={1.8} />
-                ) : (
-                  <ChevronDown size={14} strokeWidth={1.8} />
-                )}
+                <BranchChevron open={!isProjectCollapsed} />
               </IconButton>
             }
             trailing={
