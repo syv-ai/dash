@@ -1,20 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  AtSign,
-  Brain,
-  ChevronRight,
-  Copy,
-  FolderOpen,
-  List,
-  Pencil,
-  Search,
-  X,
-} from 'lucide-react';
+import { AtSign, Brain, ChevronRight, Copy, FolderOpen, List, Pencil, Search } from 'lucide-react';
 import { toast } from '../ui/toast';
 import { MEMORY_INDEX_FILE } from '../../../shared/types';
 import type { IpcResponse, Project } from '../../../shared/types';
 import { formatRelativeTime } from '../../../shared/relativeTime';
-import { Modal, useModalClose } from '../ui/Modal';
+import { Dialog, DialogClose } from '../ui/Dialog';
+import { useModalClose } from '../ui/Modal';
 import { IconButton } from '../ui/IconButton';
 import { Segmented } from '../ui/Segmented';
 import { Select } from '../ui/Select';
@@ -53,10 +44,10 @@ interface Props {
  */
 export function MemoryModal({ project, onClose }: Props) {
   return (
-    <Modal onClose={onClose} size="w-[1040px] max-w-[94vw] h-[86vh] max-h-[760px]">
+    <Dialog size="nav" onClose={onClose}>
       {/* Keyed so switching project resets the selection and search. */}
       <MemoryBody key={project.id} project={project} />
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -152,14 +143,14 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border/40 px-5">
+      <div className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-line px-5">
         <div className="flex min-w-0 items-center gap-2.5">
           <h2 className="type-title">Memory</h2>
           <Select
             value={project.id}
             onValueChange={switchProject}
             options={projectOptions}
-            className="w-auto max-w-[260px] px-2 py-1"
+            className="w-auto max-w-65"
           />
         </div>
         <div className="flex items-center gap-1">
@@ -186,14 +177,12 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
               <Copy size={14} strokeWidth={1.8} />
             </IconButton>
           )}
-          <IconButton onClick={handleClose} title="Close">
-            <X size={14} strokeWidth={2} />
-          </IconButton>
+          <DialogClose />
         </div>
       </div>
 
       {error && (
-        <div className="shrink-0 border-b border-border/40 bg-destructive/10 px-5 py-2 text-xs text-destructive">
+        <div className="shrink-0 border-b border-line px-5 py-2 text-xs text-state-fail">
           {error}
         </div>
       )}
@@ -202,7 +191,7 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
         memoryNotices(memory).map((notice) => (
           <div
             key={notice}
-            className="shrink-0 border-b border-border/40 bg-surface-2 px-5 py-2 text-xs text-muted-foreground"
+            className="shrink-0 border-b border-line bg-well px-5 py-2 type-caption"
           >
             {notice}
           </div>
@@ -212,8 +201,8 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
         <EmptyState dir={memory.dir} projectName={project.name} />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="shrink-0 border-b border-border/40 px-5 py-2">
-            <div className="w-[600px] max-w-full">
+          <div className="shrink-0 border-b border-line px-5 py-2">
+            <div className="w-150 max-w-full">
               <Segmented
                 size="sm"
                 value={filter}
@@ -230,8 +219,8 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
             </div>
           </div>
           <div className="flex min-h-0 flex-1">
-            <div className="flex w-[300px] shrink-0 flex-col border-r border-border/40">
-              <div className="flex items-center gap-2 border-b border-border/40 px-3 py-2">
+            <div className="flex w-75 shrink-0 flex-col border-r border-line">
+              <div className="flex items-center gap-2 border-b border-line px-3 py-2">
                 <Search size={14} strokeWidth={1.8} className="text-icon" />
                 <input
                   value={query}
@@ -255,7 +244,7 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
                         type="button"
                         aria-expanded={open}
                         onClick={() => setToggled((t) => ({ ...t, [section.id]: !open }))}
-                        className="sticky top-0 z-10 flex w-full items-center gap-1 bg-[hsl(var(--surface-1)/0.92)] px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
+                        className="sticky top-0 z-10 flex w-full items-center gap-1 bg-raised px-2 py-1.5 type-subheading"
                       >
                         <ChevronRight
                           size={12}
@@ -302,13 +291,13 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
             <div className="flex min-w-0 flex-1 flex-col">
               {current && currentEntry && memory && (
                 <>
-                  <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border/40 px-5 py-3">
+                  <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-5 py-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="truncate text-base font-semibold text-foreground">
                           {currentEntry.name}
                         </span>
-                        <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-xs text-muted-foreground">
+                        <span className="rounded-sm bg-hover px-1.5 py-0.5 type-caption">
                           {MEMORY_TYPE_LABELS[currentEntry.type]}
                         </span>
                       </div>
@@ -342,7 +331,7 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
                     </div>
                   </div>
                   {current.issues.length > 0 && (
-                    <div className="shrink-0 border-b border-border/40 bg-surface-2 px-5 py-1.5 text-xs text-muted-foreground">
+                    <div className="shrink-0 border-b border-line bg-well px-5 py-1.5 type-caption">
                       {memoryIssueTexts(current).map((text) => (
                         <div key={text} className="py-0.5">
                           {text}
@@ -398,7 +387,7 @@ function EmptyState({ dir, projectName }: { dir: string; projectName: string }) 
       <button
         onClick={() => copy(dir)}
         title="Copy path"
-        className="max-w-full truncate rounded-md bg-surface-2 px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+        className="max-w-full truncate rounded-md bg-hover px-2 py-1 text-xs text-ink-2 hover:text-ink"
       >
         {dir}
       </button>
