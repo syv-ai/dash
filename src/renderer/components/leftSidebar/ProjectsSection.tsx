@@ -340,7 +340,7 @@ export function ProjectsSection({
                   rest={
                     <span className="flex w-2.5 items-center justify-center">
                       {isProjectCollapsed && activityDot && (
-                        <StatusDot state={activityDot.state} label={activityDot.label} />
+                        <StatusDot size="sm" state={activityDot.state} label={activityDot.label} />
                       )}
                     </span>
                   }

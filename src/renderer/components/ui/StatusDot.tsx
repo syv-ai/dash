@@ -5,8 +5,11 @@ import { cn } from '../../lib/cn';
  *  `asleep`: no live session (sleeping, or never run). */
 export type AgentState = 'needs' | 'fail' | 'work' | 'done' | 'idle' | 'asleep';
 
-const dotVariants = cva('inline-block size-1.5 shrink-0 rounded-full', {
+const dotVariants = cva('inline-block shrink-0 rounded-full', {
   variants: {
+    // md: a task's own dot (rows, the rail, the finder); sm: a roll-up
+    // beside other values (a collapsed project's), smaller than its tasks' (T20).
+    size: { md: 'size-2', sm: 'size-1.5' },
     state: {
       needs: 'bg-state-needs',
       fail: 'bg-state-fail',
@@ -23,7 +26,7 @@ const dotVariants = cva('inline-block size-1.5 shrink-0 rounded-full', {
 const BREATHES: ReadonlySet<AgentState> = new Set(['work', 'needs', 'done']);
 
 /**
- * A task's agent state as a 6px dot — the one place colour means something
+ * A task's agent state as an 8px dot (6px `sm`) — the one place colour means something
  * (S1): working amber, waiting on you purple, finished but unseen blue, a
  * live session at rest green, failed red, sleeping no dot. The first three
  * breathe (not under reduced motion, where their colours still differ);
@@ -32,11 +35,14 @@ const BREATHES: ReadonlySet<AgentState> = new Set(['work', 'needs', 'done']);
  */
 export function StatusDot({
   state,
+  size = 'md',
   pulse = BREATHES.has(state),
   label,
   className,
 }: {
   state: AgentState;
+  /** `md` (8px) for a task; `sm` (6px) for a roll-up of several. */
+  size?: 'sm' | 'md';
   pulse?: boolean;
   label?: string;
   /** Layout only. */
@@ -48,7 +54,7 @@ export function StatusDot({
       aria-label={label}
       aria-hidden={label ? undefined : true}
       data-state={state}
-      className={cn(dotVariants({ state, pulse }), className)}
+      className={cn(dotVariants({ state, size, pulse }), className)}
     />
   );
 }

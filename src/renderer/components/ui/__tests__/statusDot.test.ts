@@ -30,4 +30,10 @@ describe('StatusDot (S1)', () => {
     for (const s of ['work', 'needs', 'done', 'idle', 'fail'] as const)
       expect(classes(s).some((c) => c.startsWith('ring'))).toBe(false);
   });
+
+  it('is 8px for a task and 6px for a roll-up (T20)', () => {
+    expect(classes('work')).toContain('size-2');
+    const sm = StatusDot({ state: 'work', size: 'sm' }) as ReactElement<{ className: string }>;
+    expect(sm.props.className.split(' ')).toContain('size-1.5');
+  });
 });
