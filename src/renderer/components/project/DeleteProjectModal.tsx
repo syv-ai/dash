@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, Trash2, Loader2 } from 'lucide-react';
+import { Trash2, Loader2 } from 'lucide-react';
 import type { Project, Task } from '../../../shared/types';
+import { Button } from '../ui/Button';
 import { CheckboxField } from '../ui/CheckboxField';
-import { Modal, useModalClose } from '../ui/Modal';
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from '../ui/Dialog';
+import { useModalClose } from '../ui/Modal';
 
 const PROTECTED_BRANCHES = new Set([
   'main',
@@ -34,9 +36,9 @@ interface DeleteProjectModalProps {
 
 export function DeleteProjectModal(props: DeleteProjectModalProps) {
   return (
-    <Modal onClose={props.onClose} size="w-[420px]">
+    <Dialog size="sm" onClose={props.onClose}>
       <DeleteProjectBody project={props.project} tasks={props.tasks} onConfirm={props.onConfirm} />
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -105,38 +107,23 @@ function DeleteProjectBody({ project, tasks, onConfirm }: DeleteProjectBodyProps
     }
   }
 
+  const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   return (
     <>
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 h-12 border-b border-border/40">
-        <h2 className="type-title">Delete Project</h2>
-        <button
-          onClick={close}
-          disabled={isDeleting}
-          className="p-1.5 rounded-lg hover:bg-accent text-icon hover:text-foreground transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none"
-        >
-          <X size={14} strokeWidth={2} />
-        </button>
-      </div>
-
-      <div className="p-5">
-        <p className="text-base text-muted-foreground mb-1">
-          Are you sure you want to delete this project and all its tasks?
-        </p>
-        <p className="text-base font-medium text-foreground mb-4 truncate">{project.name}</p>
-
+      <DialogHeader title="Delete project?" description={project.name} closeDisabled={isDeleting} />
+      <DialogBody className="gap-4">
+        <p className="type-body">The project and all its tasks are removed from Dash.</p>
         {hasCleanupOptions && (
-          <div className="flex flex-col gap-2.5 mb-4">
+          <div className="grid gap-2.5">
             {worktreeTasks.length > 0 && (
               <CheckboxField
                 checked={deleteWorktreeDirs}
                 onChange={setDeleteWorktreeDirs}
                 label={
                   <>
-                    Delete worktree directories{' '}
-                    <span className="text-muted-fade-50 font-normal">
-                      ({worktreeTasks.length} worktree
-                      {worktreeTasks.length !== 1 ? 's' : ''})
+                    Delete worktree folders{' '}
+                    <span className="text-ink-3">
+                      ({count(worktreeTasks.length, 'worktree', 'worktrees')})
                     </span>
                   </>
                 }
@@ -149,9 +136,8 @@ function DeleteProjectBody({ project, tasks, onConfirm }: DeleteProjectBodyProps
                 label={
                   <>
                     Delete local branches{' '}
-                    <span className="text-muted-fade-50 font-normal">
-                      ({branchTasks.length} branch
-                      {branchTasks.length !== 1 ? 'es' : ''})
+                    <span className="text-ink-3">
+                      ({count(branchTasks.length, 'branch', 'branches')})
                     </span>
                   </>
                 }
@@ -164,9 +150,8 @@ function DeleteProjectBody({ project, tasks, onConfirm }: DeleteProjectBodyProps
                 label={
                   <>
                     Delete remote branches{' '}
-                    <span className="text-muted-fade-50 font-normal">
-                      ({remoteBranchTasks.length} remote branch
-                      {remoteBranchTasks.length !== 1 ? 'es' : ''})
+                    <span className="text-ink-3">
+                      ({count(remoteBranchTasks.length, 'branch', 'branches')})
                     </span>
                   </>
                 }
@@ -174,38 +159,20 @@ function DeleteProjectBody({ project, tasks, onConfirm }: DeleteProjectBodyProps
             )}
           </div>
         )}
-
-        <div className="flex gap-2.5 justify-end">
-          <button
-            type="button"
-            onClick={close}
-            disabled={isDeleting}
-            className="px-4 py-2 rounded-full text-base text-muted-fade-60 hover:text-foreground hover:bg-accent/60 transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              void handleConfirm();
-            }}
-            disabled={isDeleting}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-base font-medium bg-destructive text-destructive-foreground hover:brightness-110 transition-all duration-150 disabled:opacity-70 disabled:pointer-events-none"
-          >
-            {isDeleting ? (
-              <>
-                <Loader2 size={13} strokeWidth={2} className="animate-spin" />
-                Deleting...
-              </>
-            ) : (
-              <>
-                <Trash2 size={13} strokeWidth={2} />
-                Delete
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+      </DialogBody>
+      <DialogFooter>
+        <Button variant="ghost" onClick={close} disabled={isDeleting}>
+          Cancel
+        </Button>
+        <Button variant="destructive" onClick={() => void handleConfirm()} disabled={isDeleting}>
+          {isDeleting ? (
+            <Loader2 size={14} strokeWidth={1.8} className="animate-spin" />
+          ) : (
+            <Trash2 size={14} strokeWidth={1.8} />
+          )}
+          {isDeleting ? 'Deleting…' : 'Delete'}
+        </Button>
+      </DialogFooter>
     </>
   );
 }

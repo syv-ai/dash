@@ -3,7 +3,7 @@ import { Hourglass } from 'lucide-react';
 import type { ClaudeUpdateMode, ClaudeUpdateState } from '../../../shared/types';
 import { useRuntime } from '../../stores/runtimeStore';
 import { Button } from '../ui/Button';
-import { Modal } from '../ui/Modal';
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from '../ui/Dialog';
 import { Notice } from '../ui/Notice';
 import { Segmented } from '../ui/Segmented';
 import { oldVersions, taskCount, updateIndicator } from './claudeUpdateCopy';
@@ -42,19 +42,17 @@ export function ClaudeUpdateDialog({
   };
 
   return (
-    <Modal onClose={onClose} size="w-110">
-      <div className="flex flex-col gap-4 p-5">
-        <div className="flex flex-col gap-1">
-          <h2 className="type-title">Restart on Claude Code {version}</h2>
-          {count > 0 && (
-            <p className="type-body">
-              {taskCount(count)} {count === 1 ? 'runs' : 'run'} {oldVersions(state.outdated)}.
-              Restarting moves {count === 1 ? 'it' : 'them'} to {version}.
-            </p>
-          )}
-        </div>
-
-        <ul className="type-caption flex list-disc flex-col gap-1 pl-4">
+    <Dialog size="md" onClose={onClose}>
+      <DialogHeader
+        title={`Restart on Claude Code ${version}`}
+        description={
+          count > 0
+            ? `${taskCount(count)} ${count === 1 ? 'runs' : 'run'} ${oldVersions(state.outdated)}. Restarting moves ${count === 1 ? 'it' : 'them'} to ${version}.`
+            : undefined
+        }
+      />
+      <DialogBody className="gap-4">
+        <ul className="type-body flex list-disc flex-col gap-1 pl-4">
           <li>Each conversation resumes where it left off.</li>
           <li>
             A turn in progress stops, with its subagents and background commands. A question waiting
@@ -64,7 +62,7 @@ export function ClaudeUpdateDialog({
         </ul>
 
         {!restarting && (
-          <div className="flex flex-col gap-2">
+          <div className="grid gap-2">
             <Segmented
               aria-label="When to restart"
               value={mode}
@@ -83,13 +81,12 @@ export function ClaudeUpdateDialog({
             {indicator.title}: {indicator.description.toLowerCase()}.
           </Notice>
         )}
-
-        <div className="flex justify-end gap-2">
-          {waiting && (
+      </DialogBody>
+      <DialogFooter
+        start={
+          waiting && (
             <Button
-              variant="secondary"
-              size="sm"
-              className="mr-auto"
+              variant="ghost"
               onClick={() => {
                 void cancel();
                 onClose();
@@ -97,17 +94,18 @@ export function ClaudeUpdateDialog({
             >
               Stop waiting
             </Button>
-          )}
-          <Button variant="secondary" size="sm" onClick={onClose}>
-            {waiting || restarting ? 'Close' : 'Cancel'}
+          )
+        }
+      >
+        <Button variant="ghost" onClick={onClose}>
+          {waiting || restarting ? 'Close' : 'Cancel'}
+        </Button>
+        {!restarting && !(waiting && mode === 'whenDone') && (
+          <Button onClick={confirm} disabled={count === 0}>
+            {mode === 'now' ? 'Restart all' : 'Restart when done'}
           </Button>
-          {!restarting && !(waiting && mode === 'whenDone') && (
-            <Button size="sm" onClick={confirm} disabled={count === 0}>
-              {mode === 'now' ? 'Restart all' : 'Restart when done'}
-            </Button>
-          )}
-        </div>
-      </div>
-    </Modal>
+        )}
+      </DialogFooter>
+    </Dialog>
   );
 }

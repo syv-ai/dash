@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { X, Trash2, Loader2 } from 'lucide-react';
+import { Trash2, Loader2 } from 'lucide-react';
 import type { Task } from '../../../shared/types';
+import { Button } from '../ui/Button';
 import { CheckboxField } from '../ui/CheckboxField';
-import { Modal, useModalClose } from '../ui/Modal';
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from '../ui/Dialog';
+import { useModalClose } from '../ui/Modal';
 
 interface RemoveWorktreeOptions {
   deleteWorktreeDir: boolean;
@@ -18,9 +20,9 @@ interface DeleteTaskModalProps {
 
 export function DeleteTaskModal(props: DeleteTaskModalProps) {
   return (
-    <Modal onClose={props.onClose} size="w-[420px]">
+    <Dialog size="sm" onClose={props.onClose}>
       <DeleteTaskBody task={props.task} onConfirm={props.onConfirm} />
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -65,35 +67,17 @@ function DeleteTaskBody({ task, onConfirm }: DeleteTaskBodyProps) {
 
   return (
     <>
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 h-12 border-b border-border/40">
-        <h2 className="type-title">Delete Task</h2>
-        <button
-          onClick={close}
-          disabled={isDeleting}
-          className="p-1.5 rounded-lg hover:bg-accent text-icon hover:text-foreground transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none"
-        >
-          <X size={14} strokeWidth={2} />
-        </button>
-      </div>
-
-      <div className="p-5">
-        <p className="text-base text-muted-foreground mb-1">
-          Are you sure you want to delete this task?
-        </p>
-        <p className="text-base font-medium text-foreground mb-4 truncate">{task.name}</p>
-
-        {task.useWorktree && (
-          <div className="flex flex-col gap-2.5 mb-4">
+      <DialogHeader title="Delete task?" description={task.name} closeDisabled={isDeleting} />
+      <DialogBody className="gap-4">
+        {task.useWorktree ? (
+          <div className="grid gap-2.5">
             <CheckboxField
               checked={deleteWorktreeDir}
               onChange={setDeleteWorktreeDir}
               label={
                 <>
-                  Delete worktree directory{' '}
-                  <span className="text-muted-fade-50 font-normal">
-                    {task.path.split(/[\\/]/).slice(-3).join('/')}
-                  </span>
+                  Delete the worktree folder{' '}
+                  <span className="text-ink-3">{task.path.split(/[\\/]/).slice(-3).join('/')}</span>
                 </>
               }
             />
@@ -102,8 +86,7 @@ function DeleteTaskBody({ task, onConfirm }: DeleteTaskBodyProps) {
               onChange={setDeleteLocalBranch}
               label={
                 <>
-                  Delete local branch{' '}
-                  <span className="text-muted-fade-50 font-normal">{task.branch}</span>
+                  Delete the local branch <span className="text-ink-3">{task.branch}</span>
                 </>
               }
             />
@@ -113,46 +96,30 @@ function DeleteTaskBody({ task, onConfirm }: DeleteTaskBodyProps) {
                 onChange={setDeleteRemoteBranch}
                 label={
                   <>
-                    Delete remote branch{' '}
-                    <span className="text-muted-fade-50 font-normal">origin/{task.branch}</span>
+                    Delete the remote branch{' '}
+                    <span className="text-ink-3">origin/{task.branch}</span>
                   </>
                 }
               />
             )}
           </div>
+        ) : (
+          <p className="type-body">The task and its session are removed from Dash.</p>
         )}
-
-        <div className="flex gap-2.5 justify-end">
-          <button
-            type="button"
-            onClick={close}
-            disabled={isDeleting}
-            className="px-4 py-2 rounded-full text-base text-muted-fade-60 hover:text-foreground hover:bg-accent/60 transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              void handleConfirm();
-            }}
-            disabled={isDeleting}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-base font-medium bg-destructive text-destructive-foreground hover:brightness-110 transition-all duration-150 disabled:opacity-70 disabled:pointer-events-none"
-          >
-            {isDeleting ? (
-              <>
-                <Loader2 size={13} strokeWidth={2} className="animate-spin" />
-                Deleting...
-              </>
-            ) : (
-              <>
-                <Trash2 size={13} strokeWidth={2} />
-                Delete
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+      </DialogBody>
+      <DialogFooter>
+        <Button variant="ghost" onClick={close} disabled={isDeleting}>
+          Cancel
+        </Button>
+        <Button variant="destructive" onClick={() => void handleConfirm()} disabled={isDeleting}>
+          {isDeleting ? (
+            <Loader2 size={14} strokeWidth={1.8} className="animate-spin" />
+          ) : (
+            <Trash2 size={14} strokeWidth={1.8} />
+          )}
+          {isDeleting ? 'Deleting…' : 'Delete'}
+        </Button>
+      </DialogFooter>
     </>
   );
 }
