@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "posthog": {
+      "type": "http",
+      "url": "https://mcp.posthog.com/mcp?features=dashboards,product_analytics,insights,events,data_schema,sql,error_tracking&resources=none"
+    }
+  }
+}
