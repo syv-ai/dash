@@ -11,6 +11,11 @@ export const focusRing =
 export const menuSurface =
   'z-50 rounded-lg bg-raised p-1.5 text-ink shadow-raised outline-none animate-popover-in';
 
+/** A toast: the floating sheet every toast sits on, the ports wizard's
+ *  included (the Toaster puts it on each sonner `<li>`). Its width and the
+ *  stack's motion are in index.css, under the sonner block. */
+export const toastSurface = `group/toast overflow-hidden rounded-xl bg-raised text-ink shadow-raised ${focusRing}`;
+
 /** A row in a floating menu; its icons rest in the icon token. */
 export const menuItem =
   'relative flex h-8 cursor-default select-none items-center gap-2 rounded-md px-3 text-sm text-ink outline-none transition-colors [&_svg]:shrink-0 [&_svg]:text-icon';

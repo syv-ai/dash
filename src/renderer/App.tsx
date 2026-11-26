@@ -57,7 +57,8 @@ import { ProjectSettingsModal } from './components/project/ProjectSettingsModal'
 import { TaskSettingsModal } from './components/task/TaskSettingsModal';
 import { OrchestratorAccessPrompt } from './components/settings/OrchestratorAccessPrompt';
 import { AdoSetupModal } from './components/vcs/ado/AdoSetupModal';
-import { ToastContainer } from './components/ui/Toast';
+import { Toaster } from './components/ui/Toaster';
+import { ToastSources } from './components/notifications/ToastSources';
 import { toast } from 'sonner';
 import { getBillionToastContent } from './utils/billionToast';
 import { useStatusLine } from './hooks/useStatusLine';
@@ -1962,7 +1963,8 @@ export function App() {
       {/* After every other modal, so a confirm shows over the one that asked. */}
       <ConfirmHost />
       <ClaudeUpdateHost />
-      <ToastContainer />
+      <Toaster />
+      <ToastSources />
     </div>
   );
 }

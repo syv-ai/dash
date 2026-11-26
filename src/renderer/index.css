@@ -1218,26 +1218,41 @@
   display: none !important;
 }
 
-/* ── Sonner toasts (ui/Toast's Toaster): the raised surface ── */
+/* ── Sonner toasts (ui/Toaster, headless): the surface is `toastSurface` on
+   each <li>; this tunes sonner's own stack and motion. ── */
 [data-sonner-toaster] {
-  --normal-bg: hsl(var(--raised));
-  --normal-border: transparent;
-  --normal-text: hsl(var(--ink));
-  --border-radius: var(--radius-lg);
+  /* Above dialogs (z-50…70) so a toast stays usable over one, below the
+     tooltip (9999) so the ✕'s tooltip isn't hidden behind the stack. */
+  z-index: 1000;
+  /* 340, not sonner's 356: narrower next to 12–13px type. */
+  --width: 340px !important;
 }
-[data-sonner-toast] {
-  box-shadow: var(--elevation) !important;
+@media (min-width: 601px) {
+  /* Headless toasts have no width of their own; under 600px sonner makes
+     them full width less the 16px gutters. */
+  [data-sonner-toaster] [data-sonner-toast] {
+    width: var(--width);
+  }
 }
-/* Suppress sonner's slide-in for the second (and later) appearance of the
- * ports-onboarding toast in this session. Users who project-hop see it pop
- * back into the viewport without the attention-grabbing entry effect.
- * Targets both the keyframe-driven and transition-driven entry — sonner's
- * implementation has varied across versions. */
-[data-sonner-toast].no-entry-anim {
-  animation: none !important;
-  transition-property: none !important;
-  opacity: 1 !important;
-  transform: translateY(0) translateX(0) !important;
+/* Enter: 8px up and a fade over 200ms; exit: a fade over 150ms. Sonner drops
+   all of it under prefers-reduced-motion. */
+[data-sonner-toaster] [data-sonner-toast] {
+  transition:
+    transform 200ms var(--ease-calm),
+    opacity 200ms var(--ease-calm),
+    height 200ms var(--ease-calm);
+}
+[data-sonner-toaster] [data-sonner-toast][data-y-position='bottom'][data-mounted='false'] {
+  --y: translateY(8px);
+}
+[data-sonner-toaster]
+  [data-sonner-toast][data-removed='true'][data-front='true'][data-swipe-out='false'] {
+  --y: translateY(0);
+  transition-duration: 150ms;
+}
+/* The toasts peeking behind the front one show only their surface. */
+[data-sonner-toaster] [data-sonner-toast][data-expanded='false'][data-front='false'] > * {
+  opacity: 0;
 }
 
 /* Ports drawer entrance — plays once when the section first appears
