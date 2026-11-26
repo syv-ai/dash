@@ -40,6 +40,8 @@ export type ListRowProps = Omit<React.ComponentProps<'button'>, 'children'> &
     changed?: boolean;
     /** Being dragged to reorder: faded. */
     dragging?: boolean;
+    /** The focused task or project: its label (not the second line) in semibold. */
+    strong?: boolean;
     /** Before the label: a StatusDot, a file icon. An icon that doesn't
      *  colour itself rests in the icon token. */
     leading?: React.ReactNode;
@@ -55,6 +57,9 @@ export type ListRowProps = Omit<React.ComponentProps<'button'>, 'children'> &
     indentStep?: number;
   };
 
+/** A `strong` row's label weight: the type roles' heading weight. */
+const STRONG = 'font-semibold';
+
 /** Horizontal step per tree level in an indented `ListRow`. */
 export const TREE_INDENT_PX = 12;
 
@@ -69,6 +74,7 @@ export function ListRow({
   dimmed = false,
   changed = false,
   dragging = false,
+  strong = false,
   leading,
   trailing,
   size,
@@ -98,11 +104,11 @@ export function ListRow({
       {leading && <span className="flex h-5 shrink-0 items-center text-icon">{leading}</span>}
       {description ? (
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate">{children}</span>
+          <span className={cn('truncate', strong && STRONG)}>{children}</span>
           <span className="truncate text-sm text-ink-3">{description}</span>
         </span>
       ) : (
-        <span className="min-w-0 flex-1 truncate">{children}</span>
+        <span className={cn('min-w-0 flex-1 truncate', strong && STRONG)}>{children}</span>
       )}
       {trailing && (
         <span className="flex shrink-0 items-center gap-1.5 text-ink-3">{trailing}</span>

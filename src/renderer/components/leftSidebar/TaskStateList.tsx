@@ -143,6 +143,7 @@ function TaskStateRowItem({
         <TreeRow
           ctx={ctx}
           dimmed={isAtRest(state)}
+          strong={ctx.selected}
           leading={<StatusDot state={state} label={STATE_LABELS[state]} />}
           description={reason && <ReasonText state={state}>{reason}</ReasonText>}
           // The name truncates first; the project keeps up to 6rem.

@@ -290,6 +290,7 @@ export function ProjectsSection({
         className="group/swap"
         dragging={draggingId === project.id}
         dimmed={!isActive && isProjectCollapsed && !activityDot}
+        strong={isActive}
         // A click selects and opens; Enter or Space selects and toggles.
         onActivate={(e) => {
           onSelectProject(project.id);
@@ -319,21 +320,16 @@ export function ProjectsSection({
               count={newMemoryCounts[project.id] ?? 0}
               onOpen={() => setMemoryProjectId(project.id)}
             />
-            {/* Dot and task count at rest; on hover (or while its menu
-                  is open) "New task" and a "…" menu slide in over them. */}
+            {/* The dot at rest; on hover (or while its menu is open)
+                  "New task" and a "…" menu slide in over it. */}
             <HoverSwapSlot
               revealed={menuOpenProjectId === project.id}
               rest={
-                <>
-                  <span className="flex w-2.5 items-center justify-center">
-                    {isProjectCollapsed && activityDot && (
-                      <StatusDot state={activityDot.state} label={activityDot.label} />
-                    )}
-                  </span>
-                  <span className="w-4 text-right text-xs tabular-nums">
-                    {projectTasks.length > 0 ? projectTasks.length : ''}
-                  </span>
-                </>
+                <span className="flex w-2.5 items-center justify-center">
+                  {isProjectCollapsed && activityDot && (
+                    <StatusDot state={activityDot.state} label={activityDot.label} />
+                  )}
+                </span>
               }
               actions={
                 <>

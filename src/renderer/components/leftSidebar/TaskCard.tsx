@@ -77,6 +77,7 @@ export function TaskCard({
       className="group/task"
       dragging={isDragging}
       dimmed={isAtRest(state)}
+      strong={ctx.selected}
       onActivate={onSelect}
       leading={
         state === 'asleep' ? (
