@@ -57,6 +57,8 @@ interface RepoTreeProps {
   /** A control at the header's end (review Files' "Show filetree"): the header
    *  is then the pane's top row. */
   headerAction?: React.ReactNode;
+  /** Draws its tally; false: the host's top row shows it (Files, D269). */
+  tally?: boolean;
 }
 
 const NO_DIRS: readonly string[] = [];
@@ -84,6 +86,7 @@ export function RepoTree({
   actions,
   spaceAction,
   headerAction,
+  tally = true,
 }: RepoTreeProps) {
   // Plain files have no changes to filter on, and nothing git ignores.
   const changedOnly = git && changedOnlyProp;
@@ -123,7 +126,7 @@ export function RepoTree({
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <TreeHeader tally={tree.tally} viewed={viewed?.paths.size} action={headerAction} />
+      {tally && <TreeHeader tally={tree.tally} viewed={viewed?.paths.size} action={headerAction} />}
       {filesLoading && allPaths.length === 0 ? (
         <TreePlaceholder>Loading…</TreePlaceholder>
       ) : changedOnly && changed === 0 ? (
@@ -140,7 +143,7 @@ export function RepoTree({
           leading={viewed && ((row) => <ViewedTick row={row} viewed={viewed} />)}
           actions={actions}
           spaceAction={spaceAction}
-          gapAbove={changed === 0 && !headerAction}
+          gapAbove={(changed === 0 || !tally) && !headerAction}
         />
       )}
     </div>
@@ -160,19 +163,23 @@ export function TreeHeader({
   viewed?: number;
   action?: React.ReactNode;
 }) {
-  const changed = tally.changed;
-  const summary = changed > 0 && (
+  const summary = tally.changed > 0 && <TreeTally tally={tally} viewed={viewed} />;
+  if (action) return <FilesTopRow start={summary} end={action} />;
+  if (!summary) return null;
+  return <div className="type-caption flex h-8 shrink-0 items-center gap-2 px-3">{summary}</div>;
+}
+
+/** What a tree's tally says: "7 changed · 2 viewed +580 −10". */
+export function TreeTally({ tally, viewed }: { tally: FolderTally; viewed?: number }) {
+  return (
     <>
       <span className="tabular-nums">
-        {changed} changed
+        {tally.changed} changed
         {viewed !== undefined && ` · ${viewed} viewed`}
       </span>
       <LineStats add={tally.add + tally.untrackedAdd} del={tally.del} />
     </>
   );
-  if (action) return <FilesTopRow start={summary} end={action} />;
-  if (!summary) return null;
-  return <div className="type-caption flex h-8 shrink-0 items-center gap-2 px-3">{summary}</div>;
 }
 
 /** The viewed tick, only on a file the view changes. */

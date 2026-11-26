@@ -7,8 +7,8 @@ import { Popover, PopoverArrow, PopoverContent, PopoverTrigger } from '../ui/Pop
 import { AllFilesSwitch } from '../fileTree/AllFilesSwitch';
 import { FilesTopRow } from '../fileTree/FilesTopRow';
 import { FileTree } from '../fileTree/FileTree';
-import { RepoTree, TreeHeader } from '../fileTree/RepoTree';
-import { buildTree, type FileBadges, type ItemRow } from '../fileTree/model';
+import { RepoTree, TreeHeader, TreeTally } from '../fileTree/RepoTree';
+import { buildTree, type FileBadges, type FolderTally, type ItemRow } from '../fileTree/model';
 import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
 import type { EditorView } from '../diffEditor/types';
 import type { FilesScope } from '../rightInspector/filesScope';
@@ -63,9 +63,12 @@ interface WorkingFilesProps {
   syncLinks: SyncLinks;
 }
 
+const NO_FILES: readonly FileChange[] = [];
+
 /**
  * Normal mode's Files: a top row with where the branch stands against its
- * upstream (while they differ) and the "Show filetree" switch, then one tree. Off
+ * upstream (while they differ; else the changes' tally, as review Files' row
+ * has, D269) and the "Show filetree" switch, then one tree. Off
  * (`changed`), the working tree's changes as staged and unstaged sections,
  * or the commit run while one is shown (no switch), or "No changes" with the
  * sync text under it instead; on (`all`), every file with its changes, a staged one's letter boxed. Changed
@@ -88,18 +91,32 @@ export function WorkingFiles({
   syncLinks,
 }: WorkingFilesProps) {
   const gitStatus = useGit((s) => s.gitStatus);
+  const changedOnly = scope === 'changed';
+  const working = repo.git && view.kind === 'working';
+  const files = gitStatus?.files ?? NO_FILES;
+  const merged = useMemo(() => oneChangePerPath(files), [files]);
+  // The tree's changes: the working tree's (merged per path), or, all files
+  // at another view, that view's.
+  const shown = changedOnly || working ? merged : repo.changedFiles;
+  const tally = useMemo(() => buildTree(shown).tally, [shown]);
   if (!gitStatus) {
     return <EmptyState title={loading ? 'Loading…' : 'No task selected'} />;
   }
-  const changedOnly = scope === 'changed';
   const showingRun = changedOnly && isShowingRun(run.state);
   const outOfSync = isOutOfSync(gitStatus);
-  const working = repo.git && view.kind === 'working';
+  // No sync text to show: the tally takes its place in the top row.
+  const tallyInRow = !outOfSync && !showingRun && tally.changed > 0;
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <FilesTopRow
-        start={outOfSync && <SyncText status={gitStatus} links={syncLinks} />}
-        startLeast={outOfSync && <SyncTextLeast status={gitStatus} />}
+        start={
+          outOfSync ? (
+            <SyncText status={gitStatus} links={syncLinks} />
+          ) : (
+            tallyInRow && <TreeTally tally={tally} />
+          )
+        }
+        startLeast={outOfSync ? <SyncTextLeast status={gitStatus} /> : undefined}
         end={
           !showingRun && (
             <AllFilesSwitch
@@ -112,6 +129,7 @@ export function WorkingFiles({
       {changedOnly ? (
         <ChangedFiles
           files={gitStatus.files}
+          tally={tallyInRow ? null : tally}
           cwd={cwd}
           run={run}
           onOpenChange={onOpenChange}
@@ -122,6 +140,8 @@ export function WorkingFiles({
       ) : (
         <AllFiles
           files={gitStatus.files}
+          merged={merged}
+          tally={!tallyInRow}
           working={working}
           cwd={cwd}
           onOpenFile={onOpenFile}
@@ -144,6 +164,7 @@ const isShowingRun = (
 /** The changes alone: Staged, then Unstaged. */
 function ChangedFiles({
   files,
+  tally,
   cwd,
   run,
   onOpenChange,
@@ -152,6 +173,8 @@ function ChangedFiles({
   canOpenToSide,
 }: {
   files: readonly FileChange[];
+  /** Its tally, drawn above the tree; null: the top row shows it. */
+  tally: FolderTally | null;
   cwd: string;
   run: CommitRun;
   onOpenChange: WorkingFilesProps['onOpenChange'];
@@ -160,7 +183,6 @@ function ChangedFiles({
   canOpenToSide: boolean;
 }) {
   const sections = useMemo(() => changeSections(files), [files]);
-  const tally = useMemo(() => buildTree(oneChangePerPath(files)).tally, [files]);
   const selected = useMemo(
     () => changeSelection(activePath, view, files),
     [activePath, view, files],
@@ -193,7 +215,7 @@ function ChangedFiles({
 
   return (
     <>
-      <TreeHeader tally={tally} />
+      {tally && <TreeHeader tally={tally} />}
       <FileTree
         sections={sections}
         cwd={cwd}
@@ -202,6 +224,7 @@ function ChangedFiles({
         canOpenToSide={canOpenToSide}
         actions={(row) => <ChangeActions row={row} files={files} />}
         spaceAction={(row) => stageToggle(row, files)}
+        gapAbove={!tally}
       />
     </>
   );
@@ -211,6 +234,8 @@ function ChangedFiles({
  *  tree's view, staged and discarded from here too). */
 function AllFiles({
   files,
+  merged,
+  tally,
   working,
   cwd,
   onOpenFile,
@@ -220,6 +245,10 @@ function AllFiles({
   repo,
 }: {
   files: readonly FileChange[];
+  /** `files`, one change per path. */
+  merged: readonly FileChange[];
+  /** Draws the tree's tally (false: the top row shows it). */
+  tally: boolean;
   working: boolean;
   cwd: string;
   onOpenFile: WorkingFilesProps['onOpenFile'];
@@ -228,7 +257,6 @@ function AllFiles({
   canOpenToSide: boolean;
   repo: RepoView;
 }) {
-  const merged = useMemo(() => oneChangePerPath(files), [files]);
   const badges = useMemo(
     () => (working ? withStaged(repo.badges, files) : repo.badges),
     [working, repo.badges, files],
@@ -250,6 +278,7 @@ function AllFiles({
         badgeCounts={badges}
         actions={working ? (row) => <ChangeActions row={row} files={files} /> : undefined}
         spaceAction={working ? (row) => stageToggle(row, files) : undefined}
+        tally={tally}
       />
     </div>
   );
