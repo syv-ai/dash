@@ -1,5 +1,6 @@
 import * as React from 'react';
 import {
+  Check,
   ChevronDown,
   ChevronRight,
   ChevronsDownUp,
@@ -43,10 +44,6 @@ const STATUS_LETTER: Record<FileChangeStatus, string> = {
   ignored: 'I',
 };
 
-/** The leading control column (review's viewed tick) takes two indent steps
- *  at the row's left edge; the rows' nesting starts past it. */
-const LEADING_STEPS = 2;
-
 export interface TreeItemProps {
   row: ItemRow;
   cwd: string;
@@ -57,8 +54,6 @@ export interface TreeItemProps {
   badges: FileBadges | undefined;
   /** The roving tab stop: the one row Tab lands on. */
   tabStop: boolean;
-  /** The control in the left-edge column; undefined: the tree has none. */
-  leading: React.ReactNode | undefined;
   /** Hover actions; null: the default (copy the relative path). */
   actions: React.ReactNode;
   /** Space: the row's own toggle (Files' stage); absent, Space opens it. */
@@ -72,7 +67,7 @@ export interface TreeItemProps {
 
 /** A tree row: its nesting, chevron, name, line and status columns, badges,
  *  hover actions and right-click menu. Everything a tree varies comes in as
- *  `leading` and `actions`. */
+ *  `actions` (and `badges`). */
 export function TreeItem({
   row,
   cwd,
@@ -81,7 +76,6 @@ export function TreeItem({
   quiet,
   badges,
   tabStop,
-  leading,
   actions,
   onSpace,
   canOpenToSide,
@@ -105,7 +99,7 @@ export function TreeItem({
       data-key={row.key}
       selected={selected}
       dimmed={quiet}
-      indent={row.depth + (leading !== undefined ? LEADING_STEPS : 0)}
+      indent={row.depth}
       title={folder ? undefined : path}
       className="group/swap relative cursor-pointer"
       onFocus={(e: React.FocusEvent) => e.target === e.currentTarget && onFocusRow()}
@@ -123,16 +117,10 @@ export function TreeItem({
       // A file starts where its level's chevrons do (D268).
       leading={folder ? <Chevron size={14} strokeWidth={1.8} /> : undefined}
       trailing={
-        <>
-          {/* Placed against the row, not the slot it is written in. */}
-          {leading !== undefined && (
-            <span className="absolute inset-y-0 left-2.5 flex items-center">{leading}</span>
-          )}
-          <HoverSwapSlot
-            rest={<Columns row={row} cols={cols} badges={badges} />}
-            actions={actions ?? <CopyPathAction path={path} />}
-          />
-        </>
+        <HoverSwapSlot
+          rest={<Columns row={row} cols={cols} badges={badges} />}
+          actions={actions ?? <CopyPathAction path={path} />}
+        />
       }
     >
       {folder ? (
@@ -161,21 +149,14 @@ export function TreeItem({
 
 /** A lazy folder's state in place of its rows: reading, empty, or why not,
  *  under the folder's name. */
-export function TreeNote({
-  row,
-  leading,
-}: {
-  row: Extract<TreeRow, { kind: 'note' }>;
-  /** The tree has a leading column. */
-  leading: boolean;
-}) {
+export function TreeNote({ row }: { row: Extract<TreeRow, { kind: 'note' }> }) {
   return (
     <ListRow
       as="div"
       size="sm"
       role="presentation"
       dimmed
-      indent={row.depth + (leading ? LEADING_STEPS : 0)}
+      indent={row.depth}
       title={row.failed ? row.text : undefined}
       className="cursor-default"
     >
@@ -186,7 +167,8 @@ export function TreeNote({
 
 /** The row's columns at rest, each as wide as the tree's widest value: the
  *  PR's threads, your comments, lines added and removed (a folder's while
- *  it is closed), and a file's status letter (boxed when staged). A folder shows no count of its
+ *  it is closed), a file's status letter (boxed when staged) and, in a
+ *  PR's tree, a check once it is viewed. A folder shows no count of its
  *  changes: its lines say as much, and the counts crowded the column. */
 function Columns({
   row,
@@ -236,6 +218,11 @@ function Columns({
             status
           )}
         </CharColumn>
+      )}
+      {cols.viewed && (
+        <span className="flex w-3.5 justify-center">
+          {badges?.viewed && <Check size={12} strokeWidth={1.8} aria-label="Viewed" />}
+        </span>
       )}
     </span>
   );

@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { Checkbox } from '../ui/Checkbox';
+import { Eye, EyeOff } from 'lucide-react';
+import { IconButton } from '../ui/IconButton';
 import { LineStats } from '../ui/LineStats';
 import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
 import type { EditorView } from '../diffEditor/types';
@@ -9,14 +10,16 @@ import { FilesTopRow } from './FilesTopRow';
 import { FileTree } from './FileTree';
 import {
   buildTree,
+  withViewed,
   type FileBadges,
   type FolderTally,
   type ItemRow,
   type TreeSection,
 } from './model';
 
-/** A PR's viewed marks: a tick in the tree's left-edge column on each changed
- *  file read through (its name quiet), and the tally in the header. */
+/** A PR's viewed marks: a changed file read through is quiet, with a check
+ *  beside its counts; hovering (or Space) marks it viewed or not; the header
+ *  tallies them (D270). */
 export interface ViewedColumn {
   paths: ReadonlySet<string>;
   /** Mark `path` viewed, or not. */
@@ -48,7 +51,7 @@ interface RepoTreeProps {
   /** The editor shows one pane: a file's menu offers "Open in new pane". */
   canOpenToSide: boolean;
   badgeCounts: ReadonlyMap<string, FileBadges>;
-  /** Review mode's viewed marks (their ticks fill the left-edge column). */
+  /** Review mode's viewed marks: they take the rows' hover action and Space. */
   viewed?: ViewedColumn;
   /** A row's hover actions (Files' stage and discard); absent: copy its path. */
   actions?: (row: ItemRow) => React.ReactNode;
@@ -123,6 +126,13 @@ export function RepoTree({
   const sections = useMemo<TreeSection[]>(() => [{ id: 'files', tree }], [tree]);
   const selected = useMemo(() => (selectedPath ? { path: selectedPath } : null), [selectedPath]);
   const changed = tree.tally.changed;
+  const badges = useMemo(
+    () => (viewed ? withViewed(badgeCounts, changedFiles, viewed.paths) : badgeCounts),
+    [viewed, badgeCounts, changedFiles],
+  );
+  // Review: a changed file's hover action and Space mark it viewed or not.
+  const viewedOf = (row: ItemRow) =>
+    viewed && row.kind === 'file' && row.file.change ? row.file.path : null;
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -138,11 +148,26 @@ export function RepoTree({
           selected={selected}
           onOpenFile={(row, opts) => onOpenFile(row.file.path, opts)}
           canOpenToSide={canOpenToSide}
-          badges={badgeCounts}
+          badges={badges}
           quiet={viewed?.paths}
-          leading={viewed && ((row) => <ViewedTick row={row} viewed={viewed} />)}
-          actions={actions}
-          spaceAction={spaceAction}
+          actions={
+            viewed
+              ? (row) => {
+                  const path = viewedOf(row);
+                  return path === null ? null : <ViewedAction path={path} viewed={viewed} />;
+                }
+              : actions
+          }
+          spaceAction={
+            viewed
+              ? (row) => {
+                  const path = viewedOf(row);
+                  return path === null
+                    ? null
+                    : () => viewed.onToggle(path, !viewed.paths.has(path));
+                }
+              : spaceAction
+          }
           gapAbove={(changed === 0 || !tally) && !headerAction}
         />
       )}
@@ -182,17 +207,21 @@ export function TreeTally({ tally, viewed }: { tally: FolderTally; viewed?: numb
   );
 }
 
-/** The viewed tick, only on a file the view changes. */
-function ViewedTick({ row, viewed }: { row: ItemRow; viewed: ViewedColumn }) {
-  if (row.kind !== 'file' || !row.file.change) return null;
-  const path = row.file.path;
+/** A changed file's hover action: mark it viewed, or not. */
+function ViewedAction({ path, viewed }: { path: string; viewed: ViewedColumn }) {
   const on = viewed.paths.has(path);
+  const Icon = on ? EyeOff : Eye;
   return (
-    <Checkbox
-      checked={on}
-      aria-label={on ? 'Mark not viewed' : 'Mark viewed'}
-      onChange={() => viewed.onToggle(path, !on)}
-    />
+    <IconButton
+      title={on ? 'Mark unviewed' : 'Mark viewed'}
+      size="sm"
+      onClick={(e) => {
+        e.stopPropagation();
+        viewed.onToggle(path, !on);
+      }}
+    >
+      <Icon size={14} strokeWidth={1.8} />
+    </IconButton>
   );
 }
 

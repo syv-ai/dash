@@ -10,6 +10,7 @@ import {
   subtreeChanges,
   treeColumns,
   treeKey,
+  withViewed,
   SMART_COLLAPSE_THRESHOLD,
   type TreeRow,
   type TreeSection,
@@ -348,6 +349,7 @@ describe('treeColumns', () => {
       add: 4, // "+120"
       del: 2,
       status: true, // files' letters; folders show no count
+      viewed: false,
     });
   });
 
@@ -370,7 +372,25 @@ describe('treeColumns', () => {
       add: 0,
       del: 0,
       status: false,
+      viewed: false,
     });
+  });
+
+  it('draws the viewed column for a tree that marks files viewed', () => {
+    const rows = flattenTree(one(buildTree([f('a.ts'), f('b.ts')])), state());
+    const badges = withViewed(new Map(), [{ path: 'a.ts' }, { path: 'b.ts' }], new Set(['b.ts']));
+    expect(treeColumns(rows, badges).viewed).toBe(true);
+    expect(treeColumns(rows).viewed).toBe(false);
+  });
+});
+
+describe('withViewed', () => {
+  it('marks every changed file viewed or not, keeping its other badges', () => {
+    const badges = new Map([['a.ts', { comments: 1, threads: 2 }]]);
+    const out = withViewed(badges, [{ path: 'a.ts' }, { path: 'b.ts' }], new Set(['b.ts']));
+    expect(out.get('a.ts')).toEqual({ comments: 1, threads: 2, viewed: false });
+    expect(out.get('b.ts')).toEqual({ comments: 0, threads: 0, viewed: true });
+    expect(badges.get('a.ts')).toEqual({ comments: 1, threads: 2 }); // untouched
   });
 });
 

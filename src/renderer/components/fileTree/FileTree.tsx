@@ -38,10 +38,6 @@ export interface FileTreeProps {
   badges?: ReadonlyMap<string, FileBadges>;
   /** Files named quietly (a PR's viewed ones). */
   quiet?: ReadonlySet<string>;
-  /** A control in a column at the tree's left edge (review's viewed tick),
-   *  straight down the tree whatever the nesting; null leaves a row's cell
-   *  empty. Absent: no column, no room kept for it. */
-  leading?: (row: ItemRow) => React.ReactNode;
   /** A row's hover actions; null or absent: copy its relative path. */
   actions?: (row: ItemRow) => React.ReactNode;
   /** A row's Space action (Files: stage or unstage); null or absent: Space
@@ -60,8 +56,8 @@ const estimate = (row: TreeRow | undefined) => (row?.kind === 'section' ? 28 : 3
  * repo-sized tree stays light. It owns which folders are open (changed ones
  * and the selection's by default; lazy folders read when opened), the
  * selection highlight, the arrow keys and every row's look. Trees differ
- * only in what they pass: sections, a leading control, hover actions, a
- * Space action, badges and quiet paths.
+ * only in what they pass: sections, hover actions, a Space action, badges
+ * and quiet paths.
  */
 export function FileTree({
   sections,
@@ -71,7 +67,6 @@ export function FileTree({
   canOpenToSide,
   badges,
   quiet,
-  leading,
   actions,
   spaceAction,
   gapAbove,
@@ -183,7 +178,7 @@ export function FileTree({
       {(i) => {
         const row = rows[i]!;
         if (row.kind === 'section') return <SectionHeader label={row.label} />;
-        if (row.kind === 'note') return <TreeNote row={row} leading={!!leading} />;
+        if (row.kind === 'note') return <TreeNote row={row} />;
         const path = row.kind === 'file' ? row.file.path : row.folder.path;
         return (
           <TreeItem
@@ -194,7 +189,6 @@ export function FileTree({
             quiet={row.kind === 'file' && (row.file.ignored || !!quiet?.has(path))}
             badges={row.kind === 'file' ? badges?.get(path) : undefined}
             tabStop={row.key === tabStop}
-            leading={leading ? (leading(row) ?? null) : undefined}
             actions={actions?.(row) ?? null}
             onSpace={spaceAction?.(row) ?? undefined}
             canOpenToSide={canOpenToSide}

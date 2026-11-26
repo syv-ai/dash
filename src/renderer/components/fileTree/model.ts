@@ -372,6 +372,21 @@ export interface FileBadges {
   /** Its changes in the index (a whole tree, which has no Staged section):
    *  all of them, or some. */
   staged?: true | 'mixed';
+  /** A PR's changed file: read through (true) or not; absent elsewhere. */
+  viewed?: boolean;
+}
+
+/** `badges` with each of a PR's changed files marked viewed or not. */
+export function withViewed(
+  badges: ReadonlyMap<string, FileBadges>,
+  changes: readonly { path: string }[],
+  viewed: ReadonlySet<string>,
+): Map<string, FileBadges> {
+  const out = new Map(badges);
+  for (const { path } of changes) {
+    out.set(path, { comments: 0, threads: 0, ...badges.get(path), viewed: viewed.has(path) });
+  }
+  return out;
 }
 
 /** The trailing columns, each as wide as the widest value the tree shows
@@ -383,6 +398,8 @@ export interface TreeColumns {
   del: number;
   /** A file's status letter (folders show none). */
   status: boolean;
+  /** A PR's viewed check (its tree marks files viewed). */
+  viewed: boolean;
 }
 
 const signed = (n: number) => (n > 0 ? String(n).length + 1 : 0);
@@ -394,12 +411,20 @@ export function treeColumns(
   rows: readonly TreeRow[],
   badges?: ReadonlyMap<string, FileBadges>,
 ): TreeColumns {
-  const cols: TreeColumns = { threads: false, comments: false, add: 0, del: 0, status: false };
+  const cols: TreeColumns = {
+    threads: false,
+    comments: false,
+    add: 0,
+    del: 0,
+    status: false,
+    viewed: false,
+  };
   for (const row of rows) {
     if (row.kind === 'file') {
       const b = badges?.get(row.file.path);
       if (b?.threads) cols.threads = true;
       if (b?.comments) cols.comments = true;
+      if (b?.viewed !== undefined) cols.viewed = true;
       const c = row.file.change;
       if (!c) continue;
       cols.status = true;
