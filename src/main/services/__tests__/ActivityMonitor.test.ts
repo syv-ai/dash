@@ -4,7 +4,12 @@ vi.mock('child_process', () => ({ execFile: vi.fn() }));
 vi.mock('util', () => ({ promisify: () => vi.fn().mockResolvedValue({ stdout: '' }) }));
 vi.mock('electron', () => ({ default: {} }));
 
-import { activityMonitor, activityEvents } from '../ActivityMonitor';
+import {
+  activityMonitor,
+  activityEvents,
+  SUBAGENT_QUIET_MS,
+  TURN_SETTLE_MS,
+} from '../ActivityMonitor';
 
 const mockSender = {
   send: vi.fn(),
@@ -406,6 +411,148 @@ describe('ActivityMonitor — Escape interrupt (setInterrupted)', () => {
     activityMonitor.setBusy('t1');
     activityMonitor.setIdle('t1');
     expect(activityMonitor.getAll()['t1']!.interrupted).toBeUndefined();
+  });
+});
+
+describe('ActivityMonitor — background subagents (S3)', () => {
+  const POLL = 15_000;
+  const state = () => activityMonitor.getAll()['t1']!.state;
+
+  /** A turn that launched two background subagents. */
+  function launched(): void {
+    activityMonitor.register('t1', 1);
+    activityMonitor.setBusy('t1');
+    activityMonitor.subagentStart('t1', 'a1');
+    activityMonitor.subagentStart('t1', 'a2');
+  }
+
+  it('stays working when the main turn ends while subagents run', () => {
+    launched();
+    expect(activityMonitor.endTurn('t1', ['a1', 'a2'])).toBe(false);
+    vi.advanceTimersByTime(TURN_SETTLE_MS * 2);
+    expect(state()).toBe('busy');
+    expect(activityMonitor.getAll()['t1']!.tool?.label).toBe('2 subagents running');
+  });
+
+  it('goes idle once the last subagent stops and Claude does not take a turn', () => {
+    launched();
+    activityMonitor.endTurn('t1', ['a1', 'a2']);
+    activityMonitor.subagentStop('t1', 'a1');
+    activityMonitor.subagentStop('t1', 'a2');
+    expect(state()).toBe('busy');
+    vi.advanceTimersByTime(TURN_SETTLE_MS);
+    expect(state()).toBe('idle');
+  });
+
+  it("holds through the turn a subagent's report starts, without an idle flash", () => {
+    launched();
+    activityMonitor.endTurn('t1', ['a1', 'a2']);
+    activityMonitor.subagentStop('t1', 'a1', ['a1', 'a2']);
+    activityMonitor.subagentStop('t1', 'a2', ['a2']);
+    mockSender.send.mockClear();
+    vi.advanceTimersByTime(40);
+    activityMonitor.setBusy('t1', { selfStarted: true });
+    vi.advanceTimersByTime(TURN_SETTLE_MS * 2);
+    const sent = mockSender.send.mock.calls.map(
+      (c) => (c[1] as Record<string, { state: string }>)['t1']!.state,
+    );
+    expect(sent).not.toContain('idle');
+    expect(activityMonitor.endTurn('t1', [])).toBe(true);
+    vi.advanceTimersByTime(TURN_SETTLE_MS);
+    expect(state()).toBe('idle');
+  });
+
+  it("takes the Stop hook's list of running subagents as the truth", () => {
+    activityMonitor.register('t1', 1);
+    activityMonitor.setBusy('t1');
+    // Dash restarted mid-run: it never saw a1 start.
+    activityMonitor.endTurn('t1', ['a1']);
+    expect(state()).toBe('busy');
+    // a SubagentStop lists itself as still running; the rest is the truth.
+    activityMonitor.subagentStop('t1', 'a1', ['a1']);
+    vi.advanceTimersByTime(TURN_SETTLE_MS);
+    expect(state()).toBe('idle');
+  });
+
+  it('a subagent starting at rest (resumed) makes the task work', () => {
+    activityMonitor.register('t1', 1);
+    activityMonitor.subagentStart('t1', 'a1');
+    expect(state()).toBe('busy');
+  });
+
+  describe('interrupts', () => {
+    it('Esc mid-turn with subagents running stays working, then lands on seen idle', () => {
+      launched();
+      activityMonitor.setInterrupted('t1', 'escape');
+      expect(state()).toBe('busy');
+      activityMonitor.subagentStop('t1', 'a1');
+      activityMonitor.subagentStop('t1', 'a2');
+      vi.advanceTimersByTime(TURN_SETTLE_MS);
+      expect(activityMonitor.getAll()['t1']).toEqual({ state: 'idle', interrupted: true });
+    });
+
+    it("keeps the interrupt through the reports' own turns; a typed prompt clears it", () => {
+      launched();
+      activityMonitor.setInterrupted('t1', 'ctrl-c');
+      activityMonitor.subagentStop('t1', 'a1', ['a1', 'a2']);
+      activityMonitor.setBusy('t1', { selfStarted: true });
+      activityMonitor.endTurn('t1', ['a2']);
+      activityMonitor.subagentStop('t1', 'a2', ['a2']);
+      activityMonitor.setBusy('t1', { selfStarted: true });
+      activityMonitor.endTurn('t1', []);
+      vi.advanceTimersByTime(TURN_SETTLE_MS);
+      expect(activityMonitor.getAll()['t1']!.interrupted).toBe(true);
+      activityMonitor.setBusy('t1');
+      activityMonitor.endTurn('t1', []);
+      vi.advanceTimersByTime(TURN_SETTLE_MS);
+      expect(activityMonitor.getAll()['t1']!.interrupted).toBeUndefined();
+    });
+
+    it('Ctrl+C at the prompt stops the background subagents (no hook follows): seen idle', () => {
+      launched();
+      activityMonitor.endTurn('t1', ['a1', 'a2']);
+      activityMonitor.setInterrupted('t1', 'ctrl-c');
+      expect(activityMonitor.getAll()['t1']).toEqual({ state: 'idle', interrupted: true });
+    });
+
+    it('Esc at the prompt leaves running subagents alone', () => {
+      launched();
+      activityMonitor.endTurn('t1', ['a1', 'a2']);
+      activityMonitor.setInterrupted('t1', 'escape');
+      expect(state()).toBe('busy');
+      expect(activityMonitor.getAll()['t1']!.interrupted).toBeUndefined();
+    });
+  });
+
+  describe('missed stop events', () => {
+    it('the session ending clears them', () => {
+      launched();
+      activityMonitor.setIdle('t1');
+      expect(state()).toBe('idle');
+      activityMonitor.setBusy('t1');
+      activityMonitor.endTurn('t1');
+      vi.advanceTimersByTime(TURN_SETTLE_MS);
+      expect(state()).toBe('idle');
+    });
+
+    it('the session going to sleep clears them', () => {
+      launched();
+      activityMonitor.applySupervisor('t1', { state: 'stopped', detail: 'Sleeping' }, POLL);
+      activityMonitor.applySupervisor('t1', { state: 'idle' }, POLL);
+      expect(state()).toBe('idle');
+    });
+
+    it("the listing's idle can't end them while they talk, but can once they've gone quiet", () => {
+      launched();
+      activityMonitor.endTurn('t1', ['a1', 'a2']);
+      vi.advanceTimersByTime(POLL + 1);
+      activityMonitor.noteSubagentHook('t1');
+      activityMonitor.applySupervisor('t1', { state: 'idle' }, POLL);
+      expect(state()).toBe('busy');
+      vi.advanceTimersByTime(SUBAGENT_QUIET_MS + 1);
+      activityMonitor.applySupervisor('t1', { state: 'idle' }, POLL);
+      expect(state()).toBe('idle');
+    });
   });
 });
 

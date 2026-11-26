@@ -8,7 +8,13 @@ import { eq } from 'drizzle-orm';
 import { activityMonitor } from './ActivityMonitor';
 import { contextUsageService } from './ContextUsageService';
 import { tokenStatsService } from './TokenStatsService';
-import { isSubagentHook, statusLineTaskId } from './hookPayload';
+import {
+  isSelfStartedPrompt,
+  isSubagentHook,
+  runningSubagentIds,
+  statusLineTaskId,
+  subagentId,
+} from './hookPayload';
 import { setTaskInbox } from './taskInbox';
 import { claudeConfigDir } from '../utils/claudePaths';
 import { getDb } from '../db/client';
@@ -247,9 +253,11 @@ class HookServerImpl {
           // injecting text into Claude's conversation context.
 
           if (pathname === '/hook/stop') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
-              activityMonitor.setIdle(ptyId);
-              this.showDesktopNotification(ptyId);
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+              // Background subagents still running keep the task working;
+              // "finished" waits for the last of them.
+              const over = activityMonitor.endTurn(ptyId, runningSubagentIds(payload));
+              if (over) this.showDesktopNotification(ptyId);
               // A turn just ended, so the transcript has new usage to total.
               void tokenStatsService.recomputeForTask(ptyId);
               res.writeHead(200);
@@ -262,7 +270,7 @@ class HookServerImpl {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
               const inbox = inboxFromHeaders(req.headers, payload);
               if (inbox) setTaskInbox(ptyId, inbox);
-              activityMonitor.setBusy(ptyId);
+              activityMonitor.setBusy(ptyId, { selfStarted: isSelfStartedPrompt(payload) });
               res.writeHead(200);
               res.end();
             });
@@ -323,7 +331,9 @@ class HookServerImpl {
                 activityMonitor.setWaitingForPermission(ptyId);
                 const taskName = this.getTaskName(ptyId);
                 this.showDesktopNotification(ptyId, `${taskName} is asking a question`);
-              } else if (!isSubagentHook(payload)) {
+              } else if (isSubagentHook(payload)) {
+                activityMonitor.noteSubagentHook(ptyId);
+              } else {
                 activityMonitor.setToolStart(ptyId, toolName, toolInput);
               }
               res.writeHead(200);
@@ -338,7 +348,9 @@ class HookServerImpl {
               if (toolName === 'AskUserQuestion') {
                 // User answered — back to busy (Claude will resume working).
                 activityMonitor.setBusy(ptyId);
-              } else if (!isSubagentHook(payload)) {
+              } else if (isSubagentHook(payload)) {
+                activityMonitor.noteSubagentHook(ptyId);
+              } else {
                 activityMonitor.setToolEnd(ptyId);
               }
               res.writeHead(200);
@@ -360,6 +372,28 @@ class HookServerImpl {
                 this.showDesktopNotification(ptyId, `${taskName} hit rate limit`);
               }
 
+              res.writeHead(200);
+              res.end();
+            });
+            return;
+          }
+
+          if (pathname === '/hook/subagent-start') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+              const agentId = subagentId(payload);
+              if (agentId) activityMonitor.subagentStart(ptyId, agentId);
+              res.writeHead(200);
+              res.end();
+            });
+            return;
+          }
+
+          if (pathname === '/hook/subagent-stop') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+              const agentId = subagentId(payload);
+              if (agentId) {
+                activityMonitor.subagentStop(ptyId, agentId, runningSubagentIds(payload));
+              }
               res.writeHead(200);
               res.end();
             });
@@ -410,8 +444,9 @@ class HookServerImpl {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
               // Settings only register this hook for the `clear` and `compact`
               // matchers, so reaching here means the session was reset and any
-              // prior busy state is stale. Defensive idle.
-              activityMonitor.setIdle(ptyId);
+              // prior busy state is stale: the main turn ends. Background
+              // subagents survive both, so they still count.
+              activityMonitor.endTurn(ptyId);
               res.writeHead(200);
               res.end();
             });

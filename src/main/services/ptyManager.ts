@@ -986,7 +986,7 @@ export function writePty(id: string, data: string): void {
   // only instant signal that the turn is over. See
   // ActivityMonitor.setInterrupted().
   if (record.kind === 'agent' && record.taskId && (data === '\x1b' || data === '\x03')) {
-    activityMonitor.setInterrupted(record.taskId);
+    activityMonitor.setInterrupted(record.taskId, data === '\x03' ? 'ctrl-c' : 'escape');
   }
   record.proc?.write(data);
 }

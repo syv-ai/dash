@@ -20,9 +20,30 @@ interface PtyActivity {
   /** Reason shown with `stopped`/`waiting` (from the supervisor listing). */
   detail: string | null;
   /** The turn ended by the user's interrupt; reported while idle, cleared
-   *  when the next turn starts. */
+   *  when the user starts the next turn. */
   interrupted: boolean;
+  /** The main agent's own turn is running (a prompt or a main tool call,
+   *  until Stop or an interrupt). `busy` can also mean subagents only. */
+  mainTurn: boolean;
+  /** Background subagents in flight (S3): ids from SubagentStart, minus
+   *  SubagentStop, corrected by the running list Stop/SubagentStop carry.
+   *  While any run, the task stays busy after the main turn ends. */
+  subagents: Set<string>;
+  /** Last hook from inside a subagent (start, stop, its tool calls). */
+  lastSubagentTime: number;
+  /** A pending turn end (TURN_SETTLE_MS), or null. */
+  settle: ReturnType<typeof setTimeout> | null;
 }
+
+/** How long a turn's end waits before the task shows idle. A finished
+ *  background subagent wakes Claude with its report 35–65 ms after its
+ *  SubagentStop, and a queued report right after a Stop: without the wait,
+ *  each would flash idle (a chime, a blue dot) between two busy spells. */
+export const TURN_SETTLE_MS = 1000;
+
+/** The supervisor listing may end in-flight subagents (a missed
+ *  SubagentStop) only once none has spoken for this long. */
+export const SUBAGENT_QUIET_MS = 5 * 60_000;
 
 /** Safety valve: if a busy/waiting PTY produces no hook events AND no PTY
  *  output for this long, force it to idle. Recovers from Claude crashes /
@@ -78,6 +99,13 @@ function buildToolLabel(toolName: string, toolInput: Record<string, unknown> | u
   }
 }
 
+/** What a task parked on its subagents is doing, for the tool label. */
+function subagentsLabel(a: PtyActivity): ToolActivity | null {
+  if (a.state !== 'busy' || a.mainTurn || a.subagents.size === 0) return null;
+  const n = a.subagents.size;
+  return { toolName: 'Agent', label: n === 1 ? '1 subagent running' : `${n} subagents running` };
+}
+
 /**
  * Main-side listeners for activity changes (the control API's `tasks.wait`).
  * `'change'` carries the full `getAll()` map after every state change,
@@ -105,6 +133,10 @@ class ActivityMonitorImpl {
       compacting: false,
       detail: null,
       interrupted: false,
+      mainTurn: false,
+      subagents: new Set(),
+      lastSubagentTime: 0,
+      settle: null,
     };
   }
 
@@ -159,6 +191,10 @@ class ActivityMonitorImpl {
     const hookDriven = a.state === 'busy' || a.state === 'idle' || a.state === 'waiting';
     const next = activity.state;
     if ((next === 'busy' || next === 'idle') && hooksFresh && hookDriven) return;
+    // Hooks own a task's subagents: the listing's idle may end them only
+    // once they've gone quiet (a SubagentStop we never got).
+    if (next === 'idle' && a.subagents.size > 0 && now - a.lastSubagentTime < SUBAGENT_QUIET_MS)
+      return;
     // The listing's `status` goes stale after a turn ends — a session that had
     // been sitting at the prompt for ten minutes still reported `busy`, and a
     // `done` job did so for hours. So for a task whose hooks talk to us
@@ -176,6 +212,9 @@ class ActivityMonitorImpl {
       (a.error?.type ?? null) !== (nextError?.type ?? null) ||
       (a.error?.message ?? null) !== (nextError?.message ?? null);
     if (!changed) return;
+    this.cancelSettle(a);
+    // A waiting reading can be a subagent's permission prompt: they run on.
+    if (next !== 'busy' && next !== 'waiting') this.endWork(a);
     a.state = next;
     a.error = nextError;
     a.detail = nextDetail;
@@ -186,9 +225,11 @@ class ActivityMonitorImpl {
   }
 
   unregister(ptyId: string): void {
-    if (this.activities.delete(ptyId)) {
-      this.emitAll();
-    }
+    const a = this.activities.get(ptyId);
+    if (!a) return;
+    this.cancelSettle(a);
+    this.activities.delete(ptyId);
+    this.emitAll();
   }
 
   /** Touched on every PTY byte by ptyManager. Used by the safety valve. */
@@ -197,11 +238,18 @@ class ActivityMonitorImpl {
     if (a) a.lastPtyOutputTime = Date.now();
   }
 
+  /**
+   * Idle now, subagents and all: the session ended, or Claude Code says it
+   * has sat at the prompt with nothing in the background (idle_prompt). A
+   * turn's own end goes through endTurn.
+   */
   setIdle(ptyId: string): void {
     const a = this.activities.get(ptyId);
     if (!a) return;
     a.lastHookTime = Date.now();
-    // Stop clears tool and compacting defensively even when already idle —
+    this.cancelSettle(a);
+    this.endWork(a);
+    // Clears tool and compacting defensively even when already idle —
     // covers the edge case where PreCompact arrived but PostCompact didn't.
     const hadChange = a.state !== 'idle' || a.tool !== null || a.compacting;
     if (!hadChange) return;
@@ -212,11 +260,18 @@ class ActivityMonitorImpl {
     this.emitAll();
   }
 
-  setBusy(ptyId: string): void {
+  /**
+   * A turn starts (UserPromptSubmit). `selfStarted`: Claude Code started it
+   * itself, with a background subagent's report; that doesn't undo an
+   * interrupt the user made, so the end still counts as seen.
+   */
+  setBusy(ptyId: string, { selfStarted = false }: { selfStarted?: boolean } = {}): void {
     const a = this.activities.get(ptyId);
     if (!a) return;
     a.lastHookTime = Date.now();
-    a.interrupted = false;
+    this.cancelSettle(a);
+    a.mainTurn = true;
+    if (!selfStarted) a.interrupted = false;
     if (a.state === 'busy') return;
     a.state = 'busy';
     a.error = null;
@@ -228,6 +283,7 @@ class ActivityMonitorImpl {
     const a = this.activities.get(ptyId);
     if (!a) return;
     a.lastHookTime = Date.now();
+    this.cancelSettle(a);
     if (a.state === 'waiting') return;
     a.state = 'waiting';
     a.tool = null;
@@ -248,12 +304,25 @@ class ActivityMonitorImpl {
    * user's own act, so seen. Either key while already idle just closes menus
    * or clears the prompt; nothing to do.
    */
-  setInterrupted(ptyId: string): void {
+  setInterrupted(ptyId: string, key: 'escape' | 'ctrl-c' = 'escape'): void {
     const a = this.activities.get(ptyId);
     if (!a) return;
-    if (a.state !== 'busy' && a.state !== 'waiting') return;
+    // Busy on subagents alone means Claude sits at its prompt.
+    const parked = a.state === 'busy' && !a.mainTurn && a.subagents.size > 0;
+    if (a.state === 'waiting' || (a.state === 'busy' && !parked)) {
+      // The main turn ends; background subagents run on (live: neither Esc
+      // nor Ctrl+C mid-turn stops them), so they keep the task busy.
+      a.mainTurn = false;
+    } else if (parked && key === 'ctrl-c') {
+      // Ctrl+C at the prompt stops the background agents, and no
+      // SubagentStop follows (live, 2.1.332).
+      a.subagents.clear();
+    } else {
+      return;
+    }
     a.lastHookTime = Date.now();
-    a.state = 'idle';
+    this.cancelSettle(a);
+    a.state = a.subagents.size > 0 ? 'busy' : 'idle';
     a.tool = null;
     a.compacting = false;
     a.detail = null;
@@ -261,12 +330,81 @@ class ActivityMonitorImpl {
     this.emitAll();
   }
 
+  /**
+   * The main agent finished responding (Stop). `running`: the background
+   * subagents Claude Code still lists (`background_tasks`), the truth when
+   * present. With any left the task stays busy; otherwise it goes idle after
+   * TURN_SETTLE_MS, unless a turn starts first. True when nothing runs on,
+   * i.e. the turn really is over.
+   */
+  endTurn(ptyId: string, running?: readonly string[]): boolean {
+    const a = this.activities.get(ptyId);
+    if (!a) return false;
+    a.lastHookTime = Date.now();
+    const cleared = a.tool !== null || a.compacting;
+    a.mainTurn = false;
+    a.tool = null;
+    a.compacting = false;
+    if (running) a.subagents = new Set(running);
+    if (a.subagents.size > 0) {
+      this.cancelSettle(a);
+      if (a.state !== 'busy') {
+        a.state = 'busy';
+        a.detail = null;
+      }
+      this.emitAll();
+      return false;
+    }
+    if (cleared) this.emitAll();
+    this.settleIdle(ptyId, a);
+    return true;
+  }
+
+  /** A background (or foreground) subagent started or resumed. */
+  subagentStart(ptyId: string, agentId: string): void {
+    const a = this.activities.get(ptyId);
+    if (!a) return;
+    const now = Date.now();
+    a.lastHookTime = now;
+    a.lastSubagentTime = now;
+    this.cancelSettle(a);
+    a.subagents.add(agentId);
+    if (a.state !== 'idle') return;
+    a.state = 'busy';
+    a.detail = null;
+    this.emitAll();
+  }
+
+  /**
+   * A subagent finished. `running`: the list its SubagentStop carries, which
+   * still names the stopping agent itself; the rest is the truth. The last
+   * one out ends the work unless the main turn is running.
+   */
+  subagentStop(ptyId: string, agentId: string, running?: readonly string[]): void {
+    const a = this.activities.get(ptyId);
+    if (!a) return;
+    const now = Date.now();
+    a.lastHookTime = now;
+    a.lastSubagentTime = now;
+    if (running) a.subagents = new Set(running.filter((id) => id !== agentId));
+    else a.subagents.delete(agentId);
+    this.emitAll();
+    if (a.subagents.size === 0 && !a.mainTurn && a.state === 'busy') this.settleIdle(ptyId, a);
+  }
+
+  /** Any other hook from inside a subagent: it is alive. */
+  noteSubagentHook(ptyId: string): void {
+    const a = this.activities.get(ptyId);
+    if (a) a.lastSubagentTime = Date.now();
+  }
+
   setToolStart(ptyId: string, toolName: string, toolInput?: Record<string, unknown>): void {
     const a = this.activities.get(ptyId);
     if (!a) return;
     a.lastHookTime = Date.now();
+    this.cancelSettle(a);
+    a.mainTurn = true;
     a.tool = { toolName, label: buildToolLabel(toolName, toolInput) };
-    a.interrupted = false;
     if (a.state !== 'busy') {
       a.state = 'busy';
       a.error = null;
@@ -295,6 +433,8 @@ class ActivityMonitorImpl {
     a.lastHookTime = Date.now();
     const mappedType =
       ActivityMonitorImpl.ERROR_TYPE_MAP[errorType] ?? ('unknown' as ActivityError['type']);
+    this.cancelSettle(a);
+    this.endWork(a);
     a.state = 'error';
     a.tool = null;
     a.error = { type: mappedType, message };
@@ -329,7 +469,8 @@ class ActivityMonitorImpl {
     const result: Record<string, ActivityInfo> = {};
     for (const [id, a] of this.activities) {
       const info: ActivityInfo = { state: a.state };
-      if (a.tool) info.tool = a.tool;
+      const tool = a.tool ?? subagentsLabel(a);
+      if (tool) info.tool = tool;
       if (a.error) info.error = a.error;
       if (a.compacting) info.compacting = true;
       if (a.detail) info.detail = a.detail;
@@ -349,6 +490,8 @@ class ActivityMonitorImpl {
         console.warn(
           `[ActivityMonitor] safety valve forced idle ptyId=${id} prevState=${a.state} silentMs=${silentSince}`,
         );
+        this.cancelSettle(a);
+        this.endWork(a);
         a.state = 'idle';
         a.tool = null;
         a.compacting = false;
@@ -356,6 +499,34 @@ class ActivityMonitorImpl {
       }
     }
     if (changed) this.emitAll();
+  }
+
+  /** Nothing runs any more: no main turn, no subagents. */
+  private endWork(a: PtyActivity): void {
+    a.mainTurn = false;
+    a.subagents.clear();
+  }
+
+  /** Go idle after TURN_SETTLE_MS if nothing starts meanwhile. */
+  private settleIdle(ptyId: string, a: PtyActivity): void {
+    if (a.settle) return;
+    a.settle = setTimeout(() => {
+      a.settle = null;
+      if (this.activities.get(ptyId) !== a) return;
+      if (a.mainTurn || a.subagents.size > 0) return;
+      if (a.state !== 'busy' && a.state !== 'waiting') return;
+      a.state = 'idle';
+      a.tool = null;
+      a.compacting = false;
+      a.detail = null;
+      this.emitAll();
+    }, TURN_SETTLE_MS);
+  }
+
+  private cancelSettle(a: PtyActivity): void {
+    if (!a.settle) return;
+    clearTimeout(a.settle);
+    a.settle = null;
   }
 
   private emitAll(): void {

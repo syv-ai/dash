@@ -221,6 +221,11 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
     PostCompact: [{ matcher: '*', hooks: [dashCmd('compact-end', true)] }],
     StopFailure: [{ matcher: '*', hooks: [dashCmd('stop-failure')] }],
     SessionEnd: [{ matcher: '*', hooks: [dashCmd('session-end', true)] }],
+    // Background subagents keep the task working after its own turn ends
+    // (S3). Synchronous, so each lands before the turn its report starts.
+    // Both predate MIN_CLAUDE_VERSION.
+    SubagentStart: [{ matcher: '', hooks: [dashCmd('subagent-start')] }],
+    SubagentStop: [{ matcher: '', hooks: [dashCmd('subagent-stop')] }],
   };
 
   // SessionStart(clear|compact) → defensive idle. /clear and auto-compact

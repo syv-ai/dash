@@ -63,6 +63,8 @@ describe('the inbox hooks', () => {
       'StopFailure',
       'SessionStart',
       'SessionEnd',
+      'SubagentStart',
+      'SubagentStop',
     ]);
     for (const [event, entries] of Object.entries(hooks)) {
       expect(known.has(event), event).toBe(true);

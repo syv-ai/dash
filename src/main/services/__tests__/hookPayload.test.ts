@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { isSubagentHook, statusLineTaskId } from '../hookPayload';
+import {
+  isSelfStartedPrompt,
+  isSubagentHook,
+  runningSubagentIds,
+  subagentId,
+  statusLineTaskId,
+} from '../hookPayload';
 
 describe('isSubagentHook', () => {
   it('is true when Claude Code tags the hook with an agent_id', () => {
@@ -30,5 +36,51 @@ describe('statusLineTaskId', () => {
     expect(statusLineTaskId('root', { cwd: '/repo/.claude/worktrees/wt' }, lookup)).toBe('wt');
     expect(statusLineTaskId('root', { cwd: '/elsewhere' }, lookup)).toBe('root');
     expect(statusLineTaskId('root', {}, lookup)).toBe('root');
+  });
+});
+
+// Shapes from a live Claude Code 2.1.332 session (S3): a Stop while two
+// background subagents ran, and the turn a finished one starts on its own.
+const stopWithAgents = {
+  hook_event_name: 'Stop',
+  background_tasks: [
+    { id: 'a812df100a2258567', type: 'subagent', status: 'running', agent_type: 'general-purpose' },
+    { id: 'bmffhmy29', type: 'shell', status: 'running', command: 'sleep 25' },
+    { id: 'a7fff99bbbb0d23bd', type: 'subagent', status: 'completed', agent_type: 'Explore' },
+  ],
+};
+
+describe('runningSubagentIds', () => {
+  it('lists the background subagents still running, not shells or finished ones', () => {
+    expect(runningSubagentIds(stopWithAgents)).toEqual(['a812df100a2258567']);
+  });
+
+  it('is an empty list when nothing runs, and unknown when the field is absent', () => {
+    expect(runningSubagentIds({ background_tasks: [] })).toEqual([]);
+    expect(runningSubagentIds({ hook_event_name: 'Stop' })).toBeUndefined();
+  });
+});
+
+describe('subagentId', () => {
+  it("is a subagent's agent_id", () => {
+    expect(subagentId({ agent_id: 'a1', agent_type: 'general-purpose' })).toBe('a1');
+  });
+
+  it("skips Claude Code's own internal agents, which carry an empty agent_type", () => {
+    expect(subagentId({ agent_id: 'a1', agent_type: '' })).toBeUndefined();
+    expect(subagentId({ agent_type: 'Explore' })).toBeUndefined();
+  });
+});
+
+describe('isSelfStartedPrompt', () => {
+  it('is true for the turn a finished background subagent starts with its report', () => {
+    expect(
+      isSelfStartedPrompt({ prompt: '<task-notification>\n<task-id>a7fff99bbbb0d23bd</task-id>' }),
+    ).toBe(true);
+  });
+
+  it('is false for a prompt the user typed', () => {
+    expect(isSelfStartedPrompt({ prompt: 'Run the tests' })).toBe(false);
+    expect(isSelfStartedPrompt({})).toBe(false);
   });
 });
