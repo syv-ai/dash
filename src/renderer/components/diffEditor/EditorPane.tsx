@@ -39,6 +39,7 @@ import { usePaneModels } from './editor/usePaneModels';
 import { dirtyVersion, isDirty, subscribeDirty } from './models';
 import type { TextRange } from '../../stores/editorTabsStore';
 import { useEditorSave } from './editor/useEditorSave';
+import { isOutsideWorktree } from './editor/fileRef';
 import { useMonacoEditor } from './editor/useMonacoEditor';
 import { EditorHeader } from './editor/EditorHeader';
 import { EditorViewport } from './editor/EditorViewport';
@@ -203,6 +204,14 @@ export function EditorPane({
     forceRef: forceReloadRef,
   });
 
+  // A plain file (outside the worktree, A10) compares with the disk: once
+  // saved, what was written is the original, so the saved edits stop showing
+  // as changes.
+  const plain = isOutsideWorktree(filePath);
+  const onSaved = useCallback(
+    (content: string) => editor?.getOriginalEditor().getModel()?.setValue(content),
+    [editor],
+  );
   const saveApi = useEditorSave({
     cwd,
     filePath,
@@ -211,6 +220,7 @@ export function EditorPane({
       forceReloadRef.current = true;
       reload();
     },
+    onSaved: plain ? onSaved : undefined,
   });
   const {
     saving,

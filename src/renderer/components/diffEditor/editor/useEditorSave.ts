@@ -31,12 +31,14 @@ interface Args {
   model: monacoEditor.ITextModel | null;
   /** Read the file again, taking the disk's text over the buffer. */
   reload(): void;
+  /** The text just written, once it is on disk. */
+  onSaved?: (content: string) => void;
 }
 
 /** Saves the working file's model to disk, guarded by the stamp of its last
  *  load or save. The dirty flag and stamp live with the model (models.ts), so
  *  a save from one group is seen by the other. */
-export function useEditorSave({ cwd, filePath, model, reload }: Args): SaveApi {
+export function useEditorSave({ cwd, filePath, model, reload, onSaved }: Args): SaveApi {
   const [saving, setSaving] = useState(false);
   const [savedPill, setSavedPill] = useState(false);
   const [stale, setStale] = useState<StaleInfo | null>(null);
@@ -81,6 +83,7 @@ export function useEditorSave({ cwd, filePath, model, reload }: Args): SaveApi {
             versionId,
           );
         }
+        onSaved?.(content);
         setStale(null);
         setSavedPill(true);
         window.setTimeout(() => setSavedPill(false), 1000);
@@ -88,7 +91,7 @@ export function useEditorSave({ cwd, filePath, model, reload }: Args): SaveApi {
         setSaving(false);
       }
     },
-    [cwd, filePath, model],
+    [cwd, filePath, model, onSaved],
   );
 
   const reloadFromDisk = useCallback(async () => {
