@@ -1,8 +1,8 @@
 import { cva } from 'class-variance-authority';
 import { cn } from '../../lib/cn';
 
-/** `idle`: a live session at rest; `asleep`: no live session (sleeping, or
- *  never run). */
+/** `done`: finished, not yet seen; `idle`: a live session at rest (seen);
+ *  `asleep`: no live session (sleeping, or never run). */
 export type AgentState = 'needs' | 'fail' | 'work' | 'done' | 'idle' | 'asleep';
 
 const dotVariants = cva('inline-block size-1.5 shrink-0 rounded-full', {
@@ -11,8 +11,8 @@ const dotVariants = cva('inline-block size-1.5 shrink-0 rounded-full', {
       needs: 'bg-state-needs',
       fail: 'bg-state-fail',
       work: 'bg-state-work',
-      done: 'bg-state-done',
-      idle: 'bg-ink-3',
+      done: 'bg-state-done ring-2 ring-state-done/40',
+      idle: 'bg-state-done',
       asleep: 'invisible',
     },
     pulse: { true: 'motion-safe:animate-breathe', false: '' },
@@ -21,8 +21,10 @@ const dotVariants = cva('inline-block size-1.5 shrink-0 rounded-full', {
 
 /**
  * A task's agent state as a 6px dot — the one place colour means something.
- * `work` breathes by default (not under reduced motion); `asleep` holds the
- * dot's place with nothing in it, so names line up. Give it a `label` when
+ * Green is a live session: at rest it is plain, `done` (finished, unseen)
+ * wears a halo of it until seen. `work` breathes by default (not under
+ * reduced motion); `asleep` holds the dot's place with nothing in it, so
+ * names line up. Give it a `label` when
  * nothing beside it says the state in words.
  */
 export function StatusDot({
