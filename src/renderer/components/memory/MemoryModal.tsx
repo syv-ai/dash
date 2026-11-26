@@ -10,7 +10,7 @@ import {
   Search,
   X,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '../ui/toast';
 import { MEMORY_INDEX_FILE } from '../../../shared/types';
 import type { IpcResponse, Project } from '../../../shared/types';
 import { formatRelativeTime } from '../../../shared/relativeTime';
@@ -62,7 +62,7 @@ export function MemoryModal({ project, onClose }: Props) {
 
 function copy(text: string): void {
   window.electronAPI.clipboardWriteText(text);
-  toast('Copied path', { description: text.length > 80 ? undefined : text, duration: 1800 });
+  toast.copied('path', text);
 }
 
 /** Surface a failed or rejected action instead of dropping it. Resolves true when it worked. */

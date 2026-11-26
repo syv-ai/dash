@@ -59,7 +59,7 @@ import { OrchestratorAccessPrompt } from './components/settings/OrchestratorAcce
 import { AdoSetupModal } from './components/vcs/ado/AdoSetupModal';
 import { Toaster } from './components/ui/Toaster';
 import { ToastSources } from './components/notifications/ToastSources';
-import { toast } from 'sonner';
+import { toast } from './components/ui/toast';
 import { getBillionToastContent } from './utils/billionToast';
 import { useStatusLine } from './hooks/useStatusLine';
 import { useThresholdAlerts } from './hooks/useThresholdAlerts';
@@ -371,7 +371,7 @@ export function App() {
     if (newB <= prevB) return;
     for (let b = prevB + 1; b <= newB; b++) {
       const { title, description } = getBillionToastContent(b, newTotal);
-      toast.success(title, { description, duration: 8000 });
+      toast.success(title, { description });
     }
   }, [globalTokenStats.totalTokens]);
 
@@ -731,10 +731,11 @@ export function App() {
     const summary = offenders
       .map((o) => `"${o.projectName}": ${o.tasks.map((n) => `"${n}"`).join(', ')}`)
       .join('; ');
-    toast.error(
-      `Multiple tasks share the same directory and may cross-resume each other's Claude sessions. Archive duplicates to fix: ${summary}`,
-      { duration: 20_000 },
-    );
+    toast.error('Multiple tasks share a directory', {
+      description: `They may cross-resume each other's Claude sessions. Archive the duplicates: ${summary}`,
+      key: 'duplicate-task-dirs',
+      lasting: true,
+    });
   }, [tasksByProject, projects]);
 
   // Theme
