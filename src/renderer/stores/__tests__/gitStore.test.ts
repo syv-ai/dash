@@ -11,8 +11,8 @@ vi.mock('../../terminal/SessionRegistry', () => ({
     restartAllForTask: vi.fn(),
   },
 }));
-vi.mock('sonner', () => ({
-  toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }),
+vi.mock('../../components/ui/toast', () => ({
+  toast: { info: vi.fn(), success: vi.fn(), warning: vi.fn(), error: vi.fn() },
 }));
 vi.mock('../../sounds', () => ({ playPeonSound: vi.fn(), playNotificationSound: vi.fn() }));
 

@@ -9,8 +9,8 @@ vi.mock('../../terminal/SessionRegistry', () => ({
     restartAllForTask: vi.fn(),
   },
 }));
-vi.mock('sonner', () => ({
-  toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn(), warning: vi.fn() }),
+vi.mock('../../components/ui/toast', () => ({
+  toast: { info: vi.fn(), success: vi.fn(), warning: vi.fn(), error: vi.fn() },
 }));
 const playNotificationSound = vi.fn();
 const playPeonSound = vi.fn();
@@ -401,7 +401,7 @@ describe('runtimeStore.init — auto-update', () => {
   });
 
   it('surfaces a failed check instead of swallowing it', async () => {
-    const { toast } = await import('sonner');
+    const { toast } = await import('../../components/ui/toast');
     api.autoUpdateCheck = vi.fn(() => Promise.resolve({ success: false, error: 'offline' }));
 
     const { useRuntime } = await freshStores();
@@ -411,7 +411,7 @@ describe('runtimeStore.init — auto-update', () => {
   });
 
   it('surfaces a failed install instead of swallowing it', async () => {
-    const { toast } = await import('sonner');
+    const { toast } = await import('../../components/ui/toast');
     api.autoUpdateQuitAndInstall = vi.fn(() =>
       Promise.resolve({ success: false, error: 'not ready' }),
     );

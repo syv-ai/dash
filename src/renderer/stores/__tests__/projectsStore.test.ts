@@ -13,8 +13,8 @@ vi.mock('../../terminal/SessionRegistry', () => ({
     restartAgent: vi.fn(() => Promise.resolve()),
   },
 }));
-vi.mock('sonner', () => ({
-  toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }),
+vi.mock('../../components/ui/toast', () => ({
+  toast: { info: vi.fn(), success: vi.fn(), warning: vi.fn(), error: vi.fn() },
 }));
 vi.mock('../../sounds', () => ({ playPeonSound: vi.fn(), playNotificationSound: vi.fn() }));
 
@@ -343,7 +343,7 @@ describe('projectsStore archive/restore/close/update', () => {
     const useProjects = await freshStore();
     api.ptyStopSession.mockResolvedValueOnce({ success: false, error: 'claude stop failed' });
     await useProjects.getState().closeTask('t1');
-    const { toast } = await import('sonner');
+    const { toast } = await import('../../components/ui/toast');
     expect(toast.error).toHaveBeenCalledWith('claude stop failed');
   });
 
@@ -399,7 +399,7 @@ describe('projectsStore delete', () => {
       deleteLocalBranch: false,
       deleteRemoteBranch: false,
     });
-    const { toast } = await import('sonner');
+    const { toast } = await import('../../components/ui/toast');
     expect(toast.error).toHaveBeenCalledWith('busy');
     expect(useProjects.getState().activeTaskId).toBe('t1');
   });
@@ -512,7 +512,7 @@ describe('projectsStore project archive', () => {
       deleteLocalBranches: false,
       deleteRemoteBranches: false,
     });
-    const { toast } = await import('sonner');
+    const { toast } = await import('../../components/ui/toast');
     expect(toast.error).toHaveBeenCalledWith('nope');
     expect(useProjects.getState().activeProjectId).toBe('p1');
   });
@@ -595,7 +595,7 @@ describe('projectsStore createTask', () => {
       permissionMode: 'default',
     } as CreateTaskOptions);
     expect(ok).toBe(false);
-    const { toast } = await import('sonner');
+    const { toast } = await import('../../components/ui/toast');
     expect(toast.error).toHaveBeenCalledWith('nope');
     expect(useProjects.getState().isCreatingTask).toBe(false);
   });
@@ -653,7 +653,7 @@ describe('projectsStore setDashAccess', () => {
     const result = await useProjects.getState().setDashAccess(task('t1', 'p1'), true, true);
     expect(result).toBeNull();
     expect(reg.restartAgent).not.toHaveBeenCalled();
-    const { toast } = await import('sonner');
+    const { toast } = await import('../../components/ui/toast');
     expect(toast.error).toHaveBeenCalledWith('nope');
   });
 });
@@ -691,7 +691,7 @@ describe('projectsStore setFavorite', () => {
     api.setTaskFavorite.mockResolvedValue({ success: false, error: 'nope' });
     await useProjects.getState().setFavorite(task('t1', 'p1', { favorite: true }), false);
     expect(favorite(useProjects)).toEqual([['t1', true]]);
-    const { toast } = await import('sonner');
+    const { toast } = await import('../../components/ui/toast');
     expect(toast.error).toHaveBeenCalledWith('nope');
   });
 });

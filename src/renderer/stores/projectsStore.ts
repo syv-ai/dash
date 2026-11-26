@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { toast } from 'sonner';
+import { toast } from '../components/ui/toast';
 import { sessionRegistry } from '../terminal/SessionRegistry';
 import type { Project, Task, BranchInfo, DeleteTaskOptions } from '../../shared/types';
 import type { DeleteProjectOptions } from '../components/project/DeleteProjectModal';

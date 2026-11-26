@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { toast } from 'sonner';
+import { toast } from '../components/ui/toast';
 import type { SetupRun } from '../../shared/setupRuns';
 import type { Task } from '../../shared/types';
 import { useProjects, selectTaskByPath } from './projectsStore';
@@ -67,8 +67,8 @@ export const useSetup = create<SetupStore>((set, get) => ({
         const name = taskAt(run.worktreePath)?.name;
         toast.error(name ? `Setup failed for ${name}` : 'Workspace setup failed', {
           description: run.error ?? undefined,
+          key: `setup:${run.worktreePath}`,
           action: { label: 'View output', onClick: () => get().showSetup(run.worktreePath) },
-          duration: 10_000,
         });
       }
     });

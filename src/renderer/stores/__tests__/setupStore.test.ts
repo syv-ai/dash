@@ -6,11 +6,11 @@ import type { Task } from '../../../shared/types';
 vi.mock('../../terminal/SessionRegistry', () => ({
   sessionRegistry: { dispose: vi.fn(), disposeByPrefix: vi.fn(), restartAllForTask: vi.fn() },
 }));
-vi.mock('sonner', () => ({
-  toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn(), warning: vi.fn() }),
+vi.mock('../../components/ui/toast', () => ({
+  toast: { info: vi.fn(), success: vi.fn(), warning: vi.fn(), error: vi.fn() },
 }));
 
-import { toast } from 'sonner';
+import { toast } from '../../components/ui/toast';
 import { useSetup } from '../setupStore';
 import { useProjects } from '../projectsStore';
 import { useSettings } from '../settingsStore';
