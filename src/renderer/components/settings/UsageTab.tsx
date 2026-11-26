@@ -1,6 +1,6 @@
 import React from 'react';
 import type { RateLimits } from '../../../shared/types';
-import { usageColor } from '../../lib/usageColor';
+import { quietUsageColor } from '../../lib/usageColor';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useSettings } from '../../stores/settingsStore';
 import { formatCost, formatResetTime, formatTokens } from '../../utils/format';
@@ -47,7 +47,7 @@ export function UsageTab({ latestRateLimits }: { latestRateLimits?: RateLimits }
               <Meter
                 label="5-hour"
                 value={fiveHour.usedPercentage}
-                color={usageColor(fiveHour.usedPercentage)}
+                color={quietUsageColor(fiveHour.usedPercentage)}
                 detail={
                   fiveHour.resetsAt ? `resets ${formatResetTime(fiveHour.resetsAt)}` : undefined
                 }
@@ -57,7 +57,7 @@ export function UsageTab({ latestRateLimits }: { latestRateLimits?: RateLimits }
               <Meter
                 label="Weekly"
                 value={sevenDay.usedPercentage}
-                color={usageColor(sevenDay.usedPercentage)}
+                color={quietUsageColor(sevenDay.usedPercentage)}
                 detail={
                   sevenDay.resetsAt ? `resets ${formatResetTime(sevenDay.resetsAt)}` : undefined
                 }

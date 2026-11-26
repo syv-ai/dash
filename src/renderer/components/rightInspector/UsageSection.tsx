@@ -15,7 +15,7 @@ import {
   type LimitPaces,
   type LimitKey,
 } from '../../lib/pace';
-import { usageColor } from '../../lib/usageColor';
+import { quietUsageColor, usageColor } from '../../lib/usageColor';
 import { useMinuteClock } from '../../hooks/useMinuteClock';
 import { useSettings } from '../../stores/settingsStore';
 import { LEVEL_FIGURE, LevelText, type LevelSize } from '../ui/LevelText';
@@ -63,11 +63,10 @@ type Cell = { key: string; tooltip: RichTooltip; label: string; caption?: string
 /** A level's column: the session's context, or a limit. */
 export type LevelCell = Extract<Cell, { kind: 'level' }>;
 
-/** The pace's figure by its outlook: plain ink, it resets first (not green,
- *  which means a session at rest, T19); amber, close; red, the limit comes
- *  first; plain ink with no projection yet. */
+/** The pace's figure by its outlook: green, it resets first; amber, close;
+ *  red, the limit comes first; plain ink with no projection yet. */
 const OUTLOOK_TEXT: Record<PaceOutlook, string> = {
-  clear: 'text-ink',
+  clear: 'text-state-done',
   close: 'text-warn',
   over: 'text-state-fail',
 };
@@ -119,13 +118,23 @@ function Figure({ cell, density }: { cell: Cell; density: UsageDensity }) {
 }
 
 /** A level as its percent alone, coloured by how close it is to full: the
- *  compact row's figure, the collapsed sidebar's rail's, and (`sm`) a task
- *  row's context in the left sidebar. */
-export function LevelReading({ cell: { pct, aria }, size }: { cell: LevelCell; size?: LevelSize }) {
+ *  compact row's figure, the collapsed sidebar's rail's, and (`sm`, `quiet`)
+ *  a task row's context in the left sidebar, plain ink until it nears full
+ *  (`quietUsageColor`, T30). */
+export function LevelReading({
+  cell: { pct, aria },
+  size,
+  quiet = false,
+}: {
+  cell: LevelCell;
+  size?: LevelSize;
+  quiet?: boolean;
+}) {
+  const ramp = quiet ? quietUsageColor : usageColor;
   return (
     <LevelText
       value={pct}
-      color={pct === null ? undefined : usageColor(pct)}
+      color={pct === null ? undefined : ramp(pct)}
       size={size}
       aria-label={aria}
     >
@@ -256,7 +265,7 @@ function paceCell(paces: LimitPaces, pressing: PressingPace): Cell {
   const keys = (Object.keys(LIMIT_LABELS) as LimitKey[]).filter((k) => k in paces);
   const legend =
     "The colour: where the window's average pace so far, idle time included, leads by the reset. " +
-    `Plain: the limit resets first. Amber: ${CLOSE_AT_PCT}% or more by the reset. Red: the limit comes first.`;
+    `Green: the limit resets first. Amber: ${CLOSE_AT_PCT}% or more by the reset. Red: the limit comes first.`;
   // A projection names its TTR.
   const ttr = keys.some((k) => paces[k]?.projection);
   return {

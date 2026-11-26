@@ -37,7 +37,7 @@ interface MeterProps {
   /** Fill colour: ink-3, or a state. */
   tone?: MeterTone;
   /** Any CSS colour for the fill and the percent, over `tone`: a usage
-   *  meter passes `usageColor(value)`, the one usage ramp (T19). */
+   *  meter passes `quietUsageColor(value)` (T19, T30). */
   color?: string;
   /** md = the 4px track, sm = a 2px hairline for dense rows. */
   size?: 'sm' | 'md';
@@ -55,7 +55,7 @@ interface MeterProps {
 
 /**
  * A level or progress bar: a 4px hover-tint track with a rounded fill. It
- * serves usage (coloured by `usageColor`) and progress (neutral) alike.
+ * serves usage (coloured by a usage ramp) and progress (neutral) alike.
  */
 export function Meter({
   value,

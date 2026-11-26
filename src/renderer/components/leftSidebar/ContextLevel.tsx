@@ -6,8 +6,9 @@ import { useSettings } from '../../stores/settingsStore';
 /**
  * A live task's session context as its percent at the row's end: the right
  * sidebar's Session level (`levelCells`, so the figures never disagree) read
- * as the narrow limits row reads it (`LevelReading`, coloured by how full it
- * is), a size down for a list row, with the same rich tooltip (percent,
+ * as the narrow limits row reads it (`LevelReading`), a size down for a list
+ * row and plain ink until it nears full (green would read as the session's
+ * state), with the same rich tooltip (percent,
  * tokens). The card sets the column it sits in. Nothing until the session
  * has replied, or while the setting hides the session level.
  */
@@ -18,7 +19,7 @@ export function ContextLevel({ usage }: { usage: ContextUsage | undefined }) {
   return (
     <Tooltip content={cell.tooltip}>
       <span className="flex">
-        <LevelReading cell={cell} size="sm" />
+        <LevelReading cell={cell} size="sm" quiet />
       </span>
     </Tooltip>
   );
