@@ -136,25 +136,31 @@ export interface TaskGroups {
   favorites: TaskStateRow[];
   /** Live and asking for a look: needs you, failed, working, done. */
   news: TaskStateRow[];
-  /** Live at rest, then tasks that never ran (no session yet). */
+  /** Live at rest, then tasks made this run that haven't started yet. */
   resting: TaskStateRow[];
-  /** Sleeping sessions, most recently updated first. */
+  /** Sleeping sessions and older tasks that never ran, most recently updated first. */
   inactive: TaskStateRow[];
 }
 
 /** A task that never ran: asleep with no session ever dispatched. */
 export const neverRan = (row: TaskStateRow) => row.state === 'asleep' && row.task.jobId === null;
 
+/** When this renderer started: a task made since then is "just made" (T18). */
+export const LAUNCHED_AT = new Date().toISOString();
+
 /**
  * Splits the state-ordered list into the Tasks view's groups: favourites
  * first, whatever their state; the live rest by what it asks of the user;
  * the sleeping ones last (the "Inactive sessions" group). A task that never
- * ran stays up with the live ones, so a task just made never hides.
+ * ran stays up with the live ones only if it was made since `launchedAt`, so
+ * a task just made never hides; an old one never started from Dash has no
+ * session to show and folds away with the sleeping ones (T18).
  */
-export function taskGroups(list: TaskStateList): TaskGroups {
+export function taskGroups(list: TaskStateList, launchedAt: string): TaskGroups {
   const isFavorite = (r: TaskStateRow) => r.task.favorite;
   const rest = list.idle.filter((r) => !isFavorite(r));
   const live = (r: TaskStateRow) => r.state !== 'asleep';
+  const justMade = (r: TaskStateRow) => neverRan(r) && r.task.createdAt >= launchedAt;
   return {
     favorites: [
       ...list.active.filter(isFavorite),
@@ -162,8 +168,8 @@ export function taskGroups(list: TaskStateList): TaskGroups {
       ...list.idle.filter((r) => isFavorite(r) && !live(r)),
     ],
     news: list.active.filter((r) => !isFavorite(r)),
-    resting: [...rest.filter(live), ...rest.filter(neverRan)],
-    inactive: rest.filter((r) => !live(r) && !neverRan(r)),
+    resting: [...rest.filter(live), ...rest.filter(justMade)],
+    inactive: rest.filter((r) => !live(r) && !justMade(r)),
   };
 }
 

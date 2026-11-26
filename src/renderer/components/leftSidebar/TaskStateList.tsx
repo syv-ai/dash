@@ -11,6 +11,7 @@ import { TaskContextMenu } from '../task/TaskContextMenu';
 import { openInIde } from '../../lib/openInIde';
 import { useSettings } from '../../stores/settingsStore';
 import {
+  LAUNCHED_AT,
   STATE_LABELS,
   isAtRest,
   taskGroups,
@@ -56,7 +57,10 @@ export function TaskStateList({
 }: TaskStateListProps) {
   const inactiveOpen = useSettings((s) => s.inactiveSessionsOpen);
   const setInactiveOpen = useSettings((s) => s.setInactiveSessionsOpen);
-  const rows = useMemo(() => taskTreeRows(taskGroups(list), inactiveOpen), [list, inactiveOpen]);
+  const rows = useMemo(
+    () => taskTreeRows(taskGroups(list, LAUNCHED_AT), inactiveOpen),
+    [list, inactiveOpen],
+  );
 
   if (projects.length === 0) {
     return (
