@@ -4,6 +4,8 @@ import type {
   ActivityInfo,
   AutoUpdateStatus,
   ClaudeCliInfo,
+  ClaudeUpdateMode,
+  ClaudeUpdateState,
   RemoteControlState,
   RtkStatus,
   RtkDownloadProgress,
@@ -40,6 +42,9 @@ export interface RuntimeState {
   /** The updater's whole state, or null before main has answered. Drives the
    *  sidebar banner and the Settings → Updates card. */
   updateStatus: AutoUpdateStatus | null;
+  /** Live sessions on an older Claude Code than the installed one, and any
+   *  restart onto it in progress; null before main has answered. */
+  claudeUpdate: ClaudeUpdateState | null;
 }
 
 export interface RuntimeActions {
@@ -61,6 +66,10 @@ export interface RuntimeActions {
   checkForUpdates: () => Promise<void>;
   /** Restart into a downloaded update. */
   installUpdate: () => Promise<void>;
+  /** Restart the outdated sessions on the installed Claude Code, now or once every task is done. */
+  restartClaudeSessions: (mode: ClaudeUpdateMode) => Promise<void>;
+  /** Drop a pending "restart when done". */
+  cancelClaudeRestart: () => Promise<void>;
   /** Wire every live IPC subscription; returns a combined cleanup. */
   init: () => () => void;
 }
@@ -78,6 +87,7 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
   claudeCli: null,
   supervisorSessions: [],
   updateStatus: null,
+  claudeUpdate: null,
 
   refreshClaudeCli: async (opts) => {
     const resp = await window.electronAPI.detectClaude(opts);
@@ -126,6 +136,16 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
   installUpdate: async () => {
     const resp = await window.electronAPI.autoUpdateQuitAndInstall();
     if (!resp.success) toast.error(resp.error ?? 'Could not install the update');
+  },
+
+  restartClaudeSessions: async (mode) => {
+    const resp = await window.electronAPI.claudeUpdateRestart(mode);
+    if (!resp.success) toast.error(resp.error ?? 'Could not restart the sessions');
+  },
+
+  cancelClaudeRestart: async () => {
+    const resp = await window.electronAPI.claudeUpdateCancel();
+    if (!resp.success) toast.error(resp.error ?? 'Could not cancel the restart');
   },
 
   refreshTokenRollups: async () => {
@@ -311,6 +331,15 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
       cleanups.push(unsub);
       void window.electronAPI.autoUpdateGetStatus().then((resp) => {
         if (resp.success && resp.data) set({ updateStatus: resp.data });
+      });
+    }
+
+    // ── Claude Code update (live sessions on an older CLI) ─
+    {
+      const unsub = window.electronAPI.onClaudeUpdateState((next) => set({ claudeUpdate: next }));
+      cleanups.push(unsub);
+      void window.electronAPI.claudeUpdateGetState().then((resp) => {
+        if (resp.success && resp.data) set({ claudeUpdate: resp.data });
       });
     }
 

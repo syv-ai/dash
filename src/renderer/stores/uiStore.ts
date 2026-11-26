@@ -34,6 +34,8 @@ export interface UiState {
   showSettings: boolean;
   /** The ⌘K task finder. */
   taskFinderOpen: boolean;
+  /** The "restart sessions on the new Claude Code" dialog (toast action, sidebar icon). */
+  claudeUpdateOpen: boolean;
   // Project whose Claude memory the memory modal shows; null → closed.
   memoryProjectId: string | null;
   // The task whose "…" menu opened the memory modal (where "Send to task"
@@ -74,6 +76,7 @@ export interface UiActions {
   setAdoSetup: (v: AdoSetup | null) => void;
   setShowSettings: (v: Updater<boolean>) => void;
   setTaskFinderOpen: (v: Updater<boolean>) => void;
+  setClaudeUpdateOpen: (v: boolean) => void;
   /** Show a project's memory (null closes the modal). Switching project keeps the task it was opened from. */
   setMemoryProjectId: (v: string | null) => void;
   /** Open the memory modal from a task's menu, on that task's project. */
@@ -106,6 +109,7 @@ const initialState: UiState = {
   adoSetup: null,
   showSettings: false,
   taskFinderOpen: false,
+  claudeUpdateOpen: false,
   memoryProjectId: null,
   memoryTaskId: null,
   settingsInitialTab: undefined,
@@ -134,6 +138,7 @@ export const useUi = create<UiStore>((set, get) => ({
   setAdoSetup: (v) => set({ adoSetup: v }),
   setShowSettings: (v) => set((s) => ({ showSettings: apply(v, s.showSettings) })),
   setTaskFinderOpen: (v) => set((s) => ({ taskFinderOpen: apply(v, s.taskFinderOpen) })),
+  setClaudeUpdateOpen: (v) => set({ claudeUpdateOpen: v }),
   setMemoryProjectId: (v) =>
     set((s) => ({
       memoryProjectId: v,

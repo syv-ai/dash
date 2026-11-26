@@ -1,5 +1,6 @@
 import { Plus, Search, Settings } from 'lucide-react';
 import type { Project, Task } from '../../../shared/types';
+import { ClaudeUpdateButton } from '../claudeUpdate/ClaudeUpdateButton';
 import { IconButton } from '../ui/IconButton';
 import { Segmented } from '../ui/Segmented';
 import { StatusDot } from '../ui/StatusDot';
@@ -41,7 +42,7 @@ const isMac = window.electronAPI.getPlatform() === 'darwin';
 /**
  * The app sidebar: a Tasks | Projects switch with find and create (a task
  * or a project, after the view) at its end, over the state-ordered task list
- * or the project tree, and settings at the foot.
+ * or the project tree, and settings (with the Claude Code update icon) at the foot.
  * Collapsed, it is a rail of state dots for the tasks with a live session.
  */
 export function LeftSidebar(props: LeftSidebarProps) {
@@ -75,6 +76,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
             </IconButton>
           ))}
         </div>
+        <ClaudeUpdateButton />
         {settingsButton}
       </div>
     );
@@ -168,7 +170,10 @@ export function LeftSidebar(props: LeftSidebarProps) {
       )}
 
       <UpdateBanner />
-      <div className="flex shrink-0 items-center px-2 pt-1 pb-3">{settingsButton}</div>
+      <div className="flex shrink-0 items-center gap-0.5 px-2 pt-1 pb-3">
+        {settingsButton}
+        <ClaudeUpdateButton />
+      </div>
     </div>
   );
 }

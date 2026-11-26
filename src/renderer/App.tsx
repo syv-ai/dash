@@ -75,6 +75,7 @@ import { useGit } from './stores/gitStore';
 import { useEditors } from './stores/editorsStore';
 import { mayCloseEditor } from './components/diffEditor/closeGuard';
 import { ConfirmHost } from './components/ui/ConfirmHost';
+import { ClaudeUpdateHost } from './components/claudeUpdate/ClaudeUpdateHost';
 import { useRuntime } from './stores/runtimeStore';
 import { useAppBootstrap } from './hooks/useAppBootstrap';
 import { useShallow } from 'zustand/react/shallow';
@@ -1947,6 +1948,7 @@ export function App() {
 
       {/* After every other modal, so a confirm shows over the one that asked. */}
       <ConfirmHost />
+      <ClaudeUpdateHost />
       <ToastContainer />
     </div>
   );
