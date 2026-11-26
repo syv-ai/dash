@@ -6,8 +6,8 @@ import { prStatusTint } from './prStatusColors';
 /**
  * The badge base: a small rounded-sm tag. `neutral` is ink on the hover
  * tint (light text on a faint fill, never grey on grey); the state tones tint
- * by agent state; `bare` has no fill (icon or text marks), `checkout` is
- * bare in teal (MainRepoBadge); `outline` is a
+ * by agent state; `bare` has no fill (icon or text marks), `changed` is
+ * bare in the changed-file gold (MainRepoBadge); `outline` is a
  * hairline ring, the quiet sibling of `neutral` where two counts sit side by
  * side. Padding leaves the text room either side (sm 6px, md 8px).
  * `CountBadge`, `TokenBadge`, `MainRepoBadge` and `PrBadge` build on it.
@@ -26,7 +26,7 @@ export const badgeVariants = cva(
         done: 'bg-state-done/12 text-state-done',
         link: 'bg-link/12 text-link',
         merged: prStatusTint('merged'),
-        checkout: 'text-checkout',
+        changed: 'text-changed',
       },
       size: {
         sm: 'h-4.5 px-1.5 text-xs',

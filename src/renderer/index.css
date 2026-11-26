@@ -40,9 +40,6 @@
      gold, like VS Code's, user-requested (G1). Not warn amber, which
      means caution. */
   --color-changed: hsl(var(--changed));
-  /* A task in the project's own checkout, not a worktree (MainRepoBadge's
-     M): a calm teal, a hue no state or role uses, user-requested (M1). */
-  --color-checkout: hsl(var(--checkout));
   --color-hover: hsl(var(--hover));
   --color-select: hsl(var(--select));
   --color-btn: hsl(var(--btn));
@@ -207,8 +204,6 @@
     /* Desaturated gold: 5.3:1 on ground, 6.4:1 on well (warn is
        34 78% 41%). */
     --changed: 40 48% 31%;
-    /* Calm teal, 5.9:1 on a white well. */
-    --checkout: 174 45% 30%;
     --hover: 225 20% 20% / 0.05;
     --select: 225 20% 20% / 0.09;
     --btn: 225 14% 22%;
@@ -270,8 +265,6 @@
     --git-untracked: 222 9% 30%;
     --git-conflicted: 25 85% 48%;
     --pr-merged: 262 60% 55%; /* GitHub merged-PR purple */
-    --badge-main: 218 34% 36%; /* "main checkout" task badge */
-    --badge-main-foreground: 0 0% 100%;
 
     --status-idle: var(--state-done);
     --status-wait: var(--state-needs);
@@ -330,8 +323,6 @@
     /* Soft gold: 10.7 / 9.9 / 8.9:1 on ground / well / raised, under ink
        (warn is 40 75% 62%). */
     --changed: 40 50% 68%;
-    /* Calm teal, 8.9:1 on well. */
-    --checkout: 174 40% 60%;
     --hover: 0 0% 100% / 0.05;
     --select: 0 0% 100% / 0.09;
     --btn: 220 6% 91%;
