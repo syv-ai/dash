@@ -10,7 +10,7 @@ export function FavoriteStar() {
   return (
     <Tooltip content="Favourite">
       <span role="img" aria-label="Favourite" className="flex text-favorite">
-        <Star size={14} strokeWidth={1.8} />
+        <Star size={12} strokeWidth={1.8} />
       </span>
     </Tooltip>
   );

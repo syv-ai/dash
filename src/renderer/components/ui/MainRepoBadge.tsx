@@ -20,7 +20,7 @@ export function MainRepoBadge({ task }: MainRepoBadgeProps) {
   return (
     <Tooltip content={`Runs in the project's own checkout${where}, not a worktree`}>
       <Badge tone="changed" size="icon" aria-label="Runs in the project's own checkout">
-        <LetterM size={14} strokeWidth={1.8} />
+        <LetterM size={12} strokeWidth={1.8} />
       </Badge>
     </Tooltip>
   );

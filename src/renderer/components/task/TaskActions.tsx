@@ -32,6 +32,27 @@ export function hasLiveSession(state: ActivityState | undefined): boolean {
   return !!state && state !== 'stopped';
 }
 
+/** The one-click "Put to sleep" button, shown only while the session is live.
+ *  Stops propagation so it never selects the row it sits on. */
+export function SleepTaskButton({
+  activityState,
+  onClose,
+}: Pick<TaskActionsProps, 'activityState' | 'onClose'>) {
+  if (!hasLiveSession(activityState)) return null;
+  return (
+    <IconButton
+      onClick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+      title="Put to sleep"
+      size="sm"
+    >
+      <Power size={12} strokeWidth={1.8} />
+    </IconButton>
+  );
+}
+
 export function TaskActions({
   taskId,
   activityState,
@@ -44,18 +65,7 @@ export function TaskActions({
 }: TaskActionsProps) {
   return (
     <div className="flex items-center gap-0.5">
-      {hasLiveSession(activityState) && (
-        <IconButton
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-          }}
-          title="Put to sleep"
-          size="sm"
-        >
-          <Power size={12} strokeWidth={1.8} />
-        </IconButton>
-      )}
+      <SleepTaskButton activityState={activityState} onClose={onClose} />
       <DropdownMenu onOpenChange={onMenuOpenChange}>
         <DropdownMenuTrigger asChild>
           <IconButton onClick={(e) => e.stopPropagation()} title="More actions" size="sm">

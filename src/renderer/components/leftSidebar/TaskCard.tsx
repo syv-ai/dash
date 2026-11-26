@@ -1,7 +1,7 @@
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Globe } from 'lucide-react';
 import type { Task, ActivityInfo, ContextUsage } from '../../../shared/types';
-import { TaskActions } from '../task/TaskActions';
+import { SleepTaskButton } from '../task/TaskActions';
 import { TaskContextMenu } from '../task/TaskContextMenu';
 import { TreeRow, type TreeRowContext } from '../ui/Tree';
 import { StatusDot, type AgentState } from '../ui/StatusDot';
@@ -56,9 +56,9 @@ export const TASK_INDENT_PX = 16;
  * A task row, the same in the Tasks and Projects views: the state dot, the
  * name with its marks (a favourite's star, the main-checkout M: labels, not
  * controls, T22), the second line if any; at the end the status badges, the
- * actions on hover (sleep, "…"), then the context percent, always the last
- * column so it lines up down the list (T21). Dot and end centre on the row.
- * Right-click opens the task menu.
+ * sleep button on hover, then the context percent, always the last column
+ * so it lines up down the list (T21). Dot and end centre on the row. The
+ * task menu is right-click only: a "…" button crowded the name out (T23).
  */
 export function TaskCard({
   task,
@@ -75,8 +75,6 @@ export function TaskCard({
   onArchive,
   onDelete,
 }: TaskCardProps) {
-  // The "…" menu is open: keep the actions shown though the pointer has left.
-  const [menuOpen, setMenuOpen] = useState(false);
   const activityInfo = useRuntime((s) => s.taskActivity[task.id]);
   const hasRemoteControl = useRuntime((s) => !!s.remoteControlStates[task.id]);
   const prs = useGit((s) => s.prByTask[task.id]);
@@ -135,17 +133,8 @@ export function TaskCard({
             {(prs || allPrs) && (
               <PrBadge prs={prs ?? []} allPrs={allPrs} variant="icon" taskId={task.id} />
             )}
-            <div className={menuOpen ? 'flex' : 'hidden group-hover/task:flex'}>
-              <TaskActions
-                taskId={task.id}
-                activityState={activityInfo?.state}
-                onOpenIde={onOpenIde}
-                onClose={onClose}
-                onSettings={onSettings}
-                onArchive={onArchive}
-                onDelete={onDelete}
-                onMenuOpenChange={setMenuOpen}
-              />
+            <div className="hidden group-hover/task:flex">
+              <SleepTaskButton activityState={activityInfo?.state} onClose={onClose} />
             </div>
             {state !== 'asleep' && <ContextLevel usage={usage} />}
           </>
