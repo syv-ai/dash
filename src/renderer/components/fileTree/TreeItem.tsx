@@ -120,20 +120,19 @@ export function TreeItem({
         if (e.key === ' ' && onSpace) onSpace();
         else onActivate(folder ? undefined : { toSide: e.altKey, preview: true });
       }}
-      leading={
+      // A file starts where its level's chevrons do (D268).
+      leading={folder ? <Chevron size={14} strokeWidth={1.8} /> : undefined}
+      trailing={
         <>
+          {/* Placed against the row, not the slot it is written in. */}
           {leading !== undefined && (
             <span className="absolute inset-y-0 left-2.5 flex items-center">{leading}</span>
           )}
-          {/* A file keeps the chevron's room, so names line up with folders'. */}
-          {folder ? <Chevron size={14} strokeWidth={1.8} /> : <span className="size-3.5" />}
+          <HoverSwapSlot
+            rest={<Columns row={row} cols={cols} badges={badges} />}
+            actions={actions ?? <CopyPathAction path={path} />}
+          />
         </>
-      }
-      trailing={
-        <HoverSwapSlot
-          rest={<Columns row={row} cols={cols} badges={badges} />}
-          actions={actions ?? <CopyPathAction path={path} />}
-        />
       }
     >
       {folder ? (
@@ -179,7 +178,6 @@ export function TreeNote({
       indent={row.depth + (leading ? LEADING_STEPS : 0)}
       title={row.failed ? row.text : undefined}
       className="cursor-default"
-      leading={<span className="size-3.5" />}
     >
       {row.text}
     </ListRow>
