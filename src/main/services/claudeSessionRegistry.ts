@@ -11,6 +11,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { claudeConfigDir, claudeProjectDir } from '../utils/claudePaths';
 import type { Task, TaskMessageAddresses } from '@shared/types';
+import { claudeVersionFor } from '../claudeContract/claudeVersions';
+import { reportFindings } from '../claudeContract/driftReporter';
+import { checkSessionEntry } from '../claudeContract/internalSchemas';
+import { parseClaudeVersion } from './claudeCli';
 
 /** A registry file's fields Dash uses. */
 export interface SessionEntry {
@@ -38,12 +42,18 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : nul
 
 /** Parse one registry file; null for a malformed or partial one (no numeric pid). */
 export function parseSessionEntry(raw: string): SessionEntry | null {
-  let o: unknown;
+  return sessionEntryFrom(parseJson(raw));
+}
+
+function parseJson(raw: string): unknown {
   try {
-    o = JSON.parse(raw);
+    return JSON.parse(raw);
   } catch {
     return null;
   }
+}
+
+function sessionEntryFrom(o: unknown): SessionEntry | null {
   if (typeof o !== 'object' || o === null || Array.isArray(o)) return null;
   const r = o as Record<string, unknown>;
   if (typeof r.pid !== 'number' || !Number.isInteger(r.pid) || r.pid <= 0) return null;
@@ -88,8 +98,18 @@ export function readLiveSessions(configDir: string = claudeConfigDir()): Map<str
     } catch {
       continue; // removed while listing
     }
-    const entry = parseSessionEntry(raw);
+    const obj = parseJson(raw);
+    const entry = sessionEntryFrom(obj);
     if (!entry?.jobId || !isAlive(entry.pid)) continue;
+    // Live entries only: a dead session's file is an older version's.
+    const version = (obj as { version?: unknown }).version;
+    reportFindings(
+      'session-registry',
+      checkSessionEntry(obj),
+      typeof version === 'string'
+        ? (parseClaudeVersion(version)?.join('.') ?? 'unknown')
+        : claudeVersionFor(),
+    );
     const seen = newest.get(entry.jobId);
     if (!seen || entry.updatedAt > seen.updatedAt) newest.set(entry.jobId, entry);
   }

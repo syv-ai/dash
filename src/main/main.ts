@@ -99,6 +99,11 @@ void app.whenReady().then(async () => {
   const { TelemetryService } = await import('./services/TelemetryService');
   TelemetryService.initialize();
 
+  // Claude Code contract drift (claudeContract/): the local log, ready before
+  // the first hook or listing arrives.
+  const { installDriftReporter } = await import('./claudeContract/driftReporter');
+  installDriftReporter({ dir: app.getPath('userData'), send: () => false });
+
   // Initialize database
   const { DatabaseService } = await import('./services/DatabaseService');
   DatabaseService.initialize();
@@ -270,6 +275,12 @@ async function probeClaudeCli(): Promise<void> {
       version: versionOut.trim(),
       path: claudePath,
     };
+    const { checkVersionOutput } = await import('./claudeContract/cliSchemas');
+    const { setInstalledClaudeVersion, claudeVersionFor } =
+      await import('./claudeContract/claudeVersions');
+    const { reportFindings } = await import('./claudeContract/driftReporter');
+    setInstalledClaudeVersion(versionOut);
+    reportFindings('cli-version', checkVersionOutput(versionOut), claudeVersionFor());
   } catch {
     claudeCliCache = { installed: false, version: null, path: null };
   }
@@ -429,6 +440,14 @@ app.on('before-quit', (event) => {
     try {
       const { stopAllMemoryWatches } = await import('./services/MemoryWatcher');
       stopAllMemoryWatches();
+    } catch {
+      // Best effort
+    }
+
+    // Write the drift log
+    try {
+      const { flushDriftLog } = await import('./claudeContract/driftReporter');
+      flushDriftLog();
     } catch {
       // Best effort
     }

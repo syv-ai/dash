@@ -1,4 +1,5 @@
 import { STOP_FAILURE_ERRORS, type ActivityError } from '@shared/types';
+import type { NotificationType } from '../claudeContract/hookSchemas';
 
 /**
  * Why a StopFailure ended the turn. Claude Code names the type in `error`
@@ -22,7 +23,9 @@ export function stopFailureError(payload: Record<string, unknown>): ActivityErro
  * on, `idle` it has sat at the prompt for a minute. Types missing here are
  * about other sessions (agent view) or ask nothing of the user.
  */
-export const WAIT_NOTIFICATIONS: Readonly<Record<string, 'needs' | 'answered' | 'idle'>> = {
+export const WAIT_NOTIFICATIONS: Readonly<
+  Partial<Record<NotificationType, 'needs' | 'answered' | 'idle'>>
+> = {
   permission_prompt: 'needs',
   elicitation_dialog: 'needs',
   elicitation_url_dialog: 'needs',

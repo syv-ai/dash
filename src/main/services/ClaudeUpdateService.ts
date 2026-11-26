@@ -17,6 +17,9 @@ import { DatabaseService } from './DatabaseService';
 import { restartAndStartTaskSession } from './ptyManager';
 import { supervisorService } from './SupervisorService';
 import { claudeConfigDir } from '../utils/claudePaths';
+import { claudeVersionFor, noteTaskClaudeVersion } from '../claudeContract/claudeVersions';
+import { reportFindings } from '../claudeContract/driftReporter';
+import { checkJobState } from '../claudeContract/internalSchemas';
 
 /**
  * How often the installed binary is checked for a change. Only a stat: the
@@ -135,10 +138,11 @@ class ClaudeUpdateServiceImpl {
     const sessions: LiveSessionVersion[] = await Promise.all(
       tasks
         .filter((t) => !t.shelved && t.jobId && live.has(t.jobId))
-        .map(async (t) => ({
-          taskId: t.id,
-          version: await this.readVersion(t.jobId!, live.get(t.jobId!)!.pid!),
-        })),
+        .map(async (t) => {
+          const version = await this.readVersion(t.jobId!, live.get(t.jobId!)!.pid!);
+          noteTaskClaudeVersion(t.id, version);
+          return { taskId: t.id, version };
+        }),
     );
     this.controller.setSessions(sessions);
   }
@@ -160,11 +164,25 @@ class ClaudeUpdateServiceImpl {
     }
     try {
       const file = path.join(claudeConfigDir(), 'jobs', jobId, 'state.json');
-      return parseSessionCliVersion(await fs.promises.readFile(file, 'utf8'));
+      const text = await fs.promises.readFile(file, 'utf8');
+      reportJobStateDrift(text);
+      return parseSessionCliVersion(text);
     } catch {
       return null;
     }
   }
+}
+
+/** Drift in a job's `state.json` (read here only as U2's fallback). */
+function reportJobStateDrift(text: string): void {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    // A file mid-write; the next listing reads it again.
+    return;
+  }
+  reportFindings('job-state', checkJobState(raw), claudeVersionFor());
 }
 
 /** A process's executable path: `/proc` on Linux, `lsof` on macOS; null elsewhere or on failure. */

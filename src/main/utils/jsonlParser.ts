@@ -72,6 +72,7 @@ interface ChatHistoryEntry {
   isMeta?: boolean;
   requestId?: string;
   userType?: string;
+  version?: string;
 }
 
 export function parseJsonlLine(line: string): ParsedSessionMessage | null {
@@ -138,6 +139,7 @@ export function parseJsonlLine(line: string): ParsedSessionMessage | null {
     toolCalls,
     toolResults,
     requestId: entry.requestId,
+    version: typeof entry.version === 'string' ? entry.version : undefined,
   };
 }
 

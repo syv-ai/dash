@@ -1,5 +1,7 @@
 import type { WebContents } from 'electron';
 import type { RemoteControlState } from '@shared/types';
+import { claudeVersionFor } from '../claudeContract/claudeVersions';
+import { reportFindings } from '../claudeContract/driftReporter';
 
 const MAX_BUFFER = 8 * 1024;
 const WATCH_TIMEOUT = 15_000;
@@ -30,6 +32,12 @@ class RemoteControlServiceImpl {
     this.stopWatching(ptyId);
 
     const timer = setTimeout(() => {
+      // `/remote-control` printed no claude.ai/code URL Dash recognises.
+      reportFindings(
+        'remote-control',
+        [{ kind: 'unparseable-output', path: 'url' }],
+        claudeVersionFor(ptyId),
+      );
       this.stopWatching(ptyId);
       // Emit null state so the modal can show a timeout/error
       this.states.delete(ptyId);

@@ -20,10 +20,6 @@ export function noteTaskClaudeVersion(taskId: string, raw: string | null | undef
   if (v) taskVersions.set(taskId, v);
 }
 
-export function forgetTaskClaudeVersion(taskId: string): void {
-  taskVersions.delete(taskId);
-}
-
 export function claudeVersionFor(taskId?: string): string {
   return (taskId && taskVersions.get(taskId)) || installed || 'unknown';
 }

@@ -15,7 +15,11 @@ import {
   isDispatchFailure,
   parseAgentsJson,
   parseDispatchOutput,
+  parseUntrustedRoot,
 } from './supervisorSession';
+import { checkAgentsJson, exitCodeDrift } from '../claudeContract/cliSchemas';
+import { claudeVersionFor } from '../claudeContract/claudeVersions';
+import { reportFindings } from '../claudeContract/driftReporter';
 
 const execFileAsync = promisify(execFile);
 
@@ -46,6 +50,15 @@ export class DispatchError extends Error {
     super(message);
     this.name = 'DispatchError';
   }
+}
+
+/**
+ * A dispatch that printed no job id: drift unless it is one of the failures
+ * Dash knows the words for (couldn't start, workspace not trusted).
+ */
+function reportDispatchOutput(output: string): void {
+  if (isDispatchFailure(output) || parseUntrustedRoot(output)) return;
+  reportFindings('dispatch', [{ kind: 'unparseable-output', path: 'stdout' }], claudeVersionFor());
 }
 
 /** `<claude config dir>/jobs`: watched as a change trigger only. */
@@ -123,16 +136,19 @@ class SupervisorServiceImpl extends EventEmitter {
       output = `${String(e.stdout ?? '')}\n${String(e.stderr ?? '')}`;
       const jobId = parseDispatchOutput(output);
       if (!jobId) {
+        reportDispatchOutput(output);
         throw new DispatchError(
           `claude --bg failed: ${output.trim() || e.message || String(err)}`,
           output,
         );
       }
       // Non-zero exit but the job was created — treat as dispatched.
+      reportFindings('dispatch', exitCodeDrift(err), claudeVersionFor());
       return this.resolveSession(jobId, opts.cwd);
     }
     const jobId = parseDispatchOutput(output);
     if (!jobId || isDispatchFailure(output)) {
+      if (!jobId) reportDispatchOutput(output);
       throw new DispatchError(
         `claude --bg did not start a session: ${output.trim() || '(no output)'}`,
         output,
@@ -169,7 +185,14 @@ class SupervisorServiceImpl extends EventEmitter {
     const args = ['agents', '--json'];
     if (opts.all) args.push('--all');
     if (opts.cwd) args.push('--cwd', opts.cwd);
-    const { stdout } = await this.run(args, { timeout: LIST_TIMEOUT_MS });
+    let stdout: string;
+    try {
+      ({ stdout } = await this.run(args, { timeout: LIST_TIMEOUT_MS }));
+    } catch (err) {
+      reportFindings('agents-json', exitCodeDrift(err), claudeVersionFor());
+      throw err;
+    }
+    reportFindings('agents-json', checkAgentsJson(stdout), claudeVersionFor());
     return parseAgentsJson(stdout);
   }
 

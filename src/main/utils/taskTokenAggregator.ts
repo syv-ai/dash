@@ -4,6 +4,9 @@ import { parseJsonlLine, deduplicateByRequestId, calculateMetrics } from './json
 import { claudeProjectDir } from './claudePaths';
 import { computeCostUsd } from './claudePricing';
 import type { ParsedSessionMessage } from '../../shared/sessionTypes';
+import { parseClaudeVersion } from '../services/claudeCli';
+import { reportFindings } from '../claudeContract/driftReporter';
+import { checkTranscriptUsage } from '../claudeContract/internalSchemas';
 
 export interface TaskTokenStats {
   totalTokens: number;
@@ -61,9 +64,18 @@ export async function aggregateTokenStatsForTaskPath(
   const metrics = calculateMetrics(deduped);
 
   let totalCostUsd = 0;
+  // Drift: one message per (version, model) is enough, and keeps a recompute
+  // over thousands of lines from re-checking (and re-counting) each one.
+  const checked = new Set<string>();
   for (const msg of deduped) {
     if (msg.usage) {
       totalCostUsd += computeCostUsd(msg.usage, msg.model);
+    }
+    const key = `${msg.version}\0${msg.model}`;
+    if (msg.type === 'assistant' && !checked.has(key)) {
+      checked.add(key);
+      const version = parseClaudeVersion(msg.version)?.join('.') ?? 'unknown';
+      reportFindings('transcript', checkTranscriptUsage(msg.usage, msg.model), version);
     }
   }
 

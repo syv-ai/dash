@@ -19,6 +19,11 @@ import {
 } from './hookPayload';
 import { setTaskInbox } from './taskInbox';
 import { claudeConfigDir } from '../utils/claudePaths';
+import { checkShape } from '../claudeContract/check';
+import { claudeVersionFor, noteTaskClaudeVersion } from '../claudeContract/claudeVersions';
+import { reportFindings } from '../claudeContract/driftReporter';
+import { checkHookPayload, type NotificationType } from '../claudeContract/hookSchemas';
+import { statusLineSchema } from '../claudeContract/statusLineSchema';
 import { getDb } from '../db/client';
 import { tasks } from '../db/schema';
 
@@ -71,6 +76,32 @@ export function getHookPortFilePath(): string {
     // No `app` (unit tests) — keep the shape, point at a harmless location.
     return path.join(os.tmpdir(), 'dash-hook-port');
   }
+}
+
+/**
+ * Check a hook or statusLine body against Claude Code's contract and report
+ * any drift (claudeContract/). After the response path, on the next turn of
+ * the event loop, and never throwing: it only watches.
+ */
+function observeContract(url: string | undefined, payload: Record<string, unknown>): void {
+  setImmediate(() => {
+    try {
+      const { pathname, searchParams } = new URL(url ?? '', 'http://127.0.0.1');
+      const ptyId = searchParams.get('ptyId') ?? undefined;
+      if (pathname === '/hook/context') {
+        reportFindings(
+          'statusline',
+          checkShape(statusLineSchema, payload),
+          claudeVersionFor(ptyId),
+        );
+        return;
+      }
+      const { source, findings } = checkHookPayload(payload, pathname);
+      reportFindings(source, findings, claudeVersionFor(ptyId));
+    } catch (err) {
+      console.warn('[HookServer] contract check failed:', err);
+    }
+  });
 }
 
 class HookServerImpl {
@@ -211,6 +242,7 @@ class HookServerImpl {
         res.end('expected JSON object');
         return;
       }
+      observeContract(req.url, parsed);
       try {
         callback(parsed);
       } catch (err) {
@@ -284,7 +316,7 @@ class HookServerImpl {
               const notificationType =
                 typeof payload.notification_type === 'string' ? payload.notification_type : '';
               const message = typeof payload.message === 'string' ? payload.message : undefined;
-              const effect = WAIT_NOTIFICATIONS[notificationType];
+              const effect = WAIT_NOTIFICATIONS[notificationType as NotificationType];
 
               // These notifications come ~6 s into a wait, and only when the
               // user seems away: the state may already be set by the instant
@@ -351,6 +383,8 @@ class HookServerImpl {
               const owner = statusLineTaskId(ptyId, data, (dir) => this.getTaskIdAtPath(dir));
               if (owner === ptyId || this._hasPty(owner)) {
                 contextUsageService.updateFromStatusLine(owner, data);
+                // The one payload that names the session's Claude Code version.
+                if (typeof data.version === 'string') noteTaskClaudeVersion(owner, data.version);
               }
               res.writeHead(200);
               res.end();

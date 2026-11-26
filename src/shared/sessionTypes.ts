@@ -78,6 +78,8 @@ export interface ParsedSessionMessage {
   toolCalls: ToolCallInfo[];
   toolResults: ToolResultInfo[];
   requestId?: string;
+  /** The Claude Code version that wrote the line. */
+  version?: string;
 }
 
 export interface SessionMetrics {

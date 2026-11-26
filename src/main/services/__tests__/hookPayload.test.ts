@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { NotificationType } from '../../claudeContract/hookSchemas';
 import {
   isSelfStartedPrompt,
   isSubagentHook,
@@ -17,7 +18,7 @@ describe('WAIT_NOTIFICATIONS', () => {
       'elicitation_dialog',
       'elicitation_url_dialog',
       'quota_auto_resume_stale',
-    ]) {
+    ] as const satisfies NotificationType[]) {
       expect(WAIT_NOTIFICATIONS[type], type).toBe('needs');
     }
   });
@@ -40,7 +41,7 @@ describe('WAIT_NOTIFICATIONS', () => {
       'quota_auto_resume_fired',
       'quota_auto_resume_disabled',
       'plugin_notification',
-    ]) {
+    ] as const satisfies NotificationType[]) {
       expect(WAIT_NOTIFICATIONS[type], type).toBeUndefined();
     }
   });
