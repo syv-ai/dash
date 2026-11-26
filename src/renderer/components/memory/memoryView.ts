@@ -19,9 +19,6 @@ export type KnownMemoryType = Exclude<MemoryType, 'other'>;
 
 export const KNOWN_MEMORY_TYPES = MEMORY_TYPES.filter((t): t is KnownMemoryType => t !== 'other');
 
-/** The list's top level: every memory, or one type. */
-export type MemoryFilter = 'all' | KnownMemoryType;
-
 /** What is off about a memory: Claude won't recall it, or it has no type to be filed under. */
 export type MemoryIssue = 'unindexed' | 'not-loaded' | 'untyped';
 
@@ -31,45 +28,13 @@ export const MEMORY_ISSUE_LABELS: Record<MemoryIssue, string> = {
   untyped: 'untyped',
 };
 
-/** How much of the index Claude loads, as the modal says it. */
+/** How much of the index Claude loads, in words. */
 export const MEMORY_INDEX_LIMIT = `${MEMORY_INDEX_MAX_LINES} lines or ${MEMORY_INDEX_MAX_BYTES / 1000}KB`;
 
 export interface ListedMemory {
   entry: MemoryEntry;
   issues: MemoryIssue[];
 }
-
-function needsAttention(memory: ListedMemory): boolean {
-  return memory.issues.length > 0;
-}
-
-/**
- * The list's second level. Under one type a memory is filed by state: needing
- * attention, changed lately, or older. Under "all", by type instead, with the
- * ones needing attention pulled out on top.
- */
-export type MemorySectionId = 'attention' | 'recent' | 'older' | KnownMemoryType;
-
-export interface MemorySection {
-  id: MemorySectionId;
-  entries: ListedMemory[];
-}
-
-export const MEMORY_SECTION_LABELS: Record<MemorySectionId, string> = {
-  attention: 'Needs attention',
-  recent: 'Recent',
-  older: 'Older',
-  feedback: MEMORY_TYPE_LABELS.feedback,
-  user: MEMORY_TYPE_LABELS.user,
-  reference: MEMORY_TYPE_LABELS.reference,
-  project: MEMORY_TYPE_LABELS.project,
-};
-
-/** Sections that start closed: the long tail, out of the way until asked for. */
-export const COLLAPSED_SECTIONS: ReadonlySet<MemorySectionId> = new Set(['older']);
-
-/** How long after its last change a memory still counts as recent. */
-export const MEMORY_RECENT_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** Whether a memory's name, description or text holds `query` (none: every memory does). */
 export function memoryMatches(entry: MemoryEntry, query: string): boolean {
@@ -88,7 +53,7 @@ export function listMemories(entries: MemoryEntry[]): ListedMemory[] {
   });
 }
 
-/** What is off about `memory`, a sentence each: shown above it, where the list only flags it. */
+/** What is off about `memory`, a sentence each: its row's tooltip, where the row only flags it. */
 export function memoryIssueTexts({ issues }: ListedMemory): string[] {
   const texts: string[] = [];
   if (issues.includes('unindexed')) {
@@ -101,55 +66,8 @@ export function memoryIssueTexts({ issues }: ListedMemory): string[] {
   return texts;
 }
 
-/** How many memories match `query` under each filter. */
-export function memoryCounts(entries: MemoryEntry[], query: string): Record<MemoryFilter, number> {
-  const matches = entries.filter((e) => memoryMatches(e, query));
-  const counts: Record<MemoryFilter, number> = {
-    all: matches.length,
-    feedback: 0,
-    user: 0,
-    reference: 0,
-    project: 0,
-  };
-  for (const e of matches) if (e.type !== 'other') counts[e.type]++;
-  return counts;
-}
-
 /**
- * The `memories` (see listMemories) under `filter` matching `query`, each in exactly one section,
- * newest first; empty sections are dropped. An untyped memory has no type to
- * be filed under, so it only shows under "all", as needing attention.
- */
-export function memorySections(
-  memories: ListedMemory[],
-  filter: MemoryFilter,
-  query: string,
-  nowMs: number,
-): MemorySection[] {
-  const listed = memories
-    .filter((m) => memoryMatches(m.entry, query))
-    .filter((m) => filter === 'all' || m.entry.type === filter)
-    .sort((a, b) => b.entry.mtimeMs - a.entry.mtimeMs);
-  const fine = listed.filter((m) => !needsAttention(m));
-  const isRecent = (m: ListedMemory) => nowMs - m.entry.mtimeMs <= MEMORY_RECENT_MS;
-  const sections: MemorySection[] = [
-    { id: 'attention', entries: listed.filter(needsAttention) },
-    ...(filter === 'all'
-      ? // KNOWN_MEMORY_TYPES is the display order, so a new type can't be left out of the list.
-        KNOWN_MEMORY_TYPES.map((type) => ({
-          id: type,
-          entries: fine.filter((m) => m.entry.type === type),
-        }))
-      : [
-          { id: 'recent' as const, entries: fine.filter(isRecent) },
-          { id: 'older' as const, entries: fine.filter((m) => !isRecent(m)) },
-        ]),
-  ];
-  return sections.filter((s) => s.entries.length > 0);
-}
-
-/**
- * What the modal says above the list when the index and what Claude sees have
+ * What the Memory pane says above the list when the index and what Claude sees have
  * come apart: the index has outgrown what a session loads, or it points at
  * memories that are gone.
  */
@@ -170,51 +88,27 @@ export function memoryNotices(memory: ProjectMemory): string[] {
   return notices;
 }
 
-/**
- * The chosen memory while it exists, else the first as "all" lists them: what
- * the modal shows of `memories` (see listMemories).
- */
-export function pickCurrent(
-  memories: ListedMemory[],
-  selectedFile: string | null,
-): ListedMemory | null {
-  return (
-    memories.find((m) => m.entry.file === selectedFile) ??
-    memorySections(memories, 'all', '', 0)[0]?.entries[0] ??
-    null
-  );
-}
-
 /** The project row badge's tooltip. */
 export function newMemoriesLabel(count: number): string {
   return `${count} new ${count === 1 ? 'memory' : 'memories'}`;
 }
 
-/** Where "Send to task" types a memory's path: a task, or why there is none. */
-export type MemorySendTarget = { taskId: string; taskName: string } | { reason: string };
-
 /**
- * The task a memory is sent to: the task whose menu opened the modal; else the
- * active task. Either only when it is an open task of the shown project: a
- * task of another project (the modal switched project) would be handed a
- * memory that isn't its own. Else none, and why.
+ * The task whose Agent tab shows a project's memory, asked for from the
+ * project (its menu, its new-memory count): the active task when it is one of
+ * the project's, else its first open task in the project's task order;
+ * null when the project has none. Every task of a repo shares one memory.
  */
-export function memorySendTarget(
-  project: { id: string; name: string },
-  projectTasks: Task[],
+export function memoryTaskOf(
+  projectTasks: readonly Task[],
   activeTaskId: string | null,
-  originTask: Task | null = null,
-): MemorySendTarget {
-  if (originTask && originTask.projectId === project.id && !originTask.archivedAt) {
-    return { taskId: originTask.id, taskName: originTask.name };
-  }
-  const task = projectTasks.find((t) => t.id === activeTaskId && !t.archivedAt);
-  if (task) return { taskId: task.id, taskName: task.name };
-  return { reason: `Open a task in ${project.name} to send this memory to it` };
+): Task | null {
+  const open = projectTasks.filter((t) => !t.archivedAt);
+  return open.find((t) => t.id === activeTaskId) ?? open[0] ?? null;
 }
 
 /**
- * What "Send to task" types into the prompt: an @-mention of the file, unsent,
+ * What "Mention in prompt" types into the prompt: an @-mention of the file, unsent,
  * ready for more. A path with whitespace goes in quotes (`@"…"`), the form
  * Claude Code reads a spaced path from.
  */

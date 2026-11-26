@@ -31,8 +31,6 @@ const CHANGED = 'agent:scratchpadChanged';
 const named = new Map<string, string>();
 /** The folder each task's watch is on, and the renderer was last told of. */
 const current = new Map<string, string | null>();
-/** Dirs this run handed the renderer: the editor lists these as plain files. */
-const served = new Set<string>();
 
 interface Watch {
   /** Null while the task has no folder (no session yet). */
@@ -96,14 +94,8 @@ export async function readTaskScratchpad(taskId: string): Promise<TaskScratchpad
   const dir = taskScratchpadDir(taskId);
   follow(taskId, dir);
   if (!dir) return null;
-  served.add(dir);
   const exists = fs.existsSync(dir);
   return { dir, exists, listing: exists ? await listPlainFolder(dir) : { files: [], dirs: [] } };
-}
-
-/** Whether `dir` is a scratchpad this run showed (the editor opens it as plain files). */
-export function isServedScratchpad(dir: string): boolean {
-  return served.has(path.resolve(dir));
 }
 
 function arm(taskId: string, dir: string | null): () => void {

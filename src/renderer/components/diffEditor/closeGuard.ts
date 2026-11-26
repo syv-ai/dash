@@ -1,10 +1,10 @@
 /*
  * Closing the editor drops its unsaved edits, so every way of closing it (the
- * sidebar's close button, Escape, the keybinding, the modal's own close) asks
+ * sidebar's close button, Escape, the keybinding) asks
  * first. Those live outside the editor, which is lazy-loaded with Monaco; this
  * module stays Monaco-free so they can call it. A mounted editor registers the
- * check for its folder: several can be mounted at once (a task's, kept out of
- * sight, and the memory modal's), and closing one asks only about its own.
+ * check for its task's folder: several can be mounted at once (tasks' editors
+ * kept out of sight), and closing one asks only about its own.
  */
 
 type Guard = () => boolean | Promise<boolean>;

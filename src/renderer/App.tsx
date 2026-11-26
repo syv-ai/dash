@@ -1,13 +1,4 @@
-import React, {
-  useEffect,
-  useLayoutEffect,
-  useState,
-  useCallback,
-  useRef,
-  useMemo,
-  Suspense,
-  lazy,
-} from 'react';
+import React, { useEffect, useLayoutEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { flushSync } from 'react-dom';
 import { TUI_FEATURE_IDS } from '@shared/tuiProtocol';
 import {
@@ -37,10 +28,8 @@ import { RightInspector } from './components/rightInspector/RightInspector';
 import { usePlannedMotion } from './lib/usePlannedMotion';
 import { whenFramesSettle } from './lib/framesSettled';
 import { cn } from './lib/cn';
-const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
 import { useSetup } from './stores/setupStore';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
-import { MemoryModal } from './components/memory/MemoryModal';
 import { TaskModal } from './components/task/TaskModal';
 import { NewProjectWizard } from './components/newProject/NewProjectWizard';
 import { DeleteTaskModal } from './components/task/DeleteTaskModal';
@@ -88,7 +77,6 @@ import {
   selectActiveTask,
   selectTaskById,
   selectActiveProjectTasks,
-  selectTaskByPath,
 } from './stores/projectsStore';
 
 /** Chrome around the pinned TUI canvas (panel padding + drawer gutter) added
@@ -166,9 +154,6 @@ export function App() {
   const taskFinderOpen = useUi((s) => s.taskFinderOpen);
   const setTaskFinderOpen = useUi((s) => s.setTaskFinderOpen);
   const setShowSettings = useUi((s) => s.setShowSettings);
-  const memoryProjectId = useUi((s) => s.memoryProjectId);
-  const setMemoryProjectId = useUi((s) => s.setMemoryProjectId);
-  const memoryProject = projects.find((p) => p.id === memoryProjectId) ?? null;
   const settingsInitialTab = useUi((s) => s.settingsInitialTab);
   const setSettingsInitialTab = useUi((s) => s.setSettingsInitialTab);
   const theme = useSettings((s) => s.theme);
@@ -440,21 +425,13 @@ export function App() {
   const activeTask = useProjects(selectActiveTask);
 
   // Each task's editor lives in its sidebar (expanded while shown, kept out
-  // of sight while narrow); a folder that is no task's worktree (Claude's
-  // memory) has its editor in the modal.
+  // of sight while narrow), Claude's own folders for the task included (A10).
   const inlineEditor = activeTask ? (editors[activeTask.path] ?? null) : null;
-  const modalEditor = useMemo(
-    () =>
-      Object.values(editors).find((e) => !selectTaskByPath({ tasksByProject }, e.target.cwd)) ??
-      null,
-    [editors, tasksByProject],
-  );
   const expanded = !!inlineEditor && !inlineEditor.hidden;
 
   // Close `cwd`'s editor (asking about unsaved edits) and hand the keyboard
   // back to the task's Claude Code TUI. RAF defers past React's commit so the
-  // editor is gone before xterm grabs focus. Not while the memory modal is
-  // still up: typing would reach Claude unseen. An editor shown in its task's
+  // editor is gone before xterm grabs focus. An editor shown in its task's
   // sidebar goes narrow first, through the planned motion (D264), and closes
   // once it has eased (`pendingCloseRef`, settled below), so the panel's
   // edge eases rather than the split dropping at once.
@@ -472,9 +449,7 @@ export function App() {
         editors.hide(cwd);
       } else editors.close(cwd);
       const id = useProjects.getState().activeTaskId;
-      if (id && !useUi.getState().memoryProjectId) {
-        requestAnimationFrame(() => sessionRegistry.get(id)?.focus());
-      }
+      if (id) requestAnimationFrame(() => sessionRegistry.get(id)?.focus());
     });
   }, []);
 
@@ -930,9 +905,6 @@ export function App() {
         } else if (deleteProjectTarget) {
           e.preventDefault();
           setDeleteProjectTarget(null);
-        } else if (modalEditor) {
-          e.preventDefault();
-          closeEditorOf(modalEditor.target.cwd);
         } else if (inlineEditor && expanded && !changesPanelRef.current?.isCollapsed()) {
           // Narrow or collapsed, the sidebar keeps the editor out of sight;
           // Escape doesn't close what can't be seen.
@@ -994,7 +966,6 @@ export function App() {
     remoteControlModalPtyId,
     deleteTaskTarget,
     deleteProjectTarget,
-    modalEditor,
     inlineEditor,
     expanded,
     closeEditorOf,
@@ -1929,7 +1900,6 @@ export function App() {
             )
           }
           focusHash={commitGraphFocusHash}
-          elevated={!!modalEditor}
           onClose={() => {
             setShowCommitGraph(false);
             setCommitGraphFocusHash(null);
@@ -1940,25 +1910,6 @@ export function App() {
             setCommitGraphFocusHash(null);
           }}
         />
-      )}
-
-      {memoryProject && (
-        <MemoryModal project={memoryProject} onClose={() => setMemoryProjectId(null)} />
-      )}
-
-      {modalEditor && (
-        <Suspense fallback={null}>
-          <DiffEditorModal
-            cwd={modalEditor.target.cwd}
-            initialFilePath={modalEditor.target.filePath}
-            initialView={modalEditor.target.initialView}
-            activeTaskId={activeTaskId}
-            projectId={activeTask?.projectId ?? activeProjectId}
-            terminalTheme={resolvedTerminalTheme}
-            isDark={theme === 'dark'}
-            onClose={() => closeEditorOf(modalEditor.target.cwd)}
-          />
-        </Suspense>
       )}
 
       {/* After every other modal, so a confirm shows over the one that asked. */}

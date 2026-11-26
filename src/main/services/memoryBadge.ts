@@ -5,8 +5,9 @@ import { setMemoryChangeNotifier, startMemoryWatches, watchedMemoryDir } from '.
 
 /**
  * The project row's "N new memories" badge: memories written since the
- * project's memory modal was last opened, kept live by MemoryWatcher. Each
- * change is also broadcast as `memory:changed`, for the views showing it.
+ * project's memory last showed (the Agent tab's Memory pane), kept live by
+ * MemoryWatcher. Each change is also broadcast as `memory:changed`, for the
+ * pane showing it.
  */
 
 function broadcastNewCount(projectId: string, count: number): void {
@@ -16,7 +17,7 @@ function broadcastNewCount(projectId: string, count: number): void {
 /** At startup: watch every project's memory, and push its count to the renderer on each change. */
 export function startMemoryBadges(): Promise<void> {
   setMemoryChangeNotifier((projectId, memoryDir) => {
-    // Open memory views (the Agent tab, the modal) read the folder again.
+    // The Agent tab's Memory pane reads the folder again.
     broadcast('memory:changed', { projectId, dir: memoryDir });
     void newMemoryCount(memoryDir, () => DatabaseService.getMemorySeenAt(projectId)).then((count) =>
       broadcastNewCount(projectId, count),

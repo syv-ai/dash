@@ -41,12 +41,12 @@ import { projectTreeRows, type ProjectTreeRow } from './projectTree';
 import { getProjectActivity, projectActivityDot } from './projectActivity';
 import { agentState } from './taskStates';
 import { newMemoriesLabel } from '../memory/memoryView';
+import { showProjectMemory } from '../memory/showMemory';
 import { openInIde } from '../../lib/openInIde';
 import { useSettings } from '../../stores/settingsStore';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useProjects } from '../../stores/projectsStore';
 import { useGit } from '../../stores/gitStore';
-import { useUi } from '../../stores/uiStore';
 
 const DROPDOWN_PARTS: MenuParts = { Item: DropdownMenuItem, Separator: DropdownMenuSeparator };
 const CONTEXT_PARTS: MenuParts = { Item: ContextMenuItem, Separator: ContextMenuSeparator };
@@ -118,7 +118,6 @@ export function ProjectsSection({
   const restoreProject = useProjects((s) => s.restoreProject);
   const [archivedProjectsOpen, setArchivedProjectsOpen] = useState(false);
   const detectProjectPrs = useGit((s) => s.detectProjectPrs);
-  const setMemoryProjectId = useUi((s) => s.setMemoryProjectId);
 
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => {
     try {
@@ -295,7 +294,7 @@ export function ProjectsSection({
       project,
       onShowCommitGraph: () => onShowCommitGraph(project.id),
       onSettings: () => onProjectSettings(project.id),
-      onOpenMemory: () => setMemoryProjectId(project.id),
+      onOpenMemory: () => showProjectMemory(project.id),
       onArchive: () => void archiveProject(project.id),
       onDelete: () => onDeleteProject(project.id),
     };
@@ -334,7 +333,7 @@ export function ProjectsSection({
               <>
                 <NewMemoryCount
                   count={newMemoryCounts[project.id] ?? 0}
-                  onOpen={() => setMemoryProjectId(project.id)}
+                  onOpen={() => showProjectMemory(project.id)}
                 />
                 {/* The dot at rest; on hover (or while its menu is open)
                   "New task" and a "…" menu slide in over it. */}

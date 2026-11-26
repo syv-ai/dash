@@ -3,14 +3,12 @@ import type { ProjectMemory } from '../../../shared/types';
 
 /**
  * Load a project's memory, again each time its folder changes on disk (main
- * watches every project's), and again each time `paused` turns false: the
- * modal pauses while a memory is open in the editor and reads the result back
- * once it closes.
+ * watches every project's): an edit saved in the editor, a memory Claude
+ * writes, one made or deleted from the Agent tab.
  */
 export function useProjectMemory(
   /** Null: none read (the pane isn't showing). */
   projectPath: string | null,
-  paused = false,
 ): {
   memory: ProjectMemory | null;
   error: string | null;
@@ -31,7 +29,7 @@ export function useProjectMemory(
   );
 
   useEffect(() => {
-    if (paused || projectPath === null) return;
+    if (projectPath === null) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -50,7 +48,7 @@ export function useProjectMemory(
     return () => {
       cancelled = true;
     };
-  }, [projectPath, paused, reads]);
+  }, [projectPath, reads]);
 
   return { memory, error };
 }

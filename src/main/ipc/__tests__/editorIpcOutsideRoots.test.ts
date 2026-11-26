@@ -15,7 +15,6 @@ vi.mock('../../services/DatabaseService', () => ({
   },
 }));
 vi.mock('../../services/ScratchpadService', () => ({
-  isServedScratchpad: () => false,
   taskScratchpadDir: (id: string) => (id === 't1' ? world.scratch : null),
 }));
 

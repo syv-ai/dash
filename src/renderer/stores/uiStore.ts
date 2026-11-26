@@ -37,11 +37,10 @@ export interface UiState {
   taskFinderOpen: boolean;
   /** The "restart sessions on the new Claude Code" dialog (toast action, sidebar icon). */
   claudeUpdateOpen: boolean;
-  // Project whose Claude memory the memory modal shows; null → closed.
-  memoryProjectId: string | null;
-  // The task whose "…" menu opened the memory modal (where "Send to task"
-  // goes first); null when it was opened from a project.
-  memoryTaskId: string | null;
+  /** A task whose sidebar should show Agent's Memory pane (a menu's
+   *  "Memories", a project's new-memory count); its sidebar takes it once
+   *  it shows. */
+  memoryRequestTaskId: string | null;
   settingsInitialTab: string | undefined;
   remoteControlModalPtyId: string | null;
   // Panel-animation flags (driven by App's panel toggle handlers)
@@ -78,10 +77,8 @@ export interface UiActions {
   setShowSettings: (v: Updater<boolean>) => void;
   setTaskFinderOpen: (v: Updater<boolean>) => void;
   setClaudeUpdateOpen: (v: boolean) => void;
-  /** Show a project's memory (null closes the modal). Switching project keeps the task it was opened from. */
-  setMemoryProjectId: (v: string | null) => void;
-  /** Open the memory modal from a task's menu, on that task's project. */
-  openTaskMemory: (projectId: string, taskId: string) => void;
+  /** Ask `taskId`'s sidebar for Agent's Memory pane (null: the ask was taken). */
+  setMemoryRequestTaskId: (v: string | null) => void;
   setSettingsInitialTab: (v: string | undefined) => void;
   setRemoteControlModalPtyId: (v: string | null) => void;
   setSidebarAnimating: (v: boolean) => void;
@@ -111,8 +108,7 @@ const initialState: UiState = {
   showSettings: false,
   taskFinderOpen: false,
   claudeUpdateOpen: false,
-  memoryProjectId: null,
-  memoryTaskId: null,
+  memoryRequestTaskId: null,
   settingsInitialTab: undefined,
   remoteControlModalPtyId: null,
   sidebarAnimating: false,
@@ -145,13 +141,7 @@ export const useUi = create<UiStore>((set, get) => ({
       return { taskFinderOpen: open };
     }),
   setClaudeUpdateOpen: (v) => set({ claudeUpdateOpen: v }),
-  setMemoryProjectId: (v) =>
-    set((s) => ({
-      memoryProjectId: v,
-      // Opening from a project, or closing, drops the task it was opened from.
-      memoryTaskId: v !== null && s.memoryProjectId !== null ? s.memoryTaskId : null,
-    })),
-  openTaskMemory: (projectId, taskId) => set({ memoryProjectId: projectId, memoryTaskId: taskId }),
+  setMemoryRequestTaskId: (v) => set({ memoryRequestTaskId: v }),
   setSettingsInitialTab: (v) => set({ settingsInitialTab: v }),
   setRemoteControlModalPtyId: (v) => set({ remoteControlModalPtyId: v }),
   setSidebarAnimating: (v) => set({ sidebarAnimating: v }),

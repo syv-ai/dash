@@ -6,10 +6,6 @@ import path from 'path';
 import { promisify } from 'util';
 import { parseArgs, errorResponse, IpcError } from './validate';
 import { parseBlameIncremental } from '../services/blameParser';
-import { DatabaseService } from '../services/DatabaseService';
-import { isProjectMemoryDir } from '../services/MemoryService';
-import { listPlainFolder } from '../services/plainFolder';
-import { isServedScratchpad } from '../services/ScratchpadService';
 import { outsideRoots } from '../services/editorRoots';
 import { unwatchWorkingTree, watchWorkingTree } from '../services/WorkingTreeWatcher';
 import type {
@@ -213,26 +209,6 @@ function statusFromGitCode(code: string): FileChangeStatus {
   return 'modified';
 }
 
-// Asked once per folder: the answer only changes when projects come and go.
-const memoryFolderChecks = new Map<string, Promise<boolean>>();
-
-/**
- * Whether `cwd` is one of Claude's own folders the editor opens: a project's
- * memory folder (the memory modal, the Agent tab) or a task session's
- * scratchpad (the Agent tab). The editor shows one as plain files, without
- * git, even when the folder sits inside some other repository.
- */
-function isPlainFolder(cwd: string): Promise<boolean> {
-  if (isServedScratchpad(cwd)) return Promise.resolve(true);
-  let check = memoryFolderChecks.get(cwd);
-  if (!check) {
-    const projectPaths = DatabaseService.getProjects().map((p) => p.path);
-    check = isProjectMemoryDir(cwd, projectPaths);
-    memoryFolderChecks.set(cwd, check);
-  }
-  return check;
-}
-
 /** Whether `abs` is a directory, following symlinks (a broken link isn't). */
 async function isDirectoryFollowingLinks(abs: string): Promise<boolean> {
   try {
@@ -272,20 +248,6 @@ export function parseLsFilesStageZ(out: string): { path: string; symlink: boolea
  *  directory (git lists it as a file) comes back in `dirs`. Only symlinks and
  *  untracked entries are stat'ed; tracked regular files are taken as files. */
 export async function listWorkingRepoFiles(cwd: string): Promise<RepoListing> {
-  // Claude's own folders aren't repositories: their files are the listing,
-  // a session's scratchpad all the way down, a memory folder (flat by
-  // design) its own files only.
-  if (isServedScratchpad(cwd)) return listPlainFolder(cwd);
-  if (await isPlainFolder(cwd)) {
-    const entries = await fs.readdir(cwd, { withFileTypes: true });
-    return {
-      files: entries
-        .filter((e) => e.isFile())
-        .map((e) => e.name)
-        .sort(),
-      dirs: [],
-    };
-  }
   const tracked = parseLsFilesStageZ(
     (
       await execFileAsync('git', ['ls-files', '-s', '-z'], {
@@ -487,9 +449,8 @@ export function registerEditorIpc(): void {
           path.isAbsolute(args.filePath) ? await outsideRoots(args.cwd) : [],
           'read',
         );
-        const plainFolder = plain || (await isPlainFolder(args.cwd));
         let originalContent = '';
-        if (!plainFolder) {
+        if (!plain) {
           const cwdAbs = path.resolve(args.cwd);
           let cwdReal = cwdAbs;
           try {
@@ -528,9 +489,9 @@ export function registerEditorIpc(): void {
           // workingContent stays null — file deleted on disk.
         }
 
-        // A plain folder (memory, scratchpad) has no HEAD to compare with: the file as it is on
+        // A plain file (scratchpad, memory) has no HEAD to compare with: the file as it is on
         // disk is the original, so only unsaved edits show as changes.
-        if (plainFolder) originalContent = workingContent ?? '';
+        if (plain) originalContent = workingContent ?? '';
 
         return {
           success: true,

@@ -35,10 +35,8 @@ export interface EditorTarget {
 }
 
 interface Args {
-  /** The tabs' workspace: a task's id, or the modal's folder. */
+  /** The tabs' workspace: a task's id. */
   tabsKey: string;
-  /** Keep the tabs across restarts (a task's). */
-  persistTabs: boolean;
   cwd: string;
   /** The task open in the window; its comments apply only in its own folder. */
   openTaskId: string | null;
@@ -100,11 +98,10 @@ function findReadme(paths: string[]): string | null {
  * The editor's state and data, apart from its layout: the view (working tree,
  * a commit, or a PR in review mode), the tabs and groups (editorTabsStore),
  * the view's files and commits, comment badges and the task's PR. The task
- * sidebar lays its parts out in two columns; the modal beside each other.
+ * sidebar lays its parts out in two columns.
  */
 export function useEditorWorkspace({
   tabsKey,
-  persistTabs,
   cwd,
   openTaskId,
   projectId,
@@ -115,8 +112,7 @@ export function useEditorWorkspace({
   prLive = false,
 }: Args): EditorWorkspace {
   // Git belongs to a task's worktree, and the task's comments to the active
-  // task's. Any other folder (Claude's memory, opened from the memory modal)
-  // is plain files: no git, no comments.
+  // task's. A tab outside the worktree (A10) is plain: see EditorGroups.
   const worktreeTaskId = useProjects((s) => selectTaskByPath(s, cwd)?.id ?? null);
   const git = worktreeTaskId !== null;
   const activeTaskId = worktreeTaskId === openTaskId ? openTaskId : null;
@@ -124,8 +120,9 @@ export function useEditorWorkspace({
 
   // ── Tabs ──
   useEffect(() => {
-    useEditorTabs.getState().load(tabsKey, persistTabs);
-  }, [tabsKey, persistTabs]);
+    // A task's tabs are kept across restarts.
+    useEditorTabs.getState().load(tabsKey, true);
+  }, [tabsKey]);
   const layout = useEditorTabs(selectLayout(tabsKey));
   const openFile = useCallback(
     (path: string, opts?: OpenOptions) => useEditorTabs.getState().open(tabsKey, path, opts),

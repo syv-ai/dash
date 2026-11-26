@@ -70,7 +70,7 @@ const NO_LISTING: RepoListing = { files: [], dirs: [] };
 
 /**
  * A view's files as one tree: its changes, or the whole repo with them
- * (Files on all files, the editor modal, a PR's files), under its
+ * (Files on all files, a PR's files), under its
  * `TreeHeader`.
  */
 export function RepoTree({

@@ -2,12 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import * as path from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  isServedScratchpad,
-  noteScratchpad,
-  readTaskScratchpad,
-  taskScratchpadDir,
-} from '../ScratchpadService';
+import { noteScratchpad, readTaskScratchpad, taskScratchpadDir } from '../ScratchpadService';
 
 const { sent, tasks } = vi.hoisted(() => ({
   sent: [] as unknown[][],
@@ -48,16 +43,14 @@ describe('ScratchpadService', () => {
     expect(sent).toHaveLength(1);
   });
 
-  it('lets the editor list a dir as plain files once it was served', async () => {
+  it('reads a missing scratchpad as an empty one', async () => {
     tasks.t3 = { path: '/r', sessionId: null };
     noteScratchpad('t3', { session_id: 'q', scratchpad_dir: '/nowhere/q/scratchpad' });
-    expect(isServedScratchpad('/nowhere/q/scratchpad')).toBe(false);
     expect(await readTaskScratchpad('t3')).toEqual({
       dir: '/nowhere/q/scratchpad',
       exists: false,
       listing: { files: [], dirs: [] },
     });
-    expect(isServedScratchpad('/nowhere/q/scratchpad/')).toBe(true);
   });
 
   it("prefers the background job's tmp folder while the job exists", () => {

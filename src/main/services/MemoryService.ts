@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { MEMORY_INDEX_FILE, type MemoryEntry, type ProjectMemory } from '@shared/types';
-import { claudeConfigDir, claudeProjectDir, mainRepoRoot } from '../utils/claudePaths';
+import { claudeProjectDir, mainRepoRoot } from '../utils/claudePaths';
 import { checkMemoryFrontmatter } from '../claudeContract/agentFileSchemas';
 import { claudeVersionFor } from '../claudeContract/claudeVersions';
 import { reportFindings } from '../claudeContract/driftReporter';
@@ -34,20 +34,6 @@ export async function resolveMemoryDir(projectPath: string): Promise<string> {
   return path.join(claudeProjectDir(root), 'memory');
 }
 
-/**
- * Whether `dir` is the memory folder of one of `projectPaths`. A folder not
- * shaped like one (`<config dir>/projects/<name>/memory`) is turned away
- * without asking git, so the check costs nothing for any other folder.
- */
-export async function isProjectMemoryDir(dir: string, projectPaths: string[]): Promise<boolean> {
-  const resolved = path.resolve(dir);
-  const projectsDir = path.join(claudeConfigDir(), 'projects');
-  if (path.dirname(path.dirname(resolved)) !== projectsDir) return false;
-  if (path.basename(resolved) !== 'memory') return false;
-  const dirs = await Promise.all(projectPaths.map(resolveMemoryDir));
-  return dirs.includes(resolved);
-}
-
 async function readEntry(
   dir: string,
   file: string,
@@ -76,7 +62,7 @@ async function readEntry(
 
 /**
  * Read the project's memory folder. A missing folder (or MEMORY.md) is a normal
- * state, not an error; any other read failure throws, so the modal reports it
+ * state, not an error; any other read failure throws, so the Agent tab reports it
  * instead of showing an empty or unindexed memory.
  */
 export async function readProjectMemory(projectPath: string): Promise<ProjectMemory> {

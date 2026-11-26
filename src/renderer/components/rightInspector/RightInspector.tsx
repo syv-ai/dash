@@ -255,6 +255,20 @@ export function RightInspector({
   }, []);
   // Agent's pane: the session's scratchpad or the project's memory.
   const [agentPane, setAgentPane] = useState<AgentPane>('scratchpad');
+  // Asked for this task's memory (a menu's "Memories", a project's count,
+  // `showMemory`): Agent on its Memory pane, shown narrow if collapsed (A12).
+  const memoryAsked = useUi((s) => s.memoryRequestTaskId === task.id);
+  const onShowRef = useRef(onShow);
+  onShowRef.current = onShow;
+  const railedRef = useRef(railed);
+  railedRef.current = railed;
+  useEffect(() => {
+    if (!memoryAsked) return;
+    useUi.getState().setMemoryRequestTaskId(null);
+    showSegment('agent');
+    setAgentPane('memory');
+    if (railedRef.current) onShowRef.current({ terminal: false });
+  }, [memoryAsked, showSegment]);
   // Files' scope: the user's pick for this task, else the changes when its
   // status first loads with any, else all files. Taken once, so the tree
   // doesn't swap under the user as changes come and go.
@@ -277,7 +291,6 @@ export function RightInspector({
   const checkout = useReviewCheckout(task);
   const ws = useEditorWorkspace({
     tabsKey: task.id,
-    persistTabs: true,
     cwd: task.path,
     openTaskId: task.id,
     projectId: task.projectId,

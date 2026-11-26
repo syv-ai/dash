@@ -3,7 +3,7 @@
  * whole-repo tree, every listed path), folding single-child folder chains,
  * which folders are open, and the visible rows as one flat list that the
  * component windows. Every file tree in the app (Files, a PR's files, the
- * editor modal) renders these rows through `FileTree`.
+ * Agent tab's scratchpad) renders these rows through `FileTree`.
  */
 import type { DirEntry, FileChange, RepoListing } from '../../../shared/types';
 import { treeOrder, folderOrder } from './treeOrder';

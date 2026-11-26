@@ -1,19 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { MEMORY_TYPES } from '../../../../shared/types';
 import type { MemoryEntry, ProjectMemory, Task } from '../../../../shared/types';
 import {
   listMemories,
-  memoryCounts,
   memoryIssueTexts,
+  memoryMatches,
   memoryMention,
-  memorySendTarget,
-  newMemoriesLabel,
-  memorySections,
   memoryNotices,
-  pickCurrent,
-  KNOWN_MEMORY_TYPES,
-  type MemoryFilter,
-  type MemorySection,
+  memoryTaskOf,
+  newMemoriesLabel,
 } from '../memoryView';
 
 function entry(p: Partial<MemoryEntry> & { file: string }): MemoryEntry {
@@ -28,14 +22,6 @@ function entry(p: Partial<MemoryEntry> & { file: string }): MemoryEntry {
     ...p,
   };
 }
-
-const sectionsOf = (entries: MemoryEntry[], ...rest: [MemoryFilter, string, number]) =>
-  memorySections(listMemories(entries), ...rest);
-
-const DAY = 24 * 60 * 60 * 1000;
-const NOW = 1000 * DAY;
-const files = (sections: MemorySection[]) =>
-  sections.map((s) => [s.id, ...s.entries.map((m) => m.entry.file)]);
 
 describe('listMemories', () => {
   it('flags what Claude will not recall and what has no type, and says so in words', () => {
@@ -58,60 +44,18 @@ describe('listMemories', () => {
   });
 });
 
-describe('memorySections', () => {
-  const entries = [
-    entry({ file: 'old.md', type: 'feedback', mtimeMs: NOW - 31 * DAY }),
-    entry({ file: 'new.md', type: 'feedback', mtimeMs: NOW - DAY }),
-    entry({ file: 'newer.md', type: 'feedback', mtimeMs: NOW }),
-    entry({ file: 'loose.md', type: 'feedback', mtimeMs: NOW, inIndex: false }),
-    entry({ file: 'me.md', type: 'user', mtimeMs: NOW, description: 'Senior engineer' }),
-    entry({ file: 'fact.md', type: 'project', mtimeMs: NOW - 90 * DAY }),
-    entry({ file: 'untyped.md', mtimeMs: NOW - 90 * DAY, body: 'mentions Postgres' }),
-  ];
-
-  it('files a type by state: needing attention, recent, then older, newest first', () => {
-    expect(files(sectionsOf(entries, 'feedback', '', NOW))).toEqual([
-      ['attention', 'loose.md'],
-      ['recent', 'newer.md', 'new.md'],
-      ['older', 'old.md'],
-    ]);
+describe('memoryMatches', () => {
+  const memory = entry({
+    file: 'me.md',
+    name: 'Role',
+    description: 'Senior engineer',
+    body: 'mentions Postgres',
   });
 
-  it('files "all" by type in display order, under the ones needing attention', () => {
-    expect(files(sectionsOf(entries, 'all', '', NOW))).toEqual([
-      ['attention', 'loose.md', 'untyped.md'],
-      ['feedback', 'newer.md', 'new.md', 'old.md'],
-      ['user', 'me.md'],
-      ['project', 'fact.md'],
-    ]);
-  });
-
-  it('shows every memory exactly once under "all", so none can be hidden', () => {
-    const all = MEMORY_TYPES.map((type, i) => entry({ file: `${type}.md`, type, mtimeMs: i }));
-    const sections = sectionsOf(all, 'all', '', NOW);
-    expect(sections.map((s) => s.id)).toEqual(['attention', ...KNOWN_MEMORY_TYPES]);
-    expect(sections.flatMap((s) => s.entries.map((m) => m.entry.file)).sort()).toEqual(
-      all.map((e) => e.file).sort(),
-    );
-  });
-
-  it('filters case-insensitively on name, description, and body, within the filter', () => {
-    expect(files(sectionsOf(entries, 'all', 'senior', NOW))).toEqual([['user', 'me.md']]);
-    expect(files(sectionsOf(entries, 'all', 'POSTGRES', NOW))).toEqual([
-      ['attention', 'untyped.md'],
-    ]);
-    expect(sectionsOf(entries, 'feedback', 'senior', NOW)).toEqual([]);
-  });
-
-  it('counts the matches under each tab; an untyped memory only counts under "all"', () => {
-    expect(memoryCounts(entries, '')).toEqual({
-      all: 7,
-      feedback: 4,
-      user: 1,
-      reference: 0,
-      project: 1,
-    });
-    expect(memoryCounts(entries, 'senior')).toMatchObject({ all: 1, user: 1, feedback: 0 });
+  it('matches name, description and text, ignoring case', () => {
+    for (const q of ['role', 'SENIOR', 'postgres', '  '])
+      expect(memoryMatches(memory, q)).toBe(true);
+    expect(memoryMatches(memory, 'mysql')).toBe(false);
   });
 });
 
@@ -145,26 +89,6 @@ describe('memoryNotices', () => {
   });
 });
 
-describe('pickCurrent', () => {
-  const memories = listMemories([
-    entry({ file: 'a.md', type: 'project', mtimeMs: 1 }),
-    entry({ file: 'b.md', type: 'user', mtimeMs: 2 }),
-  ]);
-
-  it('keeps the selected memory', () => {
-    expect(pickCurrent(memories, 'a.md')?.entry.file).toBe('a.md');
-  });
-
-  it('falls back to the first memory in list order when the selected file was deleted', () => {
-    expect(pickCurrent(memories, 'gone.md')?.entry.file).toBe('b.md');
-    expect(pickCurrent(memories, null)?.entry.file).toBe('b.md');
-  });
-
-  it('returns null without memories', () => {
-    expect(pickCurrent([], 'MEMORY.md')).toBeNull();
-  });
-});
-
 describe('newMemoriesLabel', () => {
   it('says how many, in the singular for one', () => {
     expect(newMemoriesLabel(1)).toBe('1 new memory');
@@ -172,51 +96,22 @@ describe('newMemoriesLabel', () => {
   });
 });
 
-describe('memorySendTarget', () => {
+describe('memoryTaskOf', () => {
   const task = (id: string, over: Partial<Task> = {}): Task =>
     ({ id, name: `Task ${id}`, projectId: 'p', archivedAt: null, ...over }) as Task;
-  const dash = { id: 'p', name: 'Dash' };
 
-  it("sends to the active task when it is one of the project's", () => {
-    expect(memorySendTarget(dash, [task('a'), task('b')], 'b')).toEqual({
-      taskId: 'b',
-      taskName: 'Task b',
-    });
+  it("is the active task when it is one of the project's", () => {
+    expect(memoryTaskOf([task('a'), task('b')], 'b')?.id).toBe('b');
   });
 
-  it("says why when the active task is another project's, or there is none", () => {
-    const reason = { reason: 'Open a task in Dash to send this memory to it' };
-    expect(memorySendTarget(dash, [task('a')], 'elsewhere')).toEqual(reason);
-    expect(memorySendTarget(dash, [task('a')], null)).toEqual(reason);
+  it("is the project's first open task otherwise", () => {
+    expect(memoryTaskOf([task('a', { archivedAt: 'x' }), task('b')], 'elsewhere')?.id).toBe('b');
+    expect(memoryTaskOf([task('a'), task('b')], null)?.id).toBe('a');
   });
 
-  it('never sends to an archived task', () => {
-    expect(memorySendTarget(dash, [task('a', { archivedAt: 'x' })], 'a')).toHaveProperty('reason');
-  });
-
-  it('sends to the task the modal was opened from first, even with another active', () => {
-    expect(memorySendTarget(dash, [task('a'), task('b')], 'b', task('a'))).toEqual({
-      taskId: 'a',
-      taskName: 'Task a',
-    });
-  });
-
-  it("skips the task it was opened from once the modal shows another project's memory", () => {
-    const other = task('a', { projectId: 'other' });
-    expect(memorySendTarget(dash, [task('b')], 'b', other)).toEqual({
-      taskId: 'b',
-      taskName: 'Task b',
-    });
-    expect(memorySendTarget(dash, [task('b')], null, other)).toEqual({
-      reason: 'Open a task in Dash to send this memory to it',
-    });
-  });
-
-  it('falls back to the active task when the task it was opened from is archived', () => {
-    expect(memorySendTarget(dash, [task('b')], 'b', task('a', { archivedAt: 'x' }))).toEqual({
-      taskId: 'b',
-      taskName: 'Task b',
-    });
+  it('is never an archived task, and none without an open one', () => {
+    expect(memoryTaskOf([task('a', { archivedAt: 'x' })], 'a')).toBeNull();
+    expect(memoryTaskOf([], null)).toBeNull();
   });
 });
 

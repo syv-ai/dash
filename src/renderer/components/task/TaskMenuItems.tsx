@@ -17,10 +17,10 @@ import { IdeIcon } from '../ui/IdeIcon';
 import { usePreferredIde } from '../../hooks/usePreferredIde';
 import { copyTaskMessageAddress } from '../../utils/copyMessageAddress';
 import { useProjects, selectTaskById } from '../../stores/projectsStore';
-import { useUi } from '../../stores/uiStore';
 import { sessionRegistry } from '../../terminal/SessionRegistry';
 import { useSetup } from '../../stores/setupStore';
 import { copyText, revealLabel } from '../diffEditor/fileActions';
+import { showTaskMemory } from '../memory/showMemory';
 
 /** What the favourite toggle says. */
 const favoriteLabel = (favorite: boolean) =>
@@ -87,7 +87,6 @@ export function TaskMenuItems({
   const setupRun = useSetup((s) => (task ? s.runs[task.path] : undefined));
   const showSetup = useSetup((s) => s.showSetup);
   const rerunSetup = useSetup((s) => s.rerun);
-  const openTaskMemory = useUi((s) => s.openTaskMemory);
   const setFavorite = useProjects((s) => s.setFavorite);
   return (
     <>
@@ -149,7 +148,7 @@ export function TaskMenuItems({
         Copy message address
       </Item>
       {task && (
-        <Item onSelect={() => openTaskMemory(task.projectId, taskId)}>
+        <Item onSelect={() => showTaskMemory(taskId)}>
           <Brain size={13} strokeWidth={1.8} />
           Memories
         </Item>

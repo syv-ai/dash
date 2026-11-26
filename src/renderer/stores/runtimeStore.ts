@@ -27,7 +27,7 @@ export interface RuntimeState {
   taskActivity: Record<string, ActivityInfo>;
   remoteControlStates: Record<string, RemoteControlState>;
   projectTokenStats: Record<string, TokenStatsRollup>;
-  /** Memories written since each project's memory modal was last opened, by project id. */
+  /** Memories written since each project's memory last showed (the Agent tab), by project id. */
   newMemoryCounts: Record<string, number>;
   globalTokenStats: TokenStatsRollup;
   rtkStatus: RtkStatus | null;
@@ -50,7 +50,7 @@ export interface RuntimeState {
 export interface RuntimeActions {
   refreshTokenRollups: () => Promise<void>;
   refreshNewMemoryCounts: () => Promise<void>;
-  /** The project's memory modal opened: clear its badge, here and in the DB. */
+  /** The project's memory showed: clear its badge, here and in the DB. */
   markMemorySeen: (projectId: string) => Promise<void>;
   /** Re-read the CLI probe; `refresh` re-runs `claude --version` in main. */
   refreshClaudeCli: (opts?: { refresh?: boolean }) => Promise<void>;

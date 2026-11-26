@@ -18,13 +18,11 @@ interface CommitGraphModalProps {
   onSelectTask: (taskId: string) => void;
   /** Select + scroll to this commit on open (e.g. from the blame card). */
   focusHash?: string | null;
-  /** Stack above another open modal (the diff editor). */
-  elevated?: boolean;
 }
 
 export function CommitGraphModal(props: CommitGraphModalProps) {
   return (
-    <Modal onClose={props.onClose} size="w-[94vw] max-w-6xl h-[88vh]" elevated={props.elevated}>
+    <Modal onClose={props.onClose} size="w-[94vw] max-w-6xl h-[88vh]">
       <CommitGraphBody
         projectPath={props.projectPath}
         projectName={props.projectName}

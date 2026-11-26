@@ -53,7 +53,7 @@ export interface FileTreeProps {
 const estimate = (row: TreeRow | undefined) => (row?.kind === 'section' ? 28 : 32);
 
 /**
- * The app's one file tree (Files, a PR's files, the editor modal), on the
+ * The app's one file tree (Files, a PR's files, the Agent tab's scratchpad), on the
  * shared `ui/Tree` (windowing, focus, the arrow keys): its sections' folders
  * (folded) and files, depth first. It owns which folders are open (changed
  * ones and the selection's by default; lazy folders read when opened) and

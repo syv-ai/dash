@@ -23,8 +23,7 @@ export interface OpenEditor {
 
 interface EditorsState {
   /**
-   * Per folder (a task's worktree, or the memory modal's folder), its open
-   * editor; no entry, closed. Per folder, so each task keeps its own editor
+   * Per task worktree, its open editor; no entry, closed. Per folder, so each task keeps its own editor
    * (and its unsaved edits) while another is active.
    */
   byCwd: Record<string, OpenEditor>;
