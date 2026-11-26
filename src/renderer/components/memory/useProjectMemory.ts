@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ProjectMemory } from '../../../shared/types';
 
 /**
- * Load a project's memory, and again each time `paused` turns false: the
+ * Load a project's memory, again each time its folder changes on disk (main
+ * watches every project's), and again each time `paused` turns false: the
  * modal pauses while a memory is open in the editor and reads the result back
  * once it closes.
  */
@@ -15,6 +16,18 @@ export function useProjectMemory(
 } {
   const [memory, setMemory] = useState<ProjectMemory | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Bumped when the folder changes, which reads it again.
+  const [reads, setReads] = useState(0);
+  const dirRef = useRef<string | null>(null);
+  dirRef.current = memory?.dir ?? null;
+
+  useEffect(
+    () =>
+      window.electronAPI.onMemoryChanged(({ dir }) => {
+        if (dirRef.current === null || dirRef.current === dir) setReads((n) => n + 1);
+      }),
+    [],
+  );
 
   useEffect(() => {
     if (paused) return;
@@ -36,7 +49,7 @@ export function useProjectMemory(
     return () => {
       cancelled = true;
     };
-  }, [projectPath, paused]);
+  }, [projectPath, paused, reads]);
 
   return { memory, error };
 }

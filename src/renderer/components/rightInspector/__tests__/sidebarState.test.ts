@@ -34,6 +34,12 @@ describe('pickSegment', () => {
     expect(pick('files', 'files', false, { reselect: false })).toBe('none');
   });
 
+  it("doesn't expand on Agent, whose files open outside the task's editor", () => {
+    expect(pick('agent', 'agent', false)).toBe('none');
+    expect(pick('agent', 'agent', true)).toBe('narrow');
+    expect(pick('files', 'agent', true)).toBe('select');
+  });
+
   it('goes narrow when the expanded view is picked again', () => {
     expect(pick('files', 'files', true)).toBe('narrow');
     expect(pick('files', 'files', true, { changesOnly: true, listedChanges: 0 })).toBe('narrow');

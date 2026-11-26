@@ -4,21 +4,22 @@
  * (editor panes beside the tree or list). Opening a file expands it; these
  * decide what the view switch does to it.
  *
- * Normal mode's views are Files and History (spec Revision 5). Files is one
- * tree scoped by its "Show filetree" switch (`filesScope`): the changes (Staged /
- * Unstaged, the commit footer) or the whole repo with them.
+ * Normal mode's views are Files, History and Agent (spec Revision 5; Agent,
+ * A1: the session's scratchpad and the project's memory, `agentTab`). Files
+ * is one tree scoped by its "Show filetree" switch (`filesScope`): the
+ * changes (Staged / Unstaged, the commit footer) or the whole repo with them.
  *
  * Review mode (spec Revision 4) has its own views, each scoped to a PR:
  * Overview, Files (the PR's changed files, or all of them at its head),
- * Comments and History; the editor shows the PR's view, except a commit
- * picked in History.
+ * Comments and History, then Agent as in normal mode; the editor shows the
+ * PR's view, except a commit picked in History.
  */
 
 import { treeOrder } from '../fileTree/treeOrder';
 
-/** The view switch's views: normal mode's Files and History; review mode's
- *  Overview, Files, Comments and History. */
-export type CodeSegment = 'overview' | 'files' | 'comments' | 'history';
+/** The view switch's views: normal mode's Files, History and Agent; review
+ *  mode's Overview, Files, Comments, History and Agent. */
+export type CodeSegment = 'overview' | 'files' | 'comments' | 'history' | 'agent';
 
 /** What the sidebar's list shows: a view, or the task's details (an icon
  *  toggle at the view row's end, read least often). */
@@ -36,7 +37,8 @@ export type SegmentPick =
   | 'select'
   /** Nothing: a single click on the current view, or re-picking a narrow
    *  view with no first file (Files on its changes with none, Comments with
-   *  no open thread on the code). */
+   *  no open thread on the code, Agent, whose files open outside the task's
+   *  editor). */
   | 'none';
 
 /**
@@ -72,7 +74,8 @@ export function pickSegment({
   if (expanded) return 'narrow';
   const empty =
     (next === 'files' && changesOnly && listedChanges === 0) ||
-    (next === 'comments' && !openThread);
+    (next === 'comments' && !openThread) ||
+    next === 'agent';
   return empty ? 'none' : 'expand';
 }
 

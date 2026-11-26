@@ -23,6 +23,8 @@ import type { RailShow } from './rail';
 import { ViewRow, type ViewRowExtra } from './ViewRow';
 import { viewRowMinPx } from './viewRowFit';
 import { TaskDetails } from './TaskDetails';
+import { AgentView } from './AgentView';
+import type { AgentPane } from './agentTab';
 import { IconButton } from '../ui/IconButton';
 import { cn } from '../../lib/cn';
 import { FolderTabs } from '../ui/FolderTabs';
@@ -244,6 +246,8 @@ export function RightInspector({
     setSegment(next);
     setLastCodeSegment(next);
   }, []);
+  // Agent's pane: the session's scratchpad or the project's memory.
+  const [agentPane, setAgentPane] = useState<AgentPane>('scratchpad');
   // Files' scope: the user's pick for this task, else the changes when its
   // status first loads with any, else all files. Taken once, so the tree
   // doesn't swap under the user as changes come and go.
@@ -271,7 +275,8 @@ export function RightInspector({
     openTaskId: task.id,
     projectId: task.projectId,
     editorOpen: editorMounted,
-    treeShown: segment === 'files',
+    // Agent lists the worktree's CLAUDE.md files, from the same listing.
+    treeShown: segment === 'files' || segment === 'agent',
     historyShown: segment === 'history',
     target,
     prLive: checkout.live,
@@ -550,6 +555,7 @@ export function RightInspector({
                     countLabel: 'Unresolved',
                   },
                   { value: 'history', label: 'History' },
+                  { value: 'agent', label: 'Agent' },
                 ]
               : [
                   {
@@ -559,6 +565,7 @@ export function RightInspector({
                     countLabel: 'Changed files',
                   },
                   { value: 'history', label: 'History' },
+                  { value: 'agent', label: 'Agent' },
                 ]
           }
         />
@@ -652,9 +659,22 @@ export function RightInspector({
     />
   );
 
+  // Agent: the session's scratchpad and the project's memory, alike in
+  // either mode. Their files open in the editor over everything (they are no
+  // task's worktree); the repo's CLAUDE.md files open here, like Files'.
+  const agentView = (
+    <AgentView
+      task={task}
+      pane={agentPane}
+      onPane={setAgentPane}
+      repoPaths={ws.data.repoPaths}
+      onOpenTaskFile={(path) => openFile(path, { preview: true })}
+    />
+  );
+
   // Review mode's column: the PR's header over the picked view; its Files
   // list every file at the PR's head (the editor's view) on "Show filetree".
-  const reviewColumn = mode && segment !== 'details' && (
+  const reviewColumn = mode && segment !== 'details' && segment !== 'agent' && (
     <ReviewView
       task={task}
       mode={mode}
@@ -676,8 +696,9 @@ export function RightInspector({
     />
   );
 
-  // The tree or list column: review mode's, the files, or the commits.
-  const tree = reviewColumn || (segment === 'history' ? history : filesView);
+  // The tree or list column: review mode's, the files, the commits or Agent.
+  const tree =
+    reviewColumn || (segment === 'history' ? history : segment === 'agent' ? agentView : filesView);
 
   // Narrow (and Details, expanded): the details, or the tree column alone.
   const list = segment === 'details' ? details : tree;
