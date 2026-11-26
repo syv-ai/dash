@@ -22,7 +22,7 @@ import {
   type OpenOptions,
 } from './tabs/editorLayout';
 import { isDirty, workingUri } from './models';
-import { absolutePath } from './editor/fileRef';
+import { absolutePath, isOutsideWorktree } from './editor/fileRef';
 import type { FileBadges } from '../fileTree/model';
 
 const NO_COMMENTS: Record<string, DiffComment[]> = {};
@@ -201,15 +201,15 @@ export function useEditorWorkspace({
     switchedTo.current = null;
     const changed = new Set(changedFiles.map((f) => f.path));
     const present = new Set(repoPaths);
-    useEditorTabs
-      .getState()
-      .retain(
-        tabsKey,
-        (path, preview) =>
-          changed.has(path) ||
-          isDirty(workingUri(absolutePath(cwd, path))) ||
-          (!preview && present.has(path)),
-      );
+    useEditorTabs.getState().retain(
+      tabsKey,
+      (path, preview) =>
+        // A file outside the worktree (A10) is in no view: it stays.
+        isOutsideWorktree(path) ||
+        changed.has(path) ||
+        isDirty(workingUri(absolutePath(cwd, path))) ||
+        (!preview && present.has(path)),
+    );
     if (view.kind === 'working') return;
     // Opened from a list before the view settled (Review's files): that stays
     // in front.

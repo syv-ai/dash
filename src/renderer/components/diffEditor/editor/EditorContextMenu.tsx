@@ -9,7 +9,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '../../ui/ContextMenu';
-import { absolutePath, fileRef, type LineRange } from './fileRef';
+import { absolutePath, fileRef, isOutsideWorktree, type LineRange } from './fileRef';
 import { IS_MAC, pressKind } from '../../../lib/mousePress';
 import { copyText as copy } from '../fileActions';
 
@@ -110,10 +110,12 @@ export function EditorContextMenu({ cwd, filePath, editor, compose, children }: 
             </span>
           </ContextMenuItem>
         )}
-        <ContextMenuItem onSelect={() => copy(filePath, 'relative path')}>
-          <FileCode2 size={13} strokeWidth={1.8} className="text-icon" />
-          Copy relative path
-        </ContextMenuItem>
+        {!isOutsideWorktree(filePath) && (
+          <ContextMenuItem onSelect={() => copy(filePath, 'relative path')}>
+            <FileCode2 size={13} strokeWidth={1.8} className="text-icon" />
+            Copy relative path
+          </ContextMenuItem>
+        )}
         <ContextMenuItem onSelect={() => copy(absolutePath(cwd, filePath), 'absolute path')}>
           <Link2 size={13} strokeWidth={1.8} className="text-icon" />
           Copy absolute path

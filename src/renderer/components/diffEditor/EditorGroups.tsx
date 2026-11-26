@@ -33,7 +33,8 @@ import { park, retainedOnUnmount, unpark } from './retention';
 import { TreeToggle } from './TreeToggle';
 import { addCloseGuard } from './closeGuard';
 import { confirm } from '../ui/ConfirmHost';
-import { absolutePath } from './editor/fileRef';
+import { absolutePath, isOutsideWorktree } from './editor/fileRef';
+import type { EditorView } from './types';
 import { LspStatusIndicator } from './LspStatusIndicator';
 import { useReviewNavigation } from './prReview/useReviewNavigation';
 import { installLsp } from '../../lsp';
@@ -46,6 +47,9 @@ interface Props {
    *  top-right corner. */
   actions?: ReactNode;
 }
+
+/** The view a plain file (outside the worktree) shows in: as it is on disk. */
+const PLAIN_VIEW: EditorView = { kind: 'working', ref: 'HEAD' };
 
 function useDirtyVersion(): number {
   return useSyncExternalStore(subscribeDirty, dirtyVersion);
@@ -115,7 +119,11 @@ export function EditorGroups({ ws, terminalTheme, isDark, actions }: Props) {
   useEffect(() => {
     let agreed = false;
     return addCloseGuard(cwd, async () => {
-      if (agreed || !anyDirtyUnder(cwd)) return true;
+      // The worktree's files, and the tabs' files outside it (A10).
+      const outside = openPaths(selectLayout(tabsKey)(useEditorTabs.getState())).filter(
+        (p) => isOutsideWorktree(p) && isDirty(workingUri(p)),
+      );
+      if (agreed || (!anyDirtyUnder(cwd) && outside.length === 0)) return true;
       agreed = await confirm({
         message: 'Discard unsaved changes?',
         confirmLabel: 'Discard',
@@ -123,7 +131,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, actions }: Props) {
       });
       return agreed;
     });
-  }, [cwd]);
+  }, [cwd, tabsKey]);
 
   // Closing a file's last tab drops its unsaved edits: ask first, once for
   // every such file among `paths`.
@@ -202,6 +210,8 @@ export function EditorGroups({ ws, terminalTheme, isDark, actions }: Props) {
           const index = i as GroupIndex;
           const isLast = i === layout.groups.length - 1;
           const filePath = group.active;
+          // A file outside the worktree opens plain (A10): working view, no git or comments.
+          const plain = !!filePath && isOutsideWorktree(filePath);
           const groupReveal =
             reveal && reveal.group === index && reveal.path === group.active
               ? { range: reveal.range, nonce: reveal.nonce }
@@ -234,18 +244,18 @@ export function EditorGroups({ ws, terminalTheme, isDark, actions }: Props) {
                       <EditorPane
                         paneId={`pane:${tabsKey}:${i}`}
                         group={index}
-                        reviewNav={ws.view.kind === 'pr' ? reviewNav : undefined}
+                        reviewNav={ws.view.kind === 'pr' && !plain ? reviewNav : undefined}
                         cwd={cwd}
-                        git={ws.git}
+                        git={ws.git && !plain}
                         filePath={filePath}
-                        view={ws.view}
-                        activeTaskId={ws.activeTaskId}
+                        view={plain ? PLAIN_VIEW : ws.view}
+                        activeTaskId={plain ? null : ws.activeTaskId}
                         terminalTheme={terminalTheme}
                         isDark={isDark}
                         revealCommentId={ws.revealCommentId}
                         onNavigateToComment={ws.navigateToComment}
                         onClearReveal={ws.clearRevealComment}
-                        projectId={ws.projectId}
+                        projectId={plain ? null : ws.projectId}
                         revealRange={groupReveal}
                         onRevealed={clearReveal}
                         onIsDirectory={(path) => showFolder(index, path)}

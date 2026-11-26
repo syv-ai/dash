@@ -10,6 +10,7 @@ import { DatabaseService } from '../services/DatabaseService';
 import { isProjectMemoryDir } from '../services/MemoryService';
 import { listPlainFolder } from '../services/plainFolder';
 import { isServedScratchpad } from '../services/ScratchpadService';
+import { outsideRoots } from '../services/editorRoots';
 import { unwatchWorkingTree, watchWorkingTree } from '../services/WorkingTreeWatcher';
 import type {
   DirEntry,
@@ -103,6 +104,36 @@ export function resolveReadableInsideCwd(cwd: string, filePath: string): string 
     if (err instanceof SymlinkEscapeError) return err.target;
     throw err;
   }
+}
+
+/** Whether `p` names something strictly inside `dir`, as written (no links followed). */
+function namedInside(dir: string, p: string): boolean {
+  const rel = path.relative(path.resolve(dir), path.resolve(dir, p));
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+/**
+ * Where an editor file lives, checked (A10): in `cwd`, the task's worktree,
+ * where git applies; or, named by its absolute path, in one of `outside`, the
+ * task's own Claude Code folders (`outsideRoots`), as a plain file. The path
+ * as named and its real path must both stay in that one folder, or this
+ * throws. A read in the worktree may follow a symlink out of it
+ * (`resolveReadableInsideCwd`); an outside folder's never may.
+ */
+export function resolveEditorPath(
+  cwd: string,
+  filePath: string,
+  outside: readonly string[],
+  access: 'read' | 'write',
+): { abs: string; plain: boolean } {
+  if (!path.isAbsolute(filePath) || namedInside(cwd, filePath)) {
+    const abs =
+      access === 'read' ? resolveReadableInsideCwd(cwd, filePath) : resolveInsideCwd(cwd, filePath);
+    return { abs, plain: false };
+  }
+  const root = outside.find((dir) => namedInside(dir, filePath));
+  if (!root) throw new Error(`Resolved path escapes cwd: ${filePath}`);
+  return { abs: resolveInsideCwd(root, filePath), plain: true };
 }
 
 /** Refuse to read a directory as a file (a stale tab, a racing rename). */
@@ -450,18 +481,26 @@ export function registerEditorIpc(): void {
           }),
           args,
         );
-        const abs = resolveReadableInsideCwd(args.cwd, args.filePath);
-        const cwdAbs = path.resolve(args.cwd);
-        let cwdReal = cwdAbs;
-        try {
-          cwdReal = safeRealpath(cwdAbs);
-        } catch {
-          /* cwdAbs is fine */
+        const { abs, plain } = resolveEditorPath(
+          args.cwd,
+          args.filePath,
+          path.isAbsolute(args.filePath) ? await outsideRoots(args.cwd) : [],
+          'read',
+        );
+        const plainFolder = plain || (await isPlainFolder(args.cwd));
+        let originalContent = '';
+        if (!plainFolder) {
+          const cwdAbs = path.resolve(args.cwd);
+          let cwdReal = cwdAbs;
+          try {
+            cwdReal = safeRealpath(cwdAbs);
+          } catch {
+            /* cwdAbs is fine */
+          }
+          const relForGit = toGitPath(path.relative(cwdReal, abs));
+          const spec = args.ref === 'HEAD' ? `HEAD:${relForGit}` : `:0:${relForGit}`;
+          originalContent = await gitShow(args.cwd, spec);
         }
-        const relForGit = toGitPath(path.relative(cwdReal, abs));
-        const spec = args.ref === 'HEAD' ? `HEAD:${relForGit}` : `:0:${relForGit}`;
-        const plainFolder = await isPlainFolder(args.cwd);
-        let originalContent = plainFolder ? '' : await gitShow(args.cwd, spec);
 
         let workingContent: string | null = null;
         let mtimeMs = 0;
@@ -642,7 +681,12 @@ export function registerEditorIpc(): void {
           }),
           args,
         );
-        const abs = resolveInsideCwd(args.cwd, args.filePath);
+        const { abs } = resolveEditorPath(
+          args.cwd,
+          args.filePath,
+          path.isAbsolute(args.filePath) ? await outsideRoots(args.cwd) : [],
+          'write',
+        );
 
         try {
           const stat = await fs.stat(abs);

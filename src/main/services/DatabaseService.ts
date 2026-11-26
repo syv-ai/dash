@@ -651,6 +651,13 @@ export class DatabaseService {
     return row ? DatabaseService.mapTask(row) : undefined;
   }
 
+  /** Every task at `path`: one per worktree, or the tasks working in the
+   *  project's own checkout, which share its path. */
+  static getTasksByPath(path: string): Task[] {
+    const db = getDb();
+    return db.select().from(tasks).where(eq(tasks.path, path)).all().map(DatabaseService.mapTask);
+  }
+
   // ── Mappers ──────────────────────────────────────────────
 
   private static mapProject(row: typeof projects.$inferSelect): Project {
