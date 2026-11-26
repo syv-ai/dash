@@ -502,16 +502,21 @@ export function RightInspector({
 
   const extras: ViewRowExtra[] = [];
   if (showComments) {
+    const commentsButton = (
+      <IconButton size="sm" title={`Comments: ${commentCount} to send`} onClick={onOpenEditor}>
+        <MessageSquareCode size={14} strokeWidth={1.8} />
+      </IconButton>
+    );
     extras.push({
       key: 'comments',
       node: (
         <>
-          <IconButton size="sm" title={`Comments: ${commentCount} to send`} onClick={onOpenEditor}>
-            <MessageSquareCode size={14} strokeWidth={1.8} />
-          </IconButton>
+          {commentsButton}
           <CountBadge count={commentCount} className="-ml-1" />
         </>
       ),
+      // The count stays in its tooltip.
+      compact: commentsButton,
     });
   }
   // The PR button's state, for the row and the rail; normal mode only.
@@ -523,7 +528,14 @@ export function RightInspector({
         onOpen: review.refreshPrs,
         onPick: review.enter,
       };
-  if (prs) extras.push({ key: 'pr', trailing: true, node: <PrButton {...prs} /> });
+  if (prs) {
+    extras.push({
+      key: 'pr',
+      trailing: true,
+      node: <PrButton {...prs} />,
+      compact: <PrButton {...prs} variant="compact" />,
+    });
+  }
 
   // The commit actions are Files' footer (`CommitBar`), not the row's.
   const header = (

@@ -12,7 +12,7 @@ import { LevelReading, levelCells } from './UsageSection';
 import { RAIL_SHOW, railParts, type RailShow, type RailTarget } from './rail';
 
 /** The view row's PR button, as the rail takes it (null in review mode). */
-type RailPrs = Omit<ComponentProps<typeof PrButton>, 'rail'>;
+type RailPrs = Omit<ComponentProps<typeof PrButton>, 'variant'>;
 
 /**
  * The task sidebar collapsed: a rail of what it would show at a glance, top
@@ -106,7 +106,7 @@ export function TaskRail({
       {prs && (
         <PrButton
           {...prs}
-          rail
+          variant="rail"
           onPick={(pr) => {
             prs.onPick(pr);
             show('pr')();

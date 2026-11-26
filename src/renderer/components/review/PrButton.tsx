@@ -30,16 +30,17 @@ const SEARCH_FROM = 8;
  * a button counting the open PRs from and into the task's branch (hidden at
  * none), badged with the unresolved threads on the branch's own PR; it opens
  * the list, grouped "From this branch" / "Into this branch". Normal mode
- * only: review mode says itself, and exits, in the PR's header. On the
- * collapsed sidebar's rail (`rail`) it is a rail item, the icon over the
- * count, its list opening beside the rail.
+ * only: review mode says itself, and exits, in the PR's header. Where the
+ * view row is tight (`compact`) it is the icon alone, the counts in its
+ * tooltip (R12). On the collapsed sidebar's rail (`rail`) it is a rail item,
+ * the icon over the count, its list opening beside the rail.
  */
 export function PrButton({
   relevant,
   own,
   onOpen,
   onPick,
-  rail = false,
+  variant = 'row',
 }: {
   relevant: RelevantPrs | null;
   /** The branch's own PR and its unresolved threads (0: no badge). */
@@ -47,9 +48,12 @@ export function PrButton({
   /** The list is opening: list the PRs again. */
   onOpen: () => void;
   onPick: (pr: PullRequest) => void;
-  /** On the rail: a `RailItemButton`, its tooltip and list to its left. */
-  rail?: boolean;
+  /** `row`: the icon, count and threads badge. `compact`: a 24px icon
+   *  button, like the row's other icon buttons. `rail`: a `RailItemButton`,
+   *  its tooltip and list to its left. */
+  variant?: 'row' | 'compact' | 'rail';
 }) {
+  const rail = variant === 'rail';
   const [open, setOpen] = useState(false);
   const from = relevant?.from ?? [];
   const into = relevant?.into ?? [];
@@ -94,6 +98,10 @@ export function PrButton({
                 {badge}
               </span>
             </RailItemButton>
+          ) : variant === 'compact' ? (
+            <Button variant="ghost" size="icon-sm" aria-label={label}>
+              <GitPullRequestArrow size={14} strokeWidth={1.8} />
+            </Button>
           ) : (
             <Button variant="ghost" size="sm" aria-label={label}>
               <GitPullRequestArrow size={14} strokeWidth={1.8} />
