@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Plus, Search, Settings } from 'lucide-react';
 import type { ContextUsage, Project, Task } from '../../../shared/types';
 import { ClaudeUpdateButton } from '../claudeUpdate/ClaudeUpdateButton';
@@ -39,7 +40,15 @@ interface LeftSidebarProps {
   onReorderTasksCommit?: (projectId: string, reordered: Task[]) => void;
   /** Each live task's session context, from the statusLine (`useStatusLine`). */
   contextUsage?: Record<string, ContextUsage>;
+  /** The sidebar's least width (px), once its tabs are measured: the view
+   *  tabs' labels in full and find and create beside them. Narrower, the
+   *  sidebar goes to its rail (T16). */
+  onMinWidth?: (px: number) => void;
 }
+
+/** The view row's room besides the tabs: its 8px gutters, the 2px gaps,
+ *  find and create (24px each, 2px apart) and 8px between them and the tabs. */
+const VIEW_ROW_REST_PX = 16 + 4 + 50 + 8;
 
 const isMac = window.electronAPI.getPlatform() === 'darwin';
 
@@ -58,6 +67,11 @@ export function LeftSidebar(props: LeftSidebarProps) {
   const setView = useSettings((s) => s.setSidebarView);
   const keybindings = useSettings((s) => s.keybindings);
   const setTaskFinderOpen = useUi((s) => s.setTaskFinderOpen);
+  const [tabsMinPx, setTabsMinPx] = useState<number>();
+  const { onMinWidth } = props;
+  useEffect(() => {
+    if (tabsMinPx !== undefined) onMinWidth?.(tabsMinPx + VIEW_ROW_REST_PX);
+  }, [tabsMinPx, onMinWidth]);
 
   const settingsButton = (
     <IconButton title="Settings" shortcut={keybindings.openSettings} onClick={props.onOpenSettings}>
@@ -111,6 +125,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
           aria-label="Sidebar view"
           value={view}
           onChange={setView}
+          onMinWidth={setTabsMinPx}
           options={[
             {
               value: 'tasks',

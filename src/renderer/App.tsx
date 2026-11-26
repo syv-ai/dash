@@ -1077,6 +1077,9 @@ export function App() {
   const expandedAtCollapseRef = useRef(false);
   // The task sidebar's least width (px), which its view tabs report.
   const [inspectorMinPx, setInspectorMinPx] = useState<number>();
+  // The left sidebar's (px), likewise: dragged narrower, it snaps to its
+  // rail (the panel's own collapse) instead of truncating its tabs (T16).
+  const [sidebarMinPx, setSidebarMinPx] = useState<number>();
   // The width before a side-car TUI sized the panel to hug it (below).
   const changesSizeBeforeTui = useRef<number | null>(null);
   const inspectorBodyRef = useRef<HTMLDivElement>(null);
@@ -1535,7 +1538,7 @@ export function App() {
           panelRef={sidebarPanelRef}
           animate={sidebarAnimating}
           defaultSize={startedCollapsed.sidebar ? '3%' : '18%'}
-          minSize="12%"
+          minSize={sidebarMinPx ?? '12%'}
           maxSize="28%"
           collapsible
           collapsedSize={`${SIDEBAR_COLLAPSED_PCT}%`}
@@ -1593,6 +1596,7 @@ export function App() {
                 void handleReorderTasksCommit(projectId, reordered);
               }}
               contextUsage={contextUsage}
+              onMinWidth={setSidebarMinPx}
             />
           </ErrorBoundary>
         </ResizablePanel>
