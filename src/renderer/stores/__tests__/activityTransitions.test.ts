@@ -25,6 +25,18 @@ describe('observeActivity', () => {
     expect(r[2]!.finished).toEqual(['a']);
   });
 
+  // The user stopped it (S2): seen, so neither flagged unseen nor chimed.
+  it('does not finish a turn the user interrupted', () => {
+    let tracker = emptyTracker();
+    tracker = observeActivity(tracker, { a: { state: 'busy' } }, 0).tracker;
+    const r = observeActivity(
+      tracker,
+      { a: { state: 'idle', interrupted: true } },
+      MIN_BUSY_DURATION_MS,
+    );
+    expect(r.finished).toEqual([]);
+  });
+
   it('finishes a task first seen busy (Dash opened or reloaded mid-turn)', () => {
     const r = run([
       [0, { a: 'busy' }],

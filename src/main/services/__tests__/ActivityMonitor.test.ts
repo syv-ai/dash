@@ -387,6 +387,26 @@ describe('ActivityMonitor — Escape interrupt (setInterrupted)', () => {
     activityMonitor.setToolStart('t1', 'Read', { file_path: '/x' });
     expect(activityMonitor.getAll()['t1']!.state).toBe('busy');
   });
+
+  // The user stopped it: the renderer counts that end as seen (green), not
+  // as a finished turn to flag (blue) or chime for.
+  it('marks the idle it leaves as interrupted, until the next turn starts', () => {
+    activityMonitor.register('t1', 1);
+    activityMonitor.setBusy('t1');
+    activityMonitor.setInterrupted('t1');
+    expect(activityMonitor.getAll()['t1']!.interrupted).toBe(true);
+    activityMonitor.setBusy('t1');
+    expect(activityMonitor.getAll()['t1']!.interrupted).toBeUndefined();
+    activityMonitor.setIdle('t1');
+    expect(activityMonitor.getAll()['t1']!.interrupted).toBeUndefined();
+  });
+
+  it('a turn that ends on its own is not interrupted', () => {
+    activityMonitor.register('t1', 1);
+    activityMonitor.setBusy('t1');
+    activityMonitor.setIdle('t1');
+    expect(activityMonitor.getAll()['t1']!.interrupted).toBeUndefined();
+  });
 });
 
 describe('activityEvents', () => {

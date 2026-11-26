@@ -30,6 +30,15 @@ describe('writePty — Escape interrupt', () => {
     expect(activityMonitor.getAll()['t1']!.tool).toBeUndefined();
   });
 
+  // Ctrl+C mid-turn cancels it as Esc does, and fires no hook either
+  // (S2: before this, the dot stayed amber until the next supervisor poll).
+  it('Ctrl+C on the agent pane returns the task to idle as an interrupt', () => {
+    busyAgent('t1', 't1');
+    writePty('t1', '\x03');
+    expect(activityMonitor.getAll()['t1']!.state).toBe('idle');
+    expect(activityMonitor.getAll()['t1']!.interrupted).toBe(true);
+  });
+
   it('a CSI sequence that merely starts with Escape (arrow key) is not an interrupt', () => {
     busyAgent('t1', 't1');
     writePty('t1', `${ESC}[A`);

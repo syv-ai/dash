@@ -19,6 +19,9 @@ interface PtyActivity {
   compacting: boolean;
   /** Reason shown with `stopped`/`waiting` (from the supervisor listing). */
   detail: string | null;
+  /** The turn ended by the user's interrupt; reported while idle, cleared
+   *  when the next turn starts. */
+  interrupted: boolean;
 }
 
 /** Safety valve: if a busy/waiting PTY produces no hook events AND no PTY
@@ -101,6 +104,7 @@ class ActivityMonitorImpl {
       error: null,
       compacting: false,
       detail: null,
+      interrupted: false,
     };
   }
 
@@ -175,6 +179,7 @@ class ActivityMonitorImpl {
     a.state = next;
     a.error = nextError;
     a.detail = nextDetail;
+    if (next !== 'idle') a.interrupted = false;
     if (next !== 'busy') a.tool = null;
     if (next === 'idle' || next === 'stopped') a.compacting = false;
     this.emitAll();
@@ -211,6 +216,7 @@ class ActivityMonitorImpl {
     const a = this.activities.get(ptyId);
     if (!a) return;
     a.lastHookTime = Date.now();
+    a.interrupted = false;
     if (a.state === 'busy') return;
     a.state = 'busy';
     a.error = null;
@@ -226,18 +232,21 @@ class ActivityMonitorImpl {
     a.state = 'waiting';
     a.tool = null;
     a.detail = null;
+    a.interrupted = false;
     this.emitAll();
   }
 
   /**
-   * The user pressed Escape in the agent pane. Claude Code treats that as an
-   * interrupt while a turn is running or a permission prompt is up, and — by
-   * design — does not fire the Stop hook for it, so nothing else brings the
-   * dot back from "running". The supervisor listing can't be relied on
-   * either: its `status` goes stale (a `done` job has reported `busy` for
-   * hours). So the keystroke is the signal, and like a hook it keeps
-   * precedence over the listing for one poll interval. Escape while already
-   * idle just closes menus; nothing to do.
+   * The user pressed Escape or Ctrl+C in the agent pane. Claude Code treats
+   * either as an interrupt while a turn is running or a permission prompt is
+   * up, and — by design — does not fire the Stop hook for it, so nothing else
+   * brings the dot back from "running". The supervisor listing can't be
+   * relied on either: its `status` goes stale (a `done` job has reported
+   * `busy` for hours), and its idle lands a poll or two later. So the
+   * keystroke is the signal, and like a hook it keeps precedence over the
+   * listing for one poll interval. The idle it leaves is `interrupted`: the
+   * user's own act, so seen. Either key while already idle just closes menus
+   * or clears the prompt; nothing to do.
    */
   setInterrupted(ptyId: string): void {
     const a = this.activities.get(ptyId);
@@ -248,6 +257,7 @@ class ActivityMonitorImpl {
     a.tool = null;
     a.compacting = false;
     a.detail = null;
+    a.interrupted = true;
     this.emitAll();
   }
 
@@ -256,6 +266,7 @@ class ActivityMonitorImpl {
     if (!a) return;
     a.lastHookTime = Date.now();
     a.tool = { toolName, label: buildToolLabel(toolName, toolInput) };
+    a.interrupted = false;
     if (a.state !== 'busy') {
       a.state = 'busy';
       a.error = null;
@@ -287,6 +298,7 @@ class ActivityMonitorImpl {
     a.state = 'error';
     a.tool = null;
     a.error = { type: mappedType, message };
+    a.interrupted = false;
     this.emitAll();
   }
 
@@ -321,6 +333,7 @@ class ActivityMonitorImpl {
       if (a.error) info.error = a.error;
       if (a.compacting) info.compacting = true;
       if (a.detail) info.detail = a.detail;
+      if (a.interrupted && a.state === 'idle') info.interrupted = true;
       result[id] = info;
     }
     return result;

@@ -391,6 +391,9 @@ export interface ActivityInfo {
   compacting?: boolean;
   /** What a `waiting` task waits for, or why a `stopped` one sleeps (not shown: sleeping tasks get no dot). */
   detail?: string;
+  /** An `idle` the user brought about by interrupting the turn (Esc, Ctrl+C):
+   *  seen by definition, so it isn't flagged unseen or chimed for. */
+  interrupted?: true;
 }
 
 // ── Claude Code session supervisor ─────────────────────────────

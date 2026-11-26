@@ -15,7 +15,8 @@ export const emptyTracker = (): ActivityTracker => ({ state: {}, busySince: {} }
 
 /**
  * Fold an activity update into the tracker. `finished`: tasks that went from
- * busy to idle after at least MIN_BUSY_DURATION_MS of work; `started`: tasks
+ * busy to idle on their own after at least MIN_BUSY_DURATION_MS of work (an
+ * idle the user interrupted into is seen, so it doesn't count); `started`: tasks
  * that went from idle to busy. A task first seen busy (Dash opened mid-turn,
  * or the supervisor listing created its entry) is timed from that sighting,
  * so its turn still finishes.
@@ -32,7 +33,7 @@ export function observeActivity(
   for (const [id, info] of Object.entries(activity)) {
     const was = tracker.state[id];
     if (was === 'idle' && info.state === 'busy') started.push(id);
-    if (was === 'busy' && info.state === 'idle') {
+    if (was === 'busy' && info.state === 'idle' && !info.interrupted) {
       if (now - (tracker.busySince[id] ?? now) >= MIN_BUSY_DURATION_MS) finished.push(id);
     }
     if (info.state === 'busy')
