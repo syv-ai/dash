@@ -2,16 +2,18 @@ import { useEffect } from 'react';
 import type { LspServerState, LspServerStatus } from '../../../shared/lsp';
 import { refreshLspStatus } from '../../stores/lspStatusStore';
 import { useLspHealth } from '../../lsp/healthWatch';
-import { StatusDot, type AgentState } from '../ui/StatusDot';
+import { Dot, type DotTone } from '../ui/Dot';
 import { Tooltip } from '../ui/Tooltip';
 
-const DOT: Record<LspServerState, AgentState> = {
-  starting: 'work',
-  restarting: 'work',
-  running: 'done',
-  failed: 'fail',
-  stopped: 'idle',
-  unavailable: 'idle',
+/** A server's dot (H4): it isn't an agent, so no agent colour; red only
+ *  when it failed, a breathing neutral dot while it comes up. */
+export const LSP_DOT: Record<LspServerState, { tone: DotTone; pulse: boolean }> = {
+  starting: { tone: 'neutral', pulse: true },
+  restarting: { tone: 'neutral', pulse: true },
+  running: { tone: 'neutral', pulse: false },
+  failed: { tone: 'fail', pulse: false },
+  stopped: { tone: 'neutral', pulse: false },
+  unavailable: { tone: 'neutral', pulse: false },
 };
 
 const NONE: LspServerStatus[] = [];
@@ -41,7 +43,7 @@ export function LspStatusIndicator({ worktree }: { worktree: string }) {
       >
         {servers.map((s) => (
           <span key={s.serverId} className="inline-flex items-center gap-1 whitespace-nowrap">
-            <StatusDot state={DOT[s.state]} label={`${s.name} ${s.state}`} />
+            <Dot {...LSP_DOT[s.state]} label={`${s.name} ${s.state}`} />
             <span className="@max-[28rem]/strip:hidden">
               {s.name} {s.state}
             </span>
