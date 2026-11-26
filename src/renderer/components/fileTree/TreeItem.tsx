@@ -128,14 +128,7 @@ export function TreeItem({
         />
       }
     >
-      {folder ? (
-        <>
-          {row.name}
-          <span className="text-ink-3">/</span>
-        </>
-      ) : (
-        row.file.name
-      )}
+      {folder ? row.name : row.file.name}
     </ListRow>
   );
   return (
