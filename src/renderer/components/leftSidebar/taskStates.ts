@@ -1,9 +1,6 @@
 import type { ActivityError, ActivityInfo, Project, Task } from '../../../shared/types';
 import type { AgentState } from '../ui/StatusDot';
 
-/** Idle rows shown before "More". */
-export const IDLE_LIMIT = 5;
-
 /** One row of the state-ordered task list. */
 export interface TaskStateRow {
   task: Task;
@@ -133,17 +130,41 @@ export function liveRows(list: TaskStateList): TaskStateRow[] {
   return [...list.active, ...list.idle.filter((r) => r.state !== 'asleep')];
 }
 
+/** The Tasks view's groups, each row in one. */
+export interface TaskGroups {
+  /** Favourite tasks in any state, live first: state order, then recency. */
+  favorites: TaskStateRow[];
+  /** Live and asking for a look: needs you, failed, working, done. */
+  news: TaskStateRow[];
+  /** Live at rest, then tasks that never ran (no session yet). */
+  resting: TaskStateRow[];
+  /** Sleeping sessions, most recently updated first. */
+  inactive: TaskStateRow[];
+}
+
+/** A task that never ran: asleep with no session ever dispatched. */
+export const neverRan = (row: TaskStateRow) => row.state === 'asleep' && row.task.jobId === null;
+
 /**
- * The idle rows on show: all when expanded, else the first IDLE_LIMIT — plus
- * the selected task if it sits further down, so the selection never hides.
+ * Splits the state-ordered list into the Tasks view's groups: favourites
+ * first, whatever their state; the live rest by what it asks of the user;
+ * the sleeping ones last (the "Inactive sessions" group). A task that never
+ * ran stays up with the live ones, so a task just made never hides.
  */
-export function visibleIdleRows(
-  idle: TaskStateRow[],
-  expanded: boolean,
-  selectedTaskId: string | null,
-): TaskStateRow[] {
-  if (expanded || idle.length <= IDLE_LIMIT) return idle;
-  return idle.filter((r, i) => i < IDLE_LIMIT || r.task.id === selectedTaskId);
+export function taskGroups(list: TaskStateList): TaskGroups {
+  const isFavorite = (r: TaskStateRow) => r.task.favorite;
+  const rest = list.idle.filter((r) => !isFavorite(r));
+  const live = (r: TaskStateRow) => r.state !== 'asleep';
+  return {
+    favorites: [
+      ...list.active.filter(isFavorite),
+      ...list.idle.filter((r) => isFavorite(r) && live(r)),
+      ...list.idle.filter((r) => isFavorite(r) && !live(r)),
+    ],
+    news: list.active.filter((r) => !isFavorite(r)),
+    resting: [...rest.filter(live), ...rest.filter(neverRan)],
+    inactive: rest.filter((r) => !live(r) && !neverRan(r)),
+  };
 }
 
 /**

@@ -26,6 +26,8 @@ export interface SettingsState {
   showPace: boolean;
   /** The left sidebar's view: the state-ordered task list or the project tree. */
   sidebarView: 'tasks' | 'projects';
+  /** The Tasks view's "Inactive sessions" group is open. */
+  inactiveSessionsOpen: boolean;
   showProjectTokens: boolean;
   desktopNotification: boolean;
   syncShellEnv: boolean;
@@ -103,6 +105,7 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   // showContextBarOnTaskCards, shellDrawerPosition) are simply no longer read;
   // stored values linger, unused.
   entry('sidebarView', 'sidebarView', strEnum(['tasks', 'projects'] as const, 'tasks')),
+  entry('inactiveSessionsOpen', 'inactiveSessionsOpen', boolDefaultFalse()),
   entry('showProjectTokens', 'showProjectTokens', boolDefaultTrue()),
   entry('desktopNotification', 'desktopNotification', boolDefaultFalse()),
   entry('syncShellEnv', 'syncShellEnv', boolDefaultFalse()),

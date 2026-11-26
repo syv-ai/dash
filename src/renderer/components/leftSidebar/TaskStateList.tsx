@@ -1,7 +1,8 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { FolderPlus, Power } from 'lucide-react';
 import type { Project, Task } from '../../../shared/types';
-import { Tree, TreeRow, ownNode, type TreeRowContext } from '../ui/Tree';
+import { Tree, TreeHeading, TreeRow, ownNode, type TreeRowContext } from '../ui/Tree';
+import { HoverSwapSlot } from '../ui/HoverSwapSlot';
 import { StatusDot, type AgentState } from '../ui/StatusDot';
 import { EmptyState } from '../ui/EmptyState';
 import { Button } from '../ui/Button';
@@ -14,11 +15,14 @@ import {
 } from '../ui/ContextMenu';
 import { TaskMenuItems, onTaskMenuCloseAutoFocus, type MenuParts } from '../task/TaskMenuItems';
 import { hasLiveSession } from '../task/TaskActions';
+import { FavoriteButton } from '../task/FavoriteButton';
 import { openInIde } from '../../lib/openInIde';
 import { useRuntime } from '../../stores/runtimeStore';
+import { useSettings } from '../../stores/settingsStore';
 import {
   STATE_LABELS,
   isAtRest,
+  taskGroups,
   type TaskStateList as Rows,
   type TaskStateRow,
 } from './taskStates';
@@ -42,11 +46,12 @@ interface TaskStateListProps extends TaskRowActions {
 }
 
 /**
- * The left sidebar's default view: every task across projects, by state.
- * Each row names its project, faint at the end. Needs-you and failed rows
- * say why on a second line; idle rows follow a gap,
- * dimmed and capped, with More / Less for the rest. Right-click opens the
- * task menu.
+ * The left sidebar's default view: favourites first (any state), then every
+ * live task across projects by state (`taskGroups`), and the sleeping ones
+ * folded under "Inactive sessions", open or closed as last left. Each row
+ * names its project, faint at the end; needs-you and failed rows say why on
+ * a second line; at-rest rows are dimmed. Hover shows the favourite star;
+ * right-click opens the task menu.
  */
 export function TaskStateList({
   rows: list,
@@ -55,11 +60,9 @@ export function TaskStateList({
   onOpenFolder,
   ...actions
 }: TaskStateListProps) {
-  const [showAllIdle, setShowAllIdle] = useState(false);
-  const rows = useMemo(
-    () => taskTreeRows(list, showAllIdle, activeTaskId),
-    [list, showAllIdle, activeTaskId],
-  );
+  const inactiveOpen = useSettings((s) => s.inactiveSessionsOpen);
+  const setInactiveOpen = useSettings((s) => s.setInactiveSessionsOpen);
+  const rows = useMemo(() => taskTreeRows(taskGroups(list), inactiveOpen), [list, inactiveOpen]);
 
   if (projects.length === 0) {
     return (
@@ -88,20 +91,15 @@ export function TaskStateList({
       variant="sidebar"
       className="min-h-0 flex-1"
       isSelected={(r) => r.kind === 'task' && r.row.task.id === activeTaskId}
-      onToggle={() => {}}
+      onToggle={() => setInactiveOpen(!inactiveOpen)}
       estimateSize={estimate}
       renderRow={(r, ctx) => {
         if (r.kind === 'gap') return <div className="h-4" />;
-        if (r.kind === 'more') {
+        if (r.kind === 'heading') return <TreeHeading>{r.label}</TreeHeading>;
+        if (r.kind === 'inactive') {
           return (
-            <TreeRow
-              ctx={ctx}
-              dimmed
-              size="sm"
-              leading={<StatusDot state="asleep" />}
-              onActivate={() => setShowAllIdle((v) => !v)}
-            >
-              {r.expanded ? 'Less' : `More (${r.hidden})`}
+            <TreeRow ctx={ctx} dimmed size="sm" onActivate={() => setInactiveOpen(!inactiveOpen)}>
+              {`Inactive sessions (${r.count})`}
             </TreeRow>
           );
         }
@@ -121,7 +119,8 @@ export function TaskStateList({
 /** A row's height before it is measured: a reason adds a line. */
 function estimate(r: TaskTreeRow): number {
   if (r.kind === 'gap') return 16;
-  if (r.kind === 'more') return 32;
+  if (r.kind === 'heading') return 28;
+  if (r.kind === 'inactive') return 32;
   return r.row.reason ? 54 : 36;
 }
 
@@ -142,12 +141,18 @@ function TaskStateRowItem({
       <ContextMenuTrigger asChild>
         <TreeRow
           ctx={ctx}
+          className="group/swap"
           dimmed={isAtRest(state)}
           strong={ctx.selected}
           leading={<StatusDot state={state} label={STATE_LABELS[state]} />}
           description={reason && <ReasonText state={state}>{reason}</ReasonText>}
           // The name truncates first; the project keeps up to 6rem.
-          trailing={projectName && <span className="max-w-24 truncate">{projectName}</span>}
+          trailing={
+            <HoverSwapSlot
+              rest={projectName && <span className="max-w-24 truncate">{projectName}</span>}
+              actions={<FavoriteButton task={task} />}
+            />
+          }
           onActivate={() => onSelectTask(task.projectId, task.id)}
         >
           {task.name}

@@ -117,6 +117,12 @@ describe('settings registry', () => {
     expect(e.codec.encode('0.13.0')).toBe('0.13.0');
   });
 
+  it('registers inactiveSessionsOpen, closed until opened', () => {
+    const e = SETTINGS_REGISTRY.find((r) => r.field === 'inactiveSessionsOpen')!;
+    expect(e.codec.decode(null)).toBe(false);
+    expect(e.codec.decode(e.codec.encode(true))).toBe(true);
+  });
+
   it('registers sidebarView, the task list unless the tree was chosen', () => {
     const e = SETTINGS_REGISTRY.find((r) => r.field === 'sidebarView')!;
     expect(e.codec.decode(null)).toBe('tasks');

@@ -1,5 +1,5 @@
 import type * as React from 'react';
-import { Settings, Archive, Trash2, AtSign, Brain, ScrollText, RotateCw } from 'lucide-react';
+import { Settings, Archive, Trash2, AtSign, Brain, ScrollText, RotateCw, Star } from 'lucide-react';
 import { DropdownMenuItem, DropdownMenuSeparator } from '../ui/DropdownMenu';
 import { IdeIcon } from '../ui/IdeIcon';
 import { usePreferredIde } from '../../hooks/usePreferredIde';
@@ -8,6 +8,7 @@ import { useProjects, selectTaskById } from '../../stores/projectsStore';
 import { useUi } from '../../stores/uiStore';
 import { sessionRegistry } from '../../terminal/SessionRegistry';
 import { useSetup } from '../../stores/setupStore';
+import { favoriteLabel } from './FavoriteButton';
 
 let focusTerminalOnClose = false;
 
@@ -70,8 +71,15 @@ export function TaskMenuItems({
   const showSetup = useSetup((s) => s.showSetup);
   const rerunSetup = useSetup((s) => s.rerun);
   const openTaskMemory = useUi((s) => s.openTaskMemory);
+  const setFavorite = useProjects((s) => s.setFavorite);
   return (
     <>
+      {task && (
+        <Item onSelect={() => void setFavorite(task, !task.favorite)}>
+          <Star size={13} strokeWidth={1.8} />
+          {favoriteLabel(task.favorite)}
+        </Item>
+      )}
       <Item onSelect={onOpenIde}>
         <span className="inline-flex w-3.25 justify-center text-icon">
           <IdeIcon ideId={ideId} />

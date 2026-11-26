@@ -214,3 +214,13 @@ export function TreeRow({
     />
   );
 }
+
+/** A group's heading inside a tree ("Staged · 3", "Favourites"): not an
+ *  item, so the keys pass over it (give its row depth -1, not focusable). */
+export function TreeHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <div role="presentation" className="type-subheading px-2.5 pt-2 pb-1">
+      {children}
+    </div>
+  );
+}

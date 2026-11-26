@@ -1,13 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import type { ActivityInfo, Project, Task } from '../../../../shared/types';
 import {
-  IDLE_LIMIT,
   agentState,
   failureReason,
   liveRows,
   newTaskProjectId,
   orderTasksByState,
-  visibleIdleRows,
+  taskGroups,
 } from '../taskStates';
 
 const project = (id: string) => ({ id, name: `Project ${id}` }) as Project;
@@ -136,26 +135,50 @@ describe('liveRows', () => {
   });
 });
 
-describe('visibleIdleRows', () => {
-  const idle = Array.from({ length: IDLE_LIMIT + 3 }, (_, i) => ({
-    task: task(`t${i}`, ''),
-    state: 'idle' as const,
-  }));
+describe('taskGroups', () => {
+  const list = orderTasksByState(
+    [
+      task('busy', '1', { jobId: 'j1' }),
+      task('favBusy', '2', { jobId: 'j2', favorite: true }),
+      task('seen', '3', { jobId: 'j3' }),
+      task('favAsleep', '9', { jobId: 'j4', favorite: true }),
+      task('favSeen', '4', { jobId: 'j5', favorite: true }),
+      task('asleepOld', '5', { jobId: 'j6' }),
+      task('asleepNew', '8', { jobId: 'j7' }),
+      task('fresh', '6', { jobId: null }),
+      task('waiting', '0', { jobId: 'j8' }),
+    ],
+    {
+      busy: { state: 'busy' },
+      favBusy: { state: 'busy' },
+      seen: { state: 'idle' },
+      favSeen: { state: 'idle' },
+      favAsleep: { state: 'stopped' },
+      asleepOld: { state: 'stopped' },
+      asleepNew: { state: 'stopped' },
+      waiting: { state: 'waiting' },
+    },
+    new Set(),
+    [],
+  );
+  const groups = taskGroups(list);
 
-  it(`shows the first ${IDLE_LIMIT} until expanded`, () => {
-    expect(visibleIdleRows(idle, false, null)).toHaveLength(IDLE_LIMIT);
-    expect(visibleIdleRows(idle, true, null)).toHaveLength(idle.length);
+  it('puts favourites first, whatever their state, live ones ahead of sleeping', () => {
+    expect(ids(groups.favorites)).toEqual(['favBusy', 'favSeen', 'favAsleep']);
   });
 
-  it('keeps a selected task below the cut on show, in place', () => {
-    const last = `t${idle.length - 1}`;
-    const shown = ids(visibleIdleRows(idle, false, last));
-    expect(shown).toHaveLength(IDLE_LIMIT + 1);
-    expect(shown.at(-1)).toBe(last);
+  it('keeps the live rest in state order, without repeating a favourite', () => {
+    expect(ids(groups.news)).toEqual(['waiting', 'busy']);
+    expect(ids(groups.resting)).toEqual(['seen', 'fresh']);
   });
 
-  it('returns a short list as is', () => {
-    expect(visibleIdleRows(idle.slice(0, 2), false, null)).toHaveLength(2);
+  it('lists the sleeping sessions apart, most recent first; a task that never ran stays up', () => {
+    expect(ids(groups.inactive)).toEqual(['asleepNew', 'asleepOld']);
+  });
+
+  it('places every task exactly once', () => {
+    const all = [...groups.favorites, ...groups.news, ...groups.resting, ...groups.inactive];
+    expect(ids(all).sort()).toEqual(ids([...list.active, ...list.idle]).sort());
   });
 });
 

@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Tree, type TreeHandle } from '../ui/Tree';
+import { Tree, TreeHeading, type TreeHandle } from '../ui/Tree';
 import { useEditorTabs } from '../../stores/editorTabsStore';
 import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
 import {
@@ -140,7 +140,7 @@ export function FileTree({
       onToggle={(row) => row.kind === 'folder' && toggle(row)}
       estimateSize={estimate}
       renderRow={(row, ctx) => {
-        if (row.kind === 'section') return <SectionHeader label={row.label} />;
+        if (row.kind === 'section') return <TreeHeading>{row.label}</TreeHeading>;
         if (row.kind === 'note') return <TreeNote row={row} />;
         const path = row.kind === 'file' ? row.file.path : row.folder.path;
         return (
@@ -159,14 +159,5 @@ export function FileTree({
         );
       }}
     />
-  );
-}
-
-/** A section's title ("Staged · 3"). */
-function SectionHeader({ label }: { label: string }) {
-  return (
-    <div role="presentation" className="type-subheading px-2.5 pt-2 pb-1">
-      {label}
-    </div>
   );
 }
