@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Check, AlertCircle } from 'lucide-react';
 import { useAdoConnection, useAdoConnectionLoader } from './useAdoConnection';
 import { AdoFormFields, AdoTestResult } from './AdoFormFields';
+import { Button } from '../../ui/Button';
+import { SwitchField } from '../../ui/SwitchField';
 
 interface AdoConnectionFormProps {
   projectId?: string;
@@ -36,89 +37,42 @@ export function AdoConnectionForm({ projectId }: AdoConnectionFormProps) {
   }
 
   return (
-    <div
-      className="rounded-xl border border-border/40"
-      style={{ background: 'hsl(var(--surface-2))' }}
+    <SwitchField
+      label="Link work items"
+      hint={configured ? 'Connected.' : 'Not set up. Turning it on asks for a token.'}
+      checked={enabled}
+      onCheckedChange={() => void handleToggle()}
     >
-      <div className="flex items-center gap-3.5 w-full p-4">
-        <button
-          type="button"
-          onClick={() => {
-            if (enabled) setExpanded(!expanded);
-          }}
-          className={`flex items-center gap-3.5 flex-1 min-w-0 text-left ${enabled ? 'cursor-pointer' : 'cursor-default'}`}
-        >
-          <div
-            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-              configured ? 'bg-[hsl(var(--git-added)/0.12)]' : 'bg-accent/60'
-            }`}
-          >
-            {configured ? (
-              <Check size={14} className="text-[hsl(var(--git-added))]" strokeWidth={2.5} />
-            ) : (
-              <AlertCircle size={14} className="text-icon" strokeWidth={2} />
-            )}
-          </div>
-          <div className="min-w-0">
-            <p className="text-base font-medium text-fg-fade-90">Azure DevOps</p>
-            <p className="text-xs text-fg-fade-50">{configured ? 'Connected' : 'Not configured'}</p>
-          </div>
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            void handleToggle();
-          }}
-          className="shrink-0"
-        >
-          <div
-            className={`w-8 h-[18px] rounded-full relative transition-colors duration-150 ${
-              enabled ? 'bg-primary' : 'bg-border'
-            }`}
-          >
-            <div
-              className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-xs transition-transform duration-150 ${
-                enabled ? 'translate-x-[16px]' : 'translate-x-[2px]'
-              }`}
-            />
-          </div>
-        </button>
-      </div>
-
-      <div
-        className="grid transition-[grid-template-rows] duration-200 ease-in-out"
-        style={{ gridTemplateRows: expanded ? '1fr' : '0fr' }}
-      >
-        <div className="overflow-hidden">
-          <div className="px-4 pb-4 space-y-2.5">
-            <AdoFormFields state={conn} />
-            <AdoTestResult result={conn.testResult} />
-
-            <div className="flex gap-2 pt-1">
-              <button
-                type="button"
-                disabled={!conn.canSubmit || conn.testing}
-                onClick={() => {
-                  void conn.handleTest();
-                }}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium border border-border/60 text-fg-fade-70 hover:bg-accent/40 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
-              >
-                {conn.testing ? 'Testing...' : 'Test Connection'}
-              </button>
-              <button
-                type="button"
-                disabled={!conn.canSubmit || conn.saving}
-                onClick={() => {
-                  void conn.handleSave();
-                }}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
-              >
-                {conn.saving ? 'Saving...' : 'Save'}
-              </button>
-            </div>
+      {enabled && !expanded && (
+        <div>
+          <Button variant="ghost" size="sm" onClick={() => setExpanded(true)}>
+            Edit connection
+          </Button>
+        </div>
+      )}
+      {enabled && expanded && (
+        <div className="grid gap-3">
+          <AdoFormFields state={conn} />
+          <AdoTestResult result={conn.testResult} />
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!conn.canSubmit || conn.testing}
+              onClick={() => void conn.handleTest()}
+            >
+              {conn.testing ? 'Testing…' : 'Test connection'}
+            </Button>
+            <Button
+              size="sm"
+              disabled={!conn.canSubmit || conn.saving}
+              onClick={() => void conn.handleSave()}
+            >
+              {conn.saving ? 'Saving…' : 'Save'}
+            </Button>
           </div>
         </div>
-      </div>
-    </div>
+      )}
+    </SwitchField>
   );
 }

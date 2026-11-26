@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Globe, Copy, Check, Loader2 } from 'lucide-react';
+import { Check, Copy, Loader2, X } from 'lucide-react';
 import QRCode from 'qrcode';
 import type { RemoteControlState } from '../../shared/types';
-import { Modal, useModalClose } from './ui/Modal';
+import { Button } from './ui/Button';
+import { Dialog, DialogBody, DialogHeader } from './ui/Dialog';
 
 interface RemoteControlModalProps {
   ptyId: string;
@@ -12,9 +13,9 @@ interface RemoteControlModalProps {
 
 export function RemoteControlModal(props: RemoteControlModalProps) {
   return (
-    <Modal onClose={props.onClose} size="w-[380px]">
+    <Dialog size="sm" onClose={props.onClose}>
       <RemoteControlBody ptyId={props.ptyId} state={props.state} />
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -24,7 +25,6 @@ interface RemoteControlBodyProps {
 }
 
 function RemoteControlBody({ ptyId, state }: RemoteControlBodyProps) {
-  const close = useModalClose();
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [enabling, setEnabling] = useState(false);
@@ -66,69 +66,54 @@ function RemoteControlBody({ ptyId, state }: RemoteControlBodyProps) {
 
   return (
     <>
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 h-12 border-b border-border/40">
-        <div className="flex items-center gap-2">
-          <Globe size={14} strokeWidth={1.8} className="text-primary" />
-          <h2 className="type-title">Remote Control</h2>
-        </div>
-        <button
-          onClick={close}
-          className="p-1.5 rounded-lg hover:bg-accent text-icon hover:text-foreground transition-all duration-150"
-        >
-          <X size={14} strokeWidth={2} />
-        </button>
-      </div>
-
-      <div className="p-5 flex flex-col items-center gap-4">
+      <DialogHeader
+        title="Remote control"
+        description="Continue this session from your phone or another browser."
+      />
+      <DialogBody compact className="justify-items-center text-center">
         {enabling && !state?.url ? (
           <>
-            <div className="w-[200px] h-[200px] rounded-lg bg-accent/30 flex items-center justify-center">
-              <Loader2 size={24} className="text-icon animate-spin" />
-            </div>
-            <p className="text-base text-muted-foreground">Enabling remote access...</p>
+            <QrSlot>
+              <Loader2 size={14} strokeWidth={1.8} className="animate-spin text-icon" />
+            </QrSlot>
+            <p className="type-body">Turning on remote access…</p>
           </>
         ) : state?.url ? (
           <>
-            {qrDataUrl && (
-              <img
-                src={qrDataUrl}
-                alt="Remote control QR code"
-                className="w-[200px] h-[200px] rounded-lg"
-              />
+            {qrDataUrl ? (
+              <img src={qrDataUrl} alt="Remote control QR code" className="size-50 rounded-lg" />
+            ) : (
+              <QrSlot />
             )}
-            <p className="text-sm text-muted-foreground text-center max-w-[280px]">
-              Scan with your phone or open the link to continue this session remotely
-            </p>
-            <button
-              onClick={handleCopy}
-              className="flex items-center gap-2 px-4 py-2 rounded-full text-base font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors w-full justify-center"
-            >
+            <p className="type-caption">Scan it with your phone, or open the link.</p>
+            <Button variant="secondary" className="w-full" onClick={handleCopy}>
               {copied ? (
-                <>
-                  <Check size={13} strokeWidth={2} />
-                  Copied
-                </>
+                <Check size={14} strokeWidth={1.8} />
               ) : (
-                <>
-                  <Copy size={13} strokeWidth={2} />
-                  Copy link
-                </>
+                <Copy size={14} strokeWidth={1.8} />
               )}
-            </button>
+              {copied ? 'Copied' : 'Copy link'}
+            </Button>
           </>
         ) : (
           <>
-            <div className="w-[200px] h-[200px] rounded-lg bg-accent/30 flex items-center justify-center">
-              <X size={24} className="text-icon" />
-            </div>
-            <p className="text-base text-muted-foreground text-center max-w-[280px]">
-              Could not enable remote access. Make sure you have a Claude Pro plan and are signed
-              in.
+            <QrSlot>
+              <X size={14} strokeWidth={1.8} className="text-icon" />
+            </QrSlot>
+            <p className="type-body">
+              Couldn&rsquo;t turn on remote access. It needs a Claude Pro plan and a signed-in
+              Claude Code.
             </p>
           </>
         )}
-      </div>
+      </DialogBody>
     </>
+  );
+}
+
+/** Where the QR code goes, while there is none. */
+function QrSlot({ children }: { children?: React.ReactNode }) {
+  return (
+    <div className="flex size-50 items-center justify-center rounded-lg bg-well">{children}</div>
   );
 }
