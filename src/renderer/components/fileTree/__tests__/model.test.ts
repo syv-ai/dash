@@ -8,6 +8,7 @@ import {
   isChanged,
   isSelected,
   revealKeys,
+  rowColumns,
   subtreeChanges,
   treeColumns,
   treeKey,
@@ -403,6 +404,53 @@ describe('treeColumns', () => {
     const badges = withViewed(new Map(), [{ path: 'a.ts' }, { path: 'b.ts' }], new Set(['b.ts']));
     expect(treeColumns(rows, badges).viewed).toBe(true);
     expect(treeColumns(rows).viewed).toBe(false);
+  });
+});
+
+describe('rowColumns', () => {
+  const cols = { threads: true, comments: true, add: 5, del: 3, status: true, viewed: true };
+  const none = {
+    threads: false,
+    comments: false,
+    add: false,
+    del: false,
+    status: false,
+    viewed: false,
+  };
+
+  it('gives a row with no values no columns, so its name takes the row', () => {
+    expect(rowColumns(cols, none)).toBeNull();
+    // A value in a column the tree doesn't draw doesn't count.
+    expect(rowColumns({ ...cols, viewed: false }, { ...none, viewed: true })).toBeNull();
+  });
+
+  it('drops the blank columns before a row’s first value, keeps those after it', () => {
+    // A closed folder: lines, no letter, no check.
+    expect(rowColumns(cols, { ...none, add: true })).toEqual({
+      threads: false,
+      comments: false,
+      add: 5,
+      del: 3,
+      status: true,
+      viewed: true,
+    });
+    // Only deletions: the add column goes, the rest stay aligned.
+    expect(rowColumns(cols, { ...none, del: true, status: true })).toMatchObject({
+      add: 0,
+      del: 3,
+    });
+  });
+
+  it('keeps every column from a row’s first badge on', () => {
+    expect(rowColumns(cols, { ...none, threads: true })).toEqual(cols);
+  });
+
+  it('starts at the first value in a column the tree draws', () => {
+    const narrow = { ...cols, threads: false, del: 0 };
+    expect(rowColumns(narrow, { ...none, threads: true, add: true })).toEqual({
+      ...narrow,
+      comments: false,
+    });
   });
 });
 

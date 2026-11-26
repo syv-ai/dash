@@ -33,6 +33,7 @@ import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
 import type { FileChangeStatus } from '../../../shared/types';
 import {
   isChanged,
+  rowColumns,
   type FileBadges,
   type ItemRow,
   type TreeColumns,
@@ -142,10 +143,12 @@ export function TreeNote({ row }: { row: Extract<FileTreeRow, { kind: 'note' }> 
  *  PR's threads, your comments, lines added and removed (a folder's while
  *  it is closed), a file's status letter (boxed when staged) and, in a
  *  PR's tree, a check once it is viewed. A folder shows no count of its
- *  changes: its lines say as much, and the counts crowded the column. */
+ *  changes: its lines say as much, and the counts crowded the column.
+ *  Blank columns before the row's first value aren't drawn (`rowColumns`),
+ *  so its name runs up to that value. */
 function Columns({
   row,
-  cols,
+  cols: treeCols,
   badges,
 }: {
   row: ItemRow;
@@ -168,6 +171,15 @@ function Columns({
     add = t.add + t.untrackedAdd;
     del = t.del;
   }
+  const cols = rowColumns(treeCols, {
+    threads: !!badges?.threads,
+    comments: !!badges?.comments,
+    add: add > 0,
+    del: del > 0,
+    status: !!status,
+    viewed: !!badges?.viewed,
+  });
+  if (!cols) return null;
   return (
     <span className="flex items-center gap-1.5 text-xs">
       {cols.threads && (

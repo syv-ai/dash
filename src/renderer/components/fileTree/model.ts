@@ -450,6 +450,27 @@ export function treeColumns(
   return cols;
 }
 
+/** The columns, left to right, in the order a row draws them. */
+const COLUMN_ORDER = ['threads', 'comments', 'add', 'del', 'status', 'viewed'] as const;
+
+/** Which of a row's columns hold a value. */
+export type FilledColumns = Record<(typeof COLUMN_ORDER)[number], boolean>;
+
+/** The tree's columns as one row draws them: those after its first value
+ *  keep their width, so values line up down the tree; the blank ones before
+ *  it are dropped, so its name runs up to that value. Null: the row has no
+ *  values (an open folder, an unchanged file) and its name takes the row. */
+export function rowColumns(cols: TreeColumns, filled: FilledColumns): TreeColumns | null {
+  const first = COLUMN_ORDER.findIndex((c) => filled[c] && cols[c]);
+  if (first < 0) return null;
+  const out = { ...cols };
+  for (const c of COLUMN_ORDER.slice(0, first)) {
+    if (c === 'add' || c === 'del') out[c] = 0;
+    else out[c] = false;
+  }
+  return out;
+}
+
 // ── Keys ─────────────────────────────────────────────────────
 
 /** A row as the shared tree's keyboard sees it (`ui/treeNav`): a section's
