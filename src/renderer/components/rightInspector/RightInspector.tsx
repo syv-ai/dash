@@ -520,6 +520,7 @@ export function RightInspector({
     <ViewRow
       tabsMinPx={tabsMinPx}
       extras={extras}
+      endPressed={segment === 'details'}
       tabs={
         <FolderTabs<Segment>
           aria-label="Task sidebar view"

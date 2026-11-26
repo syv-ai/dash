@@ -1,23 +1,63 @@
 import { describe, it, expect } from 'vitest';
-import { fitExtras, viewRowMinPx, VIEW_ROW_END_PX } from '../viewRowFit';
+import { fitViewRow, viewRowMinPx, VIEW_ROW_END_PX } from '../viewRowFit';
 
-describe('fitExtras', () => {
-  // The middle with both extras (comments, PR), then with the first alone.
-  const needs = [90, 40];
+describe('fitViewRow', () => {
+  // Tabs at their least; the extras (comments, PR) measured alone.
+  const tabs = 200;
+  const extras = [40, 50];
+  // The row's chrome beside the tabs: the gap after them, the middle's
+  // padding and the row's end padding.
+  const chrome = 2 + 8 + 4;
+  // Details with the gap before it; an extra after the first takes a gap.
+  const details = 2 + 24;
+  const all = tabs + chrome + 40 + 2 + 50 + details;
 
-  it('shows every extra while they fit whole', () => {
-    expect(fitExtras(90, needs)).toBe(2);
-    expect(fitExtras(400, needs)).toBe(2);
+  it('shows everything while it all fits', () => {
+    expect(fitViewRow(all, tabs, extras, false)).toEqual({ extras: [true, true], details: true });
+    expect(fitViewRow(all + 100, tabs, extras, false).details).toBe(true);
   });
 
-  it('gives way whole, last first, rather than clipping under Details', () => {
-    expect(fitExtras(89, needs)).toBe(1);
-    expect(fitExtras(40, needs)).toBe(1);
-    expect(fitExtras(39, needs)).toBe(0);
+  it('drops Details before the extras', () => {
+    expect(fitViewRow(all - 1, tabs, extras, false)).toEqual({
+      extras: [true, true],
+      details: false,
+    });
   });
 
-  it('shows none with none to show, or before measuring', () => {
-    expect(fitExtras(400, [])).toBe(0);
+  it('then drops the extras, last first, and brings Details back where it fits', () => {
+    // No room for the PR beside the comments: Details fits in what's left.
+    expect(fitViewRow(tabs + chrome + 40 + details, tabs, extras, false)).toEqual({
+      extras: [true, false],
+      details: true,
+    });
+    expect(fitViewRow(tabs + chrome + 40, tabs, extras, false)).toEqual({
+      extras: [true, false],
+      details: false,
+    });
+  });
+
+  it("doesn't let a wide extra that can't fit take a narrower one after it down", () => {
+    // Room for the PR alone (50), not for the wider comments (60).
+    expect(fitViewRow(tabs + chrome + 55, tabs, [60, 50], false)).toEqual({
+      extras: [false, true],
+      details: false,
+    });
+  });
+
+  it('keeps Details first while it is the view shown', () => {
+    expect(fitViewRow(all - 1, tabs, extras, true)).toEqual({
+      extras: [true, false],
+      details: true,
+    });
+  });
+
+  it('always fits Details alone at the least width the sidebar is kept at', () => {
+    const rowAtLeast = viewRowMinPx(tabs) - 8; // the list column's gutter
+    expect(fitViewRow(rowAtLeast, tabs, [], false).details).toBe(true);
+    expect(fitViewRow(rowAtLeast, tabs, extras, false)).toEqual({
+      extras: [false, false],
+      details: true,
+    });
   });
 });
 
