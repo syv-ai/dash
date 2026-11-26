@@ -37,7 +37,7 @@ interface MeterProps {
   /** Fill colour: ink-3, or a state. */
   tone?: MeterTone;
   /** Any CSS colour for the fill and the percent, over `tone`: a usage
-   *  meter passes `quietUsageColor(value)` (T19, T30). */
+   *  meter passes `usageColor(value)`, the limits' ramp (T30). */
   color?: string;
   /** md = the 4px track, sm = a 2px hairline for dense rows. */
   size?: 'sm' | 'md';
