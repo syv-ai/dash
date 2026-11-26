@@ -2,7 +2,7 @@ import * as React from 'react';
 import { cva } from 'class-variance-authority';
 import { cn } from '../../lib/cn';
 
-export type MeterTone = 'neutral' | 'needs' | 'fail' | 'work' | 'done';
+export type MeterTone = 'neutral' | 'warn' | 'needs' | 'fail' | 'work' | 'done';
 
 /** 0–100, clamped; NaN reads as 0. */
 export function clampPercent(value: number): number {
@@ -10,18 +10,19 @@ export function clampPercent(value: number): number {
 }
 
 /**
- * The tone for a usage meter, where more is worse: neutral below 60%, needs
+ * The tone for a usage meter, where more is worse: neutral below 60%, warn
  * (amber) from 60%, fail (red) from 80%. Progress meters stay neutral.
  */
 export function usageTone(percent: number): MeterTone {
   const pct = clampPercent(percent);
-  return pct >= 80 ? 'fail' : pct >= 60 ? 'needs' : 'neutral';
+  return pct >= 80 ? 'fail' : pct >= 60 ? 'warn' : 'neutral';
 }
 
 const fillVariants = cva('h-full rounded-full transition-[width] duration-500 ease-out', {
   variants: {
     tone: {
       neutral: 'bg-ink-3',
+      warn: 'bg-warn',
       needs: 'bg-state-needs',
       fail: 'bg-state-fail',
       work: 'bg-state-work',
@@ -34,6 +35,7 @@ const fillVariants = cva('h-full rounded-full transition-[width] duration-500 ea
 /** A tone's text colour, for the percent in the label row. */
 const meterToneText: Record<MeterTone, string> = {
   neutral: 'text-ink',
+  warn: 'text-warn',
   needs: 'text-state-needs',
   fail: 'text-state-fail',
   work: 'text-state-work',

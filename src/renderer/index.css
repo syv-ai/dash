@@ -10,7 +10,11 @@
      line = hairlines, ink/ink-2/ink-3 = text tiers, icon = resting
      icons (between ink-2 and ink-3), hover/select = row states,
      btn/btn-ink = the neutral primary button. Colour means agent
-     state only: needs (amber), fail (red), work (blue), done (green).
+     state only (S1): work (amber, breathes), needs (purple, breathes: a
+     question or permission prompt), unseen (blue, breathes: finished, not
+     yet opened), done (green: a live session at rest), fail (red). Beside
+     them, two roles that aren't agent state: warn (amber: caution, getting
+     close: usage, pace, confirm) and focus (blue: the keyboard focus ring).
      Contrast floor, both themes, on ground, well and raised: ink-2 ≥ 5.5:1,
      icon ≥ 4.5:1, ink-3 ≥ 4:1 (it labels things, so it reads as text, not
      decoration). Dark sits well above it (ink-2 ≥ 10, icon ≥ 9, ink-3 ≥ 7):
@@ -33,8 +37,8 @@
      colour outside state (user-requested, D191). */
   --color-link: hsl(var(--link));
   /* A changed file's name in the file trees (Files, a PR's files): a calm
-     gold, like VS Code's, user-requested (G1). Not state-needs amber, which
-     means "needs you". */
+     gold, like VS Code's, user-requested (G1). Not warn amber, which
+     means caution. */
   --color-changed: hsl(var(--changed));
   --color-hover: hsl(var(--hover));
   --color-select: hsl(var(--select));
@@ -43,7 +47,10 @@
   --color-state-needs: hsl(var(--state-needs));
   --color-state-fail: hsl(var(--state-fail));
   --color-state-work: hsl(var(--state-work));
+  --color-state-unseen: hsl(var(--state-unseen));
   --color-state-done: hsl(var(--state-done));
+  /* The keyboard focus ring (ui/styles.ts focusRing): chrome, not state. */
+  --color-focus: hsl(var(--focus));
   /* Lines added / deleted (diffstats, diff gutters, history): one pair app-wide. */
   --color-loc-add: hsl(var(--loc-add));
   --color-loc-del: hsl(var(--loc-del));
@@ -94,7 +101,8 @@
   /* `shadow-raised`: the menu/dialog/tooltip elevation (hairline + drop). */
   --shadow-raised: var(--elevation);
 
-  /* `animate-breathe`: a working StatusDot; pair with `motion-safe:`. */
+  /* `animate-breathe`: a StatusDot that wants a look (work, needs,
+     unseen); pair with `motion-safe:`. */
   --animate-breathe: breathe 2.4s ease-in-out infinite;
   @keyframes breathe {
     50% {
@@ -193,17 +201,25 @@
     /* GitHub-like blue, lightened to the AA floor: 4.6:1 on ground, 5.5:1
        on well (was 40% L: 5.1 / 6.1). */
     --link: 212 85% 43%;
-    /* Desaturated gold: 5.3:1 on ground, 6.4:1 on well (state-needs is
-       34 72% 44%). */
+    /* Desaturated gold: 5.3:1 on ground, 6.4:1 on well (warn is
+       34 78% 41%). */
     --changed: 40 48% 31%;
     --hover: 225 20% 20% / 0.05;
     --select: 225 20% 20% / 0.09;
     --btn: 225 14% 22%;
     --btn-ink: 0 0% 100%;
-    --state-needs: 34 72% 44%;
+    /* State dots and their text, on ground / well (S1): work 3.1 / 3.8
+       (was 34 72% 44%, 2.9 / 3.4), needs 4.7 / 5.7, unseen 3.6 / 4.4,
+       done 3.5 / 4.2, fail 3.9 / 4.6. */
+    --state-needs: 278 48% 50%;
     --state-fail: 4 58% 52%;
-    --state-work: 212 58% 50%;
+    --state-work: 34 78% 41%;
+    --state-unseen: 212 58% 50%;
     --state-done: 152 42% 38%;
+    /* Caution (usage, pace, confirm, git-modified): the same amber as work,
+       its own role so the two can part (S1). */
+    --warn: 34 78% 41%;
+    --focus: 212 58% 50%;
     --scrim: 225 20% 30% / 0.16;
     --edge: 225 20% 20% / 0.8;
     --shade: 225 20% 20% / 0.3;
@@ -227,7 +243,6 @@
     --accent-foreground: var(--ink);
     --destructive: var(--state-fail);
     --destructive-foreground: 0 0% 100%;
-    --warn: var(--state-needs);
     --warn-foreground: 0 0% 100%;
     --border: 225 12% 88%;
     --input: 225 12% 85%;
@@ -243,9 +258,9 @@
     --loc-add: var(--state-done);
     --loc-del: var(--state-fail);
     --git-added: var(--loc-add);
-    --git-modified: var(--state-needs);
+    --git-modified: var(--warn);
     --git-deleted: var(--loc-del);
-    --git-renamed: var(--state-work);
+    --git-renamed: var(--link);
     /* 7.4:1 on ground, 8.9:1 on well: between ink and ink-2, readable. */
     --git-untracked: 222 9% 30%;
     --git-conflicted: 25 85% 48%;
@@ -255,7 +270,7 @@
 
     --status-idle: var(--state-done);
     --status-wait: var(--state-needs);
-    --status-unseen: var(--state-work);
+    --status-unseen: var(--state-unseen);
 
     /* Service ("port") terminals: a muted periwinkle, distinct from shells. */
     --terminal-service: 248 24% 50%;
@@ -308,16 +323,22 @@
        213 85% 68%: 8.0 / 7.3 / 6.6), still under ink (16.2). */
     --link: 212 92% 76%;
     /* Soft gold: 10.7 / 9.9 / 8.9:1 on ground / well / raised, under ink
-       (state-needs is 40 75% 62%). */
+       (warn is 40 75% 62%). */
     --changed: 40 50% 68%;
     --hover: 0 0% 100% / 0.05;
     --select: 0 0% 100% / 0.09;
     --btn: 220 6% 91%;
     --btn-ink: 220 6% 5%;
-    --state-needs: 40 75% 62%;
+    /* On ground / well / raised (S1): work 10.7 / 9.9 / 8.8, needs
+       8.1 / 7.5 / 6.7, unseen 8.0 / 7.4 / 6.6, done 8.5 / 7.8 / 7.0,
+       fail 6.1 / 5.7 / 5.1. */
+    --state-needs: 276 68% 74%;
     --state-fail: 2 65% 64%;
-    --state-work: 214 65% 68%;
+    --state-work: 40 75% 62%;
+    --state-unseen: 214 65% 68%;
     --state-done: 150 40% 55%;
+    --warn: 40 75% 62%;
+    --focus: 214 65% 68%;
     --scrim: 0 0% 0% / 0.55;
     --edge: 0 0% 100%;
     --shade: 0 0% 0%;

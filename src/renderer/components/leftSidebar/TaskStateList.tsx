@@ -164,7 +164,7 @@ function TaskStateRowItem({
   );
 }
 
-/** A reason line in its state's colour (needs amber, failed red). */
+/** A reason line in its state's colour (needs purple, failed red). */
 function ReasonText({ state, children }: { state: AgentState; children: ReactNode }) {
   return (
     <span className={state === 'fail' ? 'text-state-fail' : 'text-state-needs'}>{children}</span>

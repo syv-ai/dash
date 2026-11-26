@@ -483,7 +483,7 @@ export function TerminalTabs({
           onClick={onExpand}
           className={`h-full w-full flex items-center gap-2 px-3 text-sm transition-colors ${
             hasUnseenTui
-              ? 'bg-state-needs/12 text-state-needs hover:bg-state-needs/20'
+              ? 'bg-warn/12 text-warn hover:bg-warn/20'
               : 'text-ink-2 hover:text-ink hover:bg-hover'
           }`}
         >

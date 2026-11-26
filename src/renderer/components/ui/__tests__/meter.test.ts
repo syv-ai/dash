@@ -14,11 +14,11 @@ describe('clampPercent', () => {
 });
 
 describe('usageTone', () => {
-  it('is neutral below 60%, needs from 60%, fail from 80%', () => {
+  it('is neutral below 60%, warn from 60%, fail from 80%', () => {
     expect(usageTone(0)).toBe('neutral');
     expect(usageTone(59.9)).toBe('neutral');
-    expect(usageTone(60)).toBe('needs');
-    expect(usageTone(79.9)).toBe('needs');
+    expect(usageTone(60)).toBe('warn');
+    expect(usageTone(79.9)).toBe('warn');
     expect(usageTone(80)).toBe('fail');
     expect(usageTone(250)).toBe('fail');
   });

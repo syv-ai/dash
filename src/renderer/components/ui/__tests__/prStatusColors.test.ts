@@ -13,7 +13,7 @@ describe('checkLook', () => {
   it('colours passing green, failing red, running amber and skipped neutral', () => {
     expect(checkLook('passing').tone).toBe('text-state-done');
     expect(checkLook('failing').tone).toBe('text-state-fail');
-    expect(checkLook('pending').tone).toBe('text-state-needs');
+    expect(checkLook('pending').tone).toBe('text-state-work');
     expect(checkLook('skipped').tone).toBe('text-icon');
   });
 

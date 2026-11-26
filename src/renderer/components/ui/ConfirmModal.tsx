@@ -41,7 +41,7 @@ export function ConfirmModal({
         }}
       >
         <div className="flex items-start gap-3">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-state-needs/12 text-state-needs">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-warn/12 text-warn">
             <AlertTriangle size={14} strokeWidth={1.8} />
           </div>
           <div className="pt-1.5 text-base text-ink">{message}</div>

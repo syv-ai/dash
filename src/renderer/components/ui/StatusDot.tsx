@@ -11,7 +11,7 @@ const dotVariants = cva('inline-block size-1.5 shrink-0 rounded-full', {
       needs: 'bg-state-needs',
       fail: 'bg-state-fail',
       work: 'bg-state-work',
-      done: 'bg-state-done ring-2 ring-state-done/40',
+      done: 'bg-state-unseen',
       idle: 'bg-state-done',
       asleep: 'invisible',
     },
@@ -19,17 +19,20 @@ const dotVariants = cva('inline-block size-1.5 shrink-0 rounded-full', {
   },
 });
 
+/** The states that want a look, so they breathe. */
+const BREATHES: ReadonlySet<AgentState> = new Set(['work', 'needs', 'done']);
+
 /**
- * A task's agent state as a 6px dot — the one place colour means something.
- * Green is a live session: at rest it is plain, `done` (finished, unseen)
- * wears a halo of it until seen. `work` breathes by default (not under
- * reduced motion); `asleep` holds the dot's place with nothing in it, so
- * names line up. Give it a `label` when
- * nothing beside it says the state in words.
+ * A task's agent state as a 6px dot — the one place colour means something
+ * (S1): working amber, waiting on you purple, finished but unseen blue, a
+ * live session at rest green, failed red, sleeping no dot. The first three
+ * breathe (not under reduced motion, where their colours still differ);
+ * `asleep` holds the dot's place with nothing in it, so names line up. Give
+ * it a `label` when nothing beside it says the state in words.
  */
 export function StatusDot({
   state,
-  pulse = state === 'work',
+  pulse = BREATHES.has(state),
   label,
   className,
 }: {

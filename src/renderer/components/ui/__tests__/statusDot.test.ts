@@ -6,24 +6,28 @@ import { StatusDot, type AgentState } from '../StatusDot';
 const classes = (state: AgentState) =>
   (StatusDot({ state }) as ReactElement<{ className: string }>).props.className.split(' ');
 
-describe('StatusDot', () => {
-  it('draws a live session at rest green, the resting state', () => {
-    expect(classes('idle')).toContain('bg-state-done');
-  });
+const BREATHE = 'motion-safe:animate-breathe';
 
-  it('tells done-but-unseen apart from at rest by a halo of the same green', () => {
-    expect(classes('done')).toContain('bg-state-done');
-    expect(classes('done').some((c) => c.startsWith('ring-state-done'))).toBe(true);
-    expect(classes('idle').some((c) => c.startsWith('ring'))).toBe(false);
+describe('StatusDot (S1)', () => {
+  it('gives each state its own colour', () => {
+    expect(classes('work')).toContain('bg-state-work');
+    expect(classes('needs')).toContain('bg-state-needs');
+    expect(classes('done')).toContain('bg-state-unseen');
+    expect(classes('idle')).toContain('bg-state-done');
+    expect(classes('fail')).toContain('bg-state-fail');
   });
 
   it('keeps the slot but draws nothing without a live session', () => {
     expect(classes('asleep')).toContain('invisible');
   });
 
-  it('breathes only while working', () => {
-    expect(classes('work')).toContain('motion-safe:animate-breathe');
-    for (const s of ['needs', 'fail', 'done', 'idle'] as const)
-      expect(classes(s)).not.toContain('motion-safe:animate-breathe');
+  it('breathes while it wants a look: working, waiting on you, finished unseen', () => {
+    for (const s of ['work', 'needs', 'done'] as const) expect(classes(s)).toContain(BREATHE);
+    for (const s of ['idle', 'fail', 'asleep'] as const) expect(classes(s)).not.toContain(BREATHE);
+  });
+
+  it('wears no halo: colour and breath tell the states apart', () => {
+    for (const s of ['work', 'needs', 'done', 'idle', 'fail'] as const)
+      expect(classes(s).some((c) => c.startsWith('ring'))).toBe(false);
   });
 });

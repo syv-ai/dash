@@ -67,7 +67,7 @@ export type LevelCell = Extract<Cell, { kind: 'level' }>;
  *  red, the limit comes first; plain ink with no projection yet. */
 const OUTLOOK_TEXT: Record<PaceOutlook, string> = {
   clear: 'text-state-done',
-  close: 'text-state-needs',
+  close: 'text-warn',
   over: 'text-state-fail',
 };
 

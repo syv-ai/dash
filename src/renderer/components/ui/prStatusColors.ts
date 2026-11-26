@@ -83,12 +83,12 @@ export function ciPulse(ci: CiState): string {
 }
 
 /** Checks' colour by their rolled-up state, as an open PR's icon shows them:
- *  red failing, amber running, green passing. */
+ *  red failing, amber running (the working colour), green passing. */
 export function ciText(ci: CiState): string {
   return ci === 'failing'
     ? 'text-state-fail'
     : ci === 'pending'
-      ? 'text-state-needs'
+      ? 'text-state-work'
       : 'text-state-done';
 }
 

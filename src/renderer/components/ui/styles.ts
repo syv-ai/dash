@@ -3,9 +3,9 @@
  * alike (every menu, every focusable control) are styled in one place.
  */
 
-/** Keyboard focus: a 2px state-work outline, offset 1. */
+/** Keyboard focus: a 2px focus-blue outline, offset 1. */
 export const focusRing =
-  'outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-state-work';
+  'outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus';
 
 /** A floating surface: menus, popovers, the command list, select content. */
 export const menuSurface =
