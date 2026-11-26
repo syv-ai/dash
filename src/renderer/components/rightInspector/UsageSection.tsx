@@ -161,7 +161,7 @@ export function limitCell(
   };
 }
 
-function sessionCell(ctx: ContextUsage | null): Cell {
+function sessionCell(ctx: ContextUsage | null): LevelCell {
   return {
     key: 'session',
     kind: 'level',
@@ -182,6 +182,37 @@ function sessionCell(ctx: ContextUsage | null): Cell {
           body: "Context used by this task's Claude session, once it has replied.",
         },
   };
+}
+
+/**
+ * The levels the usage row shows, in its order: the session's context, then
+ * the account's limits, each where its setting shows it. The task rail shows
+ * the same, so the two never disagree.
+ */
+export function levelCells({
+  contextUsage,
+  rateLimits,
+  showSession,
+  showLimits,
+  now,
+}: {
+  contextUsage?: ContextUsage;
+  rateLimits?: RateLimits;
+  showSession: boolean;
+  showLimits: boolean;
+  now: number;
+}): LevelCell[] {
+  const cells: LevelCell[] = [];
+  if (showSession) {
+    cells.push(sessionCell(contextUsage && contextUsage.percentage > 0 ? contextUsage : null));
+  }
+  // Both limits show once the account reports either: a window that isn't
+  // running (it reset, and no message has started the next) reads "—".
+  if (showLimits && rateLimits) {
+    cells.push(limitCell('fiveHour', rateLimits.fiveHour, now));
+    cells.push(limitCell('sevenDay', rateLimits.sevenDay, now));
+  }
+  return cells;
 }
 
 /** How far back the barometer looks: "last 30 min", "last hour". */
@@ -247,18 +278,9 @@ export function UsageSection({ contextUsage, rateLimits, paces }: UsageSectionPr
   const showPace = useSettings((s) => s.showPace);
   const now = useMinuteClock();
 
-  // Both limits show once the account reports either: a window that isn't
-  // running (it reset, and no message has started the next) reads "—".
-  const limits = showLimits ? rateLimits : undefined;
-  const pressing = showPace && limits ? pressingPace(paces) : null;
-  const ctx = contextUsage && contextUsage.percentage > 0 ? contextUsage : null;
+  const pressing = showPace && showLimits && rateLimits ? pressingPace(paces) : null;
 
-  const cells: Cell[] = [];
-  if (showSession) cells.push(sessionCell(ctx));
-  if (limits) {
-    cells.push(limitCell('fiveHour', limits.fiveHour, now));
-    cells.push(limitCell('sevenDay', limits.sevenDay, now));
-  }
+  const cells: Cell[] = levelCells({ contextUsage, rateLimits, showSession, showLimits, now });
   if (pressing) cells.push(paceCell(paces, pressing));
 
   const { rootRef, sizerRef, density } = useFittedDensity<UsageDensity>(

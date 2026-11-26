@@ -716,6 +716,7 @@ export function RightInspector({
       {railed && (
         <div className="h-full bg-ground pt-2 pr-2 pb-2">
           <TaskRail
+            contextUsage={contextUsage}
             rateLimits={rateLimits}
             status={statusIsOwn ? gitStatus : null}
             onShow={showFromRail}

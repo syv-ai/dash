@@ -19,25 +19,17 @@ const status = (over: Partial<GitStatus> = {}) => ({
 });
 
 describe('railParts', () => {
-  it('shows only the limits before the git status has loaded', () => {
-    expect(railParts({ limitsShown: true, status: null })).toEqual({
-      limits: true,
-      sync: null,
-      changes: null,
-    });
-  });
-
-  it('leaves the limits out where the sidebar does', () => {
-    expect(railParts({ limitsShown: false, status: status() }).limits).toBe(false);
+  it('shows no git parts before the git status has loaded', () => {
+    expect(railParts(null)).toEqual({ sync: null, changes: null });
   });
 
   it('shows ahead/behind only once the branch and its upstream have moved apart', () => {
-    expect(railParts({ limitsShown: true, status: status() }).sync).toBeNull();
-    expect(railParts({ limitsShown: true, status: status({ ahead: 3 }) }).sync).toEqual({
+    expect(railParts(status()).sync).toBeNull();
+    expect(railParts(status({ ahead: 3 })).sync).toEqual({
       ahead: 3,
       behind: 0,
     });
-    expect(railParts({ limitsShown: true, status: status({ ahead: 2, behind: 1 }) }).sync).toEqual({
+    expect(railParts(status({ ahead: 2, behind: 1 })).sync).toEqual({
       ahead: 2,
       behind: 1,
     });
@@ -45,13 +37,13 @@ describe('railParts', () => {
 
   it('has no ahead/behind without an upstream', () => {
     const noUpstream = status({ hasUpstream: false, ahead: 4 });
-    expect(railParts({ limitsShown: true, status: noUpstream }).sync).toBeNull();
+    expect(railParts(noUpstream).sync).toBeNull();
   });
 
   it("counts the changed files as Files' tab does, staged or not, and hides a zero", () => {
-    expect(railParts({ limitsShown: true, status: status() }).changes).toBeNull();
+    expect(railParts(status()).changes).toBeNull();
     const files = [file('a.ts'), file('b.ts', true), file('a.ts', true)];
-    expect(railParts({ limitsShown: true, status: status({ files }) }).changes).toBe(3);
+    expect(railParts(status({ files })).changes).toBe(3);
   });
 });
 
