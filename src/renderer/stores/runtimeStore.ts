@@ -11,10 +11,9 @@ import type {
   Task,
 } from '../../shared/types';
 import { playNotificationSound, playPeonSound } from '../sounds';
+import { emptyTracker, observeActivity } from './activityTransitions';
 import { useProjects } from './projectsStore';
 import { useSettings } from './settingsStore';
-
-const MIN_BUSY_DURATION_MS = 3000;
 
 interface TokenStatsRollup {
   totalTokens: number;
@@ -188,66 +187,33 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
 
     // ── Activity (PTY busy/idle) ───────────────────────────
     {
-      const prevState: Record<string, string> = {};
-      // PTYs that have been idle at least once — skip the initial busy→idle that
-      // fires when a task's activity entry first registers. `stopped` (session
-      // parked by the supervisor) counts as a resting state too.
-      const hasBeenIdle = new Set<string>();
-      const isResting = (state: string) => state === 'idle' || state === 'stopped';
-      // When each PTY entered busy, so we can ignore brief flashes (< 3s).
-      const busySince: Record<string, number> = {};
+      let tracker = emptyTracker();
+      const observe = (activity: Record<string, ActivityInfo>) => {
+        const r = observeActivity(tracker, activity, Date.now());
+        tracker = r.tracker;
+        return r;
+      };
 
       const unsub = window.electronAPI.onPtyActivity((newActivity) => {
         const sound = useSettings.getState().notificationSound;
-        // Peon mode: detect idle→busy transitions (user submits query).
-        if (sound === 'peon') {
-          for (const [id, info] of Object.entries(newActivity)) {
-            if (prevState[id] === 'idle' && info.state === 'busy' && hasBeenIdle.has(id)) {
-              playPeonSound('yes');
-              break;
-            }
-          }
-        }
-        // busy→idle transitions for PTYs that completed a full work cycle.
-        const newlyDoneIds: string[] = [];
-        for (const [id, info] of Object.entries(newActivity)) {
-          if (prevState[id] === 'busy' && info.state === 'idle' && hasBeenIdle.has(id)) {
-            const elapsed = Date.now() - (busySince[id] ?? Date.now());
-            if (elapsed >= MIN_BUSY_DURATION_MS) newlyDoneIds.push(id);
-          }
-        }
-        // Track busy start times (after detection — busySince still read above).
-        for (const [id, info] of Object.entries(newActivity)) {
-          if (info.state === 'busy' && prevState[id] !== 'busy') busySince[id] = Date.now();
-          else if (info.state !== 'busy') delete busySince[id];
-        }
-        if (newlyDoneIds.length > 0) {
+        const { finished, started } = observe(newActivity);
+        // Peon mode: an idle → busy transition (the user submitted a prompt).
+        if (sound === 'peon' && started.length > 0) playPeonSound('yes');
+        if (finished.length > 0) {
           playNotificationSound(sound);
           const currentActiveId = useProjects.getState().activeTaskId;
-          const toMarkUnseen = newlyDoneIds.filter((id) => id !== currentActiveId);
+          const toMarkUnseen = finished.filter((id) => id !== currentActiveId);
           if (toMarkUnseen.length > 0) {
             useSettings.getState().setUnseenTaskIds((prev) => new Set([...prev, ...toMarkUnseen]));
           }
         }
-        for (const [id, info] of Object.entries(newActivity)) {
-          if (isResting(info.state)) hasBeenIdle.add(id);
-        }
-        for (const id of hasBeenIdle) {
-          if (!(id in newActivity)) hasBeenIdle.delete(id);
-        }
-        for (const k of Object.keys(prevState)) delete prevState[k];
-        for (const [id, info] of Object.entries(newActivity)) prevState[id] = info.state;
-
         set({ taskActivity: newActivity });
       });
       cleanups.push(unsub);
 
       void window.electronAPI.ptyGetAllActivity().then((resp) => {
         if (resp.success && resp.data) {
-          for (const [id, info] of Object.entries(resp.data)) {
-            prevState[id] = info.state;
-            if (isResting(info.state)) hasBeenIdle.add(id);
-          }
+          observe(resp.data);
           set({ taskActivity: resp.data });
         }
       });
