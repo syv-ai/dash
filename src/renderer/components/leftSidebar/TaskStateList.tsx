@@ -43,7 +43,8 @@ interface TaskStateListProps extends TaskRowActions {
  * folded under "Inactive sessions", open or closed as last left. Each row
  * is two lines: the name, then its project (and why, for needs-you and
  * failed); a live one ends in its session's context percent. At-rest rows are
- * dimmed. Hover shows the favourite star; right-click opens the task menu.
+ * dimmed. A favourite's star always shows; any other's on hover.
+ * Right-click opens the task menu.
  */
 export function TaskStateList({
   rows: list,
@@ -160,10 +161,18 @@ function TaskStateRowItem({
           )
         }
         trailing={
-          <HoverSwapSlot
-            rest={state !== 'asleep' && <ContextLevel usage={usage} />}
-            actions={<FavoriteButton task={task} />}
-          />
+          task.favorite ? (
+            // A favourite's star always shows, beside its context.
+            <>
+              {state !== 'asleep' && <ContextLevel usage={usage} />}
+              <FavoriteButton task={task} />
+            </>
+          ) : (
+            <HoverSwapSlot
+              rest={state !== 'asleep' && <ContextLevel usage={usage} />}
+              actions={<FavoriteButton task={task} />}
+            />
+          )
         }
         onActivate={() => onSelectTask(task.projectId, task.id)}
       >
