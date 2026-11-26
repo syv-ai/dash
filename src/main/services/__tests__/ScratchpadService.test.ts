@@ -1,16 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  isServedScratchpad,
+  noteScratchpad,
+  readTaskScratchpad,
+  taskScratchpadDir,
+} from '../ScratchpadService';
 
-const sent: unknown[][] = [];
+const { sent, tasks } = vi.hoisted(() => ({
+  sent: [] as unknown[][],
+  tasks: {} as Record<string, { path: string; sessionId: string | null }>,
+}));
 vi.mock('../../utils/broadcast', () => ({
   broadcast: (...args: unknown[]) => sent.push(args),
 }));
-const tasks: Record<string, { path: string; sessionId: string | null }> = {};
 vi.mock('../DatabaseService', () => ({
   DatabaseService: { getTask: (id: string) => tasks[id] },
 }));
-
-const { isServedScratchpad, noteScratchpad, readTaskScratchpad, taskScratchpadDir } =
-  await import('../ScratchpadService');
 
 describe('ScratchpadService', () => {
   beforeEach(() => {
