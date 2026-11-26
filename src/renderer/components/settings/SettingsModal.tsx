@@ -55,7 +55,8 @@ import type {
   RtkDownloadProgress,
   RtkTestResult,
 } from '../../../shared/types';
-import { Meter, usageTone } from '../ui/Meter';
+import { Meter } from '../ui/Meter';
+import { usageColor } from '../../lib/usageColor';
 import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
 import { useControlInfo } from '../../hooks/useControlInfo';
@@ -381,7 +382,7 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
               <Meter
                 label="5-hour rate limit"
                 value={latestRateLimits.fiveHour.usedPercentage}
-                tone={usageTone(latestRateLimits.fiveHour.usedPercentage)}
+                color={usageColor(latestRateLimits.fiveHour.usedPercentage)}
                 detail={
                   latestRateLimits.fiveHour.resetsAt
                     ? `resets ${formatResetTime(latestRateLimits.fiveHour.resetsAt)}`
@@ -393,7 +394,7 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
               <Meter
                 label="7-day rate limit"
                 value={latestRateLimits.sevenDay.usedPercentage}
-                tone={usageTone(latestRateLimits.sevenDay.usedPercentage)}
+                color={usageColor(latestRateLimits.sevenDay.usedPercentage)}
                 detail={
                   latestRateLimits.sevenDay.resetsAt
                     ? `resets ${formatResetTime(latestRateLimits.sevenDay.resetsAt)}`

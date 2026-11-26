@@ -2,27 +2,17 @@ import * as React from 'react';
 import { cva } from 'class-variance-authority';
 import { cn } from '../../lib/cn';
 
-export type MeterTone = 'neutral' | 'warn' | 'needs' | 'fail' | 'work' | 'done';
+export type MeterTone = 'neutral' | 'needs' | 'fail' | 'work' | 'done';
 
 /** 0–100, clamped; NaN reads as 0. */
 export function clampPercent(value: number): number {
   return Number.isNaN(value) ? 0 : Math.max(0, Math.min(100, value));
 }
 
-/**
- * The tone for a usage meter, where more is worse: neutral below 60%, warn
- * (amber) from 60%, fail (red) from 80%. Progress meters stay neutral.
- */
-export function usageTone(percent: number): MeterTone {
-  const pct = clampPercent(percent);
-  return pct >= 80 ? 'fail' : pct >= 60 ? 'warn' : 'neutral';
-}
-
 const fillVariants = cva('h-full rounded-full transition-[width] duration-500 ease-out', {
   variants: {
     tone: {
       neutral: 'bg-ink-3',
-      warn: 'bg-warn',
       needs: 'bg-state-needs',
       fail: 'bg-state-fail',
       work: 'bg-state-work',
@@ -35,7 +25,6 @@ const fillVariants = cva('h-full rounded-full transition-[width] duration-500 ea
 /** A tone's text colour, for the percent in the label row. */
 const meterToneText: Record<MeterTone, string> = {
   neutral: 'text-ink',
-  warn: 'text-warn',
   needs: 'text-state-needs',
   fail: 'text-state-fail',
   work: 'text-state-work',
@@ -45,8 +34,11 @@ const meterToneText: Record<MeterTone, string> = {
 interface MeterProps {
   /** 0–100; values outside are clamped. */
   value: number;
-  /** Fill colour: ink-3, or a state. Use `usageTone(value)` for usage meters. */
+  /** Fill colour: ink-3, or a state. */
   tone?: MeterTone;
+  /** Any CSS colour for the fill and the percent, over `tone`: a usage
+   *  meter passes `usageColor(value)`, the one usage ramp (T19). */
+  color?: string;
   /** md = the 4px track, sm = a 2px hairline for dense rows. */
   size?: 'sm' | 'md';
   /** With a label, a row above the track shows it and the rounded percent. */
@@ -63,11 +55,12 @@ interface MeterProps {
 
 /**
  * A level or progress bar: a 4px hover-tint track with a rounded fill. It
- * serves usage (tinted by `usageTone`) and progress (neutral) alike.
+ * serves usage (coloured by `usageColor`) and progress (neutral) alike.
  */
 export function Meter({
   value,
   tone = 'neutral',
+  color,
   size = 'md',
   label,
   detail,
@@ -77,6 +70,7 @@ export function Meter({
   className,
 }: MeterProps) {
   const pct = clampPercent(value);
+  const colorVar = color ? ({ '--meter-color': color } as React.CSSProperties) : undefined;
   const track = (
     <div
       role={role}
@@ -87,7 +81,10 @@ export function Meter({
       title={title}
       className={cn('overflow-hidden rounded-full bg-hover', size === 'sm' ? 'h-0.5' : 'h-1')}
     >
-      <div className={fillVariants({ tone })} style={{ width: `${pct}%` }} />
+      <div
+        className={cn(fillVariants({ tone }), color && 'bg-(--meter-color)')}
+        style={{ ...colorVar, width: `${pct}%` }}
+      />
     </div>
   );
   if (label === undefined) return <div className={className}>{track}</div>;
@@ -96,7 +93,12 @@ export function Meter({
       <div className="flex items-baseline justify-between gap-2 text-sm">
         <span className="truncate text-ink-2">{label}</span>
         <span className="shrink-0 tabular-nums">
-          <span className={cn('font-medium', meterToneText[tone])}>{Math.round(pct)}%</span>
+          <span
+            className={cn('font-medium', color ? 'text-(--meter-color)' : meterToneText[tone])}
+            style={colorVar}
+          >
+            {Math.round(pct)}%
+          </span>
           {detail && <span className="ml-1.5 text-ink-3">{detail}</span>}
         </span>
       </div>

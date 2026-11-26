@@ -52,7 +52,7 @@ import { Input } from '../components/ui/Input';
 import { Kbd } from '../components/ui/Kbd';
 import { ListRow } from '../components/ui/ListRow';
 import { MainRepoBadge } from '../components/ui/MainRepoBadge';
-import { Meter, usageTone } from '../components/ui/Meter';
+import { Meter } from '../components/ui/Meter';
 import { ProgressRing } from '../components/ui/ProgressRing';
 import { ScrollRail, type RailSpanTone, type RailTick } from '../components/ui/ScrollRail';
 import { usageColor } from '../lib/usageColor';
@@ -381,8 +381,8 @@ function Badges() {
 function Meters() {
   return (
     <Section title="Meter">
-      {[0, 50, 90].map((v) => (
-        <Meter key={v} label={`Usage ${v}%`} value={v} tone={usageTone(v)} detail="resets 4h" />
+      {[0, 70, 90].map((v) => (
+        <Meter key={v} label={`Usage ${v}%`} value={v} color={usageColor(v)} detail="resets 4h" />
       ))}
       <Meter label="Session context" value={62} />
       <Meter value={35} role="progressbar" aria-label="Downloading" />
@@ -455,7 +455,7 @@ function Rings() {
           <span className="text-sm font-semibold text-ink-3">—</span>
         </ProgressRing>
       </div>
-      {/* The colour ramp: green to 40 %, yellow at 65 %, red at 100 %. */}
+      {/* The colour ramp: ink below 65 %, amber at 65 %, red at 100 %. */}
       <div className="flex h-3 overflow-hidden rounded-full">
         {Array.from({ length: 51 }, (_, i) => (
           <div
