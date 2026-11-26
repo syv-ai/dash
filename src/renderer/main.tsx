@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import './index.css';
+import { installErrorReporting, reportError } from './lib/telemetry';
 import { resolveTerminalFontValue, DEFAULT_FONT_MONO_STACK } from './terminal/terminalFonts';
 
 // Apply the persisted terminal font before React renders so xterm reads the
@@ -13,7 +14,20 @@ if (resolvedFont !== DEFAULT_FONT_MONO_STACK) {
   document.documentElement.style.setProperty('--terminal-font', resolvedFont);
 }
 
-const root = ReactDOM.createRoot(document.getElementById('root')!);
+installErrorReporting();
+
+// React 19 hands render errors here instead of logging them itself, so log
+// as it would, then report (no error boundary renders a fallback yet).
+const root = ReactDOM.createRoot(document.getElementById('root')!, {
+  onUncaughtError: (error, info) => {
+    console.error(error, info.componentStack);
+    reportError('react-uncaught', error);
+  },
+  onCaughtError: (error, info) => {
+    console.error(error, info.componentStack);
+    reportError('react-caught', error);
+  },
+});
 
 // `?gallery` shows the primitives gallery instead of the app (dev only: the
 // branch is dead code in production builds, so the gallery isn't bundled).

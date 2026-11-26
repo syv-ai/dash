@@ -1,9 +1,10 @@
 import { app } from 'electron';
-import { PostHog } from 'posthog-node';
+import { PostHog, type BeforeSendFn } from 'posthog-node';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 import * as os from 'os';
+import { ErrorThrottle } from './errorThrottle';
 import { scrubText } from './telemetryScrub';
 import type { DriftReport } from '../claudeContract/types';
 import { claudeVersionFor } from '../claudeContract/claudeVersions';
@@ -20,7 +21,6 @@ const MAX_NUMBER = 1_000_000;
 const DAILY_CHECK_MS = 60 * 60 * 1000;
 /** Quit waits this long for queued events (main.ts's safety net is 8 s). */
 const SHUTDOWN_TIMEOUT_MS = 3_000;
-const EXCEPTION_PROPERTIES = new Set(['$exception_message', '$exception_list', 'error_message']);
 
 // ── Allowed Events ────────────────────────────────────────────
 const ALLOWED_EVENTS = new Set([
@@ -69,8 +69,8 @@ const ALLOWED_EVENTS = new Set([
   'claude_update_detected',
   'claude_update_restart_requested',
 
-  // Errors
-  '$exception',
+  // Errors ($exception goes through captureException, not this list)
+  'ipc_failed',
 
   // Claude Code behaving differently than Dash expects (claudeContract/)
   'claude_contract_drift',
@@ -108,11 +108,9 @@ const ALLOWED_PROPERTIES = new Set([
   'removed',
   'failed',
   'error_type',
-  'error_message',
+  'error_code',
+  'channel',
   'severity',
-  '$exception_type',
-  '$exception_message',
-  '$exception_list',
 ]);
 
 // ── Persisted State ───────────────────────────────────────────
@@ -128,6 +126,8 @@ export class TelemetryService {
   private static config: TelemetryConfig | null = null;
   private static startTime: number = 0;
   private static dailyTimer: ReturnType<typeof setInterval> | null = null;
+  /** One report per error per minute, 30 an hour in all. */
+  private static readonly errors = new ErrorThrottle({ windowMs: 60_000, maxPerHour: 30 });
 
   static initialize(): void {
     try {
@@ -166,6 +166,33 @@ export class TelemetryService {
       // Silently swallow
       return false;
     }
+  }
+
+  /**
+   * An error, as PostHog error tracking's `$exception` (posthog-node parses
+   * the stack). Throttled (`errors`); every string, stack frames included,
+   * is scrubbed of user data by the client's `before_send`.
+   */
+  static captureException(error: unknown, properties: Record<string, unknown> = {}): boolean {
+    try {
+      if (!this.client || !this.config || !this.isEnabled()) return false;
+      const err = error instanceof Error ? error : new Error(String(error));
+      const key = `${String(properties.source ?? '')}:${err.name}:${scrub(err.message)}`;
+      if (!this.errors.allow(key, Date.now())) return false;
+      this.client.captureException(err, this.config.instanceId, {
+        ...this.getBaseProperties(),
+        ...this.sanitizeProperties(properties),
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** An IPC handler that answered with a failure: its channel and error code, no message. */
+  static captureIpcFailure(channel: string, errorCode: string): boolean {
+    if (!this.errors.allow(`ipc:${channel}:${errorCode}`, Date.now())) return false;
+    return this.capture('ipc_failed', { channel, error_code: errorCode });
   }
 
   /**
@@ -290,9 +317,7 @@ export class TelemetryService {
     for (const [key, value] of Object.entries(props)) {
       if (!ALLOWED_PROPERTIES.has(key)) continue;
 
-      if (EXCEPTION_PROPERTIES.has(key)) {
-        result[key] = scrubException(value);
-      } else if (typeof value === 'string') {
+      if (typeof value === 'string') {
         result[key] = value.slice(0, MAX_STRING_LENGTH);
       } else if (typeof value === 'number') {
         result[key] = Math.min(Math.max(value, 0), MAX_NUMBER);
@@ -324,22 +349,23 @@ function createClient(): PostHog {
     host: POSTHOG_HOST,
     flushAt: 10,
     flushInterval: 30_000,
+    before_send: scrubExceptionEvent,
   });
 }
 
-/** An exception message, or an `$exception_list`, with user data scrubbed (telemetryScrub). */
-function scrubException(value: unknown): unknown {
-  const scrub = (s: string) => scrubText(s, { home: os.homedir() }).slice(0, MAX_EXCEPTION_LENGTH);
+const scrub = (s: string) => scrubText(s, { home: os.homedir() }).slice(0, MAX_EXCEPTION_LENGTH);
+
+/** Every string in an `$exception` event (message, stack frames, paths) scrubbed of user data. */
+export const scrubExceptionEvent: BeforeSendFn = (event) => {
+  if (event.event !== '$exception' || !event.properties) return event;
+  return { ...event, properties: scrubDeep(event.properties, 0) as typeof event.properties };
+};
+
+function scrubDeep(value: unknown, depth: number): unknown {
   if (typeof value === 'string') return scrub(value);
-  if (!Array.isArray(value)) return undefined;
-  return value.map((item) => {
-    if (typeof item === 'string') return scrub(item);
-    if (typeof item !== 'object' || item === null) return item;
-    const safe: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(item as Record<string, unknown>)) {
-      if (typeof v === 'string') safe[k] = scrub(v);
-      else if (typeof v === 'number' || typeof v === 'boolean') safe[k] = v;
-    }
-    return safe;
-  });
+  if (depth > 8 || typeof value !== 'object' || value === null) return value;
+  if (Array.isArray(value)) return value.map((v) => scrubDeep(v, depth + 1));
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, scrubDeep(v, depth + 1)]),
+  );
 }

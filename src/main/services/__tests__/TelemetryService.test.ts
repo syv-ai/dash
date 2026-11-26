@@ -9,6 +9,7 @@ let userData: string;
 vi.mock('electron', () => ({ default: {}, app }));
 const constructed = vi.fn();
 const captured = vi.fn();
+const exceptions = vi.fn();
 vi.mock('posthog-node', () => ({
   PostHog: class {
     constructor() {
@@ -16,6 +17,9 @@ vi.mock('posthog-node', () => ({
     }
     capture(msg: unknown) {
       captured(msg);
+    }
+    captureException(...args: unknown[]) {
+      exceptions(...args);
     }
     async shutdown() {}
   },
@@ -25,6 +29,7 @@ beforeEach(() => {
   userData = mkdtempSync(path.join(os.tmpdir(), 'dash-telemetry-test-'));
   constructed.mockClear();
   captured.mockClear();
+  exceptions.mockClear();
   delete process.env.TELEMETRY_ENABLED;
   vi.resetModules();
 });
@@ -107,15 +112,11 @@ describe('TelemetryService properties', () => {
     expect(props()).toMatchObject({ moved: 2, removed: 1, failed: 0 });
   });
 
-  it('scrubs paths out of exception messages and stacks', async () => {
+  it('drops the old free-text exception properties from plain capture', async () => {
     const t = await packaged();
-    const home = os.homedir();
-    t.capture('$exception', {
-      $exception_message: `ENOENT: open '${home}/repos/secret/a.md'`,
-      $exception_list: [{ type: 'Error', value: `at ${home}/repos/secret/b.ts:1:1` }],
-    });
-    expect(JSON.stringify(props())).not.toContain(home);
-    expect(props().$exception_message).toBe("ENOENT: open '<path>'");
+    t.capture('task_created', { $exception_message: 'x', error_message: 'y' });
+    expect(props()).not.toHaveProperty('$exception_message');
+    expect(props()).not.toHaveProperty('error_message');
   });
 });
 
@@ -146,6 +147,65 @@ describe('claude_contract_drift', () => {
       field_path: 'notification_type',
       enum_value: 'agent_waiting',
     });
+  });
+});
+
+describe('error tracking', () => {
+  async function packaged() {
+    writeConfig(true);
+    app.isPackaged = true;
+    const mod = await import('../TelemetryService');
+    mod.TelemetryService.initialize();
+    return mod;
+  }
+
+  it('reports an exception once a minute per error, with its source', async () => {
+    const { TelemetryService } = await packaged();
+    const err = new Error('boom');
+    expect(TelemetryService.captureException(err, { source: 'ipc', channel: 'git:push' })).toBe(
+      true,
+    );
+    expect(TelemetryService.captureException(err, { source: 'ipc', channel: 'git:push' })).toBe(
+      false,
+    );
+    expect(exceptions).toHaveBeenCalledTimes(1);
+    const [sentErr, distinctId, props] = exceptions.mock.calls[0]!;
+    expect(sentErr).toBe(err);
+    expect(distinctId).toBe('test');
+    expect(props).toMatchObject({ source: 'ipc', channel: 'git:push', app_version: '0.0.0' });
+  });
+
+  it('scrubs every string of an $exception event before it is sent', async () => {
+    const { scrubExceptionEvent } = await packaged();
+    const home = os.homedir();
+    const event = scrubExceptionEvent({
+      event: '$exception',
+      distinctId: 'x',
+      properties: {
+        $exception_list: [
+          {
+            value: `ENOENT: open '${home}/repos/secret/a.md'`,
+            stacktrace: {
+              frames: [{ filename: `${home}/repos/dash/x.js`, abs_path: `${home}/x.js` }],
+            },
+          },
+        ],
+      },
+    });
+    expect(JSON.stringify(event)).not.toContain(home);
+    expect(JSON.stringify(event)).toContain("ENOENT: open '<path>'");
+  });
+
+  it('counts an IPC failure by channel and code only', async () => {
+    const { TelemetryService } = await packaged();
+    captured.mockClear();
+    expect(TelemetryService.captureIpcFailure('git:push', 'UNKNOWN')).toBe(true);
+    const msg = captured.mock.calls[0]![0] as {
+      event: string;
+      properties: Record<string, unknown>;
+    };
+    expect(msg.event).toBe('ipc_failed');
+    expect(msg.properties).toMatchObject({ channel: 'git:push', error_code: 'UNKNOWN' });
   });
 });
 

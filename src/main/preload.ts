@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import type { RendererErrorReport } from '../types/electron-api/telemetry';
 
 /**
  * A main→renderer event subscription: `listen<T>(channel)(callback)` calls
@@ -459,6 +460,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Telemetry
   telemetryCapture: (event: string, properties?: Record<string, unknown>) =>
     ipcRenderer.invoke('telemetry:capture', { event, properties }),
+  telemetryException: (report: RendererErrorReport) =>
+    ipcRenderer.invoke('telemetry:exception', report),
   telemetryGetStatus: () => ipcRenderer.invoke('telemetry:getStatus'),
   telemetrySetEnabled: (enabled: boolean) => ipcRenderer.invoke('telemetry:setEnabled', enabled),
 

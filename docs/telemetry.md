@@ -76,3 +76,42 @@ The source of truth for what Dash sends to PostHog. Change this file in the same
 | `claude_update_detected`          | an installed Claude Code that live sessions don't run, once per version per run                 | `outdated_count`                                                               |
 | `claude_update_restart_requested` | the user picks a restart in the update dialog                                                   | `mode` (`now`, `whenDone`), `outdated_count`                                   |
 | `claude_contract_drift`           | Claude Code sends something Dash doesn't expect, once per key ever (`src/main/claudeContract/`) | `claude_version` (the session's), `source`, `kind`, `field_path`, `enum_value` |
+
+### Errors
+
+| Event        | When                                                                                                             | Properties                            |
+| ------------ | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| `$exception` | PostHog error tracking, via `TelemetryService.captureException` (posthog-node parses the stack)                  | `source`, `channel` (IPC), `severity` |
+| `ipc_failed` | an IPC handler answered `{ success: false }`: git, forge, PTY, session and every other failure the renderer sees | `channel`, `error_code`               |
+
+`$exception` sources: `uncaughtException`, `unhandledRejection` (main), `ipc` (a handler threw), `renderer:window`, `renderer:unhandledrejection`, `renderer:react-uncaught`, `renderer:react-caught` (React 19's root error callbacks). Every string of an `$exception` event, stack frames included, is scrubbed by the client's `before_send`; frames inside Dash's bundle keep their module path (`app:/dist/...`). Reports are throttled: one per distinct error per minute and 30 an hour in all (`errorThrottle.ts`). StopFailure counts are `turn_failed` by `error_type`.
+
+## The primary dashboard
+
+Insights to build in PostHog (project 143323, EU). All trends exclude `is_dev = true`.
+
+| Insight                      | Type                  | Event(s)                                                     | Breakdown / formula                        | Interval |
+| ---------------------------- | --------------------- | ------------------------------------------------------------ | ------------------------------------------ | -------- |
+| Daily active users           | Trends, unique users  | `daily_active_user`                                          |                                            | day      |
+| Weekly active users          | Trends, weekly active | `daily_active_user`                                          |                                            | week     |
+| Stickiness                   | Stickiness            | `daily_active_user`                                          | days active per week                       | week     |
+| Retention                    | Retention             | first `app_started` → returning `daily_active_user`          |                                            | week     |
+| Tasks created                | Trends, total         | `task_created`                                               | `kind`, `source`                           | day      |
+| Sessions started             | Trends, total         | `session_started`                                            | `resumed`, `model`                         | day      |
+| Turns per active user        | Trends, formula       | `turn_completed` total / `daily_active_user` unique users    | A / B                                      | day      |
+| Turn length                  | Trends, total         | `turn_completed`                                             | `duration_bucket`                          | week     |
+| Interrupted turns            | Trends, total         | `turn_completed`                                             | `interrupted`                              | week     |
+| Waits on the user            | Trends, total         | `wait_ended`                                                 | `duration_bucket`                          | week     |
+| Failed turns by error        | Trends, total         | `turn_failed`                                                | `error_type`                               | day      |
+| Sleep / wake / restart       | Trends, total         | `session_slept`, `session_woken`, `session_restarted`        |                                            | week     |
+| Review adoption              | Trends, unique users  | `review_mode_entered`, `pr_review_submitted`                 | `verdict` (second series)                  | week     |
+| Review funnel                | Funnel                | `review_mode_entered` → `pr_review_submitted` (`ok = true`)  | within 1 day                               | week     |
+| Editor use                   | Trends, total         | `file_opened`                                                |                                            | week     |
+| Claude Code version mix      | Trends, unique users  | `daily_active_user`                                          | `claude_version`                           | day      |
+| Update restarts              | Funnel                | `claude_update_detected` → `claude_update_restart_requested` | `mode`                                     | week     |
+| Dash version mix             | Trends, unique users  | `daily_active_user`                                          | `app_version`                              | day      |
+| Errors                       | Trends, total         | `$exception`                                                 | `source`                                   | day      |
+| Error-tracking issues        | Error tracking        | (PostHog's Error tracking view)                              | grouped by issue                           |          |
+| IPC failures                 | Trends, total         | `ipc_failed`                                                 | `channel`                                  | day      |
+| Claude Code contract drift   | Trends, total         | `claude_contract_drift`                                      | `source`, then `kind`, `field_path`        | week     |
+| Drift by Claude Code version | Table                 | `claude_contract_drift`                                      | `claude_version` × `source` × `field_path` | all time |

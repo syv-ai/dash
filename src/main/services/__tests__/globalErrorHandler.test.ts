@@ -1,63 +1,38 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TelemetryService } from '../TelemetryService';
-import {
-  reportMainProcessError,
-  installGlobalErrorHandlers,
-  __resetErrorThrottleForTest,
-} from '../globalErrorHandler';
+import { reportMainProcessError, installGlobalErrorHandlers } from '../globalErrorHandler';
 
 describe('reportMainProcessError', () => {
-  let capture: ReturnType<typeof vi.spyOn>;
+  let captureException: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    __resetErrorThrottleForTest();
-    capture = vi.spyOn(TelemetryService, 'capture').mockImplementation(() => true);
+    captureException = vi
+      .spyOn(TelemetryService, 'captureException')
+      .mockImplementation(() => true);
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => vi.restoreAllMocks());
 
-  it('logs and reports a $exception with sanitizable, PII-bounded props', () => {
-    reportMainProcessError('uncaughtException', new TypeError('boom at /Users/x/secret'));
-
+  it('logs the error and reports it as an exception with its source', () => {
+    const err = new TypeError('boom');
+    reportMainProcessError('uncaughtException', err);
     expect(console.error).toHaveBeenCalledWith(
       expect.stringContaining('[globalError] uncaughtException'),
-      expect.any(Error),
+      err,
     );
-    expect(capture).toHaveBeenCalledTimes(1);
-    const [event, props] = capture.mock.calls[0]!;
-    expect(event).toBe('$exception');
-    expect(props).toMatchObject({
-      $exception_type: 'TypeError',
-      $exception_message: 'boom at /Users/x/secret',
-      $exception_list: [{ type: 'TypeError', value: 'boom at /Users/x/secret' }],
+    expect(captureException).toHaveBeenCalledWith(err, {
       source: 'uncaughtException',
       severity: 'error',
     });
   });
 
-  it('coerces a non-Error rejection reason into a reported Error', () => {
+  it('coerces a non-Error rejection reason into an Error', () => {
     reportMainProcessError('unhandledRejection', 'plain string reason');
-    expect(capture).toHaveBeenCalledTimes(1);
-    const props = capture.mock.calls[0]![1] as Record<string, unknown>;
-    expect(props.$exception_message).toBe('plain string reason');
-    expect(props.source).toBe('unhandledRejection');
-  });
-
-  it('throttles duplicate reports within the dedupe window', () => {
-    const err = new Error('repeated');
-    reportMainProcessError('uncaughtException', err);
-    reportMainProcessError('uncaughtException', err);
-    reportMainProcessError('uncaughtException', err);
-    // Logged every time, but reported once.
-    expect(console.error).toHaveBeenCalledTimes(3);
-    expect(capture).toHaveBeenCalledTimes(1);
-  });
-
-  it('reports distinct errors separately', () => {
-    reportMainProcessError('uncaughtException', new Error('one'));
-    reportMainProcessError('uncaughtException', new Error('two'));
-    expect(capture).toHaveBeenCalledTimes(2);
+    const [err, props] = captureException.mock.calls[0]!;
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toBe('plain string reason');
+    expect(props).toMatchObject({ source: 'unhandledRejection' });
   });
 });
 

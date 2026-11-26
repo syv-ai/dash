@@ -1,3 +1,6 @@
+import { ipcMain } from 'electron';
+import { TelemetryService } from '../services/TelemetryService';
+import { instrumentIpcHandlers } from './instrumentIpc';
 import { registerAppIpc } from './appIpc';
 import { registerDbIpc } from './dbIpc';
 import { registerTaskIpc } from './taskIpc';
@@ -23,6 +26,11 @@ import { registerMemoryIpc } from './memoryIpc';
 import { registerLspIpc } from './lspIpc';
 
 export function registerAllIpc(): void {
+  // First, so every handler below reports its failures (docs/telemetry.md).
+  instrumentIpcHandlers(ipcMain, {
+    failure: (channel, code) => TelemetryService.captureIpcFailure(channel, code),
+    exception: (err, channel) => TelemetryService.captureException(err, { source: 'ipc', channel }),
+  });
   registerAppIpc();
   registerDbIpc();
   registerTaskIpc();
