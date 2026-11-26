@@ -18,6 +18,7 @@ import {
   WAIT_NOTIFICATIONS,
 } from './hookPayload';
 import { setTaskInbox } from './taskInbox';
+import { noteScratchpad } from './ScratchpadService';
 import { claudeConfigDir } from '../utils/claudePaths';
 import { checkShape } from '../claudeContract/check';
 import { claudeVersionFor, noteTaskClaudeVersion } from '../claudeContract/claudeVersions';
@@ -383,6 +384,7 @@ class HookServerImpl {
               const owner = statusLineTaskId(ptyId, data, (dir) => this.getTaskIdAtPath(dir));
               if (owner === ptyId || this._hasPty(owner)) {
                 contextUsageService.updateFromStatusLine(owner, data);
+                noteScratchpad(owner, data);
                 // The one payload that names the session's Claude Code version.
                 if (typeof data.version === 'string') noteTaskClaudeVersion(owner, data.version);
               }
@@ -507,6 +509,8 @@ class HookServerImpl {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
               const inbox = inboxFromHeaders(req.headers, payload);
               if (inbox) setTaskInbox(ptyId, inbox);
+              // The first payload of a session to name its scratchpad.
+              noteScratchpad(ptyId, payload);
               res.writeHead(200);
               res.end();
             });

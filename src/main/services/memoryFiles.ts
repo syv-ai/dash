@@ -68,33 +68,74 @@ function scalarAt(
 }
 
 /**
- * Read a memory file's frontmatter. Two shapes exist on disk: older files put
- * `type:` at the top level; newer ones nest it under `metadata:`. `name` and
- * `description` are only taken at the top level so a nested key can't shadow
- * them. Not a YAML parser — the repo has none, and these files are flat.
+ * A frontmatter block as Dash reads it: each top-level key's text, or for a
+ * key with no value of its own (`metadata:`), its indented keys one level
+ * down. Not a YAML parser — the repo has none, and these files are flat.
  */
-export function parseMemoryFile(content: string): MemoryFields {
+export type Frontmatter = Record<string, string | Record<string, string>>;
+
+/**
+ * Split a memory file into its frontmatter (null when it has none) and its
+ * body. The drift check (claudeContract `checkMemoryFrontmatter`) reads the
+ * frontmatter whole; `parseMemoryFile` picks Dash's fields from it.
+ */
+export function readFrontmatter(content: string): {
+  frontmatter: Frontmatter | null;
+  body: string;
+} {
   const m = FRONTMATTER_RE.exec(content);
-  const out: MemoryFields = {
-    name: '',
-    description: '',
-    type: 'other',
-    body: m ? content.slice(m[0].length) : content,
-  };
-  if (!m?.[1]) return out;
-  const lines = m[1].split(/\r?\n/);
+  if (!m) return { frontmatter: null, body: content };
+  const body = content.slice(m[0].length);
+  const frontmatter: Frontmatter = {};
+  const lines = (m[1] ?? '').split(/\r?\n/);
+  // The top-level key whose indented keys are being read, if any.
+  let parent: Record<string, string> | null = null;
   for (let i = 0; i < lines.length; i++) {
     const kv = KEY_RE.exec(lines[i] ?? '');
     if (!kv) continue;
-    const [, indent = '', key, raw = ''] = kv;
+    const [, indent = '', key = '', raw = ''] = kv;
     const { value, span } = scalarAt(lines, i, indent, raw);
-    if (!indent && key === 'name') out.name = value;
-    else if (!indent && key === 'description') out.description = value;
-    else if (key === 'type') out.type = toMemoryType(value);
     // A block's own lines are text, not keys.
     i += span - 1;
+    if (indent) {
+      if (parent && !(key in parent)) parent[key] = value;
+      continue;
+    }
+    if (raw.trim() === '') {
+      parent = {};
+      frontmatter[key] = parent;
+    } else {
+      parent = null;
+      frontmatter[key] = value;
+    }
   }
-  return out;
+  return { frontmatter, body };
+}
+
+/** A top-level text value, or '' (absent, or a nested block). */
+function text(fm: Frontmatter, key: string): string {
+  const v = fm[key];
+  return typeof v === 'string' ? v : '';
+}
+
+/**
+ * Read a memory file's frontmatter. Two shapes exist on disk: the documented
+ * one puts `type:` at the top level; others nest it under `metadata:`. `name`
+ * and `description` are only taken at the top level so a nested key can't
+ * shadow them.
+ */
+export function parseMemoryFile(content: string): MemoryFields {
+  const { frontmatter: fm, body } = readFrontmatter(content);
+  if (!fm) return { name: '', description: '', type: 'other', body };
+  const nested = Object.values(fm).find(
+    (v): v is Record<string, string> => typeof v === 'object' && typeof v.type === 'string',
+  );
+  return {
+    name: text(fm, 'name'),
+    description: text(fm, 'description'),
+    type: toMemoryType(text(fm, 'type') || nested?.type || ''),
+    body,
+  };
 }
 
 /** A memory file's fields, named as it answers to: its frontmatter name, else its basename. */

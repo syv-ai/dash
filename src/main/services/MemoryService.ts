@@ -2,10 +2,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { MEMORY_INDEX_FILE, type MemoryEntry, type ProjectMemory } from '@shared/types';
 import { claudeConfigDir, claudeProjectDir, mainRepoRoot } from '../utils/claudePaths';
+import { checkMemoryFrontmatter } from '../claudeContract/agentFileSchemas';
+import { claudeVersionFor } from '../claudeContract/claudeVersions';
+import { reportFindings } from '../claudeContract/driftReporter';
 import {
   countNewMemories,
   indexLinkFiles,
   isMemoryFileName,
+  readFrontmatter,
   readIndex,
   readMemoryFields,
   type MemoryIndexLine,
@@ -51,6 +55,12 @@ async function readEntry(
       fs.promises.readFile(full, 'utf8'),
       fs.promises.stat(full),
     ]);
+    // Claude Code wrote it, so its frontmatter is a contract (claudeContract/).
+    reportFindings(
+      'memory-file',
+      checkMemoryFrontmatter(readFrontmatter(content).frontmatter),
+      claudeVersionFor(),
+    );
     return { file, ...readMemoryFields(content, file), mtimeMs: stat.mtimeMs, ...indexLine(file) };
   } catch (err) {
     // ENOENT: deleted between readdir and read (Claude rewrites memories

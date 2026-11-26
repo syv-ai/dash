@@ -23,6 +23,7 @@ import { registerDrawerTabsIpc } from './drawerTabsIpc';
 import { registerWorkspaceConfigIpc } from './workspaceConfigIpc';
 import { registerProjectSourceIpc } from './projectSourceIpc';
 import { registerMemoryIpc } from './memoryIpc';
+import { registerAgentIpc } from './agentIpc';
 import { registerLspIpc } from './lspIpc';
 
 export function registerAllIpc(): void {
@@ -53,5 +54,6 @@ export function registerAllIpc(): void {
   registerWorkspaceConfigIpc();
   registerProjectSourceIpc();
   registerMemoryIpc();
+  registerAgentIpc();
   registerLspIpc();
 }

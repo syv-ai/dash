@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { countNewMemories, parseMemoryFile, readIndex, toMemoryType } from '../memoryFiles';
+import {
+  countNewMemories,
+  parseMemoryFile,
+  readFrontmatter,
+  readIndex,
+  toMemoryType,
+} from '../memoryFiles';
 
 describe('parseMemoryFile', () => {
   it('reads the current shape (type under metadata:)', () => {
@@ -131,5 +137,28 @@ describe('countNewMemories', () => {
 
   it('counts nothing when the project was never seen', () => {
     expect(countNewMemories(files, null)).toBe(0);
+  });
+});
+
+describe('readFrontmatter', () => {
+  it('reads top-level text and one nested level, and splits off the body', () => {
+    const md = [
+      '---',
+      'name: a',
+      'metadata:',
+      '  type: user',
+      '  extra: "q"',
+      'type: x',
+      '---',
+      'body',
+    ];
+    expect(readFrontmatter(md.join('\n'))).toEqual({
+      frontmatter: { name: 'a', metadata: { type: 'user', extra: 'q' }, type: 'x' },
+      body: 'body',
+    });
+  });
+
+  it('is null without a frontmatter block', () => {
+    expect(readFrontmatter('# notes')).toEqual({ frontmatter: null, body: '# notes' });
   });
 });

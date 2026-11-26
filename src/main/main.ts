@@ -450,6 +450,14 @@ app.on('before-quit', (event) => {
       // Best effort
     }
 
+    // Stop the Agent tab's scratchpad watchers
+    try {
+      const { stopScratchpadWatches } = await import('./services/ScratchpadService');
+      stopScratchpadWatches();
+    } catch {
+      // Best effort
+    }
+
     // Write the drift log
     try {
       const { flushDriftLog } = await import('./claudeContract/driftReporter');

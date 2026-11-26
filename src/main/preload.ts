@@ -85,6 +85,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   memoryNewCounts: () => ipcRenderer.invoke('memory:newCounts'),
   memoryMarkSeen: (args: { projectId: string }) => ipcRenderer.invoke('memory:markSeen', args),
   onMemoryNewCount: listen<{ projectId: string; count: number }>('memory:newCount'),
+  onMemoryChanged: listen<{ projectId: string; dir: string }>('memory:changed'),
+
+  // The task sidebar's Agent tab
+  agentScratchpad: (args: { taskId: string }) => ipcRenderer.invoke('agent:scratchpad', args),
+  agentWatchScratchpad: (args: { taskId: string }) =>
+    ipcRenderer.invoke('agent:watchScratchpad', args),
+  agentUnwatchScratchpad: (args: { taskId: string }) =>
+    ipcRenderer.invoke('agent:unwatchScratchpad', args),
+  onAgentScratchpadChanged: listen<{ taskId: string }>('agent:scratchpadChanged'),
 
   // Worktree
   worktreeMigrationPlan: () => ipcRenderer.invoke('worktree:migrationPlan'),

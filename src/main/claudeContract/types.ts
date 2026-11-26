@@ -32,7 +32,9 @@ export type DriftSource =
   | 'job-state'
   | 'session-registry'
   | 'transcript'
-  | 'remote-control';
+  | 'remote-control'
+  | 'scratchpad'
+  | 'memory-file';
 
 /** One mismatch inside a payload: what kind, at which field. */
 export interface DriftFinding {

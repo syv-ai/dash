@@ -10,4 +10,6 @@ export interface MemoryApi {
   memoryMarkSeen: (args: { projectId: string }) => Promise<IpcResponse<null>>;
   /** A project's new-memory count changed (main watches every project's memory folder). */
   onMemoryNewCount: (callback: (data: { projectId: string; count: number }) => void) => () => void;
+  /** Something in a project's memory folder changed (main watches every project's). */
+  onMemoryChanged: (callback: (data: { projectId: string; dir: string }) => void) => () => void;
 }
