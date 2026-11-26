@@ -101,6 +101,21 @@ The source of truth for what Dash sends to PostHog. Change this file in the same
 
 Dash doesn't open PRs itself (the agent or the user does, with `gh` or on the forge), so both come from the polling behind the PR badge (`prOutcomes`, last states kept per task branch in localStorage). A branch listed for the first time says nothing, so PRs older than Dash's first look, or on a branch a task switched to (review mode), don't count. A PR opened and merged between two looks counts as both. A merge Dash can't see through a PR (a local merge, a push to main) isn't counted; there is no `via`, since a PR is the only way it is seen.
 
+### Feature use
+
+| Event                    | When                                                                                     | Properties                                                                    |
+| ------------------------ | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `project_switched`       | the active project changes to another one (renderer)                                     |                                                                               |
+| `sidebar_mode_changed`   | the task sidebar settles (1 s) in another state (renderer)                               | `mode` (`rail`, `narrow`, `expanded`)                                         |
+| `terminal_drawer_opened` | the task sidebar's terminal drawer opens (renderer)                                      |                                                                               |
+| `task_finder_opened`     | the task finder (⌘K) opens (renderer)                                                    |                                                                               |
+| `dashctl_called`         | a control API call to a capability the caller may use, once per command and caller a day | `command` (the capability, `tasks.create`), `source` (`task`, `orchestrator`) |
+| `lsp_failed`             | a language server gives up after its restarts                                            | `language_id` (`typescript`, `python`, `go`, `rust`)                          |
+
+`dashctl_called` goes at most once a day per command and caller kind (`captureDaily`, in memory): agents call some commands in loops, so every call would be volume, not signal. Its `command` is a registered capability name; an unknown name is refused before it is counted. `sidebar_mode_changed` waits for the state to hold a second, so a pass through narrow on the way to expanded isn't counted.
+
+Not added: onboarding steps (Dash has no onboarding flow; the new-project wizard is one step), memory panel use, services (ports) runs, remote control.
+
 ### Claude Code
 
 | Event                             | When                                                                                            | Properties                                                                     |
@@ -116,7 +131,7 @@ Dash doesn't open PRs itself (the agent or the user does, with `gh` or on the fo
 | `$exception` | PostHog error tracking, via `TelemetryService.captureException` (posthog-node parses the stack)                  | `source`, `channel` (IPC), `severity` |
 | `ipc_failed` | an IPC handler answered `{ success: false }`: git, forge, PTY, session and every other failure the renderer sees | `channel`, `error_code`               |
 
-`$exception` sources: `uncaughtException`, `unhandledRejection` (main), `ipc` (a handler threw), `renderer:window`, `renderer:unhandledrejection`, `renderer:react-uncaught`, `renderer:react-caught` (React 19's root error callbacks). Every string of an `$exception` event, stack frames included, is scrubbed by the client's `before_send`; frames inside Dash's bundle keep their module path (`app:/dist/...`). Reports are throttled: one per distinct error per minute and 30 an hour in all (`errorThrottle.ts`). StopFailure counts are `turn_failed` by `error_type`.
+`$exception` sources: `uncaughtException`, `unhandledRejection` (main), `ipc` (a handler threw), `renderer:window`, `renderer:unhandledrejection`, `renderer:react-uncaught`, `renderer:react-caught` (React 19's root error callbacks; `react-caught` is an error an error boundary caught: `ui/ErrorBoundary` wraps the whole window, and the left sidebar, the main column and the task sidebar each, so one area failing shows a calm fallback with "Try again" and leaves the others usable, and the root's fallback offers "Reload"). Every string of an `$exception` event, stack frames included, is scrubbed by the client's `before_send`; frames inside Dash's bundle keep their module path (`app:/dist/...`). Reports are throttled: one per distinct error per minute and 30 an hour in all (`errorThrottle.ts`). StopFailure counts are `turn_failed` by `error_type`.
 
 ## The primary dashboard
 
@@ -127,6 +142,7 @@ Dash doesn't open PRs itself (the agent or the user does, with `gh` or on the fo
 | Activity    | Active installs (DAU / WAU / MAU)                | `XMxNXQez` | `daily_active_user` unique, weekly active, monthly active                                                       |                                                  | day       | live       |
 | Activity    | DAU / MAU ratio                                  | `zsqO1nYX` | `daily_active_user` unique / monthly active                                                                     | A / B, 7-day smoothing                           | day       | live       |
 | Activity    | New installs per week                            | `Ku0uQ0ux` | `app_started` first time for user                                                                               |                                                  | week      | live       |
+| Activity    | Setup failures                                   | `bo2i3ngg` | `claude_cli_missing` unique; `turn_failed` unique where `error_type = authentication_failed`                    |                                                  | week      | from v0.25 |
 | Activity    | Stickiness: active days in the last 28           | `fVlJRsxD` | `daily_active_user` (stickiness)                                                                                | days active of 28                                | day       | live       |
 | Activity    | Lifecycle: new, returning, resurrecting, dormant | `6HAmnnPG` | `daily_active_user` (lifecycle)                                                                                 |                                                  | week      | live       |
 | Activity    | Weekly retention of new installs                 | `osZSimva` | first `app_started` → `daily_active_user` (retention)                                                           | 12 weeks                                         | week      | live       |
@@ -139,6 +155,9 @@ Dash doesn't open PRs itself (the agent or the user does, with `gh` or on the fo
 | Usage depth | Turn length                                      | `OmDBViun` | `turn_completed` total                                                                                          | `duration_bucket`                                | week      | from v0.25 |
 | Usage depth | Interrupted turns                                | `mF151W8E` | `turn_completed` where `interrupted = true` / all `turn_completed`                                              | A / B                                            | week      | from v0.25 |
 | Usage depth | Waits on the user                                | `ImaFttWB` | `wait_ended` total                                                                                              | `duration_bucket`                                | week      | from v0.25 |
+| Usage depth | Parallel work                                    | `P1M5FNSC` | `usage_snapshot` total (install-days)                                                                           | `peak_busy_sessions`                             | week      | from v0.25 |
+| Usage depth | Active time a day                                | `QJxQb6Q5` | `daily_active_user` total where `active_minutes_bucket` is set                                                  | `active_minutes_bucket`                          | week      | from v0.25 |
+| Usage depth | Tasks that ship                                  | `0YUdjNPL` | `pr_opened`, `branch_merged` totals                                                                             |                                                  | week      | from v0.25 |
 | Claude Code | Claude Code version mix                          | `ELfC0pa2` | `daily_active_user` unique                                                                                      | `claude_version`, percent stacked                | week      | from v0.25 |
 | Claude Code | Claude Code update restarts                      | `QntmGOMs` | `claude_update_detected` unique; `claude_update_restart_requested` unique where `mode = now`, `mode = whenDone` |                                                  | week      | from v0.25 |
 | Claude Code | Claude Code contract drift                       | `rN1m0r74` | `claude_contract_drift` total                                                                                   | `source` × `kind`                                | week      | from v0.25 |
@@ -149,5 +168,8 @@ Dash doesn't open PRs itself (the agent or the user does, with `gh` or on the fo
 | Reliability | Error-tracking issues                            | `fchb3xWN` | SQL: `$exception` grouped by `$exception_issue_id`, joined to `system.error_tracking_issues`                    | status, type, source, count, installs, last seen | 90 days   | live       |
 | Releases    | Dash version mix                                 | `0NHC8XDl` | `daily_active_user` unique                                                                                      | `app_version`, percent stacked                   | week      | live       |
 | Releases    | Platform and architecture                        | `lo4veYDY` | `daily_active_user` unique                                                                                      | `platform` × `arch`                              | last 30 d | live       |
+| Releases    | Dash updates                                     | `C52EbxZh` | `app_update_available`, `_downloaded`, `_installed` unique; `app_update_failed` total                           |                                                  | week      | from v0.25 |
+
+Setup failures sits beside New installs (the row is four 3-wide tiles); Parallel work, Active time a day and Tasks that ship are a row at the end of Usage depth; Dash updates is beside Platform and architecture. Each new insight's description says "Fills in from Dash v0.25"; the section text cards still name only the earlier events (the PostHog MCP tool set has no text-card edit), so update them by hand.
 
 The issues table leaves out issue descriptions on purpose: exception messages from releases before the scrubber carry user paths, and the dashboard is shared.
