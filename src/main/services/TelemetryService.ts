@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 import * as os from 'os';
 import { scrubText } from './telemetryScrub';
+import type { DriftReport } from '../claudeContract/types';
 
 // ── Config ────────────────────────────────────────────────────
 const POSTHOG_KEY = 'phc_zEKzF3cpq9lpt1x3ONeDemYkilhWjC1XgZSGN6AyX01';
@@ -50,6 +51,9 @@ const ALLOWED_EVENTS = new Set([
 
   // Errors
   '$exception',
+
+  // Claude Code behaving differently than Dash expects (claudeContract/)
+  'claude_contract_drift',
 ]);
 
 // ── Allowed Properties ────────────────────────────────────────
@@ -66,6 +70,9 @@ const ALLOWED_PROPERTIES = new Set([
   'session_duration_ms',
   'source',
   'kind',
+  'claude_version',
+  'field_path',
+  'enum_value',
   'moved',
   'removed',
   'failed',
@@ -128,6 +135,21 @@ export class TelemetryService {
       // Silently swallow
       return false;
     }
+  }
+
+  /**
+   * One Claude Code contract drift, shape only: where (source, field path),
+   * how (kind), under which Claude Code version, and an unknown enum member
+   * when it is identifier-shaped. Sent once per key ever (driftReporter).
+   */
+  static captureDrift(report: DriftReport): boolean {
+    return this.capture('claude_contract_drift', {
+      claude_version: report.claudeVersion,
+      source: report.source,
+      kind: report.kind,
+      field_path: report.path,
+      ...(report.value ? { enum_value: report.value } : {}),
+    });
   }
 
   static async shutdown(): Promise<void> {

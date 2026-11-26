@@ -119,6 +119,36 @@ describe('TelemetryService properties', () => {
   });
 });
 
+describe('claude_contract_drift', () => {
+  it('sends the shape of a drift, nothing else', async () => {
+    writeConfig(true);
+    app.isPackaged = true;
+    const { TelemetryService } = await import('../TelemetryService');
+    TelemetryService.initialize();
+    captured.mockClear();
+    const sent = TelemetryService.captureDrift({
+      claudeVersion: '2.1.333',
+      source: 'hook:Notification',
+      kind: 'unknown-enum-value',
+      path: 'notification_type',
+      value: 'agent_waiting',
+    });
+    expect(sent).toBe(true);
+    const msg = captured.mock.calls[0]![0] as {
+      event: string;
+      properties: Record<string, unknown>;
+    };
+    expect(msg.event).toBe('claude_contract_drift');
+    expect(msg.properties).toMatchObject({
+      claude_version: '2.1.333',
+      source: 'hook:Notification',
+      kind: 'unknown-enum-value',
+      field_path: 'notification_type',
+      enum_value: 'agent_waiting',
+    });
+  });
+});
+
 function writeConfig(enabled: boolean) {
   writeFileSync(
     path.join(userData, 'telemetry.json'),

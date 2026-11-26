@@ -102,7 +102,10 @@ void app.whenReady().then(async () => {
   // Claude Code contract drift (claudeContract/): the local log, ready before
   // the first hook or listing arrives.
   const { installDriftReporter } = await import('./claudeContract/driftReporter');
-  installDriftReporter({ dir: app.getPath('userData'), send: () => false });
+  installDriftReporter({
+    dir: app.getPath('userData'),
+    send: (report) => TelemetryService.captureDrift(report),
+  });
 
   // Initialize database
   const { DatabaseService } = await import('./services/DatabaseService');
