@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { EXPAND_EASE_MS, panelEaseMs } from '../components/ui/Resizable';
 import type { SidebarMotion } from '../components/rightInspector/RightInspector';
 import { whenFramesSettle } from './framesSettled';
@@ -7,10 +7,14 @@ import { useUi } from '../stores/uiStore';
 /** The most a planned motion's ease waits for its held layout's long frames. */
 const SETTLE_CAP_MS = 250;
 
-/** One planned move of the task sidebar (narrow ⇄ expanded, hide ⇄ show). */
+type Hold = Omit<SidebarMotion, 'phase'>;
+
+/** One planned move of the shell's panels (the task sidebar narrow ⇄
+ *  expanded or hide ⇄ show, the left sidebar's own toggle). */
 export interface MotionPlan {
-  /** What the sidebar's content holds through it (see `SidebarMotion`). */
-  hold: Omit<SidebarMotion, 'phase'>;
+  /** What the task sidebar's content holds through it (see `SidebarMotion`);
+   *  none when the move leaves it to the panels (the left sidebar's toggle). */
+  hold?: Hold;
   /** Calls `go` once the held layout's content is ready (an editor opening
    *  for the first time has mounted); returns a cancel. Default: at once. */
   ready?: (go: () => void) => () => void;
@@ -24,16 +28,21 @@ export interface MotionPlan {
 }
 
 /**
- * The task sidebar's planned motion (D258, D262, D264), one for every way it
- * moves (narrow ⇄ expanded, closing the editor, hide ⇄ show), so they can't
- * drift: the content takes its held layout first (`held`: it paints, clipped
- * by the panel), then, once frames settle, every panel eases over
- * EXPAND_EASE_MS with `ease-calm` (`easing`), and the content lets go after.
- * A new motion cancels the one running. `easeNow`: the ease in force, for
- * clearing panels' `animate` flags.
+ * The shell's planned motion (D258, D262, D264, D266), one for every way its
+ * sidebars move (narrow ⇄ expanded, closing the editor, hide ⇄ show, ⌘B),
+ * so they can't drift: the content takes its held layout first (`held`: it
+ * paints, clipped by the panel), then, once frames settle, every panel eases
+ * over EXPAND_EASE_MS with `ease-calm` (`easing`), and the content lets go
+ * after. A new motion cancels the one running. `motion`: the task sidebar's
+ * hold, if the plan has one; `phase`: where any motion is. `easeNow`: the
+ * ease in force, for clearing panels' `animate` flags.
  */
 export function usePlannedMotion() {
-  const [motion, setMotion] = useState<SidebarMotion | null>(null);
+  const [state, setState] = useState<{ phase: SidebarMotion['phase']; hold?: Hold } | null>(null);
+  const motion = useMemo<SidebarMotion | null>(
+    () => (state?.hold ? { ...state.hold, phase: state.phase } : null),
+    [state],
+  );
   const runningRef = useRef(false);
   const cancelRef = useRef<() => void>(() => {});
 
@@ -47,28 +56,29 @@ export function usePlannedMotion() {
     cancelRef.current();
     cancelRef.current = () => {};
     runningRef.current = false;
-    setMotion(null);
+    setState(null);
   }, []);
 
   /** Runs `plan`; returns its cancel. */
   const run = useCallback((plan: MotionPlan): (() => void) => {
     cancelRef.current();
     runningRef.current = true;
-    setMotion({ ...plan.hold, phase: 'held' });
+    setState({ phase: 'held', hold: plan.hold });
     const ui = useUi.getState();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let cancelSettle = () => {};
     const ease = () => {
       ui.setChangesAnimating(true);
       if (plan.movesLeft) ui.setSidebarAnimating(true);
-      const width = plan.move() ?? plan.hold.width;
-      setMotion({ ...plan.hold, width, phase: 'easing' });
+      const width = plan.move();
+      const hold = plan.hold && { ...plan.hold, width: width ?? plan.hold.width };
+      setState({ phase: 'easing', hold });
       timer = setTimeout(() => {
         runningRef.current = false;
         cancelRef.current = () => {};
         ui.setChangesAnimating(false);
         ui.setSidebarAnimating(false);
-        setMotion(null);
+        setState(null);
         plan.done?.();
       }, panelEaseMs(EXPAND_EASE_MS));
     };
@@ -90,5 +100,5 @@ export function usePlannedMotion() {
     return cancel;
   }, []);
 
-  return { motion, run, stop, easeNow };
+  return { motion, phase: state?.phase ?? null, run, stop, easeNow };
 }

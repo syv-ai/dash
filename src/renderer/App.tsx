@@ -1002,38 +1002,48 @@ export function App() {
   // of the shell), given back as the sidebar goes narrow. Null once the user
   // toggles the left sidebar themselves.
   const leftFreedByExpandRef = useRef<number | null>(null);
-  // The task sidebar's planned motion, for every way it moves (narrow ⇄
-  // expanded, closing the editor, hide ⇄ show); `easeNow` is the slower ease
-  // while one runs, so no panel's `animate` flag clears mid-ease.
-  const { motion: sidebarMotion, run: runMotion, stop: stopMotion, easeNow } = usePlannedMotion();
+  // The shell's planned motion, for every way its sidebars move (narrow ⇄
+  // expanded, closing the editor, hide ⇄ show, ⌘B); `easeNow` is the slower
+  // ease while one runs, so no panel's `animate` flag clears mid-ease.
+  const {
+    motion: sidebarMotion,
+    phase: motionPhase,
+    run: runMotion,
+    stop: stopMotion,
+    easeNow,
+  } = usePlannedMotion();
+  // ⌘B and the left sidebar's own toggle take the planned motion too (D266):
+  // the task sidebar's content isn't held (it keeps its width, or reflows
+  // as it takes or gives the room); the left sidebar's content follows the
+  // motion's rail rule (`sidebarRail`).
   const toggleSidebar = useCallback(() => {
-    const panel = sidebarPanelRef.current;
-    if (!panel) return;
-    const inspector = changesPanelRef.current;
-    const handOff = inspectorExpandedRef.current && !!inspector && !inspector.isCollapsed();
-    const leftBefore = panel.getSize().asPercentage;
-    const inspectorBefore = inspector?.getSize().asPercentage ?? 0;
+    if (!sidebarPanelRef.current) return;
     // The user's call now: going narrow leaves the left sidebar as it is.
     leftFreedByExpandRef.current = null;
-    setSidebarAnimating(true);
-    if (panel.isCollapsed()) {
-      panel.expand();
-    } else {
-      panel.collapse();
-    }
-    if (!handOff || !inspector) return;
-    setChangesAnimating(true);
-    inspector.resize(
-      `${handOffWidth({
-        inspector: inspectorBefore,
-        leftBefore,
-        leftAfter: panel.getSize().asPercentage,
-        min: TUI_PANEL_MIN_PCT,
-        max: INSPECTOR_MAX_PCT,
-      })}%`,
-    );
-    setTimeout(() => setChangesAnimating(false), panelEaseMs());
-  }, [setChangesAnimating, setSidebarAnimating]);
+    runMotion({
+      movesLeft: true,
+      move: () => {
+        const panel = sidebarPanelRef.current;
+        if (!panel) return;
+        const inspector = changesPanelRef.current;
+        const handOff = inspectorExpandedRef.current && !!inspector && !inspector.isCollapsed();
+        const leftBefore = panel.getSize().asPercentage;
+        const inspectorBefore = inspector?.getSize().asPercentage ?? 0;
+        if (panel.isCollapsed()) panel.expand();
+        else panel.collapse();
+        if (!handOff || !inspector) return;
+        inspector.resize(
+          `${handOffWidth({
+            inspector: inspectorBefore,
+            leftBefore,
+            leftAfter: panel.getSize().asPercentage,
+            min: TUI_PANEL_MIN_PCT,
+            max: INSPECTOR_MAX_PCT,
+          })}%`,
+        );
+      },
+    });
+  }, [runMotion]);
 
   // A task's editor stays its own while another task is active: switching
   // back finds it as it was (narrow or expanded, tabs, unsaved edits),
@@ -1431,14 +1441,14 @@ export function App() {
   // the task sidebar's motion collapses or restores it (D259), it keeps its
   // full content through the ease, so collapsing switches after it and
   // restoring before it, not on the ease's first frame.
-  const sidebarRail = sidebarCollapsed && !(sidebarMotion?.phase === 'easing' && sidebarAnimating);
+  const sidebarRail = sidebarCollapsed && !(motionPhase === 'easing' && sidebarAnimating);
 
   return (
     <div
       className="h-screen w-screen flex flex-col overflow-hidden"
       // The task sidebar's narrow ⇄ expanded ease, for every panel it moves.
       style={
-        sidebarMotion
+        motionPhase
           ? ({
               '--panel-ease': `${panelEaseMs(EXPAND_EASE_MS)}ms`,
               '--panel-curve': 'var(--ease-calm)',
