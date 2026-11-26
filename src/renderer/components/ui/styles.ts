@@ -16,6 +16,9 @@ export const menuSurface =
  *  stack's motion are in index.css, under the sonner block. */
 export const toastSurface = `group/toast overflow-hidden rounded-xl bg-raised text-ink shadow-raised ${focusRing}`;
 
+/** A toast's content padding (`ToastView`, the ports wizard). */
+export const toastBody = 'px-3 py-2.5';
+
 /** A row in a floating menu; its icons rest in the icon token. */
 export const menuItem =
   'relative flex h-8 cursor-default select-none items-center gap-2 rounded-md px-3 text-sm text-ink outline-none transition-colors [&_svg]:shrink-0 [&_svg]:text-icon';

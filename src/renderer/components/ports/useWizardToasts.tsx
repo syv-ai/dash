@@ -1,11 +1,11 @@
 import { useEffect } from 'react';
-import { toast } from 'sonner';
+import { toast } from '../ui/toast';
 import { selectTaskById, useProjects } from '../../stores/projectsStore';
 import { WizardScreen, type Send } from './PortsWizardToasts';
 
 /**
  * Drives the ports wizard toasts. Main pushes a screen at a time via
- * `wizard:show`; this turns each into a sonner toast (keyed by task so updates
+ * `wizard:show`; this turns each into a persistent toast (keyed by task so updates
  * replace in place) and sends the user's choices back via `wizard:message`.
  *
  * Lives in its own module — separate from `PortsWizardToasts.tsx`, whose only
@@ -29,7 +29,7 @@ export function useWizardToasts(): void {
     const activeTaskId = () => useProjects.getState().activeTaskId;
 
     const show = (s: PinnedScreen) => {
-      toast.custom(s.render, { id: s.id, duration: Infinity, dismissible: s.interactive });
+      toast.custom(s.id, s.render, { dismissible: s.interactive });
     };
 
     const reconcile = () => {
@@ -56,7 +56,7 @@ export function useWizardToasts(): void {
         // The persistent toast is dismissed on teardown; only an error needs its
         // own surfacing (e.g. the migrate failed).
         if (msg.props.reason === 'error') {
-          toast.error(msg.props.errorMessage ?? 'Port setup failed.', { duration: 8000 });
+          toast.error(msg.props.errorMessage ?? 'Port setup failed.');
         }
         screens.delete(id);
         toast.dismiss(id);

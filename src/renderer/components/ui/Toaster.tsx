@@ -5,7 +5,7 @@ import type { ToastKind } from '@shared/toast';
 import { cn } from '../../lib/cn';
 import { Button } from './Button';
 import { IconButton } from './IconButton';
-import { toastSurface } from './styles';
+import { toastBody, toastSurface } from './styles';
 
 /** Sonner's toaster, headless: every toast is a `ToastView` (or the ports
  *  wizard) on `toastSurface`. Raise toasts through `ui/toast`, never sonner. */
@@ -60,7 +60,7 @@ export function ToastView({ id, kind, title, description, meta, action, icon }: 
   return (
     <div
       role={kind === 'error' ? 'alert' : undefined}
-      className="flex items-start gap-2.5 px-3 py-2.5"
+      className={cn(toastBody, 'flex items-start gap-2.5')}
     >
       <span className="flex h-5 shrink-0 items-center">
         <Icon
