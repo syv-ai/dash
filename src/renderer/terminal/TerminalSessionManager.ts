@@ -21,7 +21,8 @@ import { clackBlock, clackExitBlock } from './clackLines';
 import { isPromptOnlySnapshot } from './snapshotFilter';
 import type { TerminalActivity } from './resizeVeil';
 import { FitScheduler } from './FitScheduler';
-import { WebglLifecycle, type LosableContext } from './WebglLifecycle';
+import { WebglLifecycle } from './WebglLifecycle';
+import { repaintOnCanvasResize } from './webglCanvasRepaint';
 import { MouseModeTracker } from './mouseModeFilter';
 import { macShellKeySequence } from './shellKeys';
 import { TUI_COLS, TUI_ROWS } from '../../shared/tuiProtocol';
@@ -89,6 +90,9 @@ export class TerminalSessionManager {
   // WebglLifecycle). Null for terminals that always use xterm's DOM renderer
   // (see createGpu).
   private readonly gpu: WebglLifecycle<WebglAddon> | null;
+  // Disconnects the installed WebGL canvas's same-frame repaint (see
+  // repaintOnCanvasResize).
+  private stopCanvasRepaint: () => void = () => {};
   // Shell-only sessions use xterm 6's DOM renderer (WebGL paints their
   // transparent background black). The DOM renderer lays each row's glyphs at
   // the font's real advance, which runs slightly wider than xterm's reported
@@ -381,21 +385,25 @@ export class TerminalSessionManager {
         const { WebglAddon } = await import('@xterm/addon-webgl');
         return new WebglAddon();
       },
-      install: (addon) => this.terminal.loadAddon(addon),
-      findContext: () => this.webglContext(),
+      install: (addon) => {
+        this.terminal.loadAddon(addon);
+        this.stopCanvasRepaint();
+        const canvas = this.webglCanvas();
+        this.stopCanvasRepaint = canvas ? repaintOnCanvasResize(this.terminal, canvas) : () => {};
+      },
+      findContext: () => this.webglCanvas()?.getContext('webgl2') ?? null,
     });
   }
 
   /**
-   * The WebGL addon's context. Its canvas sits in `.xterm-screen` beside the
-   * link layer, whose canvas already has a 2d context, so getContext('webgl2')
+   * The WebGL addon's canvas. It sits in `.xterm-screen` beside the link
+   * layer, whose canvas already has a 2d context, so getContext('webgl2')
    * returns null there and the existing context on the renderer's canvas.
    */
-  private webglContext(): LosableContext | null {
+  private webglCanvas(): HTMLCanvasElement | null {
     const canvases = this.terminal.element?.querySelectorAll('.xterm-screen canvas') ?? [];
     for (const canvas of canvases) {
-      const gl = (canvas as HTMLCanvasElement).getContext('webgl2');
-      if (gl) return gl;
+      if ((canvas as HTMLCanvasElement).getContext('webgl2')) return canvas as HTMLCanvasElement;
     }
     return null;
   }
@@ -733,6 +741,7 @@ export class TerminalSessionManager {
     if (this.unsubExit) this.unsubExit();
 
     window.electronAPI.ptyKill(this.id);
+    this.stopCanvasRepaint();
     this.gpu?.dispose(); // frees the WebGL context now, not at GC
     this.terminal.dispose();
   }
