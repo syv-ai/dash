@@ -118,6 +118,15 @@ export function orderTasksByState(
 }
 
 /**
+ * Every task with a live session, in list order: the active rows, then the
+ * idle ones that aren't asleep. The collapsed rail shows these, as it listed
+ * live sessions before the sidebar rebuild.
+ */
+export function liveRows(list: TaskStateList): TaskStateRow[] {
+  return [...list.active, ...list.idle.filter((r) => r.state !== 'asleep')];
+}
+
+/**
  * The idle rows on show: all when expanded, else the first IDLE_LIMIT — plus
  * the selected task if it sits further down, so the selection never hides.
  */

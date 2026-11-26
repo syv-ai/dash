@@ -7,7 +7,7 @@ import { ProjectsSection } from './ProjectsSection';
 import { TaskStateList } from './TaskStateList';
 import { UpdateBanner } from './UpdateBanner';
 import { useTaskStateList } from './useTaskStateList';
-import { STATE_LABELS, newTaskProjectId } from './taskStates';
+import { STATE_LABELS, liveRows, newTaskProjectId } from './taskStates';
 import { useSettings } from '../../stores/settingsStore';
 import { useUi } from '../../stores/uiStore';
 
@@ -42,7 +42,7 @@ const isMac = window.electronAPI.getPlatform() === 'darwin';
  * The app sidebar: a Tasks | Projects switch with find and create (a task
  * or a project, after the view) at its end, over the state-ordered task list
  * or the project tree, and settings at the foot.
- * Collapsed, it is a rail of state dots for the tasks that aren't idle.
+ * Collapsed, it is a rail of state dots for the tasks with a live session.
  */
 export function LeftSidebar(props: LeftSidebarProps) {
   const { projects, activeProjectId, tasksByProject, activeTaskId, collapsed } = props;
@@ -63,7 +63,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
       <div className="flex h-full flex-col items-center bg-ground pb-3">
         <div className={isMac ? 'titlebar-drag h-11 w-full shrink-0' : 'h-2 w-full shrink-0'} />
         <div className="scrollbar-none flex min-h-0 w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto">
-          {rows.active.map(({ task, state }) => (
+          {liveRows(rows).map(({ task, state }) => (
             <IconButton
               key={task.id}
               size="sm"

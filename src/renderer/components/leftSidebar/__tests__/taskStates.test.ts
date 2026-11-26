@@ -4,6 +4,7 @@ import {
   IDLE_LIMIT,
   agentState,
   failureReason,
+  liveRows,
   newTaskProjectId,
   orderTasksByState,
   visibleIdleRows,
@@ -116,6 +117,18 @@ describe('orderTasksByState', () => {
       [project('a'), project('b')],
     );
     expect(list.idle.map((r) => r.projectName)).toEqual(['Project a', 'Project b', undefined]);
+  });
+});
+
+describe('liveRows', () => {
+  it('keeps every task with a live session, the one at rest included, in list order', () => {
+    const list = orderTasksByState(
+      [task('seen', '3'), task('busy', '1'), task('asleep', '4'), task('none', '5')],
+      { busy: { state: 'busy' }, seen: { state: 'idle' }, asleep: { state: 'stopped' } },
+      new Set(),
+      [],
+    );
+    expect(ids(liveRows(list))).toEqual(['busy', 'seen']);
   });
 });
 
