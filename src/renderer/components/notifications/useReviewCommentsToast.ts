@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { toast } from 'sonner';
+import { MessageSquare } from 'lucide-react';
+import { toast } from '../ui/toast';
 import { useGit } from '../../stores/gitStore';
 import { selectTaskById, useProjects } from '../../stores/projectsStore';
 import { usePrReviews } from '../../stores/prReviewStore';
@@ -48,15 +49,18 @@ export function useReviewCommentsToast(): void {
       writeSeen(seen);
       const task = selectTaskById(useProjects.getState(), taskId);
       if (count === 0 || !task || task.archivedAt) return;
-      toast(`${count} new review ${count === 1 ? 'comment' : 'comments'} on PR #${prNumber}`, {
-        description: task.name,
-        duration: 20_000,
-        closeButton: true,
-        action: {
-          label: 'Send to task',
-          onClick: () => void typeIntoTask(taskId, buildReviewPrompt(review, threads)),
+      toast.offer(
+        `${count} new review ${count === 1 ? 'comment' : 'comments'} on PR #${prNumber}`,
+        {
+          meta: task.name,
+          icon: MessageSquare,
+          key: `review-comments:${taskId}`,
+          action: {
+            label: 'Send to task',
+            onClick: () => void typeIntoTask(taskId, buildReviewPrompt(review, threads)),
+          },
         },
-      });
+      );
     };
 
     return useGit.subscribe((state, prev) => {

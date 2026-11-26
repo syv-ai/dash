@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { toast } from 'sonner';
+import { Sparkles } from 'lucide-react';
+import { toast } from '../ui/toast';
 import { useSettings } from '../../stores/settingsStore';
 import { normalizeVersion, releaseUrl, shouldShowReleaseNotes } from '../../utils/releaseNotes';
 
@@ -19,11 +20,8 @@ export function useReleaseNotesToast(): void {
     let cancelled = false;
     void window.electronAPI.getAppVersion().then((current) => {
       if (cancelled || !current) return;
-      const {
-        lastSeenReleaseNotesVersion,
-        updateNotificationsEnabled,
-        setLastSeenReleaseNotesVersion,
-      } = useSettings.getState();
+      const { lastSeenReleaseNotesVersion, setLastSeenReleaseNotesVersion } =
+        useSettings.getState();
 
       // Fresh install: record where we are without nagging about it.
       if (lastSeenReleaseNotesVersion === undefined) {
@@ -32,15 +30,12 @@ export function useReleaseNotesToast(): void {
       }
       if (!shouldShowReleaseNotes(current, lastSeenReleaseNotesVersion)) return;
 
+      // Seen even when muted: the `updates` topic mutes the toast itself.
       setLastSeenReleaseNotesVersion(current);
-      if (!updateNotificationsEnabled) return;
-
-      // Dismissable: a close button, and it goes away on its own — the
-      // Infinity duration made it impossible to get rid of without clicking
-      // through to the release notes.
-      toast(`Dash updated to v${normalizeVersion(current)}`, {
-        duration: 20_000,
-        closeButton: true,
+      toast.offer(`Dash updated to v${normalizeVersion(current)}`, {
+        icon: Sparkles,
+        key: 'release-notes',
+        topic: 'updates',
         action: {
           label: 'Release notes',
           onClick: () => {

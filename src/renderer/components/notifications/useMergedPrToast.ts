@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { toast } from 'sonner';
+import { GitMerge } from 'lucide-react';
+import { toast } from '../ui/toast';
 import { useGit } from '../../stores/gitStore';
 import { useProjects } from '../../stores/projectsStore';
 import { newlyMergedPrs, type SeenPrStates } from '../../utils/mergedPrNotices';
@@ -53,10 +54,10 @@ export function useMergedPrToast(): void {
         const task = byId.get(id);
         const pr = newest[id];
         if (!task || !pr) continue;
-        toast(`PR #${pr.number} merged`, {
-          description: `Archive ${task.name}?`,
-          duration: 20_000,
-          closeButton: true,
+        toast.offer(`PR #${pr.number} merged`, {
+          meta: task.name,
+          icon: GitMerge,
+          key: `pr-merged:${id}`,
           action: {
             label: 'Archive',
             onClick: () => void useProjects.getState().archiveTask(id),

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { toast } from 'sonner';
+import { CircleArrowUp } from 'lucide-react';
+import { toast } from '../ui/toast';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useUi } from '../../stores/uiStore';
 import { ClaudeUpdateDialog } from './ClaudeUpdateDialog';
@@ -22,10 +23,11 @@ export function ClaudeUpdateHost() {
   useEffect(() => {
     if (!version || count === 0 || !idle || toasted.current === version) return;
     toasted.current = version;
-    toast(`Claude Code ${version} is installed`, {
+    toast.offer(`Claude Code ${version} is installed`, {
       description: `${taskCount(count)} still ${count === 1 ? 'runs' : 'run'} an older version.`,
-      duration: 20_000,
-      closeButton: true,
+      icon: CircleArrowUp,
+      key: `claude-update:${version}`,
+      topic: 'updates',
       action: { label: 'Restart…', onClick: () => setOpen(true) },
     });
   }, [version, count, idle, setOpen]);
