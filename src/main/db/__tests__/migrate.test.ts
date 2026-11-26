@@ -53,6 +53,31 @@ describe('runMigrations: Dash access and parent task columns', () => {
   });
 });
 
+describe('runMigrations: favourite tasks', () => {
+  type Col = { name: string; type: string; notnull: number; dflt_value: string | null };
+  const column = (name: string) =>
+    (db.prepare(`PRAGMA table_info(tasks)`).all() as Col[]).find((c) => c.name === name);
+
+  it('adds favorite (NOT NULL DEFAULT 0) to existing rows, idempotently, keeping the rest', () => {
+    // An install from before the column, with a task in it.
+    runMigrations();
+    db.prepare(`INSERT INTO projects (id, name, path) VALUES ('p1', 'p', '/repo')`).run();
+    db.prepare(
+      `INSERT INTO tasks (id, project_id, name, branch, path) VALUES ('t1', 'p1', 'old', 'b', '/w')`,
+    ).run();
+    db.exec(`ALTER TABLE tasks DROP COLUMN favorite`);
+
+    runMigrations();
+    expect(() => runMigrations()).not.toThrow();
+
+    expect(column('favorite')).toMatchObject({ type: 'INTEGER', notnull: 1, dflt_value: '0' });
+    expect(db.prepare(`SELECT name, favorite FROM tasks WHERE id = 't1'`).get()).toEqual({
+      name: 'old',
+      favorite: 0,
+    });
+  });
+});
+
 describe('runMigrations: PR review draft columns on diff comments', () => {
   type Col = { name: string; type: string; notnull: number; dflt_value: string | null };
   const column = (name: string) =>

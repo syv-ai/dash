@@ -102,6 +102,8 @@ export interface Task {
   /** The task that created this one through the control API; null when a
    *  person created it. Fixed at creation. */
   parentTaskId: string | null;
+  /** Pinned to the top of the sidebar's task list, asleep or not. */
+  favorite: boolean;
   sortOrder: number;
   totalTokens: number;
   totalCostUsd: number;
@@ -150,6 +152,9 @@ export type CreateTaskInput = CreateTaskOptions & {
 
 /** `task:setDashAccess`: turn a task's Dash access on or off (applies at its next session start). */
 export type SetTaskDashAccessInput = { taskId: string; enabled: boolean };
+
+/** `task:setFavorite`: pin a task to the top of the sidebar's task list, or unpin it. */
+export type SetTaskFavoriteInput = { taskId: string; favorite: boolean };
 
 /**
  * The ways another Claude Code session's SendMessage can reach a task's live

@@ -61,6 +61,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   archiveTask: (id: string) => ipcRenderer.invoke('task:archive', id),
   restoreTask: (id: string) => ipcRenderer.invoke('task:restore', id),
   setTaskDashAccess: (input: unknown) => ipcRenderer.invoke('task:setDashAccess', input),
+  setTaskFavorite: (input: unknown) => ipcRenderer.invoke('task:setFavorite', input),
   getTaskMessageAddresses: (id: string) => ipcRenderer.invoke('task:messageAddresses', id),
   getTaskLastActive: (id: string) => ipcRenderer.invoke('task:lastActive', id),
   onTasksChanged: listen<{ projectId: string }>('tasks:changed'),

@@ -657,3 +657,41 @@ describe('projectsStore setDashAccess', () => {
     expect(toast.error).toHaveBeenCalledWith('nope');
   });
 });
+
+describe('projectsStore setFavorite', () => {
+  let api: ReturnType<typeof makeElectronApiMock>;
+  beforeEach(() => {
+    api = makeElectronApiMock();
+    installWindow(api);
+  });
+  afterEach(() => resetWindow());
+
+  const favorite = (useProjects: Awaited<ReturnType<typeof freshStore>>) =>
+    useProjects.getState().tasksByProject.p1!.map((t) => [t.id, t.favorite]);
+
+  it('shows the pin at once and saves it in main', async () => {
+    const useProjects = await freshStore();
+    useProjects.getState().setTasksForProject('p1', [task('t1', 'p1'), task('t2', 'p1')]);
+    let resolve!: (v: unknown) => void;
+    api.setTaskFavorite.mockReturnValue(new Promise((r) => (resolve = r)));
+    const done = useProjects.getState().setFavorite(task('t1', 'p1'), true);
+    expect(favorite(useProjects)).toEqual([
+      ['t1', true],
+      ['t2', undefined],
+    ]);
+    resolve({ success: true, data: task('t1', 'p1', { favorite: true }) });
+    await done;
+    expect(api.setTaskFavorite).toHaveBeenCalledWith({ taskId: 't1', favorite: true });
+    expect(favorite(useProjects)[0]).toEqual(['t1', true]);
+  });
+
+  it('puts it back and toasts when main refuses', async () => {
+    const useProjects = await freshStore();
+    useProjects.getState().setTasksForProject('p1', [task('t1', 'p1', { favorite: true })]);
+    api.setTaskFavorite.mockResolvedValue({ success: false, error: 'nope' });
+    await useProjects.getState().setFavorite(task('t1', 'p1', { favorite: true }), false);
+    expect(favorite(useProjects)).toEqual([['t1', true]]);
+    const { toast } = await import('sonner');
+    expect(toast.error).toHaveBeenCalledWith('nope');
+  });
+});

@@ -442,6 +442,13 @@ export function runMigrations(): void {
     /* already exists */
   }
 
+  // A favourite task stays at the top of the sidebar's task list, asleep or not.
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0`);
+  } catch {
+    /* already exists */
+  }
+
   // The PR a task reviews, when the person picked one (else its own open PR is
   // the target): main and dashctl default to it.
   rawDb.exec(`

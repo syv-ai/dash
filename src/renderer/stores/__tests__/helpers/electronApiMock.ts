@@ -23,6 +23,7 @@ export function makeElectronApiMock(overrides: Record<string, unknown> = {}) {
     reorderTasks: vi.fn(() => ok(undefined)),
     createTask: vi.fn(),
     setTaskDashAccess: vi.fn(),
+    setTaskFavorite: vi.fn(),
     onTasksChanged: vi.fn((_cb: (d: { projectId: string }) => void) => () => {}),
     onProjectsChanged: vi.fn((_cb: () => void) => () => {}),
     onDiffCommentsChanged: vi.fn((_cb: (d: { taskId: string }) => void) => () => {}),

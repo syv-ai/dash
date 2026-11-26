@@ -71,6 +71,9 @@ export interface ProjectsActions {
   /** Turn a task's Dash access on or off. A running session restarts so its
    *  settings file gains or drops dashctl; returns the updated task. */
   setDashAccess: (taskItem: Task, enabled: boolean, running: boolean) => Promise<Task | null>;
+  /** Pin a task to the top of the task list, or unpin it. Shown at once;
+   *  put back (with a toast) if main refuses. */
+  setFavorite: (taskItem: Task, favorite: boolean) => Promise<void>;
 }
 
 /** Dispose the Claude session + shell sessions for a task. */
@@ -398,6 +401,21 @@ export const useProjects = create<ProjectsStore>((set, get) => ({
       });
     }
     return resp.data;
+  },
+  setFavorite: async (taskItem, favorite) => {
+    const show = (value: boolean) =>
+      set((s) => {
+        const list = s.tasksByProject[taskItem.projectId];
+        if (!list) return {};
+        const next = list.map((t) => (t.id === taskItem.id ? { ...t, favorite: value } : t));
+        return { tasksByProject: { ...s.tasksByProject, [taskItem.projectId]: next } };
+      });
+    show(favorite);
+    const resp = await window.electronAPI.setTaskFavorite({ taskId: taskItem.id, favorite });
+    if (!resp.success) {
+      show(!favorite);
+      toast.error(resp.error || 'Failed to change the favourite');
+    }
   },
 }));
 

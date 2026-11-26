@@ -85,6 +85,8 @@ export const tasks = sqliteTable(
     // task that created this one through the API (null if a person did).
     dashAccess: integer('dash_access', { mode: 'boolean' }).notNull().default(false),
     parentTaskId: text('parent_task_id'),
+    // Pinned to the top of the sidebar's task list.
+    favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false),
     sortOrder: integer('sort_order').notNull().default(0),
     totalTokens: integer('total_tokens').notNull().default(0),
     totalCostUsd: real('total_cost_usd').notNull().default(0),

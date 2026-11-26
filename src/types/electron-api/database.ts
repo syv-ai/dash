@@ -3,6 +3,7 @@ import type {
   CreateTaskResult,
   DeleteTaskOptions,
   SetTaskDashAccessInput,
+  SetTaskFavoriteInput,
   TaskMessageAddresses,
   IpcResponse,
   Project,
@@ -46,6 +47,7 @@ export interface DatabaseApi {
   restoreTask: (id: string) => Promise<IpcResponse<void>>;
   /** Turn a task's Dash access on or off; returns the updated task. Applies at its next dispatch. */
   setTaskDashAccess: (input: SetTaskDashAccessInput) => Promise<IpcResponse<Task>>;
+  setTaskFavorite: (input: SetTaskFavoriteInput) => Promise<IpcResponse<Task>>;
   /** Where SendMessage reaches the task's live session; null when it is not running. */
   getTaskMessageAddresses: (id: string) => Promise<IpcResponse<TaskMessageAddresses | null>>;
   /** When the task's conversation last changed (epoch ms), or null before it has one. */

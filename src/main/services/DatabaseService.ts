@@ -258,7 +258,8 @@ export class DatabaseService {
         // clobber them. Adding them here would null them out on every update
         // call that doesn't resend them (e.g. updateTask → rename wipes the
         // context prompt). Leave them out. Same for `dashAccess` (its setter is
-        // setTaskDashAccess) and `parentTaskId` (fixed at creation).
+        // setTaskDashAccess), `favorite` (setTaskFavorite) and `parentTaskId`
+        // (fixed at creation).
         .onConflictDoUpdate({
           target: tasks.id,
           set: {
@@ -327,6 +328,13 @@ export class DatabaseService {
       .set({ dashAccess: enabled, updatedAt: new Date().toISOString() })
       .where(eq(tasks.id, id))
       .run();
+  }
+
+  /** Mark a task a favourite or not. Leaves `updatedAt` alone: pinning a
+   *  task isn't activity, and the task list orders by recency. */
+  static setTaskFavorite(id: string, favorite: boolean): void {
+    const db = getDb();
+    db.update(tasks).set({ favorite }).where(eq(tasks.id, id)).run();
   }
 
   /**
@@ -692,6 +700,7 @@ export class DatabaseService {
       archivedAt: row.archivedAt,
       dashAccess: row.dashAccess ?? false,
       parentTaskId: row.parentTaskId ?? null,
+      favorite: row.favorite ?? false,
       sortOrder: row.sortOrder,
       totalTokens: row.totalTokens ?? 0,
       totalCostUsd: row.totalCostUsd ?? 0,

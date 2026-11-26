@@ -56,4 +56,19 @@ describe('DatabaseService tasks: Dash access and parent task', () => {
     DatabaseService.setTaskDashAccess(t.id, false);
     expect(DatabaseService.getTask(t.id)?.dashAccess).toBe(false);
   });
+
+  it('setTaskFavorite flips the flag alone, without bumping updatedAt; a save keeps it', () => {
+    const t = DatabaseService.saveTask({ ...base, name: 'a', contextPrompt: 'ctx' });
+    expect(t.favorite).toBe(false);
+    DatabaseService.setTaskFavorite(t.id, true);
+    expect(DatabaseService.getTask(t.id)).toMatchObject({
+      favorite: true,
+      contextPrompt: 'ctx',
+      updatedAt: t.updatedAt,
+    });
+    const renamed = DatabaseService.saveTask({ ...base, id: t.id, name: 'renamed' });
+    expect(renamed.favorite).toBe(true);
+    DatabaseService.setTaskFavorite(t.id, false);
+    expect(DatabaseService.getTask(t.id)?.favorite).toBe(false);
+  });
 });

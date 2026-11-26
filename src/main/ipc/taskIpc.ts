@@ -6,7 +6,12 @@ import { TaskService } from '../services/TaskService';
 import { DatabaseService } from '../services/DatabaseService';
 import { taskEvents } from '../services/taskEvents';
 import { messageAddresses, sessionLastActiveMs } from '../services/claudeSessionRegistry';
-import type { CreateTaskInput, DeleteTaskOptions, SetTaskDashAccessInput } from '@shared/types';
+import type {
+  CreateTaskInput,
+  DeleteTaskOptions,
+  SetTaskDashAccessInput,
+  SetTaskFavoriteInput,
+} from '@shared/types';
 
 /** Task lifecycle from the task dialog and sidebar; TaskService does the work. */
 export function registerTaskIpc(): void {
@@ -65,6 +70,23 @@ export function registerTaskIpc(): void {
       const task = DatabaseService.getTask(input.taskId);
       if (!task) throw new Error(`Task not found: ${input.taskId}`);
       DatabaseService.setTaskDashAccess(input.taskId, input.enabled);
+      taskEvents.emitChanged(task.projectId);
+      return { success: true, data: DatabaseService.getTask(input.taskId) };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  ipcMain.handle('task:setFavorite', (_event, input: SetTaskFavoriteInput) => {
+    try {
+      parseArgs(
+        'task:setFavorite',
+        z.looseObject({ taskId: z.string(), favorite: z.boolean() }),
+        input,
+      );
+      const task = DatabaseService.getTask(input.taskId);
+      if (!task) throw new Error(`Task not found: ${input.taskId}`);
+      DatabaseService.setTaskFavorite(input.taskId, input.favorite);
       taskEvents.emitChanged(task.projectId);
       return { success: true, data: DatabaseService.getTask(input.taskId) };
     } catch (error) {
