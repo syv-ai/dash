@@ -1,10 +1,31 @@
 import * as React from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { measureElement, useVirtualizer, type Virtualizer } from '@tanstack/react-virtual';
 import { cn } from '../../lib/cn';
 
 export interface VirtualListHandle {
   /** Scroll so item `index` shows (the least scroll that does). */
   scrollToIndex(index: number): void;
+}
+
+/**
+ * The virtualizer's own measure, except for an item that isn't rendered (a
+ * `display: none` ancestor, e.g. the railed task sidebar): hiding fires every
+ * item's ResizeObserver with 0, and caching that would collapse the rows,
+ * which only the ones in view ever measure again (B1). It keeps the size it
+ * had instead. Checks only a 0, so a re-render's measure stays layout-free.
+ */
+export function measureShown<T extends Element>(
+  element: T,
+  entry: ResizeObserverEntry | undefined,
+  instance: Virtualizer<HTMLDivElement, T>,
+): number {
+  const size = measureElement(element, entry, instance);
+  if (size > 0 || element.getClientRects().length > 0) return size;
+  const index = instance.indexFromElement(element);
+  return (
+    instance.itemSizeCache.get(instance.options.getItemKey(index)) ??
+    instance.options.estimateSize(index)
+  );
 }
 
 /**
@@ -41,6 +62,7 @@ export function VirtualList({
     estimateSize,
     getItemKey: itemKey,
     overscan: 12,
+    measureElement: measureShown,
   });
   React.useImperativeHandle(
     handleRef,
