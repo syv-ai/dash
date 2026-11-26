@@ -35,6 +35,17 @@ export const WAIT_NOTIFICATIONS: Readonly<
   idle_prompt: 'idle',
 };
 
+/** What a wait on the user waits for, for analytics (`wait_ended.kind`). */
+export type WaitKind = 'permission' | 'question' | 'elicitation' | 'quota';
+
+/** The wait kind of each `needs` notification in WAIT_NOTIFICATIONS. */
+export const NOTIFICATION_WAIT_KINDS: Readonly<Partial<Record<NotificationType, WaitKind>>> = {
+  permission_prompt: 'permission',
+  elicitation_dialog: 'elicitation',
+  elicitation_url_dialog: 'elicitation',
+  quota_auto_resume_stale: 'quota',
+};
+
 /**
  * True for a hook fired inside a subagent: Claude Code sets `agent_id` only
  * there. A subagent's tool calls are not the task's own turn, so they don't

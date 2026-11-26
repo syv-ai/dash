@@ -70,7 +70,7 @@ export function registerPtyIpc(): void {
           isDark: args.isDark,
           sender: event.sender,
         });
-        TelemetryService.capture('terminal_started', { source: 'direct' });
+        TelemetryService.capture('terminal_started');
         return { success: true, data: result };
       } catch (error) {
         if (error instanceof UntrustedWorkspaceError) {
@@ -168,7 +168,7 @@ export function registerPtyIpc(): void {
   ipcMain.handle('pty:stopSession', async (_event, taskId: string) => {
     try {
       parseArgs('pty:stopSession', z.string(), taskId);
-      await stopTaskSession(taskId);
+      await stopTaskSession(taskId, 'manual');
       return { success: true };
     } catch (error) {
       return errorResponse(error);

@@ -11,11 +11,13 @@ import { tokenStatsService } from './TokenStatsService';
 import {
   isSelfStartedPrompt,
   isSubagentHook,
+  NOTIFICATION_WAIT_KINDS,
   runningSubagentIds,
   statusLineTaskId,
   stopFailureError,
   subagentId,
   WAIT_NOTIFICATIONS,
+  type WaitKind,
 } from './hookPayload';
 import { setTaskInbox } from './taskInbox';
 import { noteScratchpad } from './ScratchpadService';
@@ -30,12 +32,20 @@ import { tasks } from '../db/schema';
 
 /**
  * In-process event bus for hook events that other main-side services may need
- * to observe. No internal consumers right now; kept as infrastructure.
+ * to observe. Each fires before ActivityMonitor hears the same hook, so a
+ * listener knows the cause before the state changes.
  *
  * Events:
  *  - 'permission-prompt'  { ptyId }  — Notification(permission_prompt) fired
+ *  - 'wait-opened'        { ptyId, kind }  — a hook asked the user something
+ *  - 'tool-called'        { ptyId }  — a PreToolUse, the main agent's or a subagent's
+ *  - 'subagent-started'   { ptyId }  — a SubagentStart
+ *
+ * The last three feed analytics (activityTelemetry's `HookFacts`).
  */
 export const hookEvents = new EventEmitter();
+
+const noteWait = (ptyId: string, kind: WaitKind) => hookEvents.emit('wait-opened', { ptyId, kind });
 
 /**
  * The session's inbox from a hook's `X-Dash-Messaging-*` headers
@@ -323,6 +333,8 @@ class HookServerImpl {
               // user seems away: the state may already be set by the instant
               // PermissionRequest/Elicitation hooks, so they mostly alert.
               if (effect === 'needs') {
+                const kind = NOTIFICATION_WAIT_KINDS[notificationType as NotificationType];
+                if (kind) noteWait(ptyId, kind);
                 activityMonitor.setWaitingForPermission(ptyId);
                 if (notificationType === 'permission_prompt') {
                   hookEvents.emit('permission-prompt', { ptyId });
@@ -350,6 +362,7 @@ class HookServerImpl {
           // once the user seems away.
           if (pathname === '/hook/permission-request') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+              noteWait(ptyId, 'permission');
               activityMonitor.setWaitingForPermission(ptyId);
               res.writeHead(200);
               res.end();
@@ -360,6 +373,7 @@ class HookServerImpl {
           // An MCP server asks the user for input (H2).
           if (pathname === '/hook/elicitation') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+              noteWait(ptyId, 'elicitation');
               activityMonitor.setWaitingForPermission(ptyId);
               res.writeHead(200);
               res.end();
@@ -402,9 +416,11 @@ class HookServerImpl {
                 payload.tool_input && typeof payload.tool_input === 'object'
                   ? (payload.tool_input as Record<string, unknown>)
                   : undefined;
+              hookEvents.emit('tool-called', { ptyId });
               // AskUserQuestion is "user attention required", not "Claude is
               // working" — mirror the Notification(permission_prompt) path.
               if (toolName === 'AskUserQuestion') {
+                noteWait(ptyId, 'question');
                 activityMonitor.setWaitingForPermission(ptyId);
                 const taskName = this.getTaskName(ptyId);
                 this.showDesktopNotification(ptyId, `${taskName} is asking a question`);
@@ -456,6 +472,7 @@ class HookServerImpl {
           if (pathname === '/hook/subagent-start') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
               const agentId = subagentId(payload);
+              hookEvents.emit('subagent-started', { ptyId });
               if (agentId) activityMonitor.subagentStart(ptyId, agentId);
               res.writeHead(200);
               res.end();

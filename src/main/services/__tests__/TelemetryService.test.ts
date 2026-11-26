@@ -209,6 +209,71 @@ describe('error tracking', () => {
   });
 });
 
+describe('daily usage', () => {
+  const sent = (event: string) =>
+    captured.mock.calls
+      .map((c) => c[0] as { event: string; properties: Record<string, unknown> })
+      .filter((m) => m.event === event);
+
+  it("sends the last closed day's active minutes with the first daily-active of a day, read from disk", async () => {
+    writeFileSync(
+      path.join(userData, 'telemetry.json'),
+      JSON.stringify({
+        instanceId: 'test',
+        enabled: true,
+        lastActiveDate: '2026-01-01',
+        // Left by a run that crashed: no clean quit, the minutes still count.
+        usage: { current: { date: '2026-01-01', activeMinutes: 75, peakBusy: 3 }, finished: null },
+      }),
+    );
+    app.isPackaged = true;
+    const { TelemetryService } = await import('../TelemetryService');
+    TelemetryService.initialize();
+    expect(sent('daily_active_user')[0]!.properties).toMatchObject({
+      active_minutes_bucket: '1h_2h',
+    });
+  });
+
+  it('sends one usage snapshot a day, with bucketed counts and the closed day’s peak', async () => {
+    vi.useFakeTimers();
+    try {
+      writeFileSync(
+        path.join(userData, 'telemetry.json'),
+        JSON.stringify({
+          instanceId: 'test',
+          enabled: true,
+          lastActiveDate: null,
+          usage: { current: { date: '2026-01-01', activeMinutes: 5, peakBusy: 4 }, finished: null },
+        }),
+      );
+      app.isPackaged = true;
+      const { TelemetryService } = await import('../TelemetryService');
+      TelemetryService.initialize();
+      TelemetryService.noteSessions({ live: 7, busy: 2 });
+      TelemetryService.setUsageSource({
+        counts: () => ({ projects: 3, openTasks: 12 }),
+        isForeground: () => false,
+      });
+      expect(sent('usage_snapshot')).toEqual([]);
+      vi.advanceTimersByTime(5 * 60_000);
+      expect(sent('usage_snapshot').map((m) => m.properties)).toEqual([
+        expect.objectContaining({
+          project_count: '2_3',
+          open_task_count: '11_20',
+          live_session_count: '6_10',
+          peak_busy_sessions: '4_5',
+        }),
+      ]);
+      vi.advanceTimersByTime(60 * 60_000);
+      expect(sent('usage_snapshot')).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+      const { TelemetryService } = await import('../TelemetryService');
+      await TelemetryService.shutdown();
+    }
+  });
+});
+
 function writeConfig(enabled: boolean) {
   writeFileSync(
     path.join(userData, 'telemetry.json'),

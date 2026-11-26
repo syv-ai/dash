@@ -18,6 +18,11 @@ class TaskEvents extends EventEmitter {
     this.emit('tasks-changed', event);
     broadcast('tasks:changed', event);
   }
+
+  /** A task was created (`task-created`, its id): main only, for analytics. */
+  emitCreated(taskId: string): void {
+    this.emit('task-created', taskId);
+  }
 }
 
 export const taskEvents = new TaskEvents();

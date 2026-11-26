@@ -165,9 +165,27 @@ void app.whenReady().then(async () => {
   // Start activity monitor — must happen after window creation
   const { activityMonitor, activityEvents } = await import('./services/ActivityMonitor');
   activityMonitor.start(mainWindow.webContents);
-  // Turns, waits and failed turns as analytics (docs/telemetry.md).
-  const { trackActivity } = await import('./services/activityTelemetry');
-  trackActivity(activityEvents, (event, props) => TelemetryService.capture(event, props));
+  // Turns, waits and failed turns as analytics, and the sessions working at
+  // once for the daily usage snapshot (docs/telemetry.md).
+  const { trackActivity, sessionCounts } = await import('./services/activityTelemetry');
+  const { hookEvents } = await import('./services/HookServer');
+  const { taskEvents } = await import('./services/taskEvents');
+  trackActivity(
+    { activity: activityEvents, hooks: hookEvents, tasks: taskEvents },
+    (event, props) => TelemetryService.capture(event, props),
+  );
+  activityEvents.on('change', (all) => TelemetryService.noteSessions(sessionCounts(all)));
+  TelemetryService.setUsageSource({
+    counts: () => {
+      const open = DatabaseService.getProjects().filter((p) => !p.archivedAt);
+      const openTasks = open.reduce(
+        (n, p) => n + DatabaseService.getTasks(p.id).filter((t) => !t.archivedAt).length,
+        0,
+      );
+      return { projects: open.length, openTasks };
+    },
+    isForeground: () => BrowserWindow.getFocusedWindow() !== null,
+  });
 
   // Supervisor reconcile loop: `claude agents --json` is the truth for task
   // sessions Dash was not around to see (restart, idle stop, sleep).

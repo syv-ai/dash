@@ -26,12 +26,17 @@ The source of truth for what Dash sends to PostHog. Change this file in the same
 
 ### App
 
-| Event               | When                                       | Properties            |
-| ------------------- | ------------------------------------------ | --------------------- |
-| `app_started`       | launch                                     |                       |
-| `app_session`       | quit                                       | `session_duration_ms` |
-| `app_closed`        | quit                                       |                       |
-| `daily_active_user` | first launch of a day, then checked hourly | `date`, `timezone`    |
+| Event               | When                                                                  | Properties                                                                     |
+| ------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `app_started`       | launch                                                                |                                                                                |
+| `app_session`       | quit                                                                  | `session_duration_ms`                                                          |
+| `app_closed`        | quit                                                                  |                                                                                |
+| `daily_active_user` | first launch of a day, then checked hourly                            | `date`, `timezone`, `active_minutes_bucket`                                    |
+| `usage_snapshot`    | at most once a day, a few minutes after launch or on the hourly check | `project_count`, `open_task_count`, `live_session_count`, `peak_busy_sessions` |
+
+`active_minutes_bucket` is the minutes a Dash window had focus on the last closed day (`0`, `lt_15m`, `15m_1h`, `1h_2h`, `2h_4h`, `4h_8h`, `gt_8h`), absent on an install's first day. Main counts them a minute at a time into `telemetry.json` (`UsageLedger`), so a day that ends in a crash still counts; `app_session` stays as it was and fires only on a clean quit.
+
+`usage_snapshot` measures parallel work: open projects, open tasks in them, live sessions (any not asleep) now, and `peak_busy_sessions`, the most sessions working at once on the last closed day (absent on the first day). All four are count buckets: `0`, `1`, `2_3`, `4_5`, `6_10`, `11_20`, `21_50`, `gt_50`.
 
 ### Projects and tasks
 
@@ -47,18 +52,24 @@ The source of truth for what Dash sends to PostHog. Change this file in the same
 
 ### Sessions and turns
 
-| Event               | When                                                        | Properties                                            |
-| ------------------- | ----------------------------------------------------------- | ----------------------------------------------------- |
-| `session_started`   | a task's Claude Code session is dispatched (`claude --bg`)  | `resumed`, `model` (alias), `permission_mode`         |
-| `session_woken`     | a sleeping session is respawned                             |                                                       |
-| `session_slept`     | a session is stopped (sleep)                                |                                                       |
-| `session_restarted` | a session is re-dispatched (env change, update restart)     |                                                       |
-| `terminal_started`  | a task pane attaches to its session                         | `source`                                              |
-| `turn_completed`    | a turn ends (busy → idle/stopped), from ActivityMonitor     | `duration_bucket`, `interrupted`                      |
-| `turn_failed`       | a turn ends in an error                                     | `error_type` (StopFailure's `error`, or `supervisor`) |
-| `wait_ended`        | a wait on the user (permission, question, elicitation) ends | `duration_bucket`                                     |
+| Event                | When                                                        | Properties                                                            |
+| -------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------- |
+| `session_started`    | a task's Claude Code session is dispatched (`claude --bg`)  | `resumed`, `model` (alias), `permission_mode`                         |
+| `session_woken`      | a sleeping session is respawned                             |                                                                       |
+| `session_slept`      | a session is stopped (sleep)                                | `reason` (`manual`, `task_archived`, `project_archived`, `quit`)      |
+| `session_restarted`  | a session is re-dispatched (env change, update restart)     |                                                                       |
+| `terminal_started`   | a task pane attaches to its session                         |                                                                       |
+| `turn_completed`     | a turn ends (busy → idle/stopped), from ActivityMonitor     | `duration_bucket`, `interrupted`, `tool_call_bucket`, `subagent_used` |
+| `turn_failed`        | a turn ends in an error                                     | `error_type` (StopFailure's `error`, or `supervisor`)                 |
+| `wait_ended`         | a wait on the user (permission, question, elicitation) ends | `duration_bucket`, `kind`                                             |
+| `first_turn_started` | a task created this run starts its first turn               | `duration_bucket` (since the task was created)                        |
 
 `duration_bucket` is one of `lt_10s`, `10s_1m`, `1m_5m`, `5m_15m`, `15m_1h`, `gt_1h`.
+
+- `wait_ended.kind` is what opened the wait: `permission` (PermissionRequest, or the `permission_prompt` notification), `question` (AskUserQuestion), `elicitation` (an MCP Elicitation, or its dialog notifications), `quota` (`quota_auto_resume_stale`), or `unknown` (the supervisor listing reported the wait with no hook).
+- `turn_completed.tool_call_bucket` counts every PreToolUse in the turn, the main agent's and its subagents' (count buckets as above); `subagent_used` is true when a SubagentStart came in it.
+- `session_slept.reason`: `manual` (Put to sleep), `task_archived`, `project_archived` (each live session in it), `quit` (with "Stop sessions on quit" on). Claude Code's own idle stop isn't Dash's to see.
+- `terminal_started` lost its `source` (always `direct`): main can't tell a first open from a re-attach or a restore.
 
 ### Review and editor
 

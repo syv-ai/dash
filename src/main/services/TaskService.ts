@@ -181,6 +181,7 @@ export class TaskService {
     }
 
     TelemetryService.capture('task_created', { kind: input.kind, source: opts.source });
+    taskEvents.emitCreated(task.id);
 
     // Combine the context prompt (project default or per-task) with any
     // linked-issue context into one prompt.
@@ -258,7 +259,7 @@ export class TaskService {
     // for a task nobody sees; restoring starts fresh ones.
     await stopTaskProcesses(id, 'archive');
     // Restoring and opening the task attaches, which wakes the session.
-    await stopTaskSession(id).catch((err) =>
+    await stopTaskSession(id, 'task_archived').catch((err) =>
       console.warn('[TaskService] archive: session stop failed:', err),
     );
     const task = DatabaseService.getTask(id);

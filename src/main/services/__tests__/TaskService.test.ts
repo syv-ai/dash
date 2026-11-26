@@ -71,7 +71,7 @@ const initialPrompts: Record<string, string> = {};
 const startTaskSession = vi.fn(
   async (_id: string): Promise<{ jobId: string } | { needsTrust: string }> => ({ jobId: 'j1' }),
 );
-const stopTaskSession = vi.fn(async (_id: string) => {});
+const stopTaskSession = vi.fn(async (_id: string, _reason: string) => {});
 const removeTaskSession = vi.fn(async (_id: string) => {});
 const ptysForTask = vi.hoisted(() => ({ list: [] as string[], killed: [] as string[] }));
 vi.mock('../ptyManager', () => ({
@@ -86,7 +86,7 @@ vi.mock('../ptyManager', () => ({
   },
   discardInitialPrompt: vi.fn(),
   startTaskSession: (id: string) => startTaskSession(id),
-  stopTaskSession: (id: string) => stopTaskSession(id),
+  stopTaskSession: (id: string, reason: string) => stopTaskSession(id, reason),
   removeTaskSession: (id: string) => removeTaskSession(id),
 }));
 
@@ -513,7 +513,7 @@ describe('TaskService.archive / restore', () => {
     taskEvents.on('tasks-changed', on);
     try {
       await TaskService.archive('a');
-      expect(stopTaskSession).toHaveBeenCalledWith('a');
+      expect(stopTaskSession).toHaveBeenCalledWith('a', 'task_archived');
       expect(db.tasks[0]!.archivedAt).toBe('now');
       await TaskService.restore('a');
       expect(db.tasks[0]!.archivedAt).toBeNull();
@@ -528,6 +528,6 @@ describe('TaskService.archive / restore', () => {
     ptysForTask.list = ['a', 'shell:a', 'shell:a:2', 'service:a:web'];
     await TaskService.archive('a');
     expect(ptysForTask.killed).toEqual(['shell:a', 'shell:a:2', 'service:a:web']);
-    expect(stopTaskSession).toHaveBeenCalledWith('a');
+    expect(stopTaskSession).toHaveBeenCalledWith('a', 'task_archived');
   });
 });

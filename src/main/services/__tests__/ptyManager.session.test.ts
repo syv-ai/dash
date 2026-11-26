@@ -184,7 +184,7 @@ describe('stopping or restarting the session under an open pane', () => {
   it('stopTaskSession (archive, sleep) shows the pane Detached, not re-attaching', async () => {
     const owner = fakeOwner();
     await startDirectPty({ id: 't1', cols: 80, rows: 24, sender: owner as never });
-    await stopTaskSession('t1');
+    await stopTaskSession('t1', 'manual');
     expect(exitSends(owner)).toEqual([['pty:exit:t1', { exitCode: 0 }]]);
   });
 

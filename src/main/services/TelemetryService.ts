@@ -5,9 +5,12 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 import * as os from 'os';
 import { ErrorThrottle } from './errorThrottle';
+import { writeFileAtomic } from '../utils/atomicWrite';
 import { scrubText } from './telemetryScrub';
 import type { DriftReport } from '../claudeContract/types';
 import { claudeVersionFor } from '../claudeContract/claudeVersions';
+import { countBucket, minutesBucket } from './telemetryBuckets';
+import { UsageLedger, type UsageLedgerState } from './usageLedger';
 
 // ── Config ────────────────────────────────────────────────────
 const POSTHOG_KEY = 'phc_zEKzF3cpq9lpt1x3ONeDemYkilhWjC1XgZSGN6AyX01';
@@ -21,6 +24,10 @@ const MAX_NUMBER = 1_000_000;
 const DAILY_CHECK_MS = 60 * 60 * 1000;
 /** Quit waits this long for queued events (main.ts's safety net is 8 s). */
 const SHUTDOWN_TIMEOUT_MS = 3_000;
+/** A focused window counts one active minute per tick. */
+const ACTIVE_TICK_MS = 60_000;
+/** The first usage snapshot waits for the supervisor's listing to fill in the sessions. */
+const SNAPSHOT_DELAY_MS = 5 * 60_000;
 
 // ── Allowed Events ────────────────────────────────────────────
 const ALLOWED_EVENTS = new Set([
@@ -29,6 +36,7 @@ const ALLOWED_EVENTS = new Set([
   'app_closed',
   'app_session',
   'daily_active_user',
+  'usage_snapshot',
 
   // Projects
   'project_added',
@@ -58,6 +66,7 @@ const ALLOWED_EVENTS = new Set([
   'turn_completed',
   'turn_failed',
   'wait_ended',
+  'first_turn_started',
 
   // Review and editor
   'review_mode_entered',
@@ -111,6 +120,13 @@ const ALLOWED_PROPERTIES = new Set([
   'error_code',
   'channel',
   'severity',
+  'reason',
+  'tool_call_bucket',
+  'subagent_used',
+  'active_minutes_bucket',
+  'open_task_count',
+  'live_session_count',
+  'peak_busy_sessions',
 ]);
 
 // ── Persisted State ───────────────────────────────────────────
@@ -118,6 +134,18 @@ interface TelemetryConfig {
   instanceId: string;
   enabled: boolean;
   lastActiveDate: string | null;
+  /** The day `usage_snapshot` last went (UTC date). */
+  lastSnapshotDate?: string | null;
+  /** Active minutes and peak busy sessions (UsageLedger), saved as they change. */
+  usage?: UsageLedgerState;
+}
+
+/** What main tells telemetry about the app, for the daily usage reports. */
+export interface UsageSource {
+  /** Open projects, and open tasks in them (archived ones left out). */
+  counts(): { projects: number; openTasks: number };
+  /** A Dash window has focus. */
+  isForeground(): boolean;
 }
 
 // ── Service ───────────────────────────────────────────────────
@@ -126,6 +154,10 @@ export class TelemetryService {
   private static config: TelemetryConfig | null = null;
   private static startTime: number = 0;
   private static dailyTimer: ReturnType<typeof setInterval> | null = null;
+  private static activeTimer: ReturnType<typeof setInterval> | null = null;
+  private static usage = new UsageLedger();
+  private static usageSource: UsageSource | null = null;
+  private static liveSessions = 0;
   /** One report per error per minute, 30 an hour in all. */
   private static readonly errors = new ErrorThrottle({ windowMs: 60_000, maxPerHour: 30 });
 
@@ -133,6 +165,7 @@ export class TelemetryService {
     try {
       this.startTime = Date.now();
       this.config = this.readConfig();
+      this.usage = new UsageLedger(this.config.usage);
 
       if (!this.isEnabled()) return;
 
@@ -140,8 +173,13 @@ export class TelemetryService {
 
       this.capture('app_started');
       this.checkDailyActiveUser();
-      this.dailyTimer = setInterval(() => this.checkDailyActiveUser(), DAILY_CHECK_MS);
+      this.dailyTimer = setInterval(() => {
+        this.checkDailyActiveUser();
+        this.checkUsageSnapshot();
+      }, DAILY_CHECK_MS);
       this.dailyTimer.unref?.();
+      this.activeTimer = setInterval(() => this.tickActive(), ACTIVE_TICK_MS);
+      this.activeTimer.unref?.();
     } catch {
       // Telemetry must never crash the app
     }
@@ -210,6 +248,28 @@ export class TelemetryService {
     });
   }
 
+  /**
+   * Main's view of the app for the daily usage reports (main.ts, once the
+   * database and window are up); the first snapshot follows a few minutes
+   * later, once the sessions are known.
+   */
+  static setUsageSource(source: UsageSource): void {
+    this.usageSource = source;
+    if (!this.client) return;
+    setTimeout(() => this.checkUsageSnapshot(), SNAPSHOT_DELAY_MS).unref?.();
+  }
+
+  /** ActivityMonitor's latest counts: live sessions, and the busy ones for the day's peak. */
+  static noteSessions(counts: { live: number; busy: number }): void {
+    try {
+      if (!this.client || !this.config) return;
+      this.liveSessions = counts.live;
+      if (this.usage.noteBusy(counts.busy, today())) this.saveUsage();
+    } catch {
+      // Telemetry must never crash the app
+    }
+  }
+
   static async shutdown(): Promise<void> {
     try {
       if (!this.client || !this.config) return;
@@ -221,7 +281,9 @@ export class TelemetryService {
       }
 
       if (this.dailyTimer) clearInterval(this.dailyTimer);
+      if (this.activeTimer) clearInterval(this.activeTimer);
       this.dailyTimer = null;
+      this.activeTimer = null;
       await this.client.shutdown(SHUTDOWN_TIMEOUT_MS);
       this.client = null;
     } catch {
@@ -291,9 +353,10 @@ export class TelemetryService {
     return config;
   }
 
+  /** Atomic: the usage ledger rewrites it every active minute, and a torn file would mint a new instanceId. */
   private static writeConfig(config: TelemetryConfig): void {
     try {
-      fs.writeFileSync(this.getConfigPath(), JSON.stringify(config, null, 2));
+      writeFileAtomic(this.getConfigPath(), JSON.stringify(config, null, 2));
     } catch {
       // Best effort
     }
@@ -329,19 +392,74 @@ export class TelemetryService {
     return result;
   }
 
+  /**
+   * The first check of a day. `active_minutes_bucket` is the last closed
+   * day's (this day has barely started), read from the saved ledger, so a
+   * day that ended in a crash still counts.
+   */
   private static checkDailyActiveUser(): void {
     if (!this.config) return;
-    const today = new Date().toISOString().split('T')[0]!;
-    if (this.config.lastActiveDate === today) return;
+    const date = today();
+    if (this.config.lastActiveDate === date) return;
 
-    this.config.lastActiveDate = today;
-    this.writeConfig(this.config);
+    this.config.lastActiveDate = date;
+    this.usage.rollTo(date);
+    this.saveUsage();
 
+    const closed = this.usage.finished;
     this.capture('daily_active_user', {
-      date: today,
+      date,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      ...(closed ? { active_minutes_bucket: minutesBucket(closed.activeMinutes) } : {}),
     });
   }
+
+  /**
+   * At most once a day: how much Dash holds now (projects, open tasks, live
+   * sessions) and the last closed day's peak of sessions working at once.
+   */
+  private static checkUsageSnapshot(): void {
+    try {
+      if (!this.config || !this.usageSource) return;
+      const date = today();
+      if (this.config.lastSnapshotDate === date) return;
+      const { projects, openTasks } = this.usageSource.counts();
+      const closed = this.usage.finished;
+      const sent = this.capture('usage_snapshot', {
+        project_count: countBucket(projects),
+        open_task_count: countBucket(openTasks),
+        live_session_count: countBucket(this.liveSessions),
+        ...(closed ? { peak_busy_sessions: countBucket(closed.peakBusy) } : {}),
+      });
+      if (!sent) return;
+      this.config.lastSnapshotDate = date;
+      this.usage.clearFinished();
+      this.saveUsage();
+    } catch {
+      // Telemetry must never crash the app
+    }
+  }
+
+  private static tickActive(): void {
+    try {
+      if (!this.config || !this.usageSource?.isForeground()) return;
+      this.usage.addActiveMinute(today());
+      this.saveUsage();
+    } catch {
+      // Telemetry must never crash the app
+    }
+  }
+
+  private static saveUsage(): void {
+    if (!this.config) return;
+    this.config.usage = this.usage.toJSON();
+    this.writeConfig(this.config);
+  }
+}
+
+/** Today as `YYYY-MM-DD`, UTC (the date `daily_active_user` has always used). */
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function createClient(): PostHog {

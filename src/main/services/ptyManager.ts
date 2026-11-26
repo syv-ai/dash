@@ -447,6 +447,9 @@ function spawnAttach(options: {
 
   // Forward output to renderer, replacing the Claude logo with "7" art.
   const bannerFilter = createBannerFilter((filtered: string) => {
+    // A client being killed (hibernated, replaced) can still print while it
+    // exits; that output must not reach the pane's next client.
+    if (ptys.get(options.id) !== record) return;
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:data:${options.id}`, filtered);
     }
@@ -756,15 +759,18 @@ export async function startSessionAttach(options: {
   return { id };
 }
 
+/** Why a session was put to sleep (`session_slept.reason`, docs/telemetry.md). */
+export type SleepReason = 'manual' | 'task_archived' | 'project_archived' | 'quit';
+
 /** Stop the task's session (`claude stop`); the attach client goes with it. */
-export async function stopTaskSession(taskId: string): Promise<void> {
+export async function stopTaskSession(taskId: string, reason: SleepReason): Promise<void> {
   dropTaskInbox(taskId);
   await killPtyInternal(taskId, { notifyOwner: true });
   const task = DatabaseService.getTask(taskId);
   if (!task?.jobId) return;
   await supervisorService.stop(task.jobId);
   DatabaseService.markTaskSessionStopped(taskId);
-  TelemetryService.capture('session_slept');
+  TelemetryService.capture('session_slept', { reason });
 }
 
 /**
@@ -1150,7 +1156,10 @@ export async function killAll(): Promise<void> {
         if (task.jobId && !task.shelved) {
           pending.push(
             supervisorService.stop(task.jobId).then(
-              () => DatabaseService.markTaskSessionStopped(task.id),
+              () => {
+                DatabaseService.markTaskSessionStopped(task.id);
+                TelemetryService.capture('session_slept', { reason: 'quit' });
+              },
               (err) => console.warn(`[ptyManager] stop on quit failed for ${task.name}:`, err),
             ),
           );

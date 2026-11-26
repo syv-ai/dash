@@ -52,7 +52,7 @@ export function registerDbIpc(): void {
       const live = DatabaseService.getTasks(id).filter((t) => t.jobId && !t.archivedAt);
       await Promise.all(
         live.map((t) =>
-          stopTaskSession(t.id).catch((err) =>
+          stopTaskSession(t.id, 'project_archived').catch((err) =>
             console.warn(`[db:archiveProject] session stop failed for ${t.name}:`, err),
           ),
         ),

@@ -3,6 +3,7 @@ import type { NotificationType } from '../../claudeContract/hookSchemas';
 import {
   isSelfStartedPrompt,
   isSubagentHook,
+  NOTIFICATION_WAIT_KINDS,
   runningSubagentIds,
   stopFailureError,
   subagentId,
@@ -44,6 +45,18 @@ describe('WAIT_NOTIFICATIONS', () => {
     ] as const satisfies NotificationType[]) {
       expect(WAIT_NOTIFICATIONS[type], type).toBeUndefined();
     }
+  });
+});
+
+describe('NOTIFICATION_WAIT_KINDS', () => {
+  it('names the kind of every notification that opens a wait, and only those', () => {
+    const needs = Object.entries(WAIT_NOTIFICATIONS)
+      .filter(([, effect]) => effect === 'needs')
+      .map(([type]) => type)
+      .sort();
+    expect(Object.keys(NOTIFICATION_WAIT_KINDS).sort()).toEqual(needs);
+    expect(NOTIFICATION_WAIT_KINDS.permission_prompt).toBe('permission');
+    expect(NOTIFICATION_WAIT_KINDS.elicitation_url_dialog).toBe('elicitation');
   });
 });
 
