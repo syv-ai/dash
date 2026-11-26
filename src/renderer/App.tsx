@@ -79,6 +79,7 @@ import { ConfirmHost } from './components/ui/ConfirmHost';
 import { ClaudeUpdateHost } from './components/claudeUpdate/ClaudeUpdateHost';
 import { useRuntime } from './stores/runtimeStore';
 import { useAppBootstrap } from './hooks/useAppBootstrap';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { useShallow } from 'zustand/react/shallow';
 import {
   useProjects,
@@ -1547,51 +1548,53 @@ export function App() {
             setTimeout(() => setSidebarAnimating(false), easeNow());
           }}
         >
-          <LeftSidebar
-            projects={projects}
-            activeProjectId={activeProjectId}
-            onSelectProject={(id) => {
-              setActiveProjectId(id);
-              setActiveTaskId(null);
-            }}
-            onOpenFolder={() => {
-              setShowAddProjectModal(true);
-            }}
-            onDeleteProject={handleDeleteProject}
-            onProjectSettings={(id) => {
-              const p = projects.find((proj) => proj.id === id);
-              if (p) setProjectSettingsTarget(p);
-            }}
-            tasksByProject={tasksByProject}
-            activeTaskId={activeTaskId}
-            onSelectTask={handleSelectTask}
-            onNewTask={(id) => void handleNewTask(id)}
-            onDeleteTask={handleDeleteTask}
-            onArchiveTask={(id) => {
-              void handleArchiveTask(id);
-            }}
-            onRestoreTask={(id) => {
-              void handleRestoreTask(id);
-            }}
-            onCloseTask={(id) => void handleCloseTask(id)}
-            onTaskSettings={handleTaskSettings}
-            onOpenSettings={() => {
-              setSettingsInitialTab(undefined);
-              setShowSettings(true);
-            }}
-            onShowCommitGraph={(projectId) => {
-              setActiveProjectId(projectId);
-              setShowCommitGraph(true);
-            }}
-            collapsed={sidebarRail}
-            unseenTaskIds={unseenTaskIds}
-            onReorderProjects={handleReorderProjects}
-            onReorderTasks={handleReorderTasks}
-            onReorderTasksCommit={(projectId, reordered) => {
-              void handleReorderTasksCommit(projectId, reordered);
-            }}
-            contextUsage={contextUsage}
-          />
+          <ErrorBoundary area="The sidebar">
+            <LeftSidebar
+              projects={projects}
+              activeProjectId={activeProjectId}
+              onSelectProject={(id) => {
+                setActiveProjectId(id);
+                setActiveTaskId(null);
+              }}
+              onOpenFolder={() => {
+                setShowAddProjectModal(true);
+              }}
+              onDeleteProject={handleDeleteProject}
+              onProjectSettings={(id) => {
+                const p = projects.find((proj) => proj.id === id);
+                if (p) setProjectSettingsTarget(p);
+              }}
+              tasksByProject={tasksByProject}
+              activeTaskId={activeTaskId}
+              onSelectTask={handleSelectTask}
+              onNewTask={(id) => void handleNewTask(id)}
+              onDeleteTask={handleDeleteTask}
+              onArchiveTask={(id) => {
+                void handleArchiveTask(id);
+              }}
+              onRestoreTask={(id) => {
+                void handleRestoreTask(id);
+              }}
+              onCloseTask={(id) => void handleCloseTask(id)}
+              onTaskSettings={handleTaskSettings}
+              onOpenSettings={() => {
+                setSettingsInitialTab(undefined);
+                setShowSettings(true);
+              }}
+              onShowCommitGraph={(projectId) => {
+                setActiveProjectId(projectId);
+                setShowCommitGraph(true);
+              }}
+              collapsed={sidebarRail}
+              unseenTaskIds={unseenTaskIds}
+              onReorderProjects={handleReorderProjects}
+              onReorderTasks={handleReorderTasks}
+              onReorderTasksCommit={(projectId, reordered) => {
+                void handleReorderTasksCommit(projectId, reordered);
+              }}
+              contextUsage={contextUsage}
+            />
+          </ErrorBoundary>
         </ResizablePanel>
         <ResizableHandle disabled={sidebarCollapsed} />
 
@@ -1600,50 +1603,52 @@ export function App() {
           animate={sidebarAnimating || changesAnimating}
           minSize={MAIN_MIN_PX}
         >
-          <MainContent
-            activeTask={activeTask}
-            activeProject={activeProject}
-            tasks={activeProjectTasks}
-            terminalBg={terminalBg}
-            sidebarCollapsed={sidebarCollapsed}
-            inspectorCollapsed={changesPanelCollapsed}
-            onToggleSidebar={toggleSidebar}
-            onToggleInspector={toggleInspector}
-            onSelectTask={setActiveTaskId}
-            onEnableRemoteControl={() => activeTask && setRemoteControlModalPtyId(activeTask.id)}
-            modelName={
-              activeTask
-                ? headerModelName(statusLineData[activeTask.id]?.model, activeTask.model)
-                : null
-            }
-            onOpenIde={() => {
-              if (activeTask) void openInIde(activeTask.path);
-            }}
-            onNewTask={() => {
-              if (activeProjectId) void handleNewTask(activeProjectId);
-            }}
-            onProjectSettings={() => {
-              if (activeProject) setProjectSettingsTarget(activeProject);
-            }}
-            onShowCommitGraph={() => setShowCommitGraph(true)}
-            onDeleteProject={() => {
-              if (activeProject) handleDeleteProject(activeProject.id);
-            }}
-            archivedTasks={
-              activeProjectId
-                ? (tasksByProject[activeProjectId] || []).filter((t) => t.archivedAt)
-                : []
-            }
-            onCloseTask={(id) => void handleCloseTask(id)}
-            onTaskSettings={handleTaskSettings}
-            onDeleteTask={handleDeleteTask}
-            onArchiveTask={(id) => {
-              void handleArchiveTask(id);
-            }}
-            onRestoreTask={(id) => {
-              void handleRestoreTask(id);
-            }}
-          />
+          <ErrorBoundary area="This view" resetKey={activeTask?.id ?? activeProjectId}>
+            <MainContent
+              activeTask={activeTask}
+              activeProject={activeProject}
+              tasks={activeProjectTasks}
+              terminalBg={terminalBg}
+              sidebarCollapsed={sidebarCollapsed}
+              inspectorCollapsed={changesPanelCollapsed}
+              onToggleSidebar={toggleSidebar}
+              onToggleInspector={toggleInspector}
+              onSelectTask={setActiveTaskId}
+              onEnableRemoteControl={() => activeTask && setRemoteControlModalPtyId(activeTask.id)}
+              modelName={
+                activeTask
+                  ? headerModelName(statusLineData[activeTask.id]?.model, activeTask.model)
+                  : null
+              }
+              onOpenIde={() => {
+                if (activeTask) void openInIde(activeTask.path);
+              }}
+              onNewTask={() => {
+                if (activeProjectId) void handleNewTask(activeProjectId);
+              }}
+              onProjectSettings={() => {
+                if (activeProject) setProjectSettingsTarget(activeProject);
+              }}
+              onShowCommitGraph={() => setShowCommitGraph(true)}
+              onDeleteProject={() => {
+                if (activeProject) handleDeleteProject(activeProject.id);
+              }}
+              archivedTasks={
+                activeProjectId
+                  ? (tasksByProject[activeProjectId] || []).filter((t) => t.archivedAt)
+                  : []
+              }
+              onCloseTask={(id) => void handleCloseTask(id)}
+              onTaskSettings={handleTaskSettings}
+              onDeleteTask={handleDeleteTask}
+              onArchiveTask={(id) => {
+                void handleArchiveTask(id);
+              }}
+              onRestoreTask={(id) => {
+                void handleRestoreTask(id);
+              }}
+            />
+          </ErrorBoundary>
         </ResizablePanel>
 
         {activeTask && (
@@ -1699,36 +1704,37 @@ export function App() {
                       : undefined
                   }
                 >
-                  <RightInspector
-                    key={activeTask.id}
-                    task={activeTask}
-                    modelName={headerModelName(
-                      statusLineData[activeTask.id]?.model,
-                      activeTask.model,
-                    )}
-                    rateLimits={latestRateLimits}
-                    paces={paces}
-                    contextUsage={contextUsage[activeTask.id]}
-                    diff={inlineEditor?.target ?? null}
-                    expanded={expanded || expandedShown}
-                    motion={sidebarMotion}
-                    onEditorMounted={handleEditorMounted}
-                    terminalTheme={resolvedTerminalTheme}
-                    isDark={theme === 'dark'}
-                    onViewDiff={handleViewDiff}
-                    onOpenEditor={() => {
-                      useEditors.getState().open({ cwd: activeTask.path, filePath: '' });
-                    }}
-                    onNarrow={narrowEditor}
-                    onCloseDiff={() => closeEditorOf(activeTask.path)}
-                    onCommitFinished={refreshActiveGitStatus}
-                    shellDrawerRef={shellDrawerPanelRef}
-                    onTuiActiveChange={handleTuiPanelActive}
-                    onTaskSettings={() => handleTaskSettings(activeTask.id)}
-                    onMinWidth={setInspectorMinPx}
-                    railed={changesPanelCollapsed && !sidebarMotion}
-                    onShow={showInspectorNarrow}
-                  />
+                  <ErrorBoundary key={activeTask.id} area="The task sidebar">
+                    <RightInspector
+                      task={activeTask}
+                      modelName={headerModelName(
+                        statusLineData[activeTask.id]?.model,
+                        activeTask.model,
+                      )}
+                      rateLimits={latestRateLimits}
+                      paces={paces}
+                      contextUsage={contextUsage[activeTask.id]}
+                      diff={inlineEditor?.target ?? null}
+                      expanded={expanded || expandedShown}
+                      motion={sidebarMotion}
+                      onEditorMounted={handleEditorMounted}
+                      terminalTheme={resolvedTerminalTheme}
+                      isDark={theme === 'dark'}
+                      onViewDiff={handleViewDiff}
+                      onOpenEditor={() => {
+                        useEditors.getState().open({ cwd: activeTask.path, filePath: '' });
+                      }}
+                      onNarrow={narrowEditor}
+                      onCloseDiff={() => closeEditorOf(activeTask.path)}
+                      onCommitFinished={refreshActiveGitStatus}
+                      shellDrawerRef={shellDrawerPanelRef}
+                      onTuiActiveChange={handleTuiPanelActive}
+                      onTaskSettings={() => handleTaskSettings(activeTask.id)}
+                      onMinWidth={setInspectorMinPx}
+                      railed={changesPanelCollapsed && !sidebarMotion}
+                      onShow={showInspectorNarrow}
+                    />
+                  </ErrorBoundary>
                 </div>
               </div>
             </ResizablePanel>

@@ -4,6 +4,7 @@ import { App } from './App';
 import './index.css';
 import { installErrorReporting, reportError } from './lib/telemetry';
 import { installPrOutcomeTelemetry } from './lib/prOutcomeTelemetry';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { resolveTerminalFontValue, DEFAULT_FONT_MONO_STACK } from './terminal/terminalFonts';
 
 // Apply the persisted terminal font before React renders so xterm reads the
@@ -19,7 +20,8 @@ installErrorReporting();
 installPrOutcomeTelemetry();
 
 // React 19 hands render errors here instead of logging them itself, so log
-// as it would, then report (no error boundary renders a fallback yet).
+// as it would, then report. A boundary's catch (ui/ErrorBoundary: the root
+// below, and one per area in App) reports here too, as `react-caught`.
 const root = ReactDOM.createRoot(document.getElementById('root')!, {
   onUncaughtError: (error, info) => {
     console.error(error, info.componentStack);
@@ -49,7 +51,9 @@ if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('gall
 } else {
   root.render(
     <React.StrictMode>
-      <App />
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
     </React.StrictMode>,
   );
 }
