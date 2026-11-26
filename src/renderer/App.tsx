@@ -1395,6 +1395,12 @@ export function App() {
     });
   }
 
+  // The left sidebar shows its collapsed rail once its panel is there: while
+  // the task sidebar's motion collapses or restores it (D259), it keeps its
+  // full content through the ease, so collapsing switches after it and
+  // restoring before it, not on the ease's first frame.
+  const sidebarRail = sidebarCollapsed && !(sidebarMotion?.phase === 'easing' && sidebarAnimating);
+
   return (
     <div
       className="h-screen w-screen flex flex-col overflow-hidden"
@@ -1468,7 +1474,7 @@ export function App() {
               setActiveProjectId(projectId);
               setShowCommitGraph(true);
             }}
-            collapsed={sidebarCollapsed}
+            collapsed={sidebarRail}
             unseenTaskIds={unseenTaskIds}
             onReorderProjects={handleReorderProjects}
             onReorderTasks={handleReorderTasks}

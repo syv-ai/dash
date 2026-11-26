@@ -18,7 +18,7 @@ export type { PanelImperativeHandle };
 export const PANEL_EASE_MS = 280;
 /** The task sidebar's narrow ⇄ expanded ease, slower and calmer: the panels
  *  take it while an ancestor sets `--panel-ease` to it (D258). */
-export const EXPAND_EASE_MS = 440;
+export const EXPAND_EASE_MS = 600;
 
 /** The ease's length now (`ms`, the panels' own by default): 0 when the user
  *  prefers reduced motion (the CSS drops the transition then too). Clear an
