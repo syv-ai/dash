@@ -2,24 +2,19 @@ import { useMemo, type ReactNode } from 'react';
 import { FolderPlus } from 'lucide-react';
 import type { ContextUsage, Project, Task } from '../../../shared/types';
 import { Tree, TreeRow, ownNode, type TreeRowContext } from '../ui/Tree';
-import { HoverSwapSlot } from '../ui/HoverSwapSlot';
-import { StatusDot, type AgentState } from '../ui/StatusDot';
+import type { AgentState } from '../ui/StatusDot';
 import { EmptyState } from '../ui/EmptyState';
 import { Button } from '../ui/Button';
-import { FavoriteButton } from '../task/FavoriteButton';
-import { TaskContextMenu } from '../task/TaskContextMenu';
 import { openInIde } from '../../lib/openInIde';
 import { useSettings } from '../../stores/settingsStore';
 import {
   LAUNCHED_AT,
-  STATE_LABELS,
-  isAtRest,
   taskGroups,
   type TaskStateList as Rows,
   type TaskStateRow,
 } from './taskStates';
 import { taskTreeRows, type TaskTreeRow } from './taskTree';
-import { ContextLevel } from './ContextLevel';
+import { TaskCard } from './TaskCard';
 
 export interface TaskRowActions {
   onSelectTask: (projectId: string, taskId: string) => void;
@@ -42,10 +37,8 @@ interface TaskStateListProps extends TaskRowActions {
  * The left sidebar's default view: favourites first (any state), then every
  * live task across projects by state (`taskGroups`), and the sleeping ones
  * folded under "Inactive sessions", open or closed as last left. Each row
- * is two lines: the name, then its project (and why, for needs-you and
- * failed); a live one ends in its session's context percent. At-rest rows are
- * dimmed. A favourite's star always shows; any other's on hover.
- * Right-click opens the task menu.
+ * is a `TaskCard`, as in the Projects view, with a second line: its project
+ * (and why, for needs-you and failed).
  */
 export function TaskStateList({
   rows: list,
@@ -139,48 +132,27 @@ function TaskStateRowItem({
 }) {
   const { task, state, reason, projectName } = row;
   return (
-    <TaskContextMenu
-      taskId={task.id}
+    <TaskCard
+      task={task}
+      ctx={ctx}
+      state={state}
+      usage={usage}
+      description={
+        (projectName || reason) && (
+          <>
+            {projectName}
+            {projectName && reason && ' · '}
+            {reason && <ReasonText state={state}>{reason}</ReasonText>}
+          </>
+        )
+      }
+      onSelect={() => onSelectTask(task.projectId, task.id)}
       onOpenIde={() => void openInIde(task.path || projectPath || '')}
-      onSleep={() => onCloseTask(task.id)}
+      onClose={() => onCloseTask(task.id)}
       onSettings={() => onTaskSettings(task.id)}
       onArchive={() => onArchiveTask(task.id)}
       onDelete={() => onDeleteTask(task.id)}
-    >
-      <TreeRow
-        ctx={ctx}
-        className="group/swap"
-        dimmed={isAtRest(state)}
-        strong={ctx.selected}
-        leading={<StatusDot state={state} label={STATE_LABELS[state]} />}
-        description={
-          (projectName || reason) && (
-            <>
-              {projectName}
-              {projectName && reason && ' · '}
-              {reason && <ReasonText state={state}>{reason}</ReasonText>}
-            </>
-          )
-        }
-        trailing={
-          task.favorite ? (
-            // A favourite's star always shows, beside its context.
-            <>
-              {state !== 'asleep' && <ContextLevel usage={usage} />}
-              <FavoriteButton task={task} />
-            </>
-          ) : (
-            <HoverSwapSlot
-              rest={state !== 'asleep' && <ContextLevel usage={usage} />}
-              actions={<FavoriteButton task={task} />}
-            />
-          )
-        }
-        onActivate={() => onSelectTask(task.projectId, task.id)}
-      >
-        {task.name}
-      </TreeRow>
-    </TaskContextMenu>
+    />
   );
 }
 

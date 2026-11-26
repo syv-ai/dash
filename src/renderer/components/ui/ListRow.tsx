@@ -11,8 +11,9 @@ const listRowVariants = cva(
   {
     variants: {
       size: { sm: 'h-8 text-sm', md: 'h-9 text-base' },
-      // A second line: the row grows and the leading slot stays on the first.
-      twoLine: { true: 'h-auto items-start py-2', false: '' },
+      // A second line: the row grows; leading and trailing centre on both
+      // lines (T21).
+      twoLine: { true: 'h-auto py-2', false: '' },
       dimmed: {
         true: 'text-ink-3 hover:text-ink data-[selected=true]:text-ink',
         false: '',
@@ -31,9 +32,13 @@ export type ListRowProps = Omit<React.ComponentProps<'button'>, 'children'> &
   Pick<VariantProps<typeof listRowVariants>, 'size'> & {
     /** Current row: the select tint (and aria-current). */
     selected?: boolean;
-    /** A second, smaller line under the label (a reason, a path). It is ink-3
+    /** A second line under the label (a reason, a path), in `type-caption`
      *  unless the node passed in colours itself. */
     description?: React.ReactNode;
+    /** Right after the label on its line, never truncated (the label gives
+     *  way): non-interactive marks such as the main-checkout M or a
+     *  favourite's star. */
+    badges?: React.ReactNode;
     /** Quiet row (ink-3) that reads normally on hover or when selected. */
     dimmed?: boolean;
     /** A changed file or folder: its label in the `changed` gold (G1). */
@@ -65,8 +70,8 @@ export const TREE_INDENT_PX = 12;
 
 /**
  * A sidebar or tree row: 32–36px, rounded-lg, hover tint, select tint when
- * `selected`. Leading slot, truncating label (with an optional second line),
- * trailing slot (ink-3).
+ * `selected`. Leading slot, truncating label (with badges after it and an
+ * optional second line), trailing slot (ink-3).
  */
 export function ListRow({
   selected = false,
@@ -75,6 +80,7 @@ export function ListRow({
   changed = false,
   dragging = false,
   strong = false,
+  badges,
   leading,
   trailing,
   size,
@@ -88,6 +94,15 @@ export function ListRow({
   ...props
 }: ListRowProps) {
   const Comp = as;
+  const text = <span className={cn('min-w-0 truncate', strong && STRONG)}>{children}</span>;
+  const label = badges ? (
+    <span className="flex min-w-0 items-center gap-1.5">
+      {text}
+      <span className="flex shrink-0 items-center gap-1">{badges}</span>
+    </span>
+  ) : (
+    text
+  );
   return (
     <Comp
       type={as === 'button' ? type : undefined}
@@ -104,11 +119,11 @@ export function ListRow({
       {leading && <span className="flex h-5 shrink-0 items-center text-icon">{leading}</span>}
       {description ? (
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className={cn('truncate', strong && STRONG)}>{children}</span>
-          <span className="truncate text-sm text-ink-3">{description}</span>
+          {label}
+          <span className="truncate type-caption">{description}</span>
         </span>
       ) : (
-        <span className={cn('min-w-0 flex-1 truncate', strong && STRONG)}>{children}</span>
+        <span className="flex min-w-0 flex-1">{label}</span>
       )}
       {trailing && (
         <span className="flex shrink-0 items-center gap-1.5 text-ink-3">{trailing}</span>

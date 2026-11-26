@@ -8,7 +8,7 @@ import { useSettings } from '../../stores/settingsStore';
  * sidebar's Session level (`levelCells`, so the figures never disagree) read
  * as the narrow limits row reads it (`LevelReading`, coloured by how full it
  * is), a size down for a list row, with the same rich tooltip (percent,
- * tokens). Nothing until the session has replied, or while the setting hides
+ * tokens). A fixed least width, right-aligned, so the figures form one column. Nothing until the session has replied, or while the setting hides
  * the session level.
  */
 export function ContextLevel({ usage }: { usage: ContextUsage | undefined }) {
@@ -17,7 +17,7 @@ export function ContextLevel({ usage }: { usage: ContextUsage | undefined }) {
   if (!cell || cell.pct === null) return null;
   return (
     <Tooltip content={cell.tooltip}>
-      <span className="flex">
+      <span className="flex min-w-8 justify-end">
         <LevelReading cell={cell} size="sm" />
       </span>
     </Tooltip>

@@ -165,6 +165,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
           tasksByProject={tasksByProject}
           activeTaskId={activeTaskId}
           unseenTaskIds={props.unseenTaskIds}
+          contextUsage={props.contextUsage}
           onSelectProject={props.onSelectProject}
           onOpenFolder={props.onOpenFolder}
           onDeleteProject={props.onDeleteProject}

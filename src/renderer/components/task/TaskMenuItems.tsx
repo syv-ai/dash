@@ -20,8 +20,11 @@ import { useProjects, selectTaskById } from '../../stores/projectsStore';
 import { useUi } from '../../stores/uiStore';
 import { sessionRegistry } from '../../terminal/SessionRegistry';
 import { useSetup } from '../../stores/setupStore';
-import { favoriteLabel } from './FavoriteButton';
 import { copyText, revealLabel } from '../diffEditor/fileActions';
+
+/** What the favourite toggle says. */
+const favoriteLabel = (favorite: boolean) =>
+  favorite ? 'Remove from favourites' : 'Add to favourites';
 
 let focusTerminalOnClose = false;
 

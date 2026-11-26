@@ -16,7 +16,7 @@ import {
 } from '../ui/ContextMenu';
 import type { MenuParts } from '../task/TaskMenuItems';
 import { ProjectMenuItems } from './ProjectMenuItems';
-import type { Project, Task } from '../../../shared/types';
+import type { ContextUsage, Project, Task } from '../../../shared/types';
 import { useDragReorder } from '../../hooks/useDragReorder';
 import { IconButton } from '../ui/IconButton';
 import { HoverSwapSlot } from '../ui/HoverSwapSlot';
@@ -39,6 +39,7 @@ import { ForeignSessionsSection } from './ForeignSessionsSection';
 import { foreignSessionsFor, taskOwnership } from './foreignSessions';
 import { projectTreeRows, type ProjectTreeRow } from './projectTree';
 import { getProjectActivity, projectActivityDot } from './projectActivity';
+import { agentState } from './taskStates';
 import { newMemoriesLabel } from '../memory/memoryView';
 import { openInIde } from '../../lib/openInIde';
 import { useSettings } from '../../stores/settingsStore';
@@ -59,6 +60,8 @@ interface ProjectsSectionProps {
   tasksByProject: Record<string, Task[]>;
   activeTaskId: string | null;
   unseenTaskIds?: Set<string>;
+  /** Each live task's session context (the right sidebar's Session level). */
+  contextUsage?: Record<string, ContextUsage>;
   onSelectProject: (id: string) => void;
   onOpenFolder: () => void;
   onDeleteProject: (id: string) => void;
@@ -84,6 +87,7 @@ export function ProjectsSection({
   tasksByProject,
   activeTaskId,
   unseenTaskIds,
+  contextUsage,
   onSelectProject,
   onOpenFolder,
   onDeleteProject,
@@ -104,7 +108,6 @@ export function ProjectsSection({
   const projectTokenStats = useRuntime((s) => s.projectTokenStats);
   const taskActivity = useRuntime((s) => s.taskActivity);
   const newMemoryCounts = useRuntime((s) => s.newMemoryCounts);
-  const remoteControlStates = useRuntime((s) => s.remoteControlStates);
   const supervisorSessions = useRuntime((s) => s.supervisorSessions);
   // Derive from the stable map reference (see the useShallow caveat in CLAUDE.md).
   const owned = useMemo(() => taskOwnership(tasksByProject), [tasksByProject]);
@@ -114,8 +117,6 @@ export function ProjectsSection({
   const archiveProject = useProjects((s) => s.archiveProject);
   const restoreProject = useProjects((s) => s.restoreProject);
   const [archivedProjectsOpen, setArchivedProjectsOpen] = useState(false);
-  const prByTask = useGit((s) => s.prByTask);
-  const branchPrsByTask = useGit((s) => s.branchPrsByTask);
   const detectProjectPrs = useGit((s) => s.detectProjectPrs);
   const setMemoryProjectId = useUi((s) => s.setMemoryProjectId);
 
@@ -420,13 +421,13 @@ export function ProjectsSection({
           <TaskCard
             task={task}
             ctx={ctx}
-            activityInfo={taskActivity[task.id]}
-            prs={prByTask[task.id]}
-            allPrs={branchPrsByTask[task.id]}
-            isUnseen={!!unseenTaskIds?.has(task.id)}
-            hasRemoteControl={!!remoteControlStates[task.id]}
-            isDragging={draggingTaskId === task.id}
-            dragHandlers={getTaskDragHandlers(task.id, row.siblings, project.id)}
+            state={agentState(taskActivity[task.id], !!unseenTaskIds?.has(task.id))}
+            usage={contextUsage?.[task.id]}
+            indentStep={TASK_INDENT_PX}
+            drag={{
+              isDragging: draggingTaskId === task.id,
+              handlers: getTaskDragHandlers(task.id, row.siblings, project.id),
+            }}
             onSelect={() => onSelectTask(project.id, task.id)}
             onOpenIde={() => void openInIde(task.path || project.path)}
             onClose={() => onCloseTask(task.id)}
