@@ -1,9 +1,12 @@
 import React from 'react';
-import type { PermissionMode } from '../../../shared/types';
-import { PERMISSION_MODE_LABELS, type ConfigureValues } from './types';
+import { type ConfigureValues } from './types';
+import { PermissionModePicker } from '../task/PermissionModePicker';
+import { Code } from '../ui/Code';
 import { Expandable } from '../ui/Expandable';
+import { Field, FormSection } from '../ui/Field';
+import { Input } from '../ui/Input';
 import { SwitchField } from '../ui/SwitchField';
-import { CheckboxField } from '../ui/CheckboxField';
+import { Textarea } from '../ui/Textarea';
 import { useControlInfo } from '../../hooks/useControlInfo';
 
 interface ConfigureFormProps {
@@ -13,122 +16,100 @@ interface ConfigureFormProps {
   showName?: boolean;
 }
 
-const inputClass =
-  'w-full px-3.5 py-2.5 rounded-lg bg-transparent border border-input/60 text-foreground text-base placeholder:text-muted-fade-30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150';
-const labelClass = 'block text-sm font-medium text-muted-fade-70 mb-2';
-const sectionLabel = 'type-subheading mb-2 block';
-
+/** A project's `.dash/config.json`: its name, the new-task defaults and the
+ *  worktree scripts. Sections for a `DialogBody` (the new-project wizard,
+ *  project settings). */
 export function ConfigureForm({ value, onChange, showName = true }: ConfigureFormProps) {
   const set = <K extends keyof ConfigureValues>(key: K, v: ConfigureValues[K]) =>
     onChange({ ...value, [key]: v });
   const controlSupported = useControlInfo()?.supported ?? false;
 
   return (
-    <div className="space-y-5">
+    <>
       {showName && (
-        <div>
-          <label className={labelClass}>Project name</label>
-          <input
-            type="text"
-            value={value.name}
-            onChange={(e) => set('name', e.target.value)}
-            className={inputClass}
-          />
-        </div>
+        <Field label="Name">
+          <Input value={value.name} onChange={(e) => set('name', e.target.value)} />
+        </Field>
       )}
 
-      <div>
-        <span className={sectionLabel}>Task defaults — prefilled into every New Task</span>
+      <FormSection title="New tasks" description="Prefilled into each new task; change them there.">
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={labelClass}>Base ref</label>
-            <input
-              type="text"
+          <Field label="Base branch">
+            <Input
               value={value.baseRef}
               onChange={(e) => set('baseRef', e.target.value)}
               placeholder="origin/main"
-              className={inputClass}
             />
-          </div>
-          <div>
-            <label className={labelClass}>Permission mode</label>
-            <select
-              value={value.permissionMode}
-              onChange={(e) => set('permissionMode', e.target.value as PermissionMode)}
-              className={inputClass}
-            >
-              {(Object.keys(PERMISSION_MODE_LABELS) as PermissionMode[]).map((mode) => (
-                <option key={mode} value={mode}>
-                  {PERMISSION_MODE_LABELS[mode]}
-                </option>
-              ))}
-            </select>
-          </div>
+          </Field>
+          <PermissionModePicker
+            value={value.permissionMode}
+            onChange={(mode) => set('permissionMode', mode)}
+          />
         </div>
-        <CheckboxField
-          className="mt-3"
-          checked={value.useWorktree}
-          onChange={(v) => set('useWorktree', v)}
-          label="Use a git worktree per task"
-        />
-        {controlSupported && (
-          <div className="mt-3">
+        <div className="grid divide-y divide-line">
+          <SwitchField
+            label="A worktree per task"
+            hint="Each task gets its own git worktree and branch."
+            checked={value.useWorktree}
+            onCheckedChange={(v) => set('useWorktree', v)}
+          />
+          {controlSupported && (
             <SwitchField
-              label="Dash access for new tasks"
-              hint="New tasks start with their agent able to use Dash: its ports and services, creating tasks of its own, and drafting PR review notes and comments. Each such task gets a dash skill in its checkout (.claude/skills/dash, kept out of git) that explains dashctl, the command it uses."
+              label="Dash access"
+              hint="The task's agent can use Dash: its ports and services, tasks of its own, and PR review drafts. Adds a dash skill to the checkout (.claude/skills/dash, kept out of git)."
               checked={value.dashAccess}
               onCheckedChange={(v) => set('dashAccess', v)}
             />
-          </div>
-        )}
-        <div className="mt-3">
-          <Expandable
-            label="Default context prompt"
-            hint="optional"
-            defaultOpen={!!value.contextPrompt.trim()}
-          >
-            <textarea
-              value={value.contextPrompt}
-              onChange={(e) => set('contextPrompt', e.target.value)}
-              rows={2}
-              placeholder="Optional — prepended to each new task's context."
-              className={`${inputClass} resize-none`}
-            />
-          </Expandable>
+          )}
         </div>
-      </div>
+        <Expandable
+          label="Context prompt"
+          hint="optional"
+          defaultOpen={!!value.contextPrompt.trim()}
+        >
+          <Textarea
+            aria-label="Context prompt"
+            value={value.contextPrompt}
+            onChange={(e) => set('contextPrompt', e.target.value)}
+            rows={3}
+            placeholder="Put before each new task's context: conventions, links."
+            className="resize-none"
+          />
+        </Expandable>
+      </FormSection>
 
-      <div>
-        <span className={sectionLabel}>Worktree scripts — one command per line</span>
+      <FormSection
+        title="Worktree scripts"
+        description={
+          <>
+            One command per line. They see <Code>DASH_WORKTREE_PATH</Code>,{' '}
+            <Code>DASH_PROJECT_PATH</Code> and <Code>DASH_BRANCH</Code>.
+          </>
+        }
+      >
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={labelClass}>Setup (each new worktree)</label>
-            <textarea
+          <Field label="Setup" hint="In each new worktree.">
+            <Textarea
+              variant="code"
               value={value.setup}
               onChange={(e) => set('setup', e.target.value)}
               rows={3}
               placeholder={'pnpm install\ncp ../.env .env'}
-              className={`${inputClass} font-mono text-sm resize-none`}
+              className="resize-none"
             />
-          </div>
-          <div>
-            <label className={labelClass}>Teardown (before removal)</label>
-            <textarea
+          </Field>
+          <Field label="Teardown" hint="Before a worktree is removed.">
+            <Textarea
+              variant="code"
               value={value.teardown}
               onChange={(e) => set('teardown', e.target.value)}
               rows={3}
-              placeholder={'docker compose down'}
-              className={`${inputClass} font-mono text-sm resize-none`}
+              placeholder="docker compose down"
+              className="resize-none"
             />
-          </div>
+          </Field>
         </div>
-        <p className="text-xs text-muted-fade-60 mt-2 leading-relaxed">
-          Env vars exposed to scripts:{' '}
-          <code className="font-mono text-fg-fade-80">DASH_WORKTREE_PATH</code>,{' '}
-          <code className="font-mono text-fg-fade-80">DASH_PROJECT_PATH</code>,{' '}
-          <code className="font-mono text-fg-fade-80">DASH_BRANCH</code>.
-        </p>
-      </div>
-    </div>
+      </FormSection>
+    </>
   );
 }

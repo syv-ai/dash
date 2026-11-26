@@ -1,6 +1,7 @@
 import React from 'react';
 import { Shield, FilePen, Zap, Flame } from 'lucide-react';
 import { isPermissionMode, type PermissionMode } from '../../../shared/types';
+import { Field } from '../ui/Field';
 import { Select, type SelectOption } from '../ui/Select';
 
 const OPTIONS: SelectOption<PermissionMode>[] = [
@@ -18,7 +19,7 @@ const DESCRIPTIONS: Record<PermissionMode, string> = {
 };
 
 function ModeIcon({ mode }: { mode: PermissionMode }) {
-  const props = { size: 13, strokeWidth: 1.8, className: 'text-muted-fade-60' };
+  const props = { size: 14, strokeWidth: 1.8, className: 'text-icon' };
   if (mode === 'acceptEdits') return <FilePen {...props} />;
   if (mode === 'auto') return <Zap {...props} />;
   if (mode === 'bypassPermissions') return <Flame {...props} />;
@@ -36,9 +37,18 @@ export function PermissionModePicker({
   helperText?: string;
 }) {
   return (
-    <div>
-      <label className="block text-sm font-medium text-fg-fade-70 mb-2">Permission mode</label>
+    <Field
+      label="Permission mode"
+      as="div"
+      hint={
+        <>
+          {DESCRIPTIONS[value]}
+          {helperText && <span className="block">{helperText}</span>}
+        </>
+      }
+    >
       <Select<PermissionMode>
+        aria-label="Permission mode"
         value={value}
         onValueChange={onChange}
         options={OPTIONS}
@@ -49,9 +59,7 @@ export function PermissionModePicker({
           </span>
         )}
       />
-      <p className="mt-1.5 text-xs text-muted-fade-50">{DESCRIPTIONS[value]}</p>
-      {helperText && <p className="mt-0.5 text-xs text-muted-fade-40">{helperText}</p>}
-    </div>
+    </Field>
   );
 }
 

@@ -3,7 +3,10 @@ import { toast } from 'sonner';
 import { AdoConnectionForm } from '../vcs/ado/AdoConnectionForm';
 import { isAdoRemote } from '../../../shared/urls';
 import type { Project } from '../../../shared/types';
-import { SettingsModalShell } from '../ui/SettingsModalShell';
+import { Button } from '../ui/Button';
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from '../ui/Dialog';
+import { FormSection } from '../ui/Field';
+import { useModalClose } from '../ui/Modal';
 import { ConfigureForm } from '../newProject/ConfigureForm';
 import { configToValues, valuesToConfig, type ConfigureValues } from '../newProject/types';
 
@@ -14,7 +17,17 @@ interface ProjectSettingsModalProps {
 }
 
 export function ProjectSettingsModal({ project, onClose, onRename }: ProjectSettingsModalProps) {
+  return (
+    <Dialog size="lg" onClose={onClose}>
+      <ProjectSettingsBody project={project} onRename={onRename} />
+    </Dialog>
+  );
+}
+
+function ProjectSettingsBody({ project, onRename }: Omit<ProjectSettingsModalProps, 'onClose'>) {
+  const close = useModalClose();
   const [value, setValue] = useState<ConfigureValues | null>(null);
+  const [saving, setSaving] = useState(false);
 
   // Load the committed config once on open. Shared only: saving writes config.json,
   // so config.local.json overrides must not be read in.
@@ -32,42 +45,46 @@ export function ProjectSettingsModal({ project, onClose, onRename }: ProjectSett
     };
   }, [project.path, project.name, project.baseRef]);
 
-  async function persist(next: ConfigureValues) {
-    if (next.name.trim() && next.name.trim() !== project.name) {
-      onRename(project.id, next.name.trim());
+  async function save(next: ConfigureValues) {
+    setSaving(true);
+    try {
+      if (next.name.trim() && next.name.trim() !== project.name) {
+        onRename(project.id, next.name.trim());
+      }
+      const resp = await window.electronAPI.writeWorkspaceConfig({
+        projectPath: project.path,
+        config: valuesToConfig(next),
+      });
+      if (!resp.success) {
+        toast.error(resp.error || 'Failed to save project config');
+        return;
+      }
+      toast.success('Project settings saved');
+      close();
+    } finally {
+      setSaving(false);
     }
-    const resp = await window.electronAPI.writeWorkspaceConfig({
-      projectPath: project.path,
-      config: valuesToConfig(next),
-    });
-    if (!resp.success) toast.error(resp.error || 'Failed to save project config');
-    else toast.success('Project settings saved');
   }
 
   return (
-    <SettingsModalShell title="Project Settings" onClose={onClose}>
-      {value && (
-        <>
-          <ConfigureForm value={value} onChange={setValue} />
-          <p className="text-xs text-muted-fade-50 truncate">{project.path}</p>
-          <div className="flex justify-end">
-            <button
-              onClick={() => void persist(value)}
-              className="px-4 py-2 rounded-lg text-base font-medium bg-primary text-primary-foreground hover:brightness-110 transition-all duration-150"
-            >
-              Save
-            </button>
-          </div>
-          {isAdoRemote(project.gitRemote) && (
-            <div>
-              <label className="block text-sm font-medium text-muted-fade-70 mb-2">
-                Azure DevOps
-              </label>
-              <AdoConnectionForm projectId={project.id} />
-            </div>
-          )}
-        </>
-      )}
-    </SettingsModalShell>
+    <>
+      <DialogHeader title="Project settings" description={project.path} />
+      <DialogBody>
+        {value && <ConfigureForm value={value} onChange={setValue} />}
+        {isAdoRemote(project.gitRemote) && (
+          <FormSection title="Azure DevOps">
+            <AdoConnectionForm projectId={project.id} />
+          </FormSection>
+        )}
+      </DialogBody>
+      <DialogFooter divided>
+        <Button variant="ghost" onClick={close}>
+          Cancel
+        </Button>
+        <Button disabled={!value || saving} onClick={() => value && void save(value)}>
+          Save
+        </Button>
+      </DialogFooter>
+    </>
   );
 }

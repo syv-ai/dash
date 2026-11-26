@@ -14,13 +14,6 @@ export interface ConfigureValues {
   teardown: string; // newline-separated; split on save
 }
 
-export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = {
-  default: 'Ask every time (default)',
-  acceptEdits: 'Auto-accept edits',
-  auto: 'Auto mode (classifier approves safe actions)',
-  bypassPermissions: 'Bypass all permissions',
-};
-
 const lines = (s: string): string[] =>
   s
     .split('\n')

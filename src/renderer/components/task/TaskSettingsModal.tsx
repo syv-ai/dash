@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import type { PermissionMode, TaskModel, Task } from '../../../shared/types';
-import { SettingsModalShell } from '../ui/SettingsModalShell';
+import { Dialog, DialogBody, DialogHeader } from '../ui/Dialog';
+import { Field } from '../ui/Field';
+import { Input } from '../ui/Input';
+import { Textarea } from '../ui/Textarea';
 import { PermissionModePicker } from './PermissionModePicker';
 import { ModelPicker } from './ModelPicker';
 import { Expandable } from '../ui/Expandable';
@@ -24,6 +27,8 @@ interface TaskSettingsModalProps {
    *  parked job): its spawn args are fixed at dispatch, so the change needs a new one. */
   onDashAccessChange: (id: string, enabled: boolean, restart: boolean) => void;
 }
+
+const NEXT_START = 'Applies when the session next starts.';
 
 export function TaskSettingsModal({
   task,
@@ -69,79 +74,74 @@ export function TaskSettingsModal({
   }
 
   return (
-    <SettingsModalShell title="Task Settings" onClose={onClose}>
-      <div>
-        <label className="block text-sm font-medium text-muted-fade-70 mb-2">Task name</label>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={handleSaveName}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') handleSaveName();
-          }}
-          className="w-full px-3.5 py-2.5 rounded-lg bg-transparent border border-input/60 text-foreground text-base placeholder:text-muted-fade-30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150"
-        />
-        <p className="text-xs text-muted-fade-50 mt-1.5 truncate">{branch}</p>
-      </div>
+    <Dialog size="md" onClose={onClose}>
+      <DialogHeader title="Task settings" description={branch} />
+      <DialogBody>
+        <Field label="Name">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={handleSaveName}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSaveName();
+            }}
+          />
+        </Field>
 
-      <PermissionModePicker
-        value={task.permissionMode}
-        onChange={(mode) => onPermissionModeChange(task.id, mode)}
-        helperText={hasActiveSession ? 'Applies the next time this session starts' : undefined}
-      />
+        <div className="grid grid-cols-2 gap-3">
+          <PermissionModePicker
+            value={task.permissionMode}
+            onChange={(mode) => onPermissionModeChange(task.id, mode)}
+            helperText={hasActiveSession ? NEXT_START : undefined}
+          />
+          <ModelPicker
+            value={task.model}
+            onChange={(model) => onModelChange(task.id, model)}
+            helperText={hasActiveSession ? NEXT_START : undefined}
+          />
+        </div>
 
-      <ModelPicker
-        value={task.model}
-        onChange={(model) => onModelChange(task.id, model)}
-        helperText={hasActiveSession ? 'Applies the next time this session starts' : undefined}
-      />
+        {controlSupported && (
+          <SwitchField
+            label="Dash access"
+            hint="The agent can use Dash: its ports and services, tasks of its own, and PR review drafts. Adds a dash skill to the checkout (.claude/skills/dash, kept out of git) that explains dashctl."
+            helperText={hasSession ? 'Changing it restarts the session.' : undefined}
+            checked={task.dashAccess}
+            onCheckedChange={handleDashAccessToggle}
+          />
+        )}
 
-      {controlSupported && (
-        <SwitchField
-          label="Dash access"
-          hint="Let this task's agent use Dash: its ports and services, creating tasks of its own, and drafting PR review notes and comments. Adds a dash skill to the task's checkout (.claude/skills/dash, kept out of git) that explains dashctl, the command it uses."
-          helperText={hasSession ? 'Changing it restarts the session' : undefined}
-          checked={task.dashAccess}
-          onCheckedChange={handleDashAccessToggle}
-        />
-      )}
-
-      {task.useWorktree && (
-        <Expandable
-          label="Worktree scripts"
-          hint="setup / teardown"
-          defaultOpen={!!(task.setupScript || task.teardownScript)}
-        >
-          <div className="space-y-3" onBlur={handleSaveScripts}>
-            <div>
-              <label className="block text-xs font-medium text-muted-fade-60 mb-1.5">Setup</label>
-              <textarea
-                value={setupScript}
-                onChange={(e) => setSetupScript(e.target.value)}
-                rows={3}
-                placeholder={'pnpm install'}
-                className="w-full px-3.5 py-2.5 rounded-lg bg-transparent border border-input/60 text-foreground text-sm font-mono placeholder:text-muted-fade-30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
-              />
-              <p className="text-xs text-muted-fade-40 mt-1">
-                Already ran when this worktree was created — affects future re-runs only.
-              </p>
+        {task.useWorktree && (
+          <Expandable
+            label="Worktree scripts"
+            hint="setup, teardown"
+            defaultOpen={!!(task.setupScript || task.teardownScript)}
+          >
+            <div className="grid gap-3" onBlur={handleSaveScripts}>
+              <Field label="Setup" hint="Already ran for this worktree; edits apply to re-runs.">
+                <Textarea
+                  variant="code"
+                  value={setupScript}
+                  onChange={(e) => setSetupScript(e.target.value)}
+                  rows={3}
+                  placeholder="pnpm install"
+                  className="resize-none"
+                />
+              </Field>
+              <Field label="Teardown" hint="Runs before this worktree is removed.">
+                <Textarea
+                  variant="code"
+                  value={teardownScript}
+                  onChange={(e) => setTeardownScript(e.target.value)}
+                  rows={2}
+                  placeholder="docker compose down"
+                  className="resize-none"
+                />
+              </Field>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-fade-60 mb-1.5">
-                Teardown — runs before this worktree is removed
-              </label>
-              <textarea
-                value={teardownScript}
-                onChange={(e) => setTeardownScript(e.target.value)}
-                rows={2}
-                placeholder={'docker compose down'}
-                className="w-full px-3.5 py-2.5 rounded-lg bg-transparent border border-input/60 text-foreground text-sm font-mono placeholder:text-muted-fade-30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
-              />
-            </div>
-          </div>
-        </Expandable>
-      )}
+          </Expandable>
+        )}
+      </DialogBody>
 
       {pendingDashAccess !== null && (
         <ConfirmModal
@@ -154,6 +154,6 @@ export function TaskSettingsModal({
           onCancel={() => setPendingDashAccess(null)}
         />
       )}
-    </SettingsModalShell>
+    </Dialog>
   );
 }

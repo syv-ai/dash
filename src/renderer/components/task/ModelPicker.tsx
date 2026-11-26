@@ -1,6 +1,7 @@
 import React from 'react';
 import { Sparkles } from 'lucide-react';
 import type { TaskModel } from '../../../shared/types';
+import { Field } from '../ui/Field';
 import { Select, type SelectOption } from '../ui/Select';
 
 const OPTIONS: SelectOption<TaskModel>[] = [
@@ -32,22 +33,29 @@ export function ModelPicker({
   helperText?: string;
 }) {
   return (
-    <div>
-      <label className="block text-sm font-medium text-fg-fade-70 mb-2">Model</label>
+    <Field
+      label="Model"
+      as="div"
+      hint={
+        <>
+          {DESCRIPTIONS[value]}
+          {helperText && <span className="block">{helperText}</span>}
+        </>
+      }
+    >
       <Select<TaskModel>
+        aria-label="Model"
         value={value}
         onValueChange={onChange}
         options={OPTIONS}
         renderOption={(opt) => (
           <span className="inline-flex items-center gap-2 align-middle">
-            <Sparkles size={13} strokeWidth={1.8} className="text-icon" />
+            <Sparkles size={14} strokeWidth={1.8} className="text-icon" />
             <span>{opt.label}</span>
           </span>
         )}
       />
-      <p className="mt-1.5 text-xs text-muted-fade-50">{DESCRIPTIONS[value]}</p>
-      {helperText && <p className="mt-0.5 text-xs text-muted-fade-40">{helperText}</p>}
-    </div>
+    </Field>
   );
 }
 
