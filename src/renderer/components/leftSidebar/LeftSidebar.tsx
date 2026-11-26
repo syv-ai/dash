@@ -48,6 +48,10 @@ interface LeftSidebarProps {
  *  (tabs, spacer, find, create) and find and create (24px each). */
 const VIEW_ROW_REST_PX = 16 + 6 + 48;
 
+/** The sidebar's least width (px) whatever its view row needs: room for a
+ *  task's name, marks and context percent before it snaps to the rail (T28). */
+const LEFT_SIDEBAR_MIN_PX = 240;
+
 const isMac = window.electronAPI.getPlatform() === 'darwin';
 
 /**
@@ -67,7 +71,9 @@ export function LeftSidebar(props: LeftSidebarProps) {
   const [tabsMinPx, setTabsMinPx] = useState<number>();
   const { onMinWidth } = props;
   useEffect(() => {
-    if (tabsMinPx !== undefined) onMinWidth?.(tabsMinPx + VIEW_ROW_REST_PX);
+    if (tabsMinPx !== undefined) {
+      onMinWidth?.(Math.max(LEFT_SIDEBAR_MIN_PX, tabsMinPx + VIEW_ROW_REST_PX));
+    }
   }, [tabsMinPx, onMinWidth]);
 
   const settingsButton = (
