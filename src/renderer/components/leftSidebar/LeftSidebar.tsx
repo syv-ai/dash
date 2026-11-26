@@ -42,9 +42,10 @@ interface LeftSidebarProps {
 const isMac = window.electronAPI.getPlatform() === 'darwin';
 
 /**
- * The app sidebar: a Tasks | Projects switch with find and create (a task
- * or a project, after the view) at its end, over the state-ordered task list
- * or the project tree, and settings (with the Claude Code update icon) at the foot.
+ * The app sidebar: a Tasks | Projects switch (counting live sessions and
+ * projects) with find and create (a task or a project, after the view) at its
+ * end, over the state-ordered task list or the project tree, and settings
+ * (with the Claude Code update icon) at the foot.
  * Collapsed, it is a rail of state dots for the tasks with a live session.
  */
 export function LeftSidebar(props: LeftSidebarProps) {
@@ -110,8 +111,18 @@ export function LeftSidebar(props: LeftSidebarProps) {
             value={view}
             onChange={setView}
             options={[
-              { value: 'tasks', label: 'Tasks' },
-              { value: 'projects', label: 'Projects' },
+              {
+                value: 'tasks',
+                label: 'Tasks',
+                count: liveRows(rows).length,
+                countLabel: 'Live sessions',
+              },
+              {
+                value: 'projects',
+                label: 'Projects',
+                count: projects.length,
+                countLabel: 'Projects',
+              },
             ]}
           />
         </div>
