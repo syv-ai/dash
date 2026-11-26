@@ -5,6 +5,7 @@ import { Tree, TreeRow, ownNode, type TreeRowContext } from '../ui/Tree';
 import type { AgentState } from '../ui/StatusDot';
 import { EmptyState } from '../ui/EmptyState';
 import { Button } from '../ui/Button';
+import { quietAtRest } from '../ui/styles';
 import { openInIde } from '../../lib/openInIde';
 import { useSettings } from '../../stores/settingsStore';
 import {
@@ -144,7 +145,7 @@ function TaskStateRowItem({
       description={
         (projectName || reason) && (
           <>
-            {projectName}
+            {projectName && <span className={quietAtRest}>{projectName}</span>}
             {projectName && reason && ' · '}
             {reason && <ReasonText state={state}>{reason}</ReasonText>}
           </>
