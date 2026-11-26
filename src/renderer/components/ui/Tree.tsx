@@ -1,9 +1,10 @@
 import * as React from 'react';
-import { useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { ListRow, type ListRowProps } from './ListRow';
 import { VirtualList, type VirtualListHandle } from './VirtualList';
+import { LIST_MOTION_MS } from './VirtualListMotion';
 import { tabStopKey, treeKey, type TreeNode } from './treeNav';
 
 const VARIANTS = {
@@ -61,7 +62,9 @@ export interface TreeProps<R> {
 /**
  * The app's one tree: the file trees and the left sidebar's projects and
  * tasks. Rows come in flat (the caller flattens its own model, `TreeNode`
- * for the keys) and are windowed, so a repo-sized tree stays light. The tree
+ * for the keys) and are windowed, so a repo-sized tree stays light. Rows
+ * move calmly as they change (`VirtualList`'s `animate`, T14): a branch's
+ * rows uncover as it opens, rows slide to a new place, removed rows cover. The tree
  * owns focus (one tab stop, moved by the arrow keys; `ui/treeNav`) and the
  * selection's tint; the caller owns the rows, which branches are open, and
  * every row's look, through `TreeRow` and its slots.
@@ -85,7 +88,8 @@ export function Tree<R>({
   /** A row to focus once it renders (it may be scrolled out of the window). */
   const pendingFocus = useRef<string | null>(null);
 
-  const nodes = rows.map(nodeOf);
+  const nodes = useMemo(() => rows.map(nodeOf), [rows, nodeOf]);
+  const keys = useMemo(() => nodes.map((n) => n.key), [nodes]);
   const focusRow = (index: number) => {
     const key = nodes[index]!.key;
     setFocusKey(key);
@@ -127,8 +131,8 @@ export function Tree<R>({
       className={cn(VARIANTS[variant].className, className)}
       gapAbove={gapAbove}
       gap={VARIANTS[variant].gap}
-      count={rows.length}
-      itemKey={(i) => nodes[i]!.key}
+      keys={keys}
+      animate
       estimateSize={(i) => estimateSize(rows[i]!)}
     >
       {(i) => {
@@ -181,7 +185,6 @@ export function TreeRow({
 }: TreeRowProps) {
   const { node } = ctx;
   const branch = node.open !== undefined;
-  const Chevron = node.open ? ChevronDown : ChevronRight;
   const setRef = (el: HTMLElement | null) => {
     ctx.rowRef(el);
     if (typeof ref === 'function') ref(el);
@@ -198,7 +201,7 @@ export function TreeRow({
       data-key={node.key}
       selected={ctx.selected}
       indent={node.depth}
-      leading={leading ?? (branch ? <Chevron size={14} strokeWidth={1.8} /> : undefined)}
+      leading={leading ?? (branch ? <BranchChevron open={!!node.open} /> : undefined)}
       {...props}
       ref={setRef}
       onFocus={(e: React.FocusEvent) => e.target === e.currentTarget && ctx.onFocusRow()}
@@ -211,6 +214,24 @@ export function TreeRow({
         if (e.key === ' ' && onSpace) onSpace();
         else onActivate(e);
       }}
+    />
+  );
+}
+
+/** A branch's chevron: points right, turns down as the branch opens, in
+ *  step with its rows (`LIST_MOTION_MS`, `ease-calm`). `TreeRow` draws it;
+ *  a row with its own chevron button puts it inside. */
+export function BranchChevron({ open }: { open: boolean }) {
+  return (
+    <ChevronRight
+      size={14}
+      strokeWidth={1.8}
+      // Tailwind v4's rotate-* sets `rotate`, not `transform`.
+      className={cn(
+        'transition-[rotate] ease-calm motion-reduce:transition-none',
+        open && 'rotate-90',
+      )}
+      style={{ transitionDuration: `${LIST_MOTION_MS}ms` }}
     />
   );
 }

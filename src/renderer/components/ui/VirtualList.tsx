@@ -1,6 +1,24 @@
 import * as React from 'react';
-import { measureElement, useVirtualizer, type Virtualizer } from '@tanstack/react-virtual';
+import {
+  measureElement,
+  useVirtualizer,
+  type VirtualItem,
+  type Virtualizer,
+} from '@tanstack/react-virtual';
 import { cn } from '../../lib/cn';
+import {
+  LIST_MOTION_MS,
+  enterKeyframes,
+  exitKeyframes,
+  goneRows,
+  hideWindow,
+  newRows,
+  revealWindow,
+  sameKeys,
+  slides,
+  type RunSlot,
+  type Slot,
+} from './VirtualListMotion';
 
 export interface VirtualListHandle {
   /** Scroll so item `index` shows (the least scroll that does). */
@@ -28,26 +46,223 @@ export function measureShown<T extends Element>(
   );
 }
 
+/** Each item's wrapper: placed by the virtualizer through `transform`. */
+const ITEM = 'absolute top-0 left-0 w-full';
+const translate = (y: number) => `translateY(${y}px)`;
+
+/** The calm curve as Web Animations takes it: `ease-calm`'s value from
+ *  `index.css` (a `var()` can't be an animation's easing). */
+let calmEasing: string | undefined;
+function easing(): string {
+  calmEasing ??=
+    getComputedStyle(document.documentElement).getPropertyValue('--ease-calm').trim() || 'ease';
+  return calmEasing;
+}
+
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** A removed row kept for its exit: its last render, at its old place. */
+interface Ghost extends RunSlot {
+  node: React.ReactNode;
+}
+
+/** What the last commit showed, for the next change to move from. */
+interface Shown {
+  keys: readonly React.Key[];
+  slots: Slot[];
+  nodes: Map<React.Key, React.ReactNode>;
+  /** The virtualizer's layout of every row (rendered or not), then. */
+  layout: readonly VirtualItem[];
+}
+
+/**
+ * Plays the list's motion (`VirtualListMotion`, T14) as it changes: rows
+ * that stay slide, new rows uncover, removed rows stay as ghosts while they
+ * cover; a slide cut short by a later change (or a row's first measure)
+ * carries on from where it shows. Only compositor properties, and nothing
+ * is read from the page outside a change (then all reads come before any
+ * animation starts, so the page lays out once), so scrolling costs what it
+ * did. Off under reduced motion. Returns the ghosts to render after the
+ * rows, each a `data-ghost` element.
+ */
+function useListMotion(
+  enabled: boolean,
+  keys: readonly React.Key[],
+  items: readonly VirtualItem[],
+  nodes: Map<React.Key, React.ReactNode>,
+  virtualizer: Virtualizer<HTMLDivElement, Element>,
+  boxRef: React.RefObject<HTMLDivElement | null>,
+): Ghost[] {
+  const shown = React.useRef<Shown | null>(null);
+  const sliding = React.useRef(new Map<React.Key, { anim: Animation; to: number }>());
+  /** Ghosts whose exit has started, and those it has finished. */
+  const exiting = React.useRef(new WeakSet<Ghost>());
+  const done = React.useRef(new WeakSet<Ghost>());
+  /** Ghosts still covering. A ref, so filing one costs no render; the
+   *  list renders once more when they're done. */
+  const ghosts = React.useRef<Ghost[]>([]);
+  const [, dropped] = React.useReducer((n: number) => n + 1, 0);
+
+  // The rows this change removes become ghosts in the same render, so each
+  // keeps its element and its last render (React bails out on the same
+  // node): nothing remounts. Planned once per `keys`.
+  const change = React.useRef<{
+    keys: readonly React.Key[];
+    listed: Set<React.Key>;
+    leaving: Ghost[];
+  }>(null);
+  if (change.current?.keys !== keys) {
+    const was = shown.current;
+    const moving = enabled && was !== null && !sameKeys(was.keys, keys) && !reducedMotion();
+    const listed = moving ? new Set(keys) : new Set<React.Key>();
+    const leaving = moving
+      ? goneRows(was.slots, (k) => listed.has(k)).flatMap((gone) => {
+          const node = was.nodes.get(gone.key);
+          return node === undefined ? [] : [{ ...gone, node }];
+        })
+      : [];
+    change.current = { keys, listed, leaving };
+  }
+  const { listed, leaving } = change.current;
+  // This change's ghosts render now, before the effect below files them.
+  const filed = new Set(ghosts.current);
+  const rendered = [...ghosts.current, ...leaving.filter((g) => !filed.has(g))].filter(
+    (g) => !nodes.has(g.key) && !done.current.has(g),
+  );
+
+  React.useLayoutEffect(() => {
+    const slots = items.map(({ key, start, size }) => ({ key, start, size }));
+    const was = shown.current;
+    shown.current = { keys, slots, nodes, layout: virtualizer.measurementsCache };
+    const box = boxRef.current;
+    if (!enabled || !was || !box || reducedMotion()) return;
+    const changed = !sameKeys(was.keys, keys);
+    const fresh = rendered.filter((g) => !exiting.current.has(g));
+    if (!changed && sliding.current.size === 0 && fresh.length === 0) return;
+
+    // Reads.
+    const rows = new Map<React.Key, HTMLElement>();
+    const ghostEls: HTMLElement[] = [];
+    for (const child of box.children) {
+      const el = child as HTMLElement;
+      if (el.dataset.index !== undefined) rows.set(keys[Number(el.dataset.index)]!, el);
+      else if (el.dataset.ghost !== undefined) ghostEls[Number(el.dataset.ghost)] = el;
+    }
+    const scroller = box.parentElement!;
+    const bottom = scroller.getBoundingClientRect().bottom - box.getBoundingClientRect().top;
+    /** Where a sliding row shows now, mid-slide. */
+    const showsAt = (key: React.Key) => {
+      const el = rows.get(key);
+      return el && new DOMMatrix(getComputedStyle(el).transform).m42;
+    };
+    const now = new Map(slots.map((s) => [s.key, s.start]));
+    const slidesNow: { key: React.Key; from: number; to: number; duration?: number }[] = [];
+    const stops: Animation[] = [];
+    for (const [key, { anim, to }] of sliding.current) {
+      const start = now.get(key);
+      if (start === undefined) stops.push(anim);
+      else if (start !== to && !changed) {
+        // Moved again since (its first measure): on from where it shows,
+        // for the time it had left.
+        const from = showsAt(key);
+        if (from === undefined) continue;
+        stops.push(anim);
+        const left = LIST_MOTION_MS - Number(anim.currentTime ?? 0);
+        slidesNow.push({ key, from, to: start, duration: Math.max(left, 60) });
+      }
+    }
+    let enters: { el: HTMLElement; size: number; reveal: readonly [number, number] }[] = [];
+    if (changed) {
+      const before = new Map(was.keys.map((k, i) => [k, i]));
+      const moves = slides({
+        after: slots,
+        startBefore: (k) => {
+          const i = before.get(k);
+          return i === undefined ? undefined : was.layout[i]?.start;
+        },
+        maxDistance: scroller.clientHeight * 1.5,
+      });
+      for (const move of moves) {
+        const running = sliding.current.get(move.key);
+        const from = running ? showsAt(move.key) : undefined;
+        if (running) stops.push(running.anim);
+        slidesNow.push(from === undefined ? move : { ...move, from });
+      }
+      enters = newRows(slots, (k) => before.has(k)).flatMap((s) => {
+        const el = rows.get(s.key);
+        return el ? [{ el, size: s.size, reveal: revealWindow(s, bottom) }] : [];
+      });
+    }
+
+    // Writes.
+    const timing = (duration = LIST_MOTION_MS) => ({ duration, easing: easing() });
+    for (const anim of stops) anim.cancel();
+    for (const { key, from, to, duration } of slidesNow) {
+      const el = rows.get(key);
+      if (!el) continue;
+      const anim = el.animate(
+        [{ transform: translate(from) }, { transform: translate(to) }],
+        timing(duration),
+      );
+      const entry = { anim, to };
+      sliding.current.set(key, entry);
+      anim.onfinish = anim.oncancel = () => {
+        if (sliding.current.get(key) === entry) sliding.current.delete(key);
+      };
+    }
+    for (const { el, size, reveal } of enters) el.animate(enterKeyframes(size, reveal), timing());
+    for (const ghost of fresh) {
+      const el = ghostEls[rendered.indexOf(ghost)];
+      if (!el) {
+        done.current.add(ghost);
+        continue;
+      }
+      exiting.current.add(ghost);
+      const anim = el.animate(exitKeyframes(ghost.size, hideWindow(ghost, bottom)), {
+        ...timing(),
+        fill: 'forwards',
+      });
+      anim.onfinish = () => {
+        done.current.add(ghost);
+        ghosts.current = ghosts.current.filter((x) => x !== ghost);
+        dropped();
+      };
+    }
+  });
+
+  // File this change's ghosts (and drop any whose row came back).
+  React.useLayoutEffect(() => {
+    if (leaving.length === 0 && listed.size === 0) return;
+    ghosts.current = [...ghosts.current.filter((x) => !listed.has(x.key)), ...leaving];
+  }, [leaving, listed]);
+
+  return rendered;
+}
+
 /**
  * A scrolling list that mounts only the items in view (plus a margin), so a
  * list of tens of thousands stays light. Items are measured as they render;
  * `estimateSize` only places the ones not yet seen. The element it renders
  * is the scroller, padded as a sidebar list (6px across, 8px below; `gapAbove`
  * 8px above too): size it through `className` (`flex-1 min-h-0`).
+ *
+ * `animate`: rows move as the list changes (`useListMotion`): a new `keys`
+ * array that differs from the last is a change; pass the same array (or an
+ * equal one) when nothing changed.
  */
 export function VirtualList({
-  count,
-  itemKey,
+  keys,
   estimateSize,
   children,
   className,
   handleRef,
   gapAbove = false,
   gap,
+  animate = false,
   ...props
 }: {
-  count: number;
-  itemKey: (index: number) => React.Key;
+  /** Every item's key, in order: the list. */
+  keys: readonly React.Key[];
   estimateSize: (index: number) => number;
   /** Renders item `index`. */
   children: (index: number) => React.ReactNode;
@@ -57,13 +272,16 @@ export function VirtualList({
   gapAbove?: boolean;
   /** Pixels between items. */
   gap?: number;
+  /** Rows slide, enter and leave as the list changes. */
+  animate?: boolean;
 } & Omit<React.ComponentProps<'div'>, 'children' | 'style'>) {
   const scrollRef = React.useRef<HTMLDivElement>(null);
+  const boxRef = React.useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
-    count,
+    count: keys.length,
     getScrollElement: () => scrollRef.current,
     estimateSize,
-    getItemKey: itemKey,
+    getItemKey: (i) => keys[i]!,
     overscan: 12,
     gap,
     measureElement: measureShown,
@@ -72,6 +290,17 @@ export function VirtualList({
     handleRef,
     () => ({ scrollToIndex: (index) => virtualizer.scrollToIndex(index, { align: 'auto' }) }),
     [virtualizer],
+  );
+  const items = virtualizer.getVirtualItems();
+  const nodes = new Map<React.Key, React.ReactNode>();
+  for (const item of items) nodes.set(item.key, children(item.index));
+  const ghosts = useListMotion(
+    animate,
+    keys,
+    items,
+    nodes,
+    virtualizer as Virtualizer<HTMLDivElement, Element>,
+    boxRef,
   );
   return (
     <div
@@ -83,16 +312,28 @@ export function VirtualList({
         className,
       )}
     >
-      <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-        {virtualizer.getVirtualItems().map((item) => (
+      <div ref={boxRef} className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+        {items.map((item) => (
           <div
             key={item.key}
             data-index={item.index}
             ref={virtualizer.measureElement}
-            className="absolute top-0 left-0 w-full"
-            style={{ transform: `translateY(${item.start}px)` }}
+            className={ITEM}
+            style={{ transform: translate(item.start) }}
           >
-            {children(item.index)}
+            {nodes.get(item.key)}
+          </div>
+        ))}
+        {ghosts.map((g, i) => (
+          <div
+            key={g.key}
+            data-ghost={i}
+            aria-hidden
+            inert
+            className={cn(ITEM, 'pointer-events-none')}
+            style={{ transform: translate(g.start) }}
+          >
+            {g.node}
           </div>
         ))}
       </div>
