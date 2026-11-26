@@ -335,29 +335,36 @@ describe('revealing a folder', () => {
 });
 
 describe('treeColumns', () => {
-  it('sizes each column to its widest value, folders’ lines included', () => {
-    const tree = buildTree([
-      f('a.ts', 'modified', false, 120, 3),
-      ...Array.from({ length: 12 }, (_, i) => f(`dir/${i}.ts`, 'untracked', false, 100, 0)),
-    ]);
-    expect(treeColumns(one(tree))).toEqual({
+  const tree = buildTree([
+    f('a.ts', 'modified', false, 120, 3),
+    ...Array.from({ length: 12 }, (_, i) => f(`dir/${i}.ts`, 'untracked', false, 100, 0)),
+  ]);
+
+  it('sizes each column to the widest value shown, an open folder’s sum left out', () => {
+    // dir/ starts open (12 changes): its +1200 isn't shown, its files' +100 are.
+    expect(treeColumns(flattenTree(one(tree), state()))).toEqual({
       threads: false,
       comments: false,
-      add: 5, // "+1200", the folder's untracked lines
+      add: 4, // "+120"
       del: 2,
       status: true, // files' letters; folders show no count
     });
   });
 
+  it('counts a closed folder’s lines', () => {
+    const closed = state({ open: new Map([['t:dir', false]]) });
+    expect(treeColumns(flattenTree(one(tree), closed)).add).toBe(5); // "+1200"
+  });
+
   it('draws the badge columns only when a file has one', () => {
-    const tree = buildTree([f('a.ts')]);
+    const rows = flattenTree(one(buildTree([f('a.ts')])), state());
     const badges = new Map([['a.ts', { comments: 0, threads: 2 }]]);
-    expect(treeColumns(one(tree), badges)).toMatchObject({ threads: true, comments: false });
+    expect(treeColumns(rows, badges)).toMatchObject({ threads: true, comments: false });
   });
 
   it('draws no columns for a tree with no changes', () => {
-    const tree = buildTree([], { paths: ['a.ts'], dirs: [] });
-    expect(treeColumns(one(tree))).toEqual({
+    const rows = flattenTree(one(buildTree([], { paths: ['a.ts'], dirs: [] })), state());
+    expect(treeColumns(rows)).toEqual({
       threads: false,
       comments: false,
       add: 0,

@@ -374,8 +374,8 @@ export interface FileBadges {
   staged?: true | 'mixed';
 }
 
-/** The trailing columns, each as wide as the tree's widest value (in `ch`)
- *  so rows line up; 0 or false: no row fills it, so it isn't drawn. */
+/** The trailing columns, each as wide as the widest value the tree shows
+ *  (in `ch`) so rows line up; 0 or false: no row fills it, so it isn't drawn. */
 export interface TreeColumns {
   threads: boolean;
   comments: boolean;
@@ -387,32 +387,30 @@ export interface TreeColumns {
 
 const signed = (n: number) => (n > 0 ? String(n).length + 1 : 0);
 
+/** The columns that fit the rows shown: files' badges, lines and letters,
+ *  and a closed folder's lines (an open one shows none, so its sum, wider
+ *  than any of its files', reserves no room the names could use). */
 export function treeColumns(
-  sections: readonly TreeSection[],
+  rows: readonly TreeRow[],
   badges?: ReadonlyMap<string, FileBadges>,
 ): TreeColumns {
   const cols: TreeColumns = { threads: false, comments: false, add: 0, del: 0, status: false };
-  const walk = (node: TreeFolder) => {
-    for (const f of node.files) {
-      const b = badges?.get(f.path);
+  for (const row of rows) {
+    if (row.kind === 'file') {
+      const b = badges?.get(row.file.path);
       if (b?.threads) cols.threads = true;
       if (b?.comments) cols.comments = true;
-      if (!f.change) continue;
+      const c = row.file.change;
+      if (!c) continue;
       cols.status = true;
-      cols.add = Math.max(cols.add, signed(f.change.additions));
-      cols.del = Math.max(cols.del, signed(f.change.deletions));
+      cols.add = Math.max(cols.add, signed(c.additions));
+      cols.del = Math.max(cols.del, signed(c.deletions));
+    } else if (row.kind === 'folder' && !row.open) {
+      const t = row.folder.tally;
+      cols.add = Math.max(cols.add, signed(t.add + t.untrackedAdd));
+      cols.del = Math.max(cols.del, signed(t.del));
     }
-    for (const child of node.folders.values()) {
-      const t = child.tally;
-      if (t.changed > 0) {
-        // A closed folder shows its lines in the same columns.
-        cols.add = Math.max(cols.add, signed(t.add + t.untrackedAdd));
-        cols.del = Math.max(cols.del, signed(t.del));
-      }
-      walk(child);
-    }
-  };
-  for (const s of sections) walk(s.tree);
+  }
   return cols;
 }
 

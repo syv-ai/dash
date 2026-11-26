@@ -84,7 +84,7 @@ export function FileTree({
     () => flattenTree(sections, { open, listings, selected }),
     [sections, open, listings, selected],
   );
-  const cols = useMemo(() => treeColumns(sections, badges), [sections, badges]);
+  const cols = useMemo(() => treeColumns(rows, badges), [rows, badges]);
 
   const toggle = useCallback((row: Extract<TreeRow, { kind: 'folder' }>) => {
     setOpen((m) => new Map(m).set(openKey(row.section, row.folder.path), !row.open));
