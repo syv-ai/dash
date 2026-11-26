@@ -18,7 +18,7 @@ import {
   type TaskStateRow,
 } from './taskStates';
 import { taskTreeRows, type TaskTreeRow } from './taskTree';
-import { ContextRing } from './ContextRing';
+import { ContextLevel } from './ContextLevel';
 
 export interface TaskRowActions {
   onSelectTask: (projectId: string, taskId: string) => void;
@@ -42,7 +42,7 @@ interface TaskStateListProps extends TaskRowActions {
  * live task across projects by state (`taskGroups`), and the sleeping ones
  * folded under "Inactive sessions", open or closed as last left. Each row
  * is two lines: the name, then its project (and why, for needs-you and
- * failed); a live one ends in its session's context ring. At-rest rows are
+ * failed); a live one ends in its session's context percent. At-rest rows are
  * dimmed. Hover shows the favourite star; right-click opens the task menu.
  */
 export function TaskStateList({
@@ -161,7 +161,7 @@ function TaskStateRowItem({
         }
         trailing={
           <HoverSwapSlot
-            rest={state !== 'asleep' && <ContextRing usage={usage} />}
+            rest={state !== 'asleep' && <ContextLevel usage={usage} />}
             actions={<FavoriteButton task={task} />}
           />
         }

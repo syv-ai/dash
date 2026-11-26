@@ -18,7 +18,7 @@ import {
 import { usageColor } from '../../lib/usageColor';
 import { useMinuteClock } from '../../hooks/useMinuteClock';
 import { useSettings } from '../../stores/settingsStore';
-import { LEVEL_FIGURE, LevelText } from '../ui/LevelText';
+import { LEVEL_FIGURE, LevelText, type LevelSize } from '../ui/LevelText';
 import { ProgressRing } from '../ui/ProgressRing';
 import { Tooltip, type RichTooltip } from '../ui/Tooltip';
 import { useFittedDensity } from '../ui/useFittedDensity';
@@ -118,10 +118,16 @@ function Figure({ cell, density }: { cell: Cell; density: UsageDensity }) {
 }
 
 /** A level as its percent alone, coloured by how close it is to full: the
- *  compact row's figure, and the collapsed sidebar's rail's. */
-export function LevelReading({ cell: { pct, aria } }: { cell: LevelCell }) {
+ *  compact row's figure, the collapsed sidebar's rail's, and (`sm`) a task
+ *  row's context in the left sidebar. */
+export function LevelReading({ cell: { pct, aria }, size }: { cell: LevelCell; size?: LevelSize }) {
   return (
-    <LevelText value={pct} color={pct === null ? undefined : usageColor(pct)} aria-label={aria}>
+    <LevelText
+      value={pct}
+      color={pct === null ? undefined : usageColor(pct)}
+      size={size}
+      aria-label={aria}
+    >
       {pct === null ? '—' : `${pct}%`}
     </LevelText>
   );
