@@ -4,13 +4,21 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 import * as os from 'os';
+import { scrubText } from './telemetryScrub';
 
 // ── Config ────────────────────────────────────────────────────
 const POSTHOG_KEY = 'phc_zEKzF3cpq9lpt1x3ONeDemYkilhWjC1XgZSGN6AyX01';
 const POSTHOG_HOST = 'https://eu.i.posthog.com';
 const CONFIG_FILE = 'telemetry.json';
 const MAX_STRING_LENGTH = 100;
+/** Exception messages and stacks are scrubbed first, then capped here. */
+const MAX_EXCEPTION_LENGTH = 2_000;
 const MAX_NUMBER = 1_000_000;
+/** Dash runs for days; the daily-active check runs this often, not only at launch. */
+const DAILY_CHECK_MS = 60 * 60 * 1000;
+/** Quit waits this long for queued events (main.ts's safety net is 8 s). */
+const SHUTDOWN_TIMEOUT_MS = 3_000;
+const EXCEPTION_PROPERTIES = new Set(['$exception_message', '$exception_list', 'error_message']);
 
 // ── Allowed Events ────────────────────────────────────────────
 const ALLOWED_EVENTS = new Set([
@@ -39,7 +47,6 @@ const ALLOWED_EVENTS = new Set([
   'worktree_migrated',
   'terminal_started',
   'session_adopted',
-  'settings_changed',
 
   // Errors
   '$exception',
@@ -57,9 +64,11 @@ const ALLOWED_PROPERTIES = new Set([
   'timezone',
   'duration_ms',
   'session_duration_ms',
-  'setting',
-  'value',
   'source',
+  'kind',
+  'moved',
+  'removed',
+  'failed',
   'error_type',
   'error_message',
   'severity',
@@ -80,6 +89,7 @@ export class TelemetryService {
   private static client: PostHog | null = null;
   private static config: TelemetryConfig | null = null;
   private static startTime: number = 0;
+  private static dailyTimer: ReturnType<typeof setInterval> | null = null;
 
   static initialize(): void {
     try {
@@ -88,23 +98,22 @@ export class TelemetryService {
 
       if (!this.isEnabled()) return;
 
-      this.client = new PostHog(POSTHOG_KEY, {
-        host: POSTHOG_HOST,
-        flushAt: 10,
-        flushInterval: 30_000,
-      });
+      this.client = createClient();
 
       this.capture('app_started');
       this.checkDailyActiveUser();
+      this.dailyTimer = setInterval(() => this.checkDailyActiveUser(), DAILY_CHECK_MS);
+      this.dailyTimer.unref?.();
     } catch {
       // Telemetry must never crash the app
     }
   }
 
-  static capture(event: string, properties?: Record<string, unknown>): void {
+  /** Queue an event; true when it was queued (telemetry on, event allowed). */
+  static capture(event: string, properties?: Record<string, unknown>): boolean {
     try {
-      if (!this.client || !this.config || !this.isEnabled()) return;
-      if (!ALLOWED_EVENTS.has(event)) return;
+      if (!this.client || !this.config || !this.isEnabled()) return false;
+      if (!ALLOWED_EVENTS.has(event)) return false;
 
       const sanitized = this.sanitizeProperties(properties);
       const baseProps = this.getBaseProperties();
@@ -114,8 +123,10 @@ export class TelemetryService {
         event,
         properties: { ...baseProps, ...sanitized },
       });
+      return true;
     } catch {
       // Silently swallow
+      return false;
     }
   }
 
@@ -129,16 +140,24 @@ export class TelemetryService {
         this.capture('app_closed');
       }
 
-      await this.client.shutdown();
+      if (this.dailyTimer) clearInterval(this.dailyTimer);
+      this.dailyTimer = null;
+      await this.client.shutdown(SHUTDOWN_TIMEOUT_MS);
       this.client = null;
     } catch {
       // Silently swallow
     }
   }
 
+  /**
+   * On when the user hasn't opted out, and only in the packaged app: a dev
+   * or test run sends nothing, whatever its telemetry.json says (a dev
+   * folder copied from the installed app carries `enabled: true`), unless
+   * `TELEMETRY_ENABLED=true` asks for it. `TELEMETRY_ENABLED=false` always wins.
+   */
   static isEnabled(): boolean {
-    // Env var override
     if (process.env.TELEMETRY_ENABLED === 'false') return false;
+    if (!app.isPackaged && process.env.TELEMETRY_ENABLED !== 'true') return false;
     return this.config?.enabled !== false;
   }
 
@@ -148,12 +167,8 @@ export class TelemetryService {
       this.config.enabled = enabled;
       this.writeConfig(this.config);
 
-      if (enabled && !this.client) {
-        this.client = new PostHog(POSTHOG_KEY, {
-          host: POSTHOG_HOST,
-          flushAt: 10,
-          flushInterval: 30_000,
-        });
+      if (enabled && !this.client && this.isEnabled()) {
+        this.client = createClient();
       } else if (!enabled && this.client) {
         this.client.shutdown().catch(() => {});
         this.client = null;
@@ -220,19 +235,14 @@ export class TelemetryService {
     for (const [key, value] of Object.entries(props)) {
       if (!ALLOWED_PROPERTIES.has(key)) continue;
 
-      if (typeof value === 'string') {
+      if (EXCEPTION_PROPERTIES.has(key)) {
+        result[key] = scrubException(value);
+      } else if (typeof value === 'string') {
         result[key] = value.slice(0, MAX_STRING_LENGTH);
       } else if (typeof value === 'number') {
         result[key] = Math.min(Math.max(value, 0), MAX_NUMBER);
       } else if (typeof value === 'boolean') {
         result[key] = value;
-      } else if (Array.isArray(value)) {
-        // Allow arrays (e.g. $exception_list) but sanitize string entries
-        result[key] = value.map((item) => {
-          if (typeof item === 'string') return item.slice(0, MAX_STRING_LENGTH);
-          if (typeof item === 'object' && item !== null) return sanitizeExceptionEntry(item);
-          return item;
-        });
       }
       // Objects and other types are dropped
     }
@@ -254,11 +264,27 @@ export class TelemetryService {
   }
 }
 
-function sanitizeExceptionEntry(obj: Record<string, unknown>): Record<string, unknown> {
-  const safe: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (typeof v === 'string') safe[k] = v.slice(0, MAX_STRING_LENGTH);
-    else if (typeof v === 'number' || typeof v === 'boolean') safe[k] = v;
-  }
-  return safe;
+function createClient(): PostHog {
+  return new PostHog(POSTHOG_KEY, {
+    host: POSTHOG_HOST,
+    flushAt: 10,
+    flushInterval: 30_000,
+  });
+}
+
+/** An exception message, or an `$exception_list`, with user data scrubbed (telemetryScrub). */
+function scrubException(value: unknown): unknown {
+  const scrub = (s: string) => scrubText(s, { home: os.homedir() }).slice(0, MAX_EXCEPTION_LENGTH);
+  if (typeof value === 'string') return scrub(value);
+  if (!Array.isArray(value)) return undefined;
+  return value.map((item) => {
+    if (typeof item === 'string') return scrub(item);
+    if (typeof item !== 'object' || item === null) return item;
+    const safe: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(item as Record<string, unknown>)) {
+      if (typeof v === 'string') safe[k] = scrub(v);
+      else if (typeof v === 'number' || typeof v === 'boolean') safe[k] = v;
+    }
+    return safe;
+  });
 }

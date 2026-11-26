@@ -72,8 +72,8 @@ importers:
         specifier: ^1.2.0-beta.13
         version: 1.2.0-beta.13
       posthog-node:
-        specifier: ^5.28.2
-        version: 5.38.2(rxjs@7.8.2)
+        specifier: ^5.69.0
+        version: 5.69.0(rxjs@7.8.2)
       pyright:
         specifier: ^1.1.414
         version: 1.1.414
@@ -792,11 +792,11 @@ packages:
     resolution: {integrity: sha512-ODOov0sGMJMf3jPonOkgGqPknTsu+DdQ7kD++gz8aI+aFMOMHFbWAA2taqXXVTdP+OTOQR/znGvSpmkeI0WTYQ==}
     engines: {node: '>=14.18.0'}
 
-  '@posthog/core@1.35.4':
-    resolution: {integrity: sha512-DowOjN83tGtg4NPv0tmExjXiIWapHDDTv0ZZHg70XBjH5o/AB3DkMVMvj5ODIi1Y5bw7eMETidGvRwWH0/g3wA==}
+  '@posthog/core@1.69.2':
+    resolution: {integrity: sha512-toMfPKklwLW+a4ZY3/EzM3GNMVXmk2ylGb8NPJXRH4igXMoI8wgNL2jqXOiglWAXqFBLZGYFN1oQx6LVmUTxTg==}
 
-  '@posthog/types@1.390.2':
-    resolution: {integrity: sha512-WcfKz2GNn2vfDX8vXmJYbKxegPxVWHuDQ/pHdAn0HoZDXDFnEp/+x3qBQA+fEvtbPjjtjgAt2wIgJMlM7asx7g==}
+  '@posthog/types@1.427.2':
+    resolution: {integrity: sha512-86GJtdFt7zkk6tDpCFKfxyTtuXyLpiWPmTn5nlLDGlxGeky4s4l2fiWSRvYi6Lfn5MRrjiHE24RgKR4A75K+xA==}
 
   '@radix-ui/number@1.1.3':
     resolution: {integrity: sha512-Road2bidD0uu/1BGDOWNdPI06g0lIRy6IF9GZcIrDK2KGItfor8IQwQa+yM2ERgHM1MmHxaxpTzk0/Jp42lNfA==}
@@ -3550,12 +3550,18 @@ packages:
     resolution: {integrity: sha512-FfR8sjd4em2T6fb3I2MwAJU7HWVMr9zba+enmQeeWFfCbm+UOC/0X4DS8XtpUTMwWMGbjKYP7xjfNekzyGmB3A==}
     engines: {node: ^10 || ^12 || >=14}
 
-  posthog-node@5.38.2:
-    resolution: {integrity: sha512-eiKpU+vX4hVuHbO/EosvPHsmh2AVIdoVmWss/uUOs1t4b0ViCblw2o8OIFqHxKj3mYRnSOBlX0Dw3wBvcCaYpA==}
+  posthog-node@5.69.0:
+    resolution: {integrity: sha512-sNTR0Ld3WfgXvdOtKw2K6f44MADcDED+35wId+ZJlk3qUt8CoKKBT4uP4jWMPuC9knCc9HWURXexJVY+/gat4g==}
     engines: {node: ^20.20.0 || >=22.22.0}
     peerDependencies:
+      '@opentelemetry/api': ^1.2.0
+      '@react-email/render': ^2.1.0
       rxjs: ^7.0.0
     peerDependenciesMeta:
+      '@opentelemetry/api':
+        optional: true
+      '@react-email/render':
+        optional: true
       rxjs:
         optional: true
 
@@ -4907,11 +4913,11 @@ snapshots:
       tslib: 2.8.1
       webcrypto-core: 1.9.2
 
-  '@posthog/core@1.35.4':
+  '@posthog/core@1.69.2':
     dependencies:
-      '@posthog/types': 1.390.2
+      '@posthog/types': 1.427.2
 
-  '@posthog/types@1.390.2': {}
+  '@posthog/types@1.427.2': {}
 
   '@radix-ui/number@1.1.3': {}
 
@@ -7515,9 +7521,9 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  posthog-node@5.38.2(rxjs@7.8.2):
+  posthog-node@5.69.0(rxjs@7.8.2):
     dependencies:
-      '@posthog/core': 1.35.4
+      '@posthog/core': 1.69.2
     optionalDependencies:
       rxjs: 7.8.2
 

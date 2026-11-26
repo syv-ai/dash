@@ -3,8 +3,9 @@ import { z } from 'zod';
 import { parseArgs } from './validate';
 import { TelemetryService } from '../services/TelemetryService';
 
-// Events the renderer is allowed to send
-const RENDERER_ALLOWED_EVENTS = new Set(['settings_changed']);
+// Events the renderer is allowed to send. (`settings_changed` was listed
+// here but never sent by any renderer code.)
+const RENDERER_ALLOWED_EVENTS = new Set<string>();
 
 export function registerTelemetryIpc(): void {
   ipcMain.handle(

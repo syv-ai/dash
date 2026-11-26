@@ -11,7 +11,7 @@ describe('reportMainProcessError', () => {
 
   beforeEach(() => {
     __resetErrorThrottleForTest();
-    capture = vi.spyOn(TelemetryService, 'capture').mockImplementation(() => {});
+    capture = vi.spyOn(TelemetryService, 'capture').mockImplementation(() => true);
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 

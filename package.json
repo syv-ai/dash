@@ -130,7 +130,7 @@
     "monaco-languageserver-types": "0.4.1",
     "motion": "^12.40.0",
     "node-pty": "^1.2.0-beta.13",
-    "posthog-node": "^5.28.2",
+    "posthog-node": "^5.69.0",
     "pyright": "^1.1.414",
     "qrcode": "^1.5.4",
     "react": "^19.2.0",
