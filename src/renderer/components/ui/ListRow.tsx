@@ -117,17 +117,22 @@ export function ListRow({
       {...(props as React.HTMLAttributes<HTMLElement>)}
     >
       {leading && <span className="flex h-5 shrink-0 items-center text-icon">{leading}</span>}
-      {description ? (
-        <span className="flex min-w-0 flex-1 flex-col">
-          {label}
-          <span className="truncate type-caption">{description}</span>
-        </span>
-      ) : (
-        <span className="flex min-w-0 flex-1">{label}</span>
-      )}
-      {trailing && (
-        <span className="flex shrink-0 items-center gap-1.5 text-ink-3">{trailing}</span>
-      )}
+      {/* Label and trailing keep the badges' gap (gap-1), not the row's: a
+          truncated name runs as close to the end as its marks sit to each
+          other (T26). */}
+      <span className="flex min-w-0 flex-1 items-center gap-1">
+        {description ? (
+          <span className="flex min-w-0 flex-1 flex-col">
+            {label}
+            <span className="truncate type-caption">{description}</span>
+          </span>
+        ) : (
+          <span className="flex min-w-0 flex-1">{label}</span>
+        )}
+        {trailing && (
+          <span className="flex shrink-0 items-center gap-1.5 text-ink-3">{trailing}</span>
+        )}
+      </span>
     </Comp>
   );
 }

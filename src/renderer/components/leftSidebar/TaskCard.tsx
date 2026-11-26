@@ -50,8 +50,9 @@ function dotTooltip(state: AgentState, info: ActivityInfo | undefined): string {
   return STATE_LABELS[state];
 }
 
-/** A project's tasks sit 16px in, where its name starts past the chevron. */
-export const TASK_INDENT_PX = 16;
+/** A project's tasks sit 10px in: the dot just past the chevron's ink, the
+ *  name under the project's name (T26). */
+export const TASK_INDENT_PX = 10;
 
 /**
  * A task row, the same in the Tasks and Projects views: the state dot, the
@@ -136,16 +137,16 @@ export function TaskCard({
             )}
             {/* One column at the row's end, while the session is live: the
                 percent at rest, the sleep button in its place on hover or
-                keyboard focus, so the name keeps its width (T24). */}
+                keyboard focus. It is as wide as the wider of the two, so the
+                name keeps its width (T24) and a short percent leaves no slack
+                before it (T26); right-aligned, the column lines up down the
+                list. */}
             {state !== 'asleep' && (
-              <span className="flex min-w-9 justify-end">
-                <HoverSwapSlot
-                  rest={<ContextLevel usage={usage} />}
-                  actions={
-                    <SleepTaskButton activityState={activityInfo?.state} onClose={onClose} />
-                  }
-                />
-              </span>
+              <HoverSwapSlot
+                reserve
+                rest={<ContextLevel usage={usage} />}
+                actions={<SleepTaskButton activityState={activityInfo?.state} onClose={onClose} />}
+              />
             )}
           </>
         }

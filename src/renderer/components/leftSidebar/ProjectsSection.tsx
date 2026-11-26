@@ -440,15 +440,16 @@ export function ProjectsSection({
         );
       }
       case 'empty':
+        // pl-2.5: TASK_INDENT_PX in, like the project's tasks.
         return (
-          <div className="pl-4">
+          <div className="pl-2.5">
             <EmptyState title="No tasks yet" />
           </div>
         );
       case 'sessions':
         // Sessions in this project that no task owns: their own disclosure.
         return (
-          <div className="pl-4">
+          <div className="pl-2.5">
             <ForeignSessionsSection project={row.project} onSelectTask={onSelectTask} />
           </div>
         );

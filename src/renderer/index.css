@@ -3,6 +3,9 @@
 @import 'tailwindcss';
 
 @custom-variant dark (&:is(.dark *));
+/* A HoverSwapSlot's actions on show: its row (`group/swap`) hovered or
+   keyboard-focused (it, or a control in it), or a menu open from the slot. */
+@custom-variant swap-shown (&:is(:where(.group\/swap):hover *, :where(.group\/swap):focus-visible *, :where(.group\/swap):has(:focus-visible) *, :where(.group\/slot):has([data-state=open]) *));
 
 @theme {
   /* ── Role colours: the source of truth ─────────────────────
