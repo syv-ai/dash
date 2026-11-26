@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ClaudeUpdateState } from '../../../../shared/types';
-import { updateIndicator, oldVersions } from '../claudeUpdateCopy';
+import { updateIndicator, interruptNote } from '../claudeUpdateCopy';
 
 const base: ClaudeUpdateState = {
   installedVersion: '2.1.333',
@@ -53,14 +53,14 @@ describe('updateIndicator', () => {
   });
 });
 
-describe('oldVersions', () => {
-  it('lists the distinct old versions, newest first', () => {
-    expect(
-      oldVersions([
-        { taskId: 'a', version: '2.1.330' },
-        { taskId: 'b', version: '2.1.332' },
-        { taskId: 'c', version: '2.1.330' },
-      ]),
-    ).toBe('2.1.332, 2.1.330');
+describe('interruptNote', () => {
+  it('says nothing when no outdated task is busy', () => {
+    expect(interruptNote([])).toBeNull();
+  });
+
+  it('names one or two busy tasks and counts more', () => {
+    expect(interruptNote(['api'])).toBe('api is busy and will be interrupted.');
+    expect(interruptNote(['api', 'web'])).toBe('api and web are busy and will be interrupted.');
+    expect(interruptNote(['api', 'web', 'cli'])).toBe('3 tasks are busy and will be interrupted.');
   });
 });

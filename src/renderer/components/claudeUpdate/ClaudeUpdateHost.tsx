@@ -4,7 +4,6 @@ import { toast } from '../ui/toast';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useUi } from '../../stores/uiStore';
 import { ClaudeUpdateDialog } from './ClaudeUpdateDialog';
-import { taskCount } from './claudeUpdateCopy';
 
 /**
  * The Claude Code update flow's app-level half: a toast the first time
@@ -24,7 +23,6 @@ export function ClaudeUpdateHost() {
     if (!version || count === 0 || !idle || toasted.current === version) return;
     toasted.current = version;
     toast.offer(`Claude Code ${version} is installed`, {
-      description: `${taskCount(count)} still ${count === 1 ? 'runs' : 'run'} an older version.`,
       icon: CircleArrowUp,
       key: `claude-update:${version}`,
       topic: 'updates',

@@ -35,18 +35,24 @@ export function updateIndicator(state: ClaudeUpdateState | null): UpdateIndicato
   return {
     kind: 'available',
     title: `Claude Code ${state.installedVersion} is installed`,
-    description: `${taskCount(outdated.length)} ${outdated.length === 1 ? 'runs' : 'run'} an older version`,
+    description: outdatedLine(outdated.length),
   };
 }
 
-/** The distinct versions the outdated sessions run, newest first ("2.1.332, 2.1.330"). */
-export function oldVersions(outdated: ClaudeUpdateState['outdated']): string {
-  const byNumber = (v: string) => v.split('.').map(Number);
-  return [...new Set(outdated.map((s) => s.version))]
-    .sort((a, b) => {
-      const [x, y] = [byNumber(a), byNumber(b)];
-      for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return (y[i] ?? 0) - (x[i] ?? 0);
-      return 0;
-    })
-    .join(', ');
+/** How many live sessions lag behind ("2 tasks run an older version"). */
+export function outdatedLine(n: number): string {
+  return `${taskCount(n)} ${n === 1 ? 'runs' : 'run'} an older version`;
+}
+
+/**
+ * Who "Interrupt and restart all" would cut off: the outdated tasks that are
+ * busy (working, or waiting on the user), named while there are one or two,
+ * counted beyond that; null when none is.
+ */
+export function interruptNote(busyNames: readonly string[]): string | null {
+  const n = busyNames.length;
+  if (n === 0) return null;
+  if (n === 1) return `${busyNames[0]} is busy and will be interrupted.`;
+  if (n === 2) return `${busyNames[0]} and ${busyNames[1]} are busy and will be interrupted.`;
+  return `${n} tasks are busy and will be interrupted.`;
 }
