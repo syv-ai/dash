@@ -5,6 +5,7 @@ import {
   compareClaudeVersions,
   versionMeetsMinimum,
   describeUnsupportedClaude,
+  devClaudeBinOverride,
   MIN_CLAUDE_VERSION,
 } from '../claudeCli';
 
@@ -79,5 +80,16 @@ describe('Claude Code version floor', () => {
     expect(
       describeUnsupportedClaude({ installed: true, version: '2.1.278 (Claude Code)' }),
     ).toBeNull();
+  });
+});
+
+describe('devClaudeBinOverride', () => {
+  it('names DASH_CLAUDE_BIN on a dev run only', () => {
+    const env = { DASH_CLAUDE_BIN: '/tmp/claude-wrapper' };
+    expect(devClaudeBinOverride(['electron', 'entry.js', '--dev'], env)).toBe(
+      '/tmp/claude-wrapper',
+    );
+    expect(devClaudeBinOverride(['Dash'], env)).toBeNull();
+    expect(devClaudeBinOverride(['electron', '--dev'], {})).toBeNull();
   });
 });

@@ -6,6 +6,7 @@ import { registerPtyIpc } from './ptyIpc';
 import { registerGitIpc } from './gitIpc';
 import { registerGithubIpc } from './githubIpc';
 import { registerAutoUpdateIpc } from './autoUpdateIpc';
+import { registerClaudeUpdateIpc } from './claudeUpdateIpc';
 import { registerAzureDevOpsIpc } from './azureDevOpsIpc';
 import { registerRtkIpc } from './rtkIpc';
 import { registerTelemetryIpc } from './telemetryIpc';
@@ -30,6 +31,7 @@ export function registerAllIpc(): void {
   registerGitIpc();
   registerGithubIpc();
   registerAutoUpdateIpc();
+  registerClaudeUpdateIpc();
   registerAzureDevOpsIpc();
   registerRtkIpc();
   registerTelemetryIpc();

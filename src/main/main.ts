@@ -164,6 +164,10 @@ void app.whenReady().then(async () => {
   supervisorService.setSender(mainWindow.webContents);
   supervisorService.startPolling();
 
+  // Live sessions on an older Claude Code than the installed one.
+  const { claudeUpdateService } = await import('./services/ClaudeUpdateService');
+  claudeUpdateService.start(mainWindow.webContents);
+
   // Remote control service needs a sender for state change events
   const { remoteControlService } = await import('./services/remoteControlService');
   remoteControlService.setSender(mainWindow.webContents);
@@ -248,10 +252,14 @@ export function redetectClaudeCli(): Promise<void> {
 
 async function probeClaudeCli(): Promise<void> {
   try {
-    const findCmd = process.platform === 'win32' ? 'where.exe' : 'which';
-    const { stdout } = await execFileAsync(findCmd, ['claude']);
-    // where.exe may return multiple lines; take the first
-    const claudePath = stdout.trim().split(/\r?\n/)[0]!.trim();
+    const { devClaudeBinOverride } = await import('./services/claudeCli');
+    let claudePath = devClaudeBinOverride();
+    if (!claudePath) {
+      const findCmd = process.platform === 'win32' ? 'where.exe' : 'which';
+      const { stdout } = await execFileAsync(findCmd, ['claude']);
+      // where.exe may return multiple lines; take the first
+      claudePath = stdout.trim().split(/\r?\n/)[0]!.trim();
+    }
     // .cmd files on Windows must be invoked through cmd.exe
     const { stdout: versionOut } =
       process.platform === 'win32'

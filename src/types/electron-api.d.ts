@@ -14,6 +14,7 @@ import type { RtkApi } from './electron-api/rtk';
 import type { SessionApi } from './electron-api/session';
 import type { TelemetryApi } from './electron-api/telemetry';
 import type { AutoUpdateApi } from './electron-api/autoUpdate';
+import type { ClaudeUpdateApi } from './electron-api/claudeUpdate';
 import type { MemoryApi } from './electron-api/memory';
 import type { LspApi } from './electron-api/lsp';
 
@@ -47,6 +48,7 @@ export interface ElectronAPI
     SessionApi,
     TelemetryApi,
     AutoUpdateApi,
+    ClaudeUpdateApi,
     MemoryApi,
     LspApi {}
 

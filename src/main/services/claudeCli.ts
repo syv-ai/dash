@@ -79,12 +79,30 @@ export function findLatestSessionId(cwd: string, previousPath?: string | null): 
 let cachedClaudePath: string | null = null;
 
 /**
+ * Dev runs only (`--dev`): `DASH_CLAUDE_BIN` names the `claude` Dash runs, for
+ * example a wrapper that reports a newer `--version` to simulate a Claude Code
+ * update. Ignored in the packaged app.
+ */
+export function devClaudeBinOverride(
+  argv: readonly string[] = process.argv,
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  return argv.includes('--dev') && env.DASH_CLAUDE_BIN ? env.DASH_CLAUDE_BIN : null;
+}
+
+/**
  * Resolve the `claude` executable: startup-detected cache (main.ts) →
  * `which`/`where.exe` → direct probe of common install locations. Cached per
  * process after the first successful resolution.
  */
 export async function findClaudePath(): Promise<string | null> {
   if (cachedClaudePath) return cachedClaudePath;
+
+  const override = devClaudeBinOverride();
+  if (override) {
+    cachedClaudePath = override;
+    return cachedClaudePath;
+  }
 
   // 1. Check the startup-detected cache from main.ts
   try {

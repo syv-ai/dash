@@ -471,6 +471,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   autoUpdateGetStatus: () => ipcRenderer.invoke('autoUpdate:getStatus'),
   onAutoUpdateStatus: listen<import('@shared/types').AutoUpdateStatus>('autoUpdate:status'),
 
+  // Claude Code update: live sessions on an older CLI
+  claudeUpdateGetState: () => ipcRenderer.invoke('claudeUpdate:getState'),
+  claudeUpdateRestart: (mode: import('@shared/types').ClaudeUpdateMode) =>
+    ipcRenderer.invoke('claudeUpdate:restart', mode),
+  claudeUpdateCancel: () => ipcRenderer.invoke('claudeUpdate:cancel'),
+  onClaudeUpdateState: listen<import('@shared/types').ClaudeUpdateState>('claudeUpdate:state'),
+
   // Workspace ports
   portsList: (taskId: string) => ipcRenderer.invoke('ports:list', taskId),
   portsRefresh: (taskId: string) => ipcRenderer.invoke('ports:refresh', taskId),

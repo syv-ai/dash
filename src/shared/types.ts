@@ -1193,6 +1193,29 @@ export interface AutoUpdateStatus {
   initialized: boolean;
 }
 
+// ── Claude Code update (live sessions on an older CLI) ──────
+
+/** Where a "restart sessions on the new Claude Code" request stands. */
+export type ClaudeUpdateRestart =
+  | { phase: 'none' }
+  /** "Restart when done": waiting for these tasks (working or asking) to finish. */
+  | { phase: 'waiting'; activeTaskIds: string[] }
+  | { phase: 'restarting'; done: number; total: number };
+
+/**
+ * A newer Claude Code than some live task sessions run. Broadcast whole on
+ * `claudeUpdate:state`.
+ */
+export interface ClaudeUpdateState {
+  /** `claude --version`'s number ("2.1.333"), or null before the probe answers. */
+  installedVersion: string | null;
+  /** Live task sessions on an older version than `installedVersion`. */
+  outdated: { taskId: string; version: string }[];
+  restart: ClaudeUpdateRestart;
+}
+
+export type ClaudeUpdateMode = 'now' | 'whenDone';
+
 /**
  * Claude Code auto-memory categories, in display order: standing rules first,
  * facts that go stale last. `other` catches missing or unknown types.
