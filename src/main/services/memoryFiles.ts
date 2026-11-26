@@ -210,3 +210,53 @@ export function countNewMemories(
   if (seenAt === null) return 0;
   return files.filter((f) => isMemoryFileName(f.name) && f.mtimeMs > seenAt).length;
 }
+
+/** The types a memory is made with from Dash: every documented one. */
+export type NewMemoryType = Exclude<MemoryType, 'other'>;
+
+/** A frontmatter value, quoted only when YAML would read it otherwise. */
+function yamlScalar(value: string): string {
+  return /^[A-Za-z0-9][A-Za-z0-9 _.-]*$/.test(value) ? value : JSON.stringify(value);
+}
+
+/**
+ * A new memory's file, named as Claude Code names its own (`<type>_<words>.md`,
+ * a number added while `taken` has it), and its text: the frontmatter Claude
+ * reads (A5), the description left for the user to write.
+ */
+export function newMemoryFile(
+  name: string,
+  type: NewMemoryType,
+  taken: readonly string[],
+): { file: string; content: string } {
+  const words =
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 60) || 'memory';
+  const lower = new Set(taken.map((t) => t.toLowerCase()));
+  let file = `${type}_${words}.md`;
+  for (let n = 2; lower.has(file.toLowerCase()); n++) file = `${type}_${words}_${n}.md`;
+  const content = `---\nname: ${yamlScalar(name.trim())}\ndescription: ""\ntype: ${type}\n---\n\n`;
+  return { file, content };
+}
+
+/** `index` (null: no MEMORY.md yet) with a line pointing at `file`, as Claude's own index lines do. */
+export function withIndexLine(index: string | null, name: string, file: string): string {
+  const line = `- [${name.trim().replace(/[[\]\n]/g, ' ')}](${file})\n`;
+  if (index === null || index.trim() === '') return `# Memory Index\n\n${line}`;
+  return `${index.endsWith('\n') ? index : `${index}\n`}${line}`;
+}
+
+/** `index` without the lines that point at `file` alone (a line naming others too stays). */
+export function withoutIndexLinks(index: string, file: string): string {
+  const links = indexLinkFiles(index);
+  return index
+    .split('\n')
+    .filter((_, i) => {
+      const on = links[i] ?? [];
+      return on.length === 0 || on.some((f) => f !== file);
+    })
+    .join('\n');
+}

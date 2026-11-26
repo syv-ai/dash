@@ -37,8 +37,7 @@ export type SegmentPick =
   | 'select'
   /** Nothing: a single click on the current view, or re-picking a narrow
    *  view with no first file (Files on its changes with none, Comments with
-   *  no open thread on the code, Agent, whose files open outside the task's
-   *  editor). */
+   *  no open thread on the code, Agent, which has no first file of its own). */
   | 'none';
 
 /**

@@ -71,7 +71,8 @@ export const COLLAPSED_SECTIONS: ReadonlySet<MemorySectionId> = new Set(['older'
 /** How long after its last change a memory still counts as recent. */
 export const MEMORY_RECENT_MS = 30 * 24 * 60 * 60 * 1000;
 
-function matchesQuery(entry: MemoryEntry, query: string): boolean {
+/** Whether a memory's name, description or text holds `query` (none: every memory does). */
+export function memoryMatches(entry: MemoryEntry, query: string): boolean {
   const q = query.trim().toLowerCase();
   return !q || [entry.name, entry.description, entry.body].some((f) => f.toLowerCase().includes(q));
 }
@@ -102,7 +103,7 @@ export function memoryIssueTexts({ issues }: ListedMemory): string[] {
 
 /** How many memories match `query` under each filter. */
 export function memoryCounts(entries: MemoryEntry[], query: string): Record<MemoryFilter, number> {
-  const matches = entries.filter((e) => matchesQuery(e, query));
+  const matches = entries.filter((e) => memoryMatches(e, query));
   const counts: Record<MemoryFilter, number> = {
     all: matches.length,
     feedback: 0,
@@ -126,7 +127,7 @@ export function memorySections(
   nowMs: number,
 ): MemorySection[] {
   const listed = memories
-    .filter((m) => matchesQuery(m.entry, query))
+    .filter((m) => memoryMatches(m.entry, query))
     .filter((m) => filter === 'all' || m.entry.type === filter)
     .sort((a, b) => b.entry.mtimeMs - a.entry.mtimeMs);
   const fine = listed.filter((m) => !needsAttention(m));

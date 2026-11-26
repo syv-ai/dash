@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
   countNewMemories,
+  isMemoryFileName,
+  newMemoryFile,
   parseMemoryFile,
   readFrontmatter,
   readIndex,
   toMemoryType,
+  withIndexLine,
+  withoutIndexLinks,
 } from '../memoryFiles';
 
 describe('parseMemoryFile', () => {
@@ -160,5 +164,54 @@ describe('readFrontmatter', () => {
 
   it('is null without a frontmatter block', () => {
     expect(readFrontmatter('# notes')).toEqual({ frontmatter: null, body: '# notes' });
+  });
+});
+
+describe('newMemoryFile', () => {
+  it('names the file as Claude does, and writes frontmatter Dash reads back', () => {
+    const { file, content } = newMemoryFile('Prefer CI runs!', 'feedback', []);
+    expect(file).toBe('feedback_prefer_ci_runs.md');
+    expect(isMemoryFileName(file)).toBe(true);
+    expect(parseMemoryFile(content)).toMatchObject({
+      name: 'Prefer CI runs!',
+      description: '',
+      type: 'feedback',
+    });
+  });
+
+  it('numbers a name already taken, whatever its case', () => {
+    expect(newMemoryFile('x', 'user', ['user_x.md', 'USER_X_2.md']).file).toBe('user_x_3.md');
+  });
+
+  it('never names a path: separators and dots become underscores', () => {
+    expect(newMemoryFile('../../etc/passwd', 'project', []).file).toBe('project_etc_passwd.md');
+    expect(newMemoryFile('???', 'reference', []).file).toBe('reference_memory.md');
+  });
+});
+
+describe('withIndexLine', () => {
+  it('starts an index when there is none', () => {
+    expect(withIndexLine(null, 'A', 'user_a.md')).toBe('# Memory Index\n\n- [A](user_a.md)\n');
+  });
+
+  it('appends a line Claude reads as a link', () => {
+    const next = withIndexLine('# Memory Index\n- [B](b.md)', 'A', 'user_a.md');
+    expect(next).toBe('# Memory Index\n- [B](b.md)\n- [A](user_a.md)\n');
+    expect(readIndex(next)('user_a.md').inIndex).toBe(true);
+  });
+});
+
+describe('withoutIndexLinks', () => {
+  it('drops the lines pointing at the file alone', () => {
+    const index =
+      '# Memory Index\n- [A](a.md) - one\n- [B](b.md) - two\n- [A, B](a.md) [b](b.md)\n';
+    expect(withoutIndexLinks(index, 'a.md')).toBe(
+      '# Memory Index\n- [B](b.md) - two\n- [A, B](a.md) [b](b.md)\n',
+    );
+  });
+
+  it('leaves a link in code alone', () => {
+    const index = 'See `[A](a.md)` for the shape\n';
+    expect(withoutIndexLinks(index, 'a.md')).toBe(index);
   });
 });

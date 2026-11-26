@@ -8,8 +8,9 @@ import type { ProjectMemory } from '../../../shared/types';
  * once it closes.
  */
 export function useProjectMemory(
-  projectPath: string,
-  paused: boolean,
+  /** Null: none read (the pane isn't showing). */
+  projectPath: string | null,
+  paused = false,
 ): {
   memory: ProjectMemory | null;
   error: string | null;
@@ -30,7 +31,7 @@ export function useProjectMemory(
   );
 
   useEffect(() => {
-    if (paused) return;
+    if (paused || projectPath === null) return;
     let cancelled = false;
     void (async () => {
       try {

@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { claudeProjectDir } from '../../utils/claudePaths';
-import { readProjectMemory, resolveMemoryDir } from '../MemoryService';
+import { createMemory, deleteMemory, readProjectMemory, resolveMemoryDir } from '../MemoryService';
 
 function git(cwd: string, ...args: string[]): void {
   execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd });
@@ -142,5 +142,38 @@ describe('what Claude will not see', () => {
       fs.writeFileSync(path.join(dir, name), 'x');
     }
     expect((await readProjectMemory(repo)).entries.map((e) => e.file)).toEqual(['ok.md']);
+  });
+});
+
+describe('making and removing a memory', () => {
+  const unlink = (full: string) => fs.promises.unlink(full);
+
+  it('makes the folder, the file and its index line; Dash reads it back', async () => {
+    const full = await createMemory(repo, 'Prefer CI', 'feedback');
+    const dir = await resolveMemoryDir(repo);
+    expect(full).toBe(path.join(dir, 'feedback_prefer_ci.md'));
+    const memory = await readProjectMemory(repo);
+    expect(memory.entries).toMatchObject([
+      { file: 'feedback_prefer_ci.md', name: 'Prefer CI', type: 'feedback', inIndex: true },
+    ]);
+  });
+
+  it('removes the memory and the index lines pointing at it alone', async () => {
+    await createMemory(repo, 'One', 'user');
+    await createMemory(repo, 'Two', 'user');
+    await deleteMemory(repo, 'user_one.md', unlink);
+    const memory = await readProjectMemory(repo);
+    expect(memory.entries.map((e) => e.file)).toEqual(['user_two.md']);
+    expect(memory.dangling).toEqual([]);
+  });
+
+  it('refuses anything that is not a memory file of the folder', async () => {
+    await createMemory(repo, 'One', 'user');
+    const removed: string[] = [];
+    const record = async (full: string) => void removed.push(full);
+    for (const file of ['MEMORY.md', '../repo/README.md', 'sub/x.md', 'notes.txt']) {
+      await expect(deleteMemory(repo, file, record)).rejects.toThrow();
+    }
+    expect(removed).toEqual([]);
   });
 });

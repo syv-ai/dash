@@ -9,10 +9,14 @@ import {
   countNewMemories,
   indexLinkFiles,
   isMemoryFileName,
+  newMemoryFile,
   readFrontmatter,
   readIndex,
   readMemoryFields,
+  withIndexLine,
+  withoutIndexLinks,
   type MemoryIndexLine,
+  type NewMemoryType,
 } from './memoryFiles';
 
 /** The one read failure that means "not there": anything else is a real error. */
@@ -145,4 +149,56 @@ export async function newMemoryCount(dir: string, seenAt: () => number | null): 
     files.filter((f) => f !== null),
     seenAt(),
   );
+}
+
+/** MEMORY.md's text, or null when the folder has none. */
+async function readIndexFile(dir: string): Promise<string | null> {
+  try {
+    return await fs.promises.readFile(path.join(dir, MEMORY_INDEX_FILE), 'utf8');
+  } catch (err) {
+    if (isMissing(err)) return null;
+    throw err;
+  }
+}
+
+/**
+ * Make a memory in the project's folder (made if missing) from the Agent
+ * tab's "New memory", and point MEMORY.md at it so Claude finds it. Returns
+ * the file's absolute path, for the editor.
+ */
+export async function createMemory(
+  projectPath: string,
+  name: string,
+  type: NewMemoryType,
+): Promise<string> {
+  const dir = await resolveMemoryDir(projectPath);
+  await fs.promises.mkdir(dir, { recursive: true });
+  const { file, content } = newMemoryFile(name, type, await fs.promises.readdir(dir));
+  const full = path.join(dir, file);
+  // `wx`: never over a file that appeared since the listing.
+  await fs.promises.writeFile(full, content, { encoding: 'utf8', flag: 'wx' });
+  const index = await readIndexFile(dir);
+  await fs.promises.writeFile(path.join(dir, MEMORY_INDEX_FILE), withIndexLine(index, name, file));
+  return full;
+}
+
+/**
+ * Remove one memory (`file`, a name in the folder itself, never MEMORY.md)
+ * through `remove` (the OS trash), and drop MEMORY.md's lines that point at
+ * it alone, so Claude isn't sent to a file that's gone.
+ */
+export async function deleteMemory(
+  projectPath: string,
+  file: string,
+  remove: (fullPath: string) => Promise<void>,
+): Promise<void> {
+  if (!isMemoryFileName(file)) throw new Error(`Not a memory file: ${file}`);
+  const dir = await resolveMemoryDir(projectPath);
+  const full = path.join(dir, file);
+  await fs.promises.lstat(full);
+  await remove(full);
+  const index = await readIndexFile(dir);
+  if (index === null) return;
+  const next = withoutIndexLinks(index, file);
+  if (next !== index) await fs.promises.writeFile(path.join(dir, MEMORY_INDEX_FILE), next);
 }

@@ -1,57 +1,93 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Brain, Copy, FileText, FolderOpen, List } from 'lucide-react';
+import {
+  AtSign,
+  Brain,
+  Copy,
+  FileText,
+  FolderOpen,
+  Link2,
+  List,
+  MoreHorizontal,
+  Plus,
+  Trash2,
+} from 'lucide-react';
 import { toast } from '../ui/toast';
 import { MEMORY_INDEX_FILE } from '../../../shared/types';
-import type { Task } from '../../../shared/types';
+import type { MemoryEntry, Task } from '../../../shared/types';
 import type { TaskScratchpad } from '../../../shared/agent';
-import { useEditors } from '../../stores/editorsStore';
 import { useProjects } from '../../stores/projectsStore';
-import { useUi } from '../../stores/uiStore';
+import { useRuntime } from '../../stores/runtimeStore';
+import { typeIntoTask } from '../../utils/typeIntoTask';
 import { FilesTopRow } from '../fileTree/FilesTopRow';
 import { FileTree } from '../fileTree/FileTree';
 import { buildTree, type TreeSection } from '../fileTree/model';
+import { copyText, revealLabel } from '../diffEditor/fileActions';
 import { useProjectMemory } from '../memory/useProjectMemory';
-import { MEMORY_TYPE_LABELS } from '../memory/memoryView';
+import {
+  KNOWN_MEMORY_TYPES,
+  MEMORY_ISSUE_LABELS,
+  MEMORY_TYPE_LABELS,
+  listMemories,
+  memoryIssueTexts,
+  memoryMatches,
+  memoryMention,
+  memoryNotices,
+  type KnownMemoryType,
+} from '../memory/memoryView';
+import { confirm } from '../ui/ConfirmHost';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItems,
+  ContextMenuTrigger,
+} from '../ui/ContextMenu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '../ui/DropdownMenu';
 import { EmptyState } from '../ui/EmptyState';
 import { IconButton } from '../ui/IconButton';
+import { Input } from '../ui/Input';
 import { ListRow } from '../ui/ListRow';
+import { Notice } from '../ui/Notice';
 import { Segmented } from '../ui/Segmented';
+import { formatRelativeTime } from '../../../shared/relativeTime';
 import { instructionFiles, memoryGroups, type AgentPane } from './agentTab';
-
-/** Open a file of one of Claude's own folders (no task's worktree): the
- *  editor opens over everything, as the memory modal's Edit does (A3). */
-function openPlainFile(dir: string, filePath: string): void {
-  useEditors.getState().open({ cwd: dir, filePath, initialView: { kind: 'working', ref: 'HEAD' } });
-}
-
-function copyPath(path: string): void {
-  window.electronAPI.clipboardWriteText(path);
-  toast.copied('path', path);
-}
 
 /**
  * The task sidebar's Agent tab (A1): what Claude Code keeps beside the code,
  * one pane at a time under a switch in Files' top row: the session's
  * scratchpad as a tree, or the project's memories by type with MEMORY.md and
- * the repo's CLAUDE.md files. Both follow the disk live.
+ * the repo's CLAUDE.md files. Both follow the disk live. Every file opens in
+ * the task's own editor, expanding the sidebar (A10): a scratchpad or memory
+ * file by its absolute path, a CLAUDE.md by its worktree one.
  */
 export function AgentView({
   task,
   pane,
   onPane,
   repoPaths,
-  onOpenTaskFile,
+  activePath,
+  onOpenFile,
 }: {
   task: Task;
   pane: AgentPane;
   onPane: (pane: AgentPane) => void;
   /** The worktree's files, for its CLAUDE.md files. */
   repoPaths: readonly string[];
-  /** Open a file of the task's worktree in its editor (expanding the sidebar). */
-  onOpenTaskFile: (path: string) => void;
+  /** The file the task's editor shows, to mark its row. */
+  activePath: string | null;
+  /** Open a file in the task's editor (expanding the sidebar): worktree-relative or absolute. */
+  onOpenFile: (path: string) => void;
 }) {
   const scratchpad = useTaskScratchpad(task.id);
   const project = useProjects((s) => s.projects.find((p) => p.id === task.projectId) ?? null);
+  const { memory, error } = useProjectMemory(pane === 'memory' ? (project?.path ?? null) : null);
+  // The type a memory is being named for, from "New memory".
+  const [creating, setCreating] = useState<KnownMemoryType | null>(null);
 
   const end =
     pane === 'scratchpad'
@@ -59,19 +95,50 @@ export function AgentView({
           <IconButton
             size="sm"
             title="Copy scratchpad path"
-            onClick={() => copyPath(scratchpad.dir)}
+            onClick={() => copyText(scratchpad.dir, 'path')}
           >
             <Copy size={14} strokeWidth={1.8} />
           </IconButton>
         )
-      : project && (
-          <IconButton
-            size="sm"
-            title="Open memory"
-            onClick={() => useUi.getState().openTaskMemory(project.id, task.id)}
-          >
-            <Brain size={14} strokeWidth={1.8} />
-          </IconButton>
+      : project &&
+        memory && (
+          <div className="flex items-center gap-0.5">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <IconButton size="sm" title="New memory">
+                  <Plus size={14} strokeWidth={1.8} />
+                </IconButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>New memory</DropdownMenuLabel>
+                {KNOWN_MEMORY_TYPES.map((type) => (
+                  <DropdownMenuItem key={type} onSelect={() => setCreating(type)}>
+                    {MEMORY_TYPE_LABELS[type]}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <IconButton size="sm" title="More">
+                  <MoreHorizontal size={14} strokeWidth={1.8} />
+                </IconButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={!memory.exists}
+                  onSelect={() => void revealMemoryFolder(project.path)}
+                >
+                  <FolderOpen size={14} strokeWidth={1.8} />
+                  {revealLabel()}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => copyText(memory.dir, 'path')}>
+                  <Copy size={14} strokeWidth={1.8} />
+                  Copy folder path
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         );
 
   return (
@@ -93,15 +160,52 @@ export function AgentView({
         end={end || undefined}
       />
       {pane === 'scratchpad' ? (
-        <ScratchpadPane scratchpad={scratchpad} />
+        <ScratchpadPane scratchpad={scratchpad} activePath={activePath} onOpenFile={onOpenFile} />
+      ) : error ? (
+        <EmptyState illustration={Brain} title="Could not read memory" description={error} />
       ) : (
-        <MemoryPane
-          projectPath={project?.path ?? null}
-          repoPaths={repoPaths}
-          onOpenTaskFile={onOpenTaskFile}
-        />
+        memory &&
+        project && (
+          <MemoryPane
+            task={task}
+            projectId={project.id}
+            projectPath={project.path}
+            dir={memory.dir}
+            hasIndex={memory.hasIndex}
+            entries={memory.entries}
+            notices={memoryNotices(memory)}
+            repoPaths={repoPaths}
+            activePath={activePath}
+            onOpenFile={onOpenFile}
+            creating={creating}
+            onCreated={() => setCreating(null)}
+          />
+        )
       )}
     </div>
+  );
+}
+
+/** Surface a failed action instead of dropping it; resolves to its data, or null. */
+async function attempt<T>(
+  action: Promise<{ success: boolean; data?: T; error?: string }>,
+  fallback: string,
+): Promise<T | null> {
+  try {
+    const res = await action;
+    if (res.success) return res.data ?? (null as T);
+    toast.error(res.error || fallback);
+  } catch (err) {
+    console.error(fallback, err);
+    toast.error(fallback);
+  }
+  return null;
+}
+
+function revealMemoryFolder(projectPath: string): Promise<unknown> {
+  return attempt(
+    window.electronAPI.memoryOpenDir({ projectPath }),
+    'Could not reveal the memory folder',
   );
 }
 
@@ -135,7 +239,15 @@ function useTaskScratchpad(taskId: string): TaskScratchpad | null | undefined {
   return scratchpad;
 }
 
-function ScratchpadPane({ scratchpad }: { scratchpad: TaskScratchpad | null | undefined }) {
+function ScratchpadPane({
+  scratchpad,
+  activePath,
+  onOpenFile,
+}: {
+  scratchpad: TaskScratchpad | null | undefined;
+  activePath: string | null;
+  onOpenFile: (path: string) => void;
+}) {
   const sections = useMemo<TreeSection[]>(
     () =>
       scratchpad
@@ -171,12 +283,13 @@ function ScratchpadPane({ scratchpad }: { scratchpad: TaskScratchpad | null | un
       />
     );
   }
+  const prefix = `${scratchpad.dir}/`;
   return (
     <FileTree
       sections={sections}
       cwd={scratchpad.dir}
-      selected={null}
-      onOpenFile={(row) => openPlainFile(scratchpad.dir, row.file.path)}
+      selected={activePath?.startsWith(prefix) ? { path: activePath.slice(prefix.length) } : null}
+      onOpenFile={(row) => onOpenFile(`${prefix}${row.file.path}`)}
       canOpenToSide={false}
       gapAbove
     />
@@ -184,39 +297,122 @@ function ScratchpadPane({ scratchpad }: { scratchpad: TaskScratchpad | null | un
 }
 
 function MemoryPane({
+  task,
+  projectId,
   projectPath,
+  dir,
+  hasIndex,
+  entries,
+  notices,
   repoPaths,
-  onOpenTaskFile,
+  activePath,
+  onOpenFile,
+  creating,
+  onCreated,
 }: {
-  projectPath: string | null;
+  task: Task;
+  projectId: string;
+  projectPath: string;
+  dir: string;
+  hasIndex: boolean;
+  entries: MemoryEntry[];
+  notices: string[];
   repoPaths: readonly string[];
-  onOpenTaskFile: (path: string) => void;
+  activePath: string | null;
+  onOpenFile: (path: string) => void;
+  creating: KnownMemoryType | null;
+  onCreated: () => void;
 }) {
-  const { memory, error } = useProjectMemory(projectPath ?? '', projectPath === null);
-  const groups = useMemo(() => memoryGroups(memory?.entries ?? []), [memory]);
+  const [query, setQuery] = useState('');
+  const issues = useMemo(
+    () => new Map(listMemories(entries).map((m) => [m.entry.file, m])),
+    [entries],
+  );
+  const groups = useMemo(
+    () => memoryGroups(entries.filter((e) => memoryMatches(e, query))),
+    [entries, query],
+  );
   const instructions = useMemo(() => instructionFiles(repoPaths), [repoPaths]);
-  if (error)
-    return <EmptyState illustration={Brain} title="Could not read memory" description={error} />;
-  if (!memory) return null;
+  // Shown, the memories are seen: the project row's "new" badge clears, and
+  // stays clear while the pane follows the folder.
+  const markMemorySeen = useRuntime((s) => s.markMemorySeen);
+  useEffect(() => {
+    void markMemorySeen(projectId);
+  }, [markMemorySeen, projectId, entries]);
 
-  const noMemory = groups.length === 0 && !memory.hasIndex;
+  const pathOf = (file: string) => `${dir}/${file}`;
+  const create = async (name: string) => {
+    if (!creating) return;
+    onCreated();
+    const made = await attempt(
+      window.electronAPI.memoryCreate({ projectPath, name, type: creating }),
+      'Could not make the memory',
+    );
+    if (made) onOpenFile(made.path);
+  };
+  const remove = async (entry: MemoryEntry) => {
+    const ok = await confirm({
+      message: hasIndex
+        ? `Move "${entry.name}" to the Trash and drop its line from ${MEMORY_INDEX_FILE}?`
+        : `Move "${entry.name}" to the Trash?`,
+      confirmLabel: 'Move to Trash',
+      destructive: true,
+    });
+    if (!ok) return;
+    await attempt(
+      window.electronAPI.memoryDelete({ projectPath, file: entry.file }),
+      'Could not delete the memory',
+    );
+  };
+
+  const noMemory = entries.length === 0 && !hasIndex;
+  const now = Date.now() / 1000;
   return (
     <div className="scrollbar-thin-hover min-h-0 flex-1 overflow-y-auto px-1.5 pt-2 pb-2">
-      {noMemory ? (
+      {notices.map((notice) => (
+        <Notice key={notice} className="mx-1 mb-2">
+          {notice}
+        </Notice>
+      ))}
+      {creating && (
+        <NewMemoryField
+          type={creating}
+          onSubmit={(name) => void create(name)}
+          onCancel={onCreated}
+        />
+      )}
+      {entries.length > 0 && (
+        <div className="mx-1 mb-1">
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && query) {
+                e.stopPropagation();
+                setQuery('');
+              }
+            }}
+            placeholder="Search memories"
+            aria-label="Search memories"
+          />
+        </div>
+      )}
+      {noMemory && !creating ? (
         <EmptyState
           illustration={Brain}
           title="No memories yet"
-          description="Claude writes memories here as it learns about the project."
+          description="Claude writes memories here as it learns about the project. Add one with +."
           className="flex-none"
         />
       ) : (
         <>
-          {memory.hasIndex && (
+          {hasIndex && !query.trim() && (
             <ListRow
               size="sm"
+              selected={activePath === pathOf(MEMORY_INDEX_FILE)}
               leading={<List size={14} strokeWidth={1.8} />}
               description="Index, loaded at session start"
-              onClick={() => openPlainFile(memory.dir, MEMORY_INDEX_FILE)}
+              onClick={() => onOpenFile(pathOf(MEMORY_INDEX_FILE))}
             >
               {MEMORY_INDEX_FILE}
             </ListRow>
@@ -224,36 +420,123 @@ function MemoryPane({
           {groups.map((group) => (
             <section key={group.type}>
               <GroupHeading label={MEMORY_TYPE_LABELS[group.type]} count={group.entries.length} />
-              {group.entries.map((entry) => (
-                <ListRow
-                  key={entry.file}
-                  size="sm"
-                  description={entry.description || undefined}
-                  title={entry.file}
-                  onClick={() => openPlainFile(memory.dir, entry.file)}
-                >
-                  {entry.name}
-                </ListRow>
-              ))}
+              {group.entries.map((entry) => {
+                const listed = issues.get(entry.file);
+                const flags = (listed?.issues ?? []).filter((i) => i !== 'untyped');
+                return (
+                  <ContextMenu key={entry.file}>
+                    <ContextMenuTrigger asChild>
+                      <ListRow
+                        size="sm"
+                        selected={activePath === pathOf(entry.file)}
+                        description={entry.description || undefined}
+                        title={[
+                          `${entry.file} · edited ${formatRelativeTime(entry.mtimeMs / 1000, now)}`,
+                          ...(listed ? memoryIssueTexts(listed) : []),
+                        ].join('\n')}
+                        trailing={
+                          flags.length > 0
+                            ? flags.map((i) => MEMORY_ISSUE_LABELS[i]).join(' · ')
+                            : undefined
+                        }
+                        onClick={() => onOpenFile(pathOf(entry.file))}
+                      >
+                        {entry.name}
+                      </ListRow>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent>
+                      <ContextMenuItems
+                        items={[
+                          {
+                            label: 'Open',
+                            icon: FileText,
+                            onSelect: () => onOpenFile(pathOf(entry.file)),
+                          },
+                          {
+                            label: 'Mention in prompt',
+                            icon: AtSign,
+                            onSelect: () =>
+                              void typeIntoTask(task.id, memoryMention(pathOf(entry.file))),
+                          },
+                          'separator',
+                          {
+                            label: 'Copy path',
+                            icon: Link2,
+                            onSelect: () => copyText(pathOf(entry.file), 'path'),
+                          },
+                          {
+                            label: revealLabel(),
+                            icon: FolderOpen,
+                            onSelect: () => window.electronAPI.showItemInFolder(pathOf(entry.file)),
+                          },
+                          'separator',
+                          {
+                            label: 'Delete',
+                            icon: Trash2,
+                            destructive: true,
+                            onSelect: () => void remove(entry),
+                          },
+                        ]}
+                      />
+                    </ContextMenuContent>
+                  </ContextMenu>
+                );
+              })}
             </section>
           ))}
+          {query.trim() && groups.length === 0 && (
+            <p className="type-caption px-2.5 py-3">No matches</p>
+          )}
         </>
       )}
-      {instructions.length > 0 && (
+      {instructions.length > 0 && !query.trim() && (
         <section>
           <GroupHeading label="Instructions" count={instructions.length} />
           {instructions.map((path) => (
             <ListRow
               key={path}
               size="sm"
+              selected={activePath === path}
               leading={<FileText size={14} strokeWidth={1.8} />}
-              onClick={() => onOpenTaskFile(path)}
+              onClick={() => onOpenFile(path)}
             >
               {path}
             </ListRow>
           ))}
         </section>
       )}
+    </div>
+  );
+}
+
+/** "New memory"'s name, typed in place at the top of the list: Enter makes it, Escape or leaving drops it. */
+function NewMemoryField({
+  type,
+  onSubmit,
+  onCancel,
+}: {
+  type: KnownMemoryType;
+  onSubmit: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState('');
+  return (
+    <div className="mx-1 mb-2">
+      <Input
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onBlur={onCancel}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && name.trim()) onSubmit(name.trim());
+          if (e.key === 'Escape') {
+            e.stopPropagation();
+            onCancel();
+          }
+        }}
+        placeholder={`Name the ${MEMORY_TYPE_LABELS[type].toLowerCase()} memory`}
+        aria-label="New memory name"
+      />
     </div>
   );
 }

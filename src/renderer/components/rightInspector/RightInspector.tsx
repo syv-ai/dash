@@ -681,15 +681,16 @@ export function RightInspector({
   );
 
   // Agent: the session's scratchpad and the project's memory, alike in
-  // either mode. Their files open in the editor over everything (they are no
-  // task's worktree); the repo's CLAUDE.md files open here, like Files'.
+  // either mode. Their files open here, in the task's editor, as Files' do
+  // (A10): a scratchpad or memory file by its absolute path, plain.
   const agentView = (
     <AgentView
       task={task}
       pane={agentPane}
       onPane={setAgentPane}
       repoPaths={ws.data.repoPaths}
-      onOpenTaskFile={(path) => openFile(path, { preview: true })}
+      activePath={activePath(ws.layout)}
+      onOpenFile={(path) => openFile(path, { preview: true })}
     />
   );
 

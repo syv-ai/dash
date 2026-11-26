@@ -3,13 +3,26 @@ import * as path from 'path';
 import { ipcMain, shell } from 'electron';
 import { z } from 'zod';
 import { IpcError, parseArgs, errorResponse, ipcError } from './validate';
-import { readProjectMemory, resolveMemoryDir } from '../services/MemoryService';
+import {
+  createMemory,
+  deleteMemory,
+  readProjectMemory,
+  resolveMemoryDir,
+} from '../services/MemoryService';
 import { DatabaseService } from '../services/DatabaseService';
 import { markMemorySeen, newMemoryCounts } from '../services/memoryBadge';
 
 export const memoryProjectArgsSchema = z.object({
   projectPath: z.string().refine((p) => path.isAbsolute(p), 'must be an absolute path'),
 });
+
+const memoryCreateArgsSchema = z.looseObject({
+  name: z.string().trim().min(1).max(200),
+  type: z.enum(['user', 'feedback', 'project', 'reference']),
+});
+
+/** A file of the memory folder itself, by name; MemoryService checks it is a memory. */
+const memoryDeleteArgsSchema = z.looseObject({ file: z.string().min(1) });
 
 /**
  * `parseArgs` for the memory channels, which all name a project: the path must
@@ -45,11 +58,34 @@ export function registerMemoryIpc(): void {
     }
   });
 
-  // The memory modal opened on this project: its memories are no longer new.
+  // The project's memory was looked at (the Agent tab's Memory pane): its memories are no longer new.
   ipcMain.handle('memory:markSeen', (_event, raw: unknown) => {
     try {
       const { projectId } = parseArgs('memory:markSeen', z.object({ projectId: z.string() }), raw);
       if (DatabaseService.getProjects().some((p) => p.id === projectId)) markMemorySeen(projectId);
+      return { success: true, data: null };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  // The Agent tab's "New memory": main names the file and writes it.
+  ipcMain.handle('memory:create', async (_event, raw: unknown) => {
+    try {
+      const { projectPath } = parseProjectArgs('memory:create', raw);
+      const { name, type } = parseArgs('memory:create', memoryCreateArgsSchema, raw);
+      return { success: true, data: { path: await createMemory(projectPath, name, type) } };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  // The Memory pane's Delete: to the OS trash, so it can be put back.
+  ipcMain.handle('memory:delete', async (_event, raw: unknown) => {
+    try {
+      const { projectPath } = parseProjectArgs('memory:delete', raw);
+      const { file } = parseArgs('memory:delete', memoryDeleteArgsSchema, raw);
+      await deleteMemory(projectPath, file, (full) => shell.trashItem(full));
       return { success: true, data: null };
     } catch (error) {
       return errorResponse(error);
