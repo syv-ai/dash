@@ -124,8 +124,18 @@ export function isDispatchFailure(output: string): boolean {
 
 // ── `claude agents --json` ──────────────────────────────────
 
-const STATES: readonly SupervisorState[] = ['working', 'blocked', 'done', 'failed', 'stopped'];
-const STATUSES: readonly SupervisorStatus[] = ['busy', 'waiting', 'idle'];
+export const SUPERVISOR_STATES = [
+  'working',
+  'blocked',
+  'done',
+  'failed',
+  'stopped',
+] as const satisfies readonly SupervisorState[];
+export const SUPERVISOR_STATUSES = [
+  'busy',
+  'waiting',
+  'idle',
+] as const satisfies readonly SupervisorStatus[];
 
 const rowSchema = z.looseObject({
   id: z.string().optional(),
@@ -172,8 +182,8 @@ export function parseAgentsJson(stdout: string): SupervisorSession[] {
       cwd: r.cwd,
       kind: r.kind === 'background' || r.id ? 'background' : 'interactive',
       startedAt: r.startedAt ?? 0,
-      state: oneOf(r.state, STATES),
-      status: oneOf(r.status, STATUSES),
+      state: oneOf(r.state, SUPERVISOR_STATES),
+      status: oneOf(r.status, SUPERVISOR_STATUSES),
       waitingFor: r.waitingFor,
       pid: r.pid,
       detail: r.detail,

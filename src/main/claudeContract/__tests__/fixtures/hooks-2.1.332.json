@@ -1,0 +1,359 @@
+{
+  "claudeVersion": "2.1.332",
+  "source": "smoke-review S-hooks*.jsonl and lag/hooks.jsonl, scrubbed: strings replaced, tool input/output emptied",
+  "payloads": [
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "hook_event_name": "Notification",
+      "message": "<scrubbed>",
+      "notification_type": "permission_prompt"
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "hook_event_name": "Notification",
+      "message": "<scrubbed>",
+      "notification_type": "idle_prompt"
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "permission_mode": "default",
+      "effort": {
+        "level": "medium"
+      },
+      "hook_event_name": "PermissionRequest",
+      "tool_name": "Bash",
+      "tool_input": {},
+      "permission_suggestions": []
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "permission_mode": "default",
+      "agent_id": "a0000000000000001",
+      "agent_type": "general-purpose",
+      "effort": {
+        "level": "medium"
+      },
+      "hook_event_name": "PermissionRequest",
+      "tool_name": "Bash",
+      "tool_input": {},
+      "permission_suggestions": [
+        {
+          "type": "addDirectories",
+          "directories": ["<scrubbed>"],
+          "destination": "<scrubbed>"
+        }
+      ]
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "permission_mode": "default",
+      "effort": {
+        "level": "medium"
+      },
+      "hook_event_name": "PostToolBatch",
+      "tool_calls": [
+        {
+          "tool_name": "Bash",
+          "tool_input": {},
+          "tool_use_id": "toolu_fixture",
+          "tool_response": {}
+        }
+      ]
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "permission_mode": "default",
+      "agent_id": "a0000000000000001",
+      "agent_type": "general-purpose",
+      "effort": {
+        "level": "medium"
+      },
+      "hook_event_name": "PostToolBatch",
+      "tool_calls": [
+        {
+          "tool_name": "Read",
+          "tool_input": {},
+          "tool_use_id": "toolu_fixture",
+          "tool_response": {}
+        }
+      ]
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "permission_mode": "default",
+      "effort": {
+        "level": "medium"
+      },
+      "hook_event_name": "PostToolBatch",
+      "tool_calls": [
+        {
+          "tool_name": "Agent",
+          "tool_input": {},
+          "tool_use_id": "toolu_fixture",
+          "tool_response": {}
+        }
+      ]
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "permission_mode": "default",
+      "effort": {
+        "level": "medium"
+      },
+      "hook_event_name": "PostToolUse",
+      "tool_name": "Bash",
+      "tool_input": {},
+      "tool_response": {},
+      "tool_use_id": "toolu_fixture",
+      "duration_ms": 0
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "permission_mode": "default",
+      "effort": {
+        "level": "medium"
+      },
+      "hook_event_name": "PostToolUse",
+      "tool_name": "Agent",
+      "tool_input": {},
+      "tool_response": {},
+      "tool_use_id": "toolu_fixture",
+      "duration_ms": 0
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "permission_mode": "default",
+      "agent_id": "a0000000000000001",
+      "agent_type": "general-purpose",
+      "effort": {
+        "level": "medium"
+      },
+      "hook_event_name": "PostToolUse",
+      "tool_name": "Read",
+      "tool_input": {},
+      "tool_response": {},
+      "tool_use_id": "toolu_fixture",
+      "duration_ms": 0
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "permission_mode": "default",
+      "agent_id": "a0000000000000001",
+      "agent_type": "general-purpose",
+      "effort": {
+        "level": "medium"
+      },
+      "hook_event_name": "PostToolUse",
+      "tool_name": "Bash",
+      "tool_input": {},
+      "tool_response": {},
+      "tool_use_id": "toolu_fixture",
+      "duration_ms": 0
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "permission_mode": "default",
+      "effort": {
+        "level": "medium"
+      },
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "tool_input": {},
+      "tool_use_id": "toolu_fixture"
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "permission_mode": "default",
+      "effort": {
+        "level": "medium"
+      },
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Agent",
+      "tool_input": {},
+      "tool_use_id": "toolu_fixture"
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "permission_mode": "default",
+      "agent_id": "a0000000000000001",
+      "agent_type": "general-purpose",
+      "effort": {
+        "level": "medium"
+      },
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Read",
+      "tool_input": {},
+      "tool_use_id": "toolu_fixture"
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "permission_mode": "default",
+      "agent_id": "a0000000000000001",
+      "agent_type": "general-purpose",
+      "effort": {
+        "level": "medium"
+      },
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "tool_input": {},
+      "tool_use_id": "toolu_fixture"
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "hook_event_name": "SessionEnd",
+      "reason": "other"
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "permission_mode": "default",
+      "effort": {
+        "level": "medium"
+      },
+      "hook_event_name": "Stop",
+      "stop_hook_active": false,
+      "last_assistant_message": "<scrubbed>",
+      "background_tasks": [],
+      "session_crons": []
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "permission_mode": "default",
+      "effort": {
+        "level": "medium"
+      },
+      "hook_event_name": "Stop",
+      "stop_hook_active": false,
+      "last_assistant_message": "<scrubbed>",
+      "background_tasks": [
+        {
+          "id": "fixture-id",
+          "type": "subagent",
+          "status": "running",
+          "description": "<scrubbed>",
+          "agent_type": "general-purpose"
+        }
+      ],
+      "session_crons": []
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "agent_id": "a0000000000000001",
+      "agent_type": "general-purpose",
+      "hook_event_name": "SubagentStart"
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "permission_mode": "default",
+      "agent_id": "a0000000000000001",
+      "agent_type": "general-purpose",
+      "effort": {
+        "level": "medium"
+      },
+      "hook_event_name": "SubagentStop",
+      "stop_hook_active": false,
+      "agent_transcript_path": "/scrubbed/agent_transcript_path",
+      "last_assistant_message": "<scrubbed>",
+      "background_tasks": [
+        {
+          "id": "fixture-id",
+          "type": "subagent",
+          "status": "running",
+          "description": "<scrubbed>",
+          "agent_type": "general-purpose"
+        }
+      ],
+      "session_crons": []
+    },
+    {
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "transcript_path": "/scrubbed/transcript_path",
+      "cwd": "/scrubbed/cwd",
+      "scratchpad_dir": "/scrubbed/scratchpad_dir",
+      "prompt_id": "00000000-0000-4000-8000-000000000002",
+      "permission_mode": "default",
+      "hook_event_name": "UserPromptSubmit",
+      "prompt": "<scrubbed>",
+      "session_title": "<scrubbed>"
+    }
+  ]
+}

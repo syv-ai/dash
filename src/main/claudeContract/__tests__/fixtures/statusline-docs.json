@@ -1,0 +1,111 @@
+{
+  "cwd": "/current/working/directory",
+  "session_id": "abc123...",
+  "session_name": "my-session",
+  "prompt_id": "550e8400-e29b-41d4-a716-446655440000",
+  "transcript_path": "/path/to/transcript.jsonl",
+  "model": {
+    "id": "claude-opus-5-5",
+    "display_name": "Opus"
+  },
+  "workspace": {
+    "current_dir": "/current/working/directory",
+    "project_dir": "/original/project/directory",
+    "added_dirs": [],
+    "git_worktree": "feature-xyz",
+    "repo": {
+      "host": "github.com",
+      "owner": "anthropics",
+      "name": "claude-code"
+    }
+  },
+  "version": "2.1.90",
+  "output_style": {
+    "name": "default"
+  },
+  "cost": {
+    "total_cost_usd": 0.01234,
+    "total_duration_ms": 45000,
+    "total_api_duration_ms": 2300,
+    "total_lines_added": 156,
+    "total_lines_removed": 23
+  },
+  "context_window": {
+    "total_input_tokens": 15500,
+    "total_output_tokens": 1200,
+    "context_window_size": 200000,
+    "used_percentage": 8,
+    "remaining_percentage": 92,
+    "current_usage": {
+      "input_tokens": 8500,
+      "output_tokens": 1200,
+      "cache_creation_input_tokens": 5000,
+      "cache_read_input_tokens": 2000
+    }
+  },
+  "exceeds_200k_tokens": false,
+  "prompt_cache": {
+    "warm": true,
+    "caching_observed": true,
+    "ttl": "1h",
+    "expires_at": 1738429200,
+    "requests": 14,
+    "misses": 2,
+    "expected_rebuilds": 1,
+    "hit_ratio": 0.91,
+    "cache_write_tokens": 352000,
+    "miss_recache_tokens": 310200,
+    "last_miss_at": 1738425230,
+    "last_miss_cause": {
+      "causes": ["tools_changed"],
+      "tools_added": 2,
+      "tools_removed": 0
+    },
+    "miss_causes": {
+      "tools_changed": 2
+    },
+    "recache_tokens_if_cold": 45000
+  },
+  "fast_mode": false,
+  "effort": {
+    "level": "high"
+  },
+  "thinking": {
+    "enabled": true
+  },
+  "rate_limits": {
+    "five_hour": {
+      "used_percentage": 23.5,
+      "resets_at": 1738425600
+    },
+    "seven_day": {
+      "used_percentage": 41.2,
+      "resets_at": 1738857600
+    },
+    "spend_limit": {
+      "used_percentage": 62.8,
+      "resets_at": 1740787200,
+      "used_usd": 314.12,
+      "limit_usd": 500,
+      "period": "monthly"
+    }
+  },
+  "vim": {
+    "mode": "NORMAL"
+  },
+  "agent": {
+    "name": "security-reviewer"
+  },
+  "pr": {
+    "number": 1234,
+    "url": "https://github.com/anthropics/claude-code/pull/1234",
+    "review_state": "pending"
+  },
+  "worktree": {
+    "name": "my-feature",
+    "path": "/path/to/.claude/worktrees/my-feature",
+    "branch": "worktree-my-feature",
+    "original_cwd": "/path/to/project",
+    "original_branch": "main"
+  }
+}

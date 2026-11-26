@@ -1,0 +1,53 @@
+{
+  "claudeVersion": "2.1.332",
+  "source": "claude agents --json --all, one row per shape, scrubbed",
+  "rows": [
+    {
+      "id": "0000abcd",
+      "cwd": "/scrubbed/cwd",
+      "kind": "background",
+      "startedAt": 1,
+      "sessionId": "00000000-0000-4000-8000-000000000001",
+      "name": "<scrubbed>",
+      "state": "blocked"
+    },
+    {
+      "id": "0000abcd",
+      "cwd": "/scrubbed/cwd",
+      "kind": "background",
+      "startedAt": 1,
+      "sessionId": "00000000-0000-4000-8000-000000000001",
+      "name": "<scrubbed>",
+      "state": "done"
+    },
+    {
+      "id": "0000abcd",
+      "cwd": "/scrubbed/cwd",
+      "kind": "background",
+      "startedAt": 1,
+      "sessionId": "00000000-0000-4000-8000-000000000001",
+      "name": "<scrubbed>",
+      "state": "stopped"
+    },
+    {
+      "id": "0000abcd",
+      "cwd": "/scrubbed/cwd",
+      "kind": "background",
+      "startedAt": 1,
+      "sessionId": "00000000-0000-4000-8000-000000000001",
+      "name": "<scrubbed>",
+      "state": "failed"
+    },
+    {
+      "pid": 1,
+      "id": "0000abcd",
+      "cwd": "/scrubbed/cwd",
+      "kind": "background",
+      "startedAt": 1,
+      "sessionId": "00000000-0000-4000-8000-000000000001",
+      "name": "<scrubbed>",
+      "status": "busy",
+      "state": "working"
+    }
+  ]
+}
