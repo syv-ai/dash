@@ -392,6 +392,69 @@ describe('ActivityMonitor — supervisor reconcile (applySupervisor)', () => {
     });
   });
 
+  // H5, live (2.1.332): denying a prompt ("No" by its number key, or by the
+  // arrows and Enter) fires no hook, and only the listing ends the wait. The
+  // user stopped the turn, so that idle is seen, as an interrupt is.
+  describe('a wait the user denied (H5)', () => {
+    function prompted(): void {
+      activityMonitor.register('t1', 1);
+      activityMonitor.setToolStart('t1', 'Bash', { command: 'date > /tmp/x' });
+      activityMonitor.setWaitingForPermission('t1');
+      vi.advanceTimersByTime(WAIT_LISTING_GRACE_MS + 1);
+      activityMonitor.setWaitingForPermission('t1'); // the ~6 s notification
+    }
+
+    it('marks the idle the listing reports with no hook since the wait as interrupted', () => {
+      prompted();
+      activityMonitor.applySupervisor('t1', { state: 'idle' }, POLL);
+      expect(activityMonitor.getAll()['t1']).toEqual({ state: 'idle', interrupted: true });
+    });
+
+    it('still does when the listing read a stale busy in between', () => {
+      prompted();
+      activityMonitor.applySupervisor('t1', { state: 'busy' }, POLL);
+      vi.advanceTimersByTime(POLL + 1);
+      activityMonitor.applySupervisor('t1', { state: 'idle' }, POLL);
+      expect(activityMonitor.getAll()['t1']!.interrupted).toBe(true);
+    });
+
+    it('an approved prompt whose tool ran ends as a finished turn', () => {
+      prompted();
+      activityMonitor.applySupervisor('t1', { state: 'busy' }, POLL);
+      activityMonitor.setToolEnd('t1');
+      vi.advanceTimersByTime(POLL + 1);
+      activityMonitor.applySupervisor('t1', { state: 'idle' }, POLL);
+      expect(activityMonitor.getAll()['t1']!.interrupted).toBeUndefined();
+    });
+
+    it('an approved quick tool whose Stop lands before the listing is not interrupted', () => {
+      prompted();
+      activityMonitor.setToolEnd('t1');
+      activityMonitor.endTurn('t1');
+      activityMonitor.applySupervisor('t1', { state: 'idle' }, POLL);
+      expect(activityMonitor.getAll()['t1']!.interrupted).toBeUndefined();
+    });
+
+    // "No, and tell Claude what to do differently" goes on with the turn:
+    // its end is Claude's own.
+    it('a deny with feedback that Claude acts on ends as a finished turn', () => {
+      prompted();
+      activityMonitor.applySupervisor('t1', { state: 'busy' }, POLL);
+      activityMonitor.endTurn('t1');
+      vi.advanceTimersByTime(TURN_SETTLE_MS);
+      expect(activityMonitor.getAll()['t1']).toEqual({ state: 'idle' });
+    });
+
+    it('a later turn ending on the listing is not interrupted', () => {
+      prompted();
+      activityMonitor.applySupervisor('t1', { state: 'idle' }, POLL);
+      activityMonitor.setBusy('t1');
+      vi.advanceTimersByTime(POLL + 1);
+      activityMonitor.applySupervisor('t1', { state: 'idle' }, POLL);
+      expect(activityMonitor.getAll()['t1']!.interrupted).toBeUndefined();
+    });
+  });
+
   // H1, live: the listing marks the job `failed` a second after StopFailure,
   // with no detail; the hook's error says why, so it stays.
   it("keeps a StopFailure's error when the listing reports the same failure", () => {
@@ -482,6 +545,15 @@ describe('ActivityMonitor — Escape interrupt (setInterrupted)', () => {
     activityMonitor.setWaitingForPermission('t1');
     activityMonitor.setInterrupted('t1');
     expect(activityMonitor.getAll()['t1']!.state).toBe('idle');
+  });
+
+  // H5, live (2.1.332): Ctrl+C leaves a permission prompt up; the task
+  // went green for 1.2 s until the listing said waiting again.
+  it('Ctrl+C leaves a pending prompt waiting', () => {
+    activityMonitor.register('t1', 1);
+    activityMonitor.setWaitingForPermission('t1');
+    activityMonitor.setInterrupted('t1', 'ctrl-c');
+    expect(activityMonitor.getAll()['t1']!.state).toBe('waiting');
   });
 
   it('is a no-op while idle — Escape there just closes menus', () => {

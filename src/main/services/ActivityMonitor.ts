@@ -35,6 +35,10 @@ interface PtyActivity {
   settle: ReturnType<typeof setTimeout> | null;
   /** When the current `waiting` began. */
   waitSince: number;
+  /** A hook opened a wait and no main-turn hook has spoken since. Denying a
+   *  permission prompt fires none, so an idle the listing then reports is
+   *  the user's deny: `interrupted` (H5). */
+  waitUnheard: boolean;
 }
 
 /** How long a turn's end waits before the task shows idle. A finished
@@ -145,6 +149,7 @@ class ActivityMonitorImpl {
       lastSubagentTime: 0,
       settle: null,
       waitSince: 0,
+      waitUnheard: false,
     };
   }
 
@@ -248,6 +253,12 @@ class ActivityMonitorImpl {
     a.error = nextError;
     a.detail = nextDetail;
     if (next !== 'idle') a.interrupted = false;
+    if (next === 'idle' && a.waitUnheard) {
+      // A false mark costs a chime; a missed deny, a false blue (H5).
+      console.log(`[ActivityMonitor] wait ended with no hook: denied, ptyId=${ptyId}`);
+      a.interrupted = true;
+    }
+    if (next !== 'busy' && next !== 'waiting') a.waitUnheard = false;
     if (next !== 'busy') a.tool = null;
     if (next === 'idle' || next === 'stopped') a.compacting = false;
     this.emitAll();
@@ -276,6 +287,7 @@ class ActivityMonitorImpl {
     const a = this.activities.get(ptyId);
     if (!a) return;
     a.lastHookTime = Date.now();
+    a.waitUnheard = false;
     this.cancelSettle(a);
     this.endWork(a);
     // Clears tool and compacting defensively even when already idle —
@@ -298,6 +310,7 @@ class ActivityMonitorImpl {
     const a = this.activities.get(ptyId);
     if (!a) return;
     a.lastHookTime = Date.now();
+    a.waitUnheard = false;
     this.cancelSettle(a);
     a.mainTurn = true;
     if (!selfStarted) a.interrupted = false;
@@ -315,6 +328,7 @@ class ActivityMonitorImpl {
     this.cancelSettle(a);
     if (a.state === 'waiting') return;
     a.waitSince = a.lastHookTime;
+    a.waitUnheard = true;
     a.state = 'waiting';
     a.tool = null;
     a.detail = null;
@@ -331,6 +345,7 @@ class ActivityMonitorImpl {
     const a = this.activities.get(ptyId);
     if (!a || a.state !== 'waiting') return;
     a.lastHookTime = Date.now();
+    a.waitUnheard = false;
     this.cancelSettle(a);
     a.state = 'busy';
     a.detail = null;
@@ -339,8 +354,8 @@ class ActivityMonitorImpl {
 
   /**
    * The user pressed Escape or Ctrl+C in the agent pane. Claude Code treats
-   * either as an interrupt while a turn is running or a permission prompt is
-   * up, and — by design — does not fire the Stop hook for it, so nothing else
+   * either as an interrupt while a turn is running, and Escape also while a
+   * permission prompt is up (Ctrl+C leaves it), and — by design — does not fire the Stop hook for it, so nothing else
    * brings the dot back from "running". The supervisor listing can't be
    * relied on either: its `status` goes stale (a `done` job has reported
    * `busy` for hours), and its idle lands a poll or two later. So the
@@ -352,6 +367,8 @@ class ActivityMonitorImpl {
   setInterrupted(ptyId: string, key: 'escape' | 'ctrl-c' = 'escape'): void {
     const a = this.activities.get(ptyId);
     if (!a) return;
+    // Ctrl+C leaves a permission prompt up (live, 2.1.332, H5).
+    if (a.state === 'waiting' && key === 'ctrl-c') return;
     // Busy on subagents alone means Claude sits at its prompt.
     const parked = a.state === 'busy' && !a.mainTurn && a.subagents.size > 0;
     if (a.state === 'waiting' || (a.state === 'busy' && !parked)) {
@@ -366,6 +383,7 @@ class ActivityMonitorImpl {
       return;
     }
     a.lastHookTime = Date.now();
+    a.waitUnheard = false;
     this.cancelSettle(a);
     a.state = a.subagents.size > 0 ? 'busy' : 'idle';
     a.tool = null;
@@ -386,6 +404,7 @@ class ActivityMonitorImpl {
     const a = this.activities.get(ptyId);
     if (!a) return false;
     a.lastHookTime = Date.now();
+    a.waitUnheard = false;
     const cleared = a.tool !== null || a.compacting;
     a.mainTurn = false;
     a.tool = null;
@@ -448,6 +467,7 @@ class ActivityMonitorImpl {
     const a = this.activities.get(ptyId);
     if (!a) return;
     a.lastHookTime = Date.now();
+    a.waitUnheard = false;
     this.cancelSettle(a);
     a.mainTurn = true;
     a.tool = { toolName, label: buildToolLabel(toolName, toolInput) };
@@ -463,6 +483,7 @@ class ActivityMonitorImpl {
     const a = this.activities.get(ptyId);
     if (!a) return;
     a.lastHookTime = Date.now();
+    a.waitUnheard = false;
     a.tool = null;
     this.emitAll();
   }
@@ -472,6 +493,7 @@ class ActivityMonitorImpl {
     const a = this.activities.get(ptyId);
     if (!a) return;
     a.lastHookTime = Date.now();
+    a.waitUnheard = false;
     this.cancelSettle(a);
     this.endWork(a);
     a.state = 'error';
