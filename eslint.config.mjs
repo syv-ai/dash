@@ -113,4 +113,15 @@ export default tseslint.config(
       'no-restricted-syntax': 'off',
     },
   },
+  // One way to raise a toast: components/ui/toast (on sonner, headless).
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/renderer/components/ui/toast.ts', 'src/renderer/components/ui/Toaster.tsx'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { paths: [{ name: 'sonner', message: 'Use components/ui/toast.' }] },
+      ],
+    },
+  },
 );
