@@ -17,13 +17,19 @@ export interface TaskStateRow {
 export interface TaskStateList {
   /** Needs you, failed, working, done — in that order. */
   active: TaskStateRow[];
-  /** Idle and sleeping tasks, most recently updated first. */
+  /** Idle and sleeping tasks (at rest), most recently updated first. */
   idle: TaskStateRow[];
 }
 
 /** Every state, in list order. */
-export const STATE_ORDER: AgentState[] = ['needs', 'fail', 'work', 'done', 'idle'];
-const ACTIVE_ORDER = STATE_ORDER.filter((s) => s !== 'idle');
+export const STATE_ORDER: AgentState[] = ['needs', 'fail', 'work', 'done', 'idle', 'asleep'];
+
+/** Idle or asleep: nothing to tell the user, so the row is dimmed. */
+export function isAtRest(state: AgentState): boolean {
+  return state === 'idle' || state === 'asleep';
+}
+
+const ACTIVE_ORDER = STATE_ORDER.filter((s) => !isAtRest(s));
 
 /** What each state is called where words are needed (labels, group headings). */
 export const STATE_LABELS: Record<AgentState, string> = {
@@ -32,6 +38,7 @@ export const STATE_LABELS: Record<AgentState, string> = {
   work: 'Working',
   done: 'Done',
   idle: 'Idle',
+  asleep: 'Sleeping',
 };
 
 const ERROR_LABELS: Record<ActivityError['type'], string> = {
@@ -49,8 +56,8 @@ export function failureReason(error: ActivityError | undefined): string {
 
 /**
  * A task's agent state. `waiting` needs you, `error` failed, `busy` works; an
- * idle session is done until the user has seen it. A sleeping (`stopped`)
- * session and one that never ran are plain idle.
+ * idle session is done until the user has seen it, then idle. A sleeping
+ * (`stopped`) session and one that never ran are asleep: no live session.
  */
 export function agentState(info: ActivityInfo | undefined, unseen: boolean): AgentState {
   switch (info?.state) {
@@ -63,7 +70,7 @@ export function agentState(info: ActivityInfo | undefined, unseen: boolean): Age
     case 'idle':
       return unseen ? 'done' : 'idle';
     default:
-      return 'idle';
+      return 'asleep';
   }
 }
 
@@ -106,7 +113,7 @@ export function orderTasksByState(
 
   return {
     active: ACTIVE_ORDER.flatMap((s) => rows.filter((r) => r.state === s)),
-    idle: rows.filter((r) => r.state === 'idle'),
+    idle: rows.filter((r) => isAtRest(r.state)),
   };
 }
 

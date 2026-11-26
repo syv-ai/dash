@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ActivityInfo, ActivityState, Task } from '../../../../shared/types';
-import { getProjectActivity } from '../projectActivity';
+import { getProjectActivity, projectActivityDot } from '../projectActivity';
 
 const task = (id: string, over: Partial<Task> = {}): Task =>
   ({ id, projectId: 'p', archivedAt: null, ...over }) as Task;
@@ -36,5 +36,12 @@ describe('getProjectActivity', () => {
     expect(
       getProjectActivity([task('a', { archivedAt: '2026-01-01' })], states({ a: 'busy' })),
     ).toBeNull();
+  });
+});
+
+describe('projectActivityDot', () => {
+  it('gives a project whose live sessions sit idle the idle dot, and one with none no dot', () => {
+    expect(projectActivityDot('idle')?.state).toBe('idle');
+    expect(projectActivityDot(null)).toBeNull();
   });
 });

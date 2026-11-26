@@ -60,11 +60,7 @@ function TaskFinderList({ onSelectTask }: Pick<TaskFinderProps, 'onSelectTask'>)
                     close();
                   }}
                 >
-                  {state === 'idle' ? (
-                    <span className="size-1.5 shrink-0" />
-                  ) : (
-                    <StatusDot state={state} />
-                  )}
+                  <StatusDot state={state} />
                   <span className="min-w-0 flex-1 truncate">{task.name}</span>
                   <span className="shrink-0 text-xs text-ink-3">{projectName(task.projectId)}</span>
                 </CommandItem>

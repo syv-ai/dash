@@ -23,13 +23,13 @@ interface ForeignSessionsSectionProps {
   onSelectTask: (projectId: string, taskId: string) => void;
 }
 
-/** A session's state as a task dot; sleeping and idle sessions get none. */
-function sessionDot(s: SupervisorSession): { state: AgentState; label: string } | null {
+/** A session's state as a task dot. */
+function sessionDot(s: SupervisorSession): { state: AgentState; label: string } {
   if (s.state === 'failed') return { state: 'fail', label: 'Failed' };
-  if (s.state === 'stopped' || s.pid === undefined) return null;
+  if (s.state === 'stopped' || s.pid === undefined) return { state: 'asleep', label: 'Sleeping' };
   if (s.status === 'busy') return { state: 'work', label: 'Working' };
   if (s.status === 'waiting') return { state: 'needs', label: s.waitingFor ?? 'Waiting' };
-  return null;
+  return { state: 'idle', label: 'Idle' };
 }
 
 /**
@@ -87,13 +87,7 @@ export function ForeignSessionsSection({ project, onSelectTask }: ForeignSession
                 as="div"
                 size="sm"
                 dimmed
-                leading={
-                  dot ? (
-                    <StatusDot state={dot.state} label={dot.label} />
-                  ) : (
-                    <span className="size-1.5" />
-                  )
-                }
+                leading={<StatusDot state={dot.state} label={dot.label} />}
                 trailing={
                   <>
                     <span className="text-xs group-hover/foreign:hidden">{meta}</span>

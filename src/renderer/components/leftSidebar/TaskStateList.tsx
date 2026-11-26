@@ -19,6 +19,7 @@ import { useRuntime } from '../../stores/runtimeStore';
 import {
   IDLE_LIMIT,
   STATE_LABELS,
+  isAtRest,
   visibleIdleRows,
   type TaskStateList as Rows,
   type TaskStateRow,
@@ -103,7 +104,7 @@ export function TaskStateList({
         <ListRow
           dimmed
           size="sm"
-          leading={<span className="size-1.5" />}
+          leading={<StatusDot state="asleep" />}
           onClick={() => setShowAllIdle((v) => !v)}
         >
           {showAllIdle ? 'Less' : `More (${hiddenIdle})`}
@@ -130,14 +131,8 @@ function TaskStateRowItem({
       <ContextMenuTrigger asChild>
         <ListRow
           selected={selected}
-          dimmed={state === 'idle'}
-          leading={
-            state === 'idle' ? (
-              <span className="size-1.5" />
-            ) : (
-              <StatusDot state={state} label={STATE_LABELS[state]} />
-            )
-          }
+          dimmed={isAtRest(state)}
+          leading={<StatusDot state={state} label={STATE_LABELS[state]} />}
           description={reason && <ReasonText state={state}>{reason}</ReasonText>}
           // The name truncates first; the project keeps up to 6rem.
           trailing={projectName && <span className="max-w-24 truncate">{projectName}</span>}

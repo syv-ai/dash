@@ -23,8 +23,8 @@ export function getProjectActivity(
 }
 
 /**
- * The dot a collapsed project shows for its rolled-up activity, or none: a
- * project whose live sessions all sit idle gets no dot, like an idle task.
+ * The dot a collapsed project shows for its rolled-up activity, or none when
+ * no session is live: idle sessions get the idle dot, like an idle task.
  */
 export function projectActivityDot(
   activity: ProjectActivity,
@@ -36,6 +36,8 @@ export function projectActivityDot(
       return { state: 'needs', label: 'A task needs you' };
     case 'busy':
       return { state: 'work', label: 'Claude is working' };
+    case 'idle':
+      return { state: 'idle', label: 'Claude is idle' };
     default:
       return null;
   }

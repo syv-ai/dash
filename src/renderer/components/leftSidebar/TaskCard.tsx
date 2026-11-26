@@ -10,7 +10,7 @@ import { PrBadge } from '../ui/PrBadge';
 import { SetupStatus } from '../task/SetupStatus';
 import type { DragHandlers } from '../../hooks/useDragReorder';
 import { cn } from '../../lib/cn';
-import { STATE_LABELS, agentState, failureReason } from './taskStates';
+import { STATE_LABELS, agentState, failureReason, isAtRest } from './taskStates';
 
 interface TaskCardProps {
   task: Task;
@@ -72,7 +72,7 @@ export function TaskCard({
         role="button"
         tabIndex={0}
         selected={isActive}
-        dimmed={state === 'idle'}
+        dimmed={isAtRest(state)}
         onClick={onSelect}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -81,8 +81,8 @@ export function TaskCard({
           }
         }}
         leading={
-          state === 'idle' ? (
-            <span className="size-1.5" />
+          state === 'asleep' ? (
+            <StatusDot state={state} />
           ) : (
             <Tooltip content={dotTooltip(state, activityInfo)}>
               <span className="flex">

@@ -24,9 +24,10 @@ describe('agentState', () => {
     expect(agentState({ state: 'idle' }, false)).toBe('idle');
   });
 
-  it('treats a sleeping session and no session as idle, even unseen', () => {
-    expect(agentState({ state: 'stopped' }, true)).toBe('idle');
-    expect(agentState(undefined, true)).toBe('idle');
+  it('keeps a live session at rest apart from a sleeping one or none, so it keeps its dot', () => {
+    expect(agentState({ state: 'idle' }, false)).toBe('idle');
+    expect(agentState({ state: 'stopped' }, true)).toBe('asleep');
+    expect(agentState(undefined, true)).toBe('asleep');
   });
 });
 
