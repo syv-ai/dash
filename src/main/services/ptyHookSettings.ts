@@ -16,6 +16,7 @@ import {
   entryIsDashOwned,
   mergeHookEntries,
 } from './hookSettingsMerge';
+import { WAIT_NOTIFICATIONS } from './hookPayload';
 
 /**
  * Generation of `.claude/settings.local.json` — the hooks, statusLine, commit
@@ -206,10 +207,11 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
   const dashEntries: Partial<Record<DashHookEvent, HookEntry[]>> = {
     Stop: [{ matcher: '', hooks: [dashCmd('stop')] }],
     UserPromptSubmit: [{ matcher: '', hooks: [inboxCmd('busy')] }],
-    Notification: [
-      { matcher: 'permission_prompt', hooks: [dashCmd('notification')] },
-      { matcher: 'idle_prompt', hooks: [dashCmd('notification')] },
-    ],
+    // One entry per type Dash acts on (H2); the rest never reach Dash.
+    Notification: Object.keys(WAIT_NOTIFICATIONS).map((matcher) => ({
+      matcher,
+      hooks: [dashCmd('notification')],
+    })),
     PreToolUse: buildPreToolUseHooks(dashCmd, guard),
     PostToolUse: [{ matcher: '*', hooks: [dashCmd('tool-end', true)] }],
     PreCompact: [{ matcher: '*', hooks: [dashCmd('compact-start', true)] }],
@@ -226,6 +228,13 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
     // Both predate MIN_CLAUDE_VERSION.
     SubagentStart: [{ matcher: '', hooks: [dashCmd('subagent-start')] }],
     SubagentStop: [{ matcher: '', hooks: [dashCmd('subagent-stop')] }],
+    // An MCP elicitation turns the task to needs at once (the
+    // elicitation_dialog notification waits ~6 s) and back when answered
+    // (H2). Async, so Claude Code ignores whatever the hook prints: it can
+    // never answer, decline or rewrite the elicitation for the user. Both
+    // predate MIN_CLAUDE_VERSION.
+    Elicitation: [{ matcher: '', hooks: [dashCmd('elicitation', true)] }],
+    ElicitationResult: [{ matcher: '', hooks: [dashCmd('elicitation-result', true)] }],
   };
 
   // SessionStart(clear|compact) → defensive idle. /clear and auto-compact

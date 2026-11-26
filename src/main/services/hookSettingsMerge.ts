@@ -41,6 +41,8 @@ export const DASH_HOOK_EVENTS = [
   'PermissionRequest',
   'SubagentStart',
   'SubagentStop',
+  'Elicitation',
+  'ElicitationResult',
 ] as const;
 
 export type DashHookEvent = (typeof DASH_HOOK_EVENTS)[number];
@@ -79,6 +81,8 @@ export const DASH_HOOK_ENDPOINTS = [
   'permission-request',
   'subagent-start',
   'subagent-stop',
+  'elicitation',
+  'elicitation-result',
 ] as const;
 
 export type DashHookEndpoint = (typeof DASH_HOOK_ENDPOINTS)[number];

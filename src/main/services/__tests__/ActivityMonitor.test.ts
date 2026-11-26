@@ -61,6 +61,23 @@ describe('ActivityMonitor — state transitions (hooks-only)', () => {
     expect(activityMonitor.getAll()['pty1']!.state).toBe('waiting');
   });
 
+  it('resumeFromWait lifts a waiting task to busy once its prompt is answered', () => {
+    activityMonitor.register('pty1', 12345);
+    activityMonitor.setBusy('pty1');
+    activityMonitor.setWaitingForPermission('pty1');
+    activityMonitor.resumeFromWait('pty1');
+    expect(activityMonitor.getAll()['pty1']!.state).toBe('busy');
+  });
+
+  it('resumeFromWait leaves a task that is not waiting alone', () => {
+    activityMonitor.register('pty1', 12345);
+    activityMonitor.resumeFromWait('pty1');
+    expect(activityMonitor.getAll()['pty1']!.state).toBe('idle');
+    activityMonitor.setError('pty1', { type: 'server_error' });
+    activityMonitor.resumeFromWait('pty1');
+    expect(activityMonitor.getAll()['pty1']!.state).toBe('error');
+  });
+
   it('setError transitions to error and carries type + message', () => {
     activityMonitor.register('pty1', 12345);
     activityMonitor.setError('pty1', { type: 'rate_limit', message: 'Rate limited' });

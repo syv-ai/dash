@@ -15,6 +15,7 @@ import {
   statusLineTaskId,
   stopFailureError,
   subagentId,
+  WAIT_NOTIFICATIONS,
 } from './hookPayload';
 import { setTaskInbox } from './taskInbox';
 import { claudeConfigDir } from '../utils/claudePaths';
@@ -283,20 +284,47 @@ class HookServerImpl {
               const notificationType =
                 typeof payload.notification_type === 'string' ? payload.notification_type : '';
               const message = typeof payload.message === 'string' ? payload.message : undefined;
+              const effect = WAIT_NOTIFICATIONS[notificationType];
 
-              if (notificationType === 'permission_prompt') {
+              // These notifications come ~6 s into a wait, and only when the
+              // user seems away: the state may already be set by the instant
+              // PermissionRequest/Elicitation hooks, so they mostly alert.
+              if (effect === 'needs') {
                 activityMonitor.setWaitingForPermission(ptyId);
-                hookEvents.emit('permission-prompt', { ptyId });
+                if (notificationType === 'permission_prompt') {
+                  hookEvents.emit('permission-prompt', { ptyId });
+                }
                 const taskName = this.getTaskName(ptyId);
-                const notifBody = message
-                  ? `${taskName}: ${message}`
-                  : `${taskName} needs permission`;
-                this.showDesktopNotification(ptyId, notifBody);
-              } else if (notificationType === 'idle_prompt') {
+                this.showDesktopNotification(
+                  ptyId,
+                  message ? `${taskName}: ${message}` : `${taskName} needs you`,
+                );
+              } else if (effect === 'answered') {
+                activityMonitor.resumeFromWait(ptyId);
+              } else if (effect === 'idle') {
                 activityMonitor.setIdle(ptyId);
                 this.showDesktopNotification(ptyId);
               }
 
+              res.writeHead(200);
+              res.end();
+            });
+            return;
+          }
+
+          // An MCP server asks the user for input (H2).
+          if (pathname === '/hook/elicitation') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+              activityMonitor.setWaitingForPermission(ptyId);
+              res.writeHead(200);
+              res.end();
+            });
+            return;
+          }
+
+          if (pathname === '/hook/elicitation-result') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+              activityMonitor.resumeFromWait(ptyId);
               res.writeHead(200);
               res.end();
             });

@@ -16,6 +16,23 @@ export function stopFailureError(payload: Record<string, unknown>): ActivityErro
 }
 
 /**
+ * What each Notification `notification_type` Dash registers means for the
+ * task (H2; the types are listed at code.claude.com/docs/en/hooks):
+ * `needs` it waits on the user, `answered` a wait ended and the work goes
+ * on, `idle` it has sat at the prompt for a minute. Types missing here are
+ * about other sessions (agent view) or ask nothing of the user.
+ */
+export const WAIT_NOTIFICATIONS: Readonly<Record<string, 'needs' | 'answered' | 'idle'>> = {
+  permission_prompt: 'needs',
+  elicitation_dialog: 'needs',
+  elicitation_url_dialog: 'needs',
+  quota_auto_resume_stale: 'needs',
+  elicitation_response: 'answered',
+  elicitation_complete: 'answered',
+  idle_prompt: 'idle',
+};
+
+/**
  * True for a hook fired inside a subagent: Claude Code sets `agent_id` only
  * there. A subagent's tool calls are not the task's own turn, so they don't
  * drive the main turn's state or tool label; SubagentStart/SubagentStop

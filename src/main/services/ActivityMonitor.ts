@@ -296,6 +296,21 @@ class ActivityMonitorImpl {
   }
 
   /**
+   * The prompt a task waited on was answered and the work goes on (an MCP
+   * elicitation answered). Only lifts `waiting`: an answer arriving after
+   * the turn moved on changes nothing.
+   */
+  resumeFromWait(ptyId: string): void {
+    const a = this.activities.get(ptyId);
+    if (!a || a.state !== 'waiting') return;
+    a.lastHookTime = Date.now();
+    this.cancelSettle(a);
+    a.state = 'busy';
+    a.detail = null;
+    this.emitAll();
+  }
+
+  /**
    * The user pressed Escape or Ctrl+C in the agent pane. Claude Code treats
    * either as an interrupt while a turn is running or a permission prompt is
    * up, and — by design — does not fire the Stop hook for it, so nothing else

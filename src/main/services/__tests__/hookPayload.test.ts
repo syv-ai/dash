@@ -6,7 +6,45 @@ import {
   stopFailureError,
   subagentId,
   statusLineTaskId,
+  WAIT_NOTIFICATIONS,
 } from '../hookPayload';
+
+// Notification types per code.claude.com/docs/en/hooks (Claude Code 2.1.332).
+describe('WAIT_NOTIFICATIONS', () => {
+  it('turns every prompt that waits on the user into needs', () => {
+    for (const type of [
+      'permission_prompt',
+      'elicitation_dialog',
+      'elicitation_url_dialog',
+      'quota_auto_resume_stale',
+    ]) {
+      expect(WAIT_NOTIFICATIONS[type], type).toBe('needs');
+    }
+  });
+
+  it('lifts the wait when an elicitation is answered or completes', () => {
+    expect(WAIT_NOTIFICATIONS.elicitation_response).toBe('answered');
+    expect(WAIT_NOTIFICATIONS.elicitation_complete).toBe('answered');
+  });
+
+  it('keeps idle_prompt as idle', () => {
+    expect(WAIT_NOTIFICATIONS.idle_prompt).toBe('idle');
+  });
+
+  it('ignores types about other sessions or that ask nothing of the user', () => {
+    for (const type of [
+      'agent_needs_input',
+      'agent_completed',
+      'auth_success',
+      'auth_storage_failure',
+      'quota_auto_resume_fired',
+      'quota_auto_resume_disabled',
+      'plugin_notification',
+    ]) {
+      expect(WAIT_NOTIFICATIONS[type], type).toBeUndefined();
+    }
+  });
+});
 
 // StopFailure input per code.claude.com/docs/en/hooks (Claude Code 2.1.332):
 // the type is `error`, with optional `error_details` and the rendered text in
