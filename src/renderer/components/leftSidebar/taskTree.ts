@@ -1,7 +1,7 @@
 /*
- * The Tasks view as the shared tree's rows (`ui/Tree`), pure: favourites
- * under their heading, the live tasks, then "Inactive sessions", a branch
- * holding the sleeping ones.
+ * The Tasks view as the shared tree's rows (`ui/Tree`), pure: favourites at
+ * the top (no heading: their always-shown star says it, T13), the live
+ * tasks, then "Inactive sessions", a branch holding the sleeping ones.
  */
 import type { TreeNode } from '../ui/treeNav';
 import type { TaskGroups, TaskStateRow } from './taskStates';
@@ -9,8 +9,6 @@ import type { TaskGroups, TaskStateRow } from './taskStates';
 export type TaskTreeRow = TreeNode &
   (
     | { kind: 'task'; row: TaskStateRow }
-    /** The Favourites group's heading. */
-    | { kind: 'heading'; label: string }
     /** Room between groups. */
     | { kind: 'gap' }
     /** "Inactive sessions": the sleeping tasks, a branch. */
@@ -32,16 +30,7 @@ export function taskTreeRows(groups: TaskGroups, inactiveOpen: boolean): TaskTre
   const gap = (key: string) => {
     if (rows.length > 0) rows.push({ kind: 'gap', key, depth: 0, focusable: false });
   };
-  if (groups.favorites.length > 0) {
-    rows.push({
-      kind: 'heading',
-      key: 'h:favorites',
-      label: 'Favourites',
-      depth: -1,
-      focusable: false,
-    });
-    rows.push(...groups.favorites.map((r) => taskRow(r)));
-  }
+  rows.push(...groups.favorites.map((r) => taskRow(r)));
   if (groups.news.length > 0) {
     gap('g:news');
     rows.push(...groups.news.map((r) => taskRow(r)));

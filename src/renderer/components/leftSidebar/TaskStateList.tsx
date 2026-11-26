@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from 'react';
 import { FolderPlus } from 'lucide-react';
 import type { ContextUsage, Project, Task } from '../../../shared/types';
-import { Tree, TreeHeading, TreeRow, ownNode, type TreeRowContext } from '../ui/Tree';
+import { Tree, TreeRow, ownNode, type TreeRowContext } from '../ui/Tree';
 import { HoverSwapSlot } from '../ui/HoverSwapSlot';
 import { StatusDot, type AgentState } from '../ui/StatusDot';
 import { EmptyState } from '../ui/EmptyState';
@@ -89,7 +89,6 @@ export function TaskStateList({
       estimateSize={estimate}
       renderRow={(r, ctx) => {
         if (r.kind === 'gap') return <div className="h-4" />;
-        if (r.kind === 'heading') return <TreeHeading>{r.label}</TreeHeading>;
         if (r.kind === 'inactive') {
           return (
             <TreeRow ctx={ctx} dimmed size="sm" onActivate={() => setInactiveOpen(!inactiveOpen)}>
@@ -114,7 +113,6 @@ export function TaskStateList({
 /** A row's height before it is measured: a task is two lines. */
 function estimate(r: TaskTreeRow): number {
   if (r.kind === 'gap') return 16;
-  if (r.kind === 'heading') return 28;
   if (r.kind === 'inactive') return 32;
   return 54;
 }

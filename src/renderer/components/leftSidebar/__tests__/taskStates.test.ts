@@ -163,7 +163,7 @@ describe('taskGroups', () => {
   );
   const groups = taskGroups(list);
 
-  it('puts favourites first, whatever their state, live ones ahead of sleeping', () => {
+  it('puts favourites first, whatever their state, live ones ahead of sleeping (never in Inactive)', () => {
     expect(ids(groups.favorites)).toEqual(['favBusy', 'favSeen', 'favAsleep']);
   });
 

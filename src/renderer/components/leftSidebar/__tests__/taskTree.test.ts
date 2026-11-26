@@ -25,17 +25,8 @@ describe('taskTreeRows', () => {
     inactive: [row('s1', 'asleep'), row('s2', 'asleep')],
   });
 
-  it('heads the favourites, gaps the groups, and folds the sleeping ones under a count', () => {
-    expect(keys(all)).toEqual([
-      'h:favorites',
-      'f',
-      'g:news',
-      'w',
-      'g:resting',
-      'i',
-      'g:inactive',
-      'inactive',
-    ]);
+  it('puts the favourites first, unheaded, gaps the groups, and folds the sleeping ones under a count', () => {
+    expect(keys(all)).toEqual(['f', 'g:news', 'w', 'g:resting', 'i', 'g:inactive', 'inactive']);
     expect(taskTreeRows(all, false).at(-1)).toMatchObject({
       kind: 'inactive',
       count: 2,
