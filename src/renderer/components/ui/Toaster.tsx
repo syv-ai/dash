@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { Check, CircleX, Copy, Info, Loader2, TriangleAlert, X } from 'lucide-react';
 import { Toaster as Sonner, toast as sonner } from 'sonner';
@@ -6,21 +7,46 @@ import { cn } from '../../lib/cn';
 import { Button } from './Button';
 import { IconButton } from './IconButton';
 import { toastBody, toastSurface } from './styles';
+import { Tooltip } from './Tooltip';
 
 /** Sonner's toaster, headless: every toast is a `ToastView` (or the ports
  *  wizard) on `toastSurface`. Raise toasts through `ui/toast`, never sonner. */
 export function Toaster() {
   return (
-    <Sonner
-      position="bottom-right"
-      offset={16}
-      mobileOffset={16}
-      gap={8}
-      visibleToasts={3}
-      containerAriaLabel="Notifications"
-      toastOptions={{ unstyled: true, className: toastSurface }}
-    />
+    // `contents`: a wrapper for the key handler only; sonner places itself.
+    <div className="contents" onKeyDown={dismissFocusedToast}>
+      <Sonner
+        position="bottom-right"
+        offset={16}
+        mobileOffset={16}
+        gap={8}
+        visibleToasts={3}
+        containerAriaLabel="Notifications"
+        toastOptions={{ unstyled: true, className: toastSurface }}
+      />
+    </div>
   );
+}
+
+/** Esc dismisses the focused toast (⌥T, then Tab to it); sonner's own Esc
+ *  only collapses the stack. A dialog's capture-phase Esc still wins. */
+function dismissFocusedToast(e: KeyboardEvent<HTMLDivElement>) {
+  if (e.key !== 'Escape') return;
+  const li = (e.target as HTMLElement).closest('[data-sonner-toast]');
+  const id = li?.querySelector<HTMLElement>('[data-toast-id]')?.dataset.toastId;
+  if (id) sonner.dismiss(id);
+}
+
+/** Whether a line-clamped child cuts its text, so the whole of it can go in a tooltip. */
+function useClamped<T extends HTMLElement>(text: string) {
+  const ref = useRef<T>(null);
+  const [clamped, setClamped] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    setClamped([...el.children].some((c) => c.scrollHeight > c.clientHeight + 1));
+  }, [text]);
+  return [ref, clamped] as const;
 }
 
 export type ToastViewKind = ToastKind | 'copied' | 'offer' | 'progress';
@@ -57,8 +83,10 @@ interface ToastViewProps {
 export function ToastView({ id, kind, title, description, meta, action, icon }: ToastViewProps) {
   const Icon = kind === 'offer' ? (icon ?? Info) : ICONS[kind];
   const alwaysDismiss = kind === 'offer' || kind === 'error';
+  const [textRef, clamped] = useClamped<HTMLDivElement>(`${title}\n${description ?? ''}`);
   return (
     <div
+      data-toast-id={id}
       role={kind === 'error' ? 'alert' : undefined}
       className={cn(toastBody, 'flex items-start gap-2.5')}
     >
@@ -73,11 +101,14 @@ export function ToastView({ id, kind, title, description, meta, action, icon }: 
           )}
         />
       </span>
-      <div className="min-w-0 flex-1">
-        <p className="type-heading line-clamp-3">{title}</p>
-        {description && <p className="type-body line-clamp-3">{description}</p>}
-        {meta && <p className="type-caption truncate">{meta}</p>}
-      </div>
+      {/* Text past three lines is cut; the tooltip then carries all of it. */}
+      <Tooltip content={clamped ? { title, body: description } : ''} delay={400}>
+        <div ref={textRef} className="min-w-0 flex-1">
+          <p className="type-heading line-clamp-3">{title}</p>
+          {description && <p className="type-body line-clamp-3">{description}</p>}
+          {meta && <p className="type-caption truncate">{meta}</p>}
+        </div>
+      </Tooltip>
       {(action || kind !== 'progress') && (
         <div className="-my-0.75 flex shrink-0 items-center gap-1">
           {action && (
