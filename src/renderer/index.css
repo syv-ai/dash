@@ -332,7 +332,7 @@
     --changed: 40 50% 68%;
     /* Calm yellow: 11.2 / 10.4 / 9.3 / 9.3:1 on ground / well / raised /
        a selected row. */
-    --favorite: 48 50% 66%;
+    --favorite: 50 85% 63%;
     --hover: 0 0% 100% / 0.05;
     --select: 0 0% 100% / 0.09;
     --btn: 220 6% 91%;
