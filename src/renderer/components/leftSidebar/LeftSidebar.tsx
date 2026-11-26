@@ -1,5 +1,5 @@
 import { Plus, Search, Settings } from 'lucide-react';
-import type { Project, Task } from '../../../shared/types';
+import type { ContextUsage, Project, Task } from '../../../shared/types';
 import { ClaudeUpdateButton } from '../claudeUpdate/ClaudeUpdateButton';
 import { IconButton } from '../ui/IconButton';
 import { Segmented } from '../ui/Segmented';
@@ -35,6 +35,8 @@ interface LeftSidebarProps {
   onReorderProjects?: (reordered: Project[]) => void;
   onReorderTasks?: (projectId: string, reordered: Task[]) => void;
   onReorderTasksCommit?: (projectId: string, reordered: Task[]) => void;
+  /** Each live task's session context, from the statusLine (`useStatusLine`). */
+  contextUsage?: Record<string, ContextUsage>;
 }
 
 const isMac = window.electronAPI.getPlatform() === 'darwin';
@@ -160,6 +162,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
           rows={rows}
           projects={projects}
           activeTaskId={activeTaskId}
+          contextUsage={props.contextUsage}
           onOpenFolder={props.onOpenFolder}
           onSelectTask={props.onSelectTask}
           onCloseTask={props.onCloseTask}

@@ -1588,6 +1588,7 @@ export function App() {
             onReorderTasksCommit={(projectId, reordered) => {
               void handleReorderTasksCommit(projectId, reordered);
             }}
+            contextUsage={contextUsage}
           />
         </ResizablePanel>
         <ResizableHandle disabled={sidebarCollapsed} />

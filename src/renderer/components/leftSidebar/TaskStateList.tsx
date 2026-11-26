@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from 'react';
 import { FolderPlus, Power } from 'lucide-react';
-import type { Project, Task } from '../../../shared/types';
+import type { ContextUsage, Project, Task } from '../../../shared/types';
 import { Tree, TreeHeading, TreeRow, ownNode, type TreeRowContext } from '../ui/Tree';
 import { HoverSwapSlot } from '../ui/HoverSwapSlot';
 import { StatusDot, type AgentState } from '../ui/StatusDot';
@@ -27,6 +27,7 @@ import {
   type TaskStateRow,
 } from './taskStates';
 import { taskTreeRows, type TaskTreeRow } from './taskTree';
+import { ContextRing } from './ContextRing';
 
 const CONTEXT_PARTS: MenuParts = { Item: ContextMenuItem, Separator: ContextMenuSeparator };
 
@@ -42,6 +43,8 @@ interface TaskStateListProps extends TaskRowActions {
   rows: Rows;
   projects: Project[];
   activeTaskId: string | null;
+  /** Each live task's session context (the right sidebar's Session level). */
+  contextUsage?: Record<string, ContextUsage>;
   onOpenFolder: () => void;
 }
 
@@ -49,14 +52,15 @@ interface TaskStateListProps extends TaskRowActions {
  * The left sidebar's default view: favourites first (any state), then every
  * live task across projects by state (`taskGroups`), and the sleeping ones
  * folded under "Inactive sessions", open or closed as last left. Each row
- * names its project, faint at the end; needs-you and failed rows say why on
- * a second line; at-rest rows are dimmed. Hover shows the favourite star;
- * right-click opens the task menu.
+ * is two lines: the name, then its project (and why, for needs-you and
+ * failed); a live one ends in its session's context ring. At-rest rows are
+ * dimmed. Hover shows the favourite star; right-click opens the task menu.
  */
 export function TaskStateList({
   rows: list,
   projects,
   activeTaskId,
+  contextUsage,
   onOpenFolder,
   ...actions
 }: TaskStateListProps) {
@@ -107,6 +111,7 @@ export function TaskStateList({
           <TaskStateRowItem
             row={r.row}
             ctx={ctx}
+            usage={contextUsage?.[r.row.task.id]}
             projectPath={projectPath(r.row.task)}
             {...actions}
           />
@@ -116,24 +121,30 @@ export function TaskStateList({
   );
 }
 
-/** A row's height before it is measured: a reason adds a line. */
+/** A row's height before it is measured: a task is two lines. */
 function estimate(r: TaskTreeRow): number {
   if (r.kind === 'gap') return 16;
   if (r.kind === 'heading') return 28;
   if (r.kind === 'inactive') return 32;
-  return r.row.reason ? 54 : 36;
+  return 54;
 }
 
 function TaskStateRowItem({
   row,
   ctx,
+  usage,
   projectPath,
   onSelectTask,
   onCloseTask,
   onTaskSettings,
   onArchiveTask,
   onDeleteTask,
-}: TaskRowActions & { row: TaskStateRow; ctx: TreeRowContext; projectPath?: string }) {
+}: TaskRowActions & {
+  row: TaskStateRow;
+  ctx: TreeRowContext;
+  usage: ContextUsage | undefined;
+  projectPath?: string;
+}) {
   const { task, state, reason, projectName } = row;
   const activityState = useRuntime((s) => s.taskActivity[task.id]?.state);
   return (
@@ -145,11 +156,18 @@ function TaskStateRowItem({
           dimmed={isAtRest(state)}
           strong={ctx.selected}
           leading={<StatusDot state={state} label={STATE_LABELS[state]} />}
-          description={reason && <ReasonText state={state}>{reason}</ReasonText>}
-          // The name truncates first; the project keeps up to 6rem.
+          description={
+            (projectName || reason) && (
+              <>
+                {projectName}
+                {projectName && reason && ' · '}
+                {reason && <ReasonText state={state}>{reason}</ReasonText>}
+              </>
+            )
+          }
           trailing={
             <HoverSwapSlot
-              rest={projectName && <span className="max-w-24 truncate">{projectName}</span>}
+              rest={state !== 'asleep' && <ContextRing usage={usage} />}
               actions={<FavoriteButton task={task} />}
             />
           }
