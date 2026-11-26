@@ -63,26 +63,16 @@ describe('ActivityMonitor — state transitions (hooks-only)', () => {
 
   it('setError transitions to error and carries type + message', () => {
     activityMonitor.register('pty1', 12345);
-    activityMonitor.setError('pty1', 'rate_limit', 'Rate limited');
+    activityMonitor.setError('pty1', { type: 'rate_limit', message: 'Rate limited' });
     const info = activityMonitor.getAll()['pty1']!;
     expect(info.state).toBe('error');
     expect(info.error?.type).toBe('rate_limit');
     expect(info.error?.message).toBe('Rate limited');
   });
 
-  it('maps error types', () => {
-    activityMonitor.register('pty1', 12345);
-    activityMonitor.setError('pty1', 'authentication_failed');
-    expect(activityMonitor.getAll()['pty1']!.error?.type).toBe('auth_error');
-    activityMonitor.setError('pty1', 'billing_error');
-    expect(activityMonitor.getAll()['pty1']!.error?.type).toBe('billing_error');
-    activityMonitor.setError('pty1', 'something_else');
-    expect(activityMonitor.getAll()['pty1']!.error?.type).toBe('unknown');
-  });
-
   it('setBusy clears prior error', () => {
     activityMonitor.register('pty1', 12345);
-    activityMonitor.setError('pty1', 'rate_limit');
+    activityMonitor.setError('pty1', { type: 'rate_limit' });
     activityMonitor.setBusy('pty1');
     const info = activityMonitor.getAll()['pty1']!;
     expect(info.state).toBe('busy');
@@ -187,7 +177,7 @@ describe('ActivityMonitor — safety valve', () => {
   it('does not fire on error PTYs', () => {
     activityMonitor.start(mockSender as unknown as Parameters<typeof activityMonitor.start>[0]);
     activityMonitor.register('pty1', 12345);
-    activityMonitor.setError('pty1', 'rate_limit');
+    activityMonitor.setError('pty1', { type: 'rate_limit' });
     vi.advanceTimersByTime(10 * 60_000);
     expect(activityMonitor.getAll()['pty1']!.state).toBe('error');
   });

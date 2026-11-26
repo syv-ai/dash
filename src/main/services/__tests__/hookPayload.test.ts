@@ -3,9 +3,57 @@ import {
   isSelfStartedPrompt,
   isSubagentHook,
   runningSubagentIds,
+  stopFailureError,
   subagentId,
   statusLineTaskId,
 } from '../hookPayload';
+
+// StopFailure input per code.claude.com/docs/en/hooks (Claude Code 2.1.332):
+// the type is `error`, with optional `error_details` and the rendered text in
+// `last_assistant_message`.
+describe('stopFailureError', () => {
+  it('reads the documented `error` field, not `error_type`', () => {
+    expect(
+      stopFailureError({
+        hook_event_name: 'StopFailure',
+        error: 'rate_limit',
+        error_details: '429 Too Many Requests',
+        last_assistant_message: 'API Error: Rate limit reached',
+      }),
+    ).toEqual({ type: 'rate_limit' });
+  });
+
+  it('keeps every documented error value as its own type', () => {
+    for (const error of [
+      'authentication_failed',
+      'oauth_org_not_allowed',
+      'account_on_hold',
+      'billing_error',
+      'invalid_request',
+      'model_not_found',
+      'server_error',
+      'max_output_tokens',
+      'cloud_credential_error',
+    ]) {
+      expect(stopFailureError({ error }).type).toBe(error);
+    }
+  });
+
+  it('carries the rendered error text only when the type says nothing', () => {
+    expect(
+      stopFailureError({
+        error: 'unknown',
+        error_details: 'socket hang up',
+        last_assistant_message: 'API Error: socket hang up',
+      }),
+    ).toEqual({ type: 'unknown', message: 'API Error: socket hang up' });
+    expect(stopFailureError({ error: 'brand_new_value', error_details: 'x' })).toEqual({
+      type: 'unknown',
+      message: 'x',
+    });
+    expect(stopFailureError({})).toEqual({ type: 'unknown' });
+  });
+});
 
 describe('isSubagentHook', () => {
   it('is true when Claude Code tags the hook with an agent_id', () => {

@@ -39,7 +39,11 @@ describe('failureReason', () => {
 
   it('falls back to a label for the type', () => {
     expect(failureReason({ type: 'rate_limit' })).toBe('Rate limited');
-    expect(failureReason({ type: 'auth_error', message: '  ' })).toBe('Authentication error');
+    expect(failureReason({ type: 'authentication_failed', message: '  ' })).toBe(
+      'Authentication failed',
+    );
+    expect(failureReason({ type: 'model_not_found' })).toBe('Model not found');
+    expect(failureReason({ type: 'server_error' })).toBe('API server error');
     expect(failureReason(undefined)).toBe('Failed');
   });
 });

@@ -1,3 +1,20 @@
+import { STOP_FAILURE_ERRORS, type ActivityError } from '@shared/types';
+
+/**
+ * Why a StopFailure ended the turn. Claude Code names the type in `error`
+ * (one of STOP_FAILURE_ERRORS; a value newer than Dash counts as `unknown`).
+ * The type's label says enough, so the rendered error text
+ * (`last_assistant_message`, else `error_details`) rides along only for an
+ * unknown one.
+ */
+export function stopFailureError(payload: Record<string, unknown>): ActivityError {
+  const { error, error_details: details, last_assistant_message: rendered } = payload;
+  const type = STOP_FAILURE_ERRORS.find((e) => e === error) ?? 'unknown';
+  if (type !== 'unknown') return { type };
+  const text = [rendered, details].find((t): t is string => typeof t === 'string' && t !== '');
+  return text ? { type, message: text } : { type };
+}
+
 /**
  * True for a hook fired inside a subagent: Claude Code sets `agent_id` only
  * there. A subagent's tool calls are not the task's own turn, so they don't

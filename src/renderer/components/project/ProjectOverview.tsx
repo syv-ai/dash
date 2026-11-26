@@ -56,7 +56,7 @@ function ActivityDot({ info }: { info?: ActivityInfo }) {
     const label =
       info?.error?.type === 'rate_limit'
         ? 'Rate limited'
-        : info?.error?.type === 'auth_error'
+        : info?.error?.type === 'authentication_failed'
           ? 'Auth error'
           : 'Error';
     return (

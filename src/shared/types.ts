@@ -374,9 +374,29 @@ export interface ToolActivity {
   label: string;
 }
 
-/** Error info from StopFailure hook. */
+/**
+ * Why a turn ended on an API error: the `error` values Claude Code's
+ * StopFailure hook documents (code.claude.com/docs/en/hooks), verbatim.
+ */
+export const STOP_FAILURE_ERRORS = [
+  'rate_limit',
+  'authentication_failed',
+  'oauth_org_not_allowed',
+  'account_on_hold',
+  'billing_error',
+  'invalid_request',
+  'model_not_found',
+  'server_error',
+  'max_output_tokens',
+  'cloud_credential_error',
+  'unknown',
+] as const;
+
+export type StopFailureError = (typeof STOP_FAILURE_ERRORS)[number];
+
 export interface ActivityError {
-  type: 'rate_limit' | 'auth_error' | 'billing_error' | 'supervisor' | 'unknown';
+  /** A StopFailure's error, or `supervisor` for a failed session row. */
+  type: StopFailureError | 'supervisor';
   message?: string;
 }
 

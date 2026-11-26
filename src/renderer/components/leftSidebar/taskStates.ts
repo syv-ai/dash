@@ -43,8 +43,15 @@ export const STATE_LABELS: Record<AgentState, string> = {
 
 const ERROR_LABELS: Record<ActivityError['type'], string> = {
   rate_limit: 'Rate limited',
-  auth_error: 'Authentication error',
+  authentication_failed: 'Authentication failed',
+  oauth_org_not_allowed: 'Organization not allowed',
+  account_on_hold: 'Account on hold',
   billing_error: 'Billing error',
+  invalid_request: 'Invalid request',
+  model_not_found: 'Model not found',
+  server_error: 'API server error',
+  max_output_tokens: 'Output token limit reached',
+  cloud_credential_error: 'Cloud credentials failed',
   supervisor: 'Session failed',
   unknown: 'Failed',
 };

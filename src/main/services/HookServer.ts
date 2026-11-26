@@ -13,6 +13,7 @@ import {
   isSubagentHook,
   runningSubagentIds,
   statusLineTaskId,
+  stopFailureError,
   subagentId,
 } from './hookPayload';
 import { setTaskInbox } from './taskInbox';
@@ -361,13 +362,11 @@ class HookServerImpl {
 
           if (pathname === '/hook/stop-failure') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
-              const errorType =
-                typeof payload.error_type === 'string' ? payload.error_type : 'unknown';
-              const message = typeof payload.error === 'string' ? payload.error : undefined;
-              console.error(`[HookServer] StopFailure for ptyId=${ptyId} type=${errorType}`);
-              activityMonitor.setError(ptyId, errorType, message);
+              const error = stopFailureError(payload);
+              console.error(`[HookServer] StopFailure for ptyId=${ptyId} type=${error.type}`);
+              activityMonitor.setError(ptyId, error);
 
-              if (errorType === 'rate_limit') {
+              if (error.type === 'rate_limit') {
                 const taskName = this.getTaskName(ptyId);
                 this.showDesktopNotification(ptyId, `${taskName} hit rate limit`);
               }

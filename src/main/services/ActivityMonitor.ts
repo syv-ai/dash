@@ -424,23 +424,16 @@ class ActivityMonitorImpl {
     this.emitAll();
   }
 
-  private static readonly ERROR_TYPE_MAP: Record<string, ActivityError['type']> = {
-    rate_limit: 'rate_limit',
-    authentication_failed: 'auth_error',
-    billing_error: 'billing_error',
-  };
-
-  setError(ptyId: string, errorType: string, message?: string): void {
+  /** The turn ended on an API error (StopFailure). */
+  setError(ptyId: string, error: ActivityError): void {
     const a = this.activities.get(ptyId);
     if (!a) return;
     a.lastHookTime = Date.now();
-    const mappedType =
-      ActivityMonitorImpl.ERROR_TYPE_MAP[errorType] ?? ('unknown' as ActivityError['type']);
     this.cancelSettle(a);
     this.endWork(a);
     a.state = 'error';
     a.tool = null;
-    a.error = { type: mappedType, message };
+    a.error = error;
     a.interrupted = false;
     this.emitAll();
   }
