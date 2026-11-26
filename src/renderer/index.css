@@ -32,6 +32,10 @@
   /* A link in running text (TextLink, Markdown): a soft blue, the one
      colour outside state (user-requested, D191). */
   --color-link: hsl(var(--link));
+  /* A changed file's name in the file trees (Files, a PR's files): a calm
+     gold, like VS Code's, user-requested (G1). Not state-needs amber, which
+     means "needs you". */
+  --color-changed: hsl(var(--changed));
   --color-hover: hsl(var(--hover));
   --color-select: hsl(var(--select));
   --color-btn: hsl(var(--btn));
@@ -189,6 +193,9 @@
     /* GitHub-like blue, lightened to the AA floor: 4.6:1 on ground, 5.5:1
        on well (was 40% L: 5.1 / 6.1). */
     --link: 212 85% 43%;
+    /* Desaturated gold: 5.3:1 on ground, 6.4:1 on well (state-needs is
+       34 72% 44%). */
+    --changed: 40 48% 31%;
     --hover: 225 20% 20% / 0.05;
     --select: 225 20% 20% / 0.09;
     --btn: 225 14% 22%;
@@ -300,6 +307,9 @@
     /* Light soft blue: 10.3 / 9.5 / 8.5:1 on ground / well / raised (was
        213 85% 68%: 8.0 / 7.3 / 6.6), still under ink (16.2). */
     --link: 212 92% 76%;
+    /* Soft gold: 10.7 / 9.9 / 8.9:1 on ground / well / raised, under ink
+       (state-needs is 40 75% 62%). */
+    --changed: 40 50% 68%;
     --hover: 0 0% 100% / 0.05;
     --select: 0 0% 100% / 0.09;
     --btn: 220 6% 91%;

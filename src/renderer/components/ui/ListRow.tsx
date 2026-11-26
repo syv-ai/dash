@@ -17,8 +17,11 @@ const listRowVariants = cva(
         true: 'text-ink-3 hover:text-ink data-[selected=true]:text-ink',
         false: '',
       },
+      // A changed file's name (G1); a dimmed row stays dimmed.
+      changed: { true: '', false: '' },
     },
-    defaultVariants: { size: 'md', twoLine: false, dimmed: false },
+    compoundVariants: [{ changed: true, dimmed: false, className: 'text-changed' }],
+    defaultVariants: { size: 'md', twoLine: false, dimmed: false, changed: false },
   },
 );
 
@@ -31,6 +34,8 @@ export type ListRowProps = Omit<React.ComponentProps<'button'>, 'children'> &
     description?: React.ReactNode;
     /** Quiet row (ink-3) that reads normally on hover or when selected. */
     dimmed?: boolean;
+    /** A changed file or folder: its label in the `changed` gold (G1). */
+    changed?: boolean;
     /** Before the label: a StatusDot, a file icon. An icon that doesn't
      *  colour itself rests in the icon token. */
     leading?: React.ReactNode;
@@ -56,6 +61,7 @@ export function ListRow({
   selected = false,
   description,
   dimmed = false,
+  changed = false,
   leading,
   trailing,
   size,
@@ -73,7 +79,7 @@ export function ListRow({
       type={as === 'button' ? type : undefined}
       data-selected={selected}
       aria-current={selected ? 'true' : undefined}
-      className={cn(listRowVariants({ size, dimmed, twoLine: !!description }), className)}
+      className={cn(listRowVariants({ size, dimmed, changed, twoLine: !!description }), className)}
       // px-2.5 is 10px; a tree row adds its depth to the left of it.
       style={indent ? { ...style, paddingLeft: 10 + indent * TREE_INDENT_PX } : style}
       {...(props as React.HTMLAttributes<HTMLElement>)}
@@ -87,7 +93,9 @@ export function ListRow({
       ) : (
         <span className="min-w-0 flex-1 truncate">{children}</span>
       )}
-      {trailing && <span className="flex shrink-0 items-center gap-1.5 text-ink-3">{trailing}</span>}
+      {trailing && (
+        <span className="flex shrink-0 items-center gap-1.5 text-ink-3">{trailing}</span>
+      )}
     </Comp>
   );
 }
