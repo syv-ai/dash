@@ -392,6 +392,54 @@ describe('ActivityMonitor — supervisor reconcile (applySupervisor)', () => {
     });
   });
 
+  // H1, live: the listing marks the job `failed` a second after StopFailure,
+  // with no detail; the hook's error says why, so it stays.
+  it("keeps a StopFailure's error when the listing reports the same failure", () => {
+    activityMonitor.register('t1', 1);
+    activityMonitor.setError('t1', { type: 'unknown', message: 'API Error: 400 bad' });
+    activityMonitor.applySupervisor('t1', { state: 'error', error: { type: 'supervisor' } }, POLL);
+    expect(activityMonitor.getAll()['t1']!.error).toEqual({
+      type: 'unknown',
+      message: 'API Error: 400 bad',
+    });
+  });
+
+  // H1, live: after a 401 StopFailure the listing read idle 1.6 s later and
+  // the red was gone. The session sits at its prompt either way; the error
+  // stands until the user's next turn.
+  it("keeps a StopFailure's error over the listing's idle or busy", () => {
+    activityMonitor.register('t1', 1);
+    activityMonitor.setError('t1', { type: 'authentication_failed' });
+    vi.advanceTimersByTime(POLL + 1);
+    activityMonitor.applySupervisor('t1', { state: 'idle' }, POLL);
+    activityMonitor.applySupervisor('t1', { state: 'busy' }, POLL);
+    expect(activityMonitor.getAll()['t1']!.state).toBe('error');
+    activityMonitor.setBusy('t1');
+    expect(activityMonitor.getAll()['t1']!.state).toBe('busy');
+  });
+
+  it("still lets a sleeping session's listing replace a StopFailure's error", () => {
+    activityMonitor.register('t1', 1);
+    activityMonitor.setError('t1', { type: 'rate_limit' });
+    activityMonitor.applySupervisor('t1', { state: 'stopped', detail: 'Sleeping' }, POLL);
+    expect(activityMonitor.getAll()['t1']!.state).toBe('stopped');
+  });
+
+  it("takes the listing's error for a failure no hook reported", () => {
+    activityMonitor.register('t1', 1);
+    activityMonitor.setBusy('t1');
+    vi.advanceTimersByTime(POLL + 1);
+    activityMonitor.applySupervisor(
+      't1',
+      { state: 'error', error: { type: 'supervisor', message: 'exited' } },
+      POLL,
+    );
+    expect(activityMonitor.getAll()['t1']!.error).toEqual({
+      type: 'supervisor',
+      message: 'exited',
+    });
+  });
+
   it('still drives busy for a listing-only task that has no hooks', () => {
     activityMonitor.applySupervisor('t2', { state: 'idle' }, POLL);
     activityMonitor.applySupervisor('t2', { state: 'busy' }, POLL);

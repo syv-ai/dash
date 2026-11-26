@@ -206,6 +206,10 @@ class ActivityMonitorImpl {
     const hookDriven = a.state === 'busy' || a.state === 'idle' || a.state === 'waiting';
     const next = activity.state;
     if ((next === 'busy' || next === 'idle') && hooksFresh && hookDriven) return;
+    // A StopFailure leaves the session at its prompt, which the listing reads
+    // as idle; the error stands until the user's next turn clears it (H1).
+    const hookError = a.state === 'error' && a.error !== null && a.error.type !== 'supervisor';
+    if ((next === 'busy' || next === 'idle') && hookError) return;
     // Hooks own a task's subagents: the listing's idle may end them only
     // once they've gone quiet (a SubagentStop we never got).
     if (next === 'idle' && a.subagents.size > 0 && now - a.lastSubagentTime < SUBAGENT_QUIET_MS)
@@ -220,7 +224,14 @@ class ActivityMonitorImpl {
     // permission prompt fires no hook until the tool finishes (S4).
     if (next === 'busy' && (a.state === 'busy' || a.state === 'idle') && a.lastHookTime > 0) return;
 
-    const nextError = next === 'error' ? (activity.error ?? a.error) : null;
+    // A StopFailure's error says why; the listing's `failed` that follows it
+    // carries no detail (H1), so an error already shown stays.
+    const nextError =
+      next === 'error'
+        ? a.state === 'error' && a.error
+          ? a.error
+          : (activity.error ?? a.error)
+        : null;
     const nextDetail = activity.detail ?? null;
     const changed =
       created ||
