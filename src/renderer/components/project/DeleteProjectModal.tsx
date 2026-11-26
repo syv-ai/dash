@@ -111,7 +111,7 @@ function DeleteProjectBody({ project, tasks, onConfirm }: DeleteProjectBodyProps
   return (
     <>
       <DialogHeader title="Delete project?" description={project.name} closeDisabled={isDeleting} />
-      <DialogBody className="gap-4">
+      <DialogBody compact>
         <p className="type-body">The project and all its tasks are removed from Dash.</p>
         {hasCleanupOptions && (
           <div className="grid gap-2.5">

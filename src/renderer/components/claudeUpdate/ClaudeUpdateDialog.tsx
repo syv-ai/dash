@@ -51,7 +51,7 @@ export function ClaudeUpdateDialog({
             : undefined
         }
       />
-      <DialogBody className="gap-4">
+      <DialogBody compact>
         <ul className="type-body flex list-disc flex-col gap-1 pl-4">
           <li>Each conversation resumes where it left off.</li>
           <li>

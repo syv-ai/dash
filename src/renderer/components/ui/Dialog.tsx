@@ -113,12 +113,18 @@ export function DialogHeader({
   );
 }
 
-/** The scrolling middle: 20px sides, sections 24px apart. */
-export function DialogBody({ className, ...props }: React.ComponentProps<'div'>) {
+/** The scrolling middle: 20px sides, sections 24px apart (`compact`: 16px,
+ *  for a short confirm-sized body). */
+export function DialogBody({
+  compact = false,
+  className,
+  ...props
+}: React.ComponentProps<'div'> & { compact?: boolean }) {
   return (
     <div
       className={cn(
-        'scrollbar-thin-hover grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-5 pt-1 pb-5',
+        'scrollbar-thin-hover grid min-h-0 flex-1 content-start overflow-y-auto px-5 pt-1 pb-5',
+        compact ? 'gap-4' : 'gap-6',
         className,
       )}
       {...props}

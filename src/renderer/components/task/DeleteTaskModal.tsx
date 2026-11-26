@@ -68,7 +68,7 @@ function DeleteTaskBody({ task, onConfirm }: DeleteTaskBodyProps) {
   return (
     <>
       <DialogHeader title="Delete task?" description={task.name} closeDisabled={isDeleting} />
-      <DialogBody className="gap-4">
+      <DialogBody compact>
         {task.useWorktree ? (
           <div className="grid gap-2.5">
             <CheckboxField
