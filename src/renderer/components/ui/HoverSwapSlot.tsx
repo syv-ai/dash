@@ -19,7 +19,8 @@ interface HoverSwapSlotProps {
  * The trailing end of a sidebar row: quiet values at rest, the row's actions on
  * hover or keyboard focus. Whichever shows takes the room, the other none: at
  * rest the actions reserve nothing and the label runs up to `rest`; on hover
- * the label gives way to the actions (the task card's model, B2). The row must
+ * the label gives way to the actions (B2). The task card puts it in a
+ * fixed column, so its name keeps one width (T24). The row must
  * carry the `group/swap` class.
  */
 export function HoverSwapSlot({ rest, actions, revealed = false }: HoverSwapSlotProps) {

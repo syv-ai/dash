@@ -32,6 +32,8 @@ export const badgeVariants = cva(
         sm: 'h-4.5 px-1.5 text-xs',
         md: 'h-5.5 px-2 text-xs',
         icon: 'size-4.5 justify-center',
+        // A bare mark beside a name (MainRepoBadge): the box hugs an 11px glyph.
+        'icon-sm': 'size-2.75 justify-center',
       },
     },
     defaultVariants: { tone: 'neutral', size: 'md' },

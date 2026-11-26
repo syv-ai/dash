@@ -6,6 +6,7 @@ import { TaskContextMenu } from '../task/TaskContextMenu';
 import { TreeRow, type TreeRowContext } from '../ui/Tree';
 import { StatusDot, type AgentState } from '../ui/StatusDot';
 import { Tooltip } from '../ui/Tooltip';
+import { HoverSwapSlot } from '../ui/HoverSwapSlot';
 import { MainRepoBadge } from '../ui/MainRepoBadge';
 import { FavoriteStar } from '../ui/FavoriteStar';
 import { PrBadge } from '../ui/PrBadge';
@@ -55,10 +56,10 @@ export const TASK_INDENT_PX = 16;
 /**
  * A task row, the same in the Tasks and Projects views: the state dot, the
  * name with its marks (a favourite's star, the main-checkout M: labels, not
- * controls, T22), the second line if any; at the end the status badges, the
- * sleep button on hover, then the context percent, always the last column
- * so it lines up down the list (T21). Dot and end centre on the row. The
- * task menu is right-click only: a "…" button crowded the name out (T23).
+ * controls, T22), the second line if any; at the end the status badges, then
+ * a live session's last column: the context percent at rest, the sleep
+ * button in its place on hover or keyboard focus (T24). Dot and end centre
+ * on the row. The task menu is right-click only (T23).
  */
 export function TaskCard({
   task,
@@ -102,7 +103,7 @@ export function TaskCard({
         indentStep={indentStep}
         draggable={!!drag}
         {...drag?.handlers}
-        className="group/task"
+        className="group/swap"
         dragging={drag?.isDragging}
         dimmed={isAtRest(state)}
         strong={ctx.selected}
@@ -133,10 +134,19 @@ export function TaskCard({
             {(prs || allPrs) && (
               <PrBadge prs={prs ?? []} allPrs={allPrs} variant="icon" taskId={task.id} />
             )}
-            <div className="hidden group-hover/task:flex">
-              <SleepTaskButton activityState={activityInfo?.state} onClose={onClose} />
-            </div>
-            {state !== 'asleep' && <ContextLevel usage={usage} />}
+            {/* One column at the row's end, while the session is live: the
+                percent at rest, the sleep button in its place on hover or
+                keyboard focus, so the name keeps its width (T24). */}
+            {state !== 'asleep' && (
+              <span className="flex min-w-9 justify-end">
+                <HoverSwapSlot
+                  rest={<ContextLevel usage={usage} />}
+                  actions={
+                    <SleepTaskButton activityState={activityInfo?.state} onClose={onClose} />
+                  }
+                />
+              </span>
+            )}
           </>
         }
       >
