@@ -3,15 +3,13 @@ import { Plus, Search, Settings } from 'lucide-react';
 import type { ContextUsage, Project, Task } from '../../../shared/types';
 import { ClaudeUpdateButton } from '../claudeUpdate/ClaudeUpdateButton';
 import { IconButton } from '../ui/IconButton';
-import { FolderTabs } from '../ui/FolderTabs';
-import { folderSheet, folderStripSlot } from '../ui/FolderTab';
+import { ViewTabs } from '../ui/ViewTabs';
 import { StatusDot } from '../ui/StatusDot';
 import { ProjectsSection } from './ProjectsSection';
 import { TaskStateList } from './TaskStateList';
 import { UpdateBanner } from './UpdateBanner';
 import { useTaskStateList } from './useTaskStateList';
 import { STATE_LABELS, liveRows, newTaskProjectId } from './taskStates';
-import { cn } from '../../lib/cn';
 import { useSettings } from '../../stores/settingsStore';
 import { useUi } from '../../stores/uiStore';
 
@@ -46,18 +44,17 @@ interface LeftSidebarProps {
   onMinWidth?: (px: number) => void;
 }
 
-/** The view row's room besides the tabs: its 8px gutters, the 2px gaps,
- *  find and create (24px each, 2px apart) and 8px between them and the tabs. */
-const VIEW_ROW_REST_PX = 16 + 4 + 50 + 8;
+/** The view row's room besides the tabs: its 8px gutters, the three 2px gaps
+ *  (tabs, spacer, find, create) and find and create (24px each). */
+const VIEW_ROW_REST_PX = 16 + 6 + 48;
 
 const isMac = window.electronAPI.getPlatform() === 'darwin';
 
 /**
- * The app sidebar: Tasks | Projects view tabs (`FolderTabs`, as the task
- * sidebar's; counting live sessions and projects) with find and create (a
- * task or a project, after the view) at the row's end, over a sheet holding
- * the state-ordered task list or the project tree, and settings (with the
- * Claude Code update icon) at the foot.
+ * The app sidebar: Tasks | Projects view tabs (`ViewTabs`' pills; counting
+ * live sessions and projects) with find and create (a task or a project,
+ * after the view) at the row's end, over the state-ordered task list or the
+ * project tree, and settings (with the Claude Code update icon) at the foot.
  * Collapsed, it is a rail of state dots for the tasks with a live session.
  */
 export function LeftSidebar(props: LeftSidebarProps) {
@@ -118,10 +115,10 @@ export function LeftSidebar(props: LeftSidebarProps) {
     <div className="flex h-full min-w-0 flex-col bg-ground">
       {/* On macOS the traffic lights sit in this strip; it drags the window. */}
       <div className={isMac ? 'titlebar-drag h-11 shrink-0' : 'h-2 shrink-0'} />
-      {/* The view tabs on the sheet's top edge, 1px over, as the task
-          sidebar's: find and create at the row's end. */}
-      <div className="relative z-10 -mb-px flex h-9 shrink-0 items-center gap-0.5 px-2">
-        <FolderTabs
+      {/* The view tabs, then find and create at the row's end. */}
+      <div className="flex h-9 shrink-0 items-center gap-0.5 px-2">
+        <ViewTabs
+          variant="pill"
           aria-label="Sidebar view"
           value={view}
           onChange={setView}
@@ -142,66 +139,62 @@ export function LeftSidebar(props: LeftSidebarProps) {
           ]}
         />
         <div className="min-w-0 flex-1" />
-        <div className={cn(folderStripSlot, 'gap-0.5')}>
-          <IconButton
-            size="sm"
-            title="Find a task"
-            shortcut={keybindings.findTask}
-            onClick={() => setTaskFinderOpen(true)}
-          >
-            <Search size={14} strokeWidth={1.8} />
-          </IconButton>
-          {projectsView ? (
-            <IconButton size="sm" title="Create project" onClick={props.onOpenFolder}>
-              <Plus size={14} strokeWidth={1.8} />
-            </IconButton>
-          ) : (
-            <IconButton size="sm" title="New task" shortcut={keybindings.newTask} onClick={newTask}>
-              <Plus size={14} strokeWidth={1.8} />
-            </IconButton>
-          )}
-        </div>
-      </div>
-
-      <div className={cn('mx-2 flex min-h-0 flex-1 flex-col', folderSheet)}>
+        <IconButton
+          size="sm"
+          title="Find a task"
+          shortcut={keybindings.findTask}
+          onClick={() => setTaskFinderOpen(true)}
+        >
+          <Search size={14} strokeWidth={1.8} />
+        </IconButton>
         {projectsView ? (
-          <ProjectsSection
-            projects={projects}
-            activeProjectId={activeProjectId}
-            tasksByProject={tasksByProject}
-            activeTaskId={activeTaskId}
-            unseenTaskIds={props.unseenTaskIds}
-            onSelectProject={props.onSelectProject}
-            onOpenFolder={props.onOpenFolder}
-            onDeleteProject={props.onDeleteProject}
-            onProjectSettings={props.onProjectSettings}
-            onShowCommitGraph={props.onShowCommitGraph}
-            onSelectTask={props.onSelectTask}
-            onNewTask={props.onNewTask}
-            onDeleteTask={props.onDeleteTask}
-            onArchiveTask={props.onArchiveTask}
-            onRestoreTask={props.onRestoreTask}
-            onCloseTask={props.onCloseTask}
-            onTaskSettings={props.onTaskSettings}
-            onReorderProjects={props.onReorderProjects}
-            onReorderTasks={props.onReorderTasks}
-            onReorderTasksCommit={props.onReorderTasksCommit}
-          />
+          <IconButton size="sm" title="Create project" onClick={props.onOpenFolder}>
+            <Plus size={14} strokeWidth={1.8} />
+          </IconButton>
         ) : (
-          <TaskStateList
-            rows={rows}
-            projects={projects}
-            activeTaskId={activeTaskId}
-            contextUsage={props.contextUsage}
-            onOpenFolder={props.onOpenFolder}
-            onSelectTask={props.onSelectTask}
-            onCloseTask={props.onCloseTask}
-            onTaskSettings={props.onTaskSettings}
-            onArchiveTask={props.onArchiveTask}
-            onDeleteTask={props.onDeleteTask}
-          />
+          <IconButton size="sm" title="New task" shortcut={keybindings.newTask} onClick={newTask}>
+            <Plus size={14} strokeWidth={1.8} />
+          </IconButton>
         )}
       </div>
+
+      {projectsView ? (
+        <ProjectsSection
+          projects={projects}
+          activeProjectId={activeProjectId}
+          tasksByProject={tasksByProject}
+          activeTaskId={activeTaskId}
+          unseenTaskIds={props.unseenTaskIds}
+          onSelectProject={props.onSelectProject}
+          onOpenFolder={props.onOpenFolder}
+          onDeleteProject={props.onDeleteProject}
+          onProjectSettings={props.onProjectSettings}
+          onShowCommitGraph={props.onShowCommitGraph}
+          onSelectTask={props.onSelectTask}
+          onNewTask={props.onNewTask}
+          onDeleteTask={props.onDeleteTask}
+          onArchiveTask={props.onArchiveTask}
+          onRestoreTask={props.onRestoreTask}
+          onCloseTask={props.onCloseTask}
+          onTaskSettings={props.onTaskSettings}
+          onReorderProjects={props.onReorderProjects}
+          onReorderTasks={props.onReorderTasks}
+          onReorderTasksCommit={props.onReorderTasksCommit}
+        />
+      ) : (
+        <TaskStateList
+          rows={rows}
+          projects={projects}
+          activeTaskId={activeTaskId}
+          contextUsage={props.contextUsage}
+          onOpenFolder={props.onOpenFolder}
+          onSelectTask={props.onSelectTask}
+          onCloseTask={props.onCloseTask}
+          onTaskSettings={props.onTaskSettings}
+          onArchiveTask={props.onArchiveTask}
+          onDeleteTask={props.onDeleteTask}
+        />
+      )}
 
       <UpdateBanner />
       <div className="flex shrink-0 items-center gap-0.5 px-2 pt-1 pb-3">

@@ -57,7 +57,7 @@ function extraWidths(extras: readonly ViewRowExtra[], widths: readonly number[])
 /**
  * The task sidebar's view row, on the sheet's top edge, 1px over, like the
  * editor's tab strip: the view tabs, the middle's extras, then `end`
- * (Details). Who gives way as it narrows: the tabs' counts (`FolderTabs`,
+ * (Details). Who gives way as it narrows: the tabs' counts (`ViewTabs`,
  * which shrinks first), then `end` (unless `endPressed`: it is the view
  * shown), then the extras, last first, each to its compact form and then
  * hidden (`fitViewRow`); `end` never comes back in an extra's place. The
@@ -73,7 +73,7 @@ export function ViewRow({
   endPressed,
 }: {
   tabs: ReactNode;
-  /** The tabs' least width, as `FolderTabs` reports it. */
+  /** The tabs' least width, as `ViewTabs` reports it. */
   tabsMinPx: number | undefined;
   /** In order of keeping: the last gives way first. */
   extras: ViewRowExtra[];

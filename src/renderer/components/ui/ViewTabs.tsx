@@ -2,7 +2,8 @@ import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { CountBadge } from './CountBadge';
 import { FolderTab } from './FolderTab';
-import { segmentTip } from './Segmented';
+import { pillVariants, segmentTip } from './Segmented';
+import { Tab, type TabProps } from './Tab';
 import { Tooltip } from './Tooltip';
 import { firstFitting, useFittedDensity } from './useFittedDensity';
 import { useReselect } from './useReselect';
@@ -10,14 +11,49 @@ import { useReselect } from './useReselect';
 /** How the row gives way as it narrows: it drops the counts (they move into
  *  the tooltip). Its labels never truncate; the host keeps it at least as
  *  wide as `uncounted` (`onMinWidth`). */
-export type FolderTabsDensity = 'full' | 'uncounted';
+export type ViewTabsDensity = 'full' | 'uncounted';
 const measured = ['full', 'uncounted'] as const;
-export const fitFolderTabs = (available: number, needs: readonly number[]): FolderTabsDensity =>
+export const fitViewTabs = (available: number, needs: readonly number[]): ViewTabsDensity =>
   firstFitting(available, needs, measured) ?? 'uncounted';
 
-/** The inset that keeps the first tab off the sheet's 12px rounded corner. It
- *  never gives way: a tab sliding onto the corner reads as a glitch. */
-const inset = 'pl-3';
+/**
+ * The two looks. `folder`: case files (`FolderTab`) on the row's foot, the
+ * open one joined to the sheet the host draws under the row (`folderSheet`),
+ * the first inset clear of the sheet's 12px rounded corner (a tab sliding
+ * onto the corner reads as a glitch, so the inset never gives way). `pill`:
+ * `Segmented`'s pills (`pillVariants`), centred in the row, on no sheet.
+ */
+export type ViewTabsVariant = 'folder' | 'pill';
+
+/** Where the tabs sit in the row. */
+const align: Record<ViewTabsVariant, string> = { folder: 'h-full items-end', pill: 'items-center' };
+/** The room before the first tab: the folder's corner inset. */
+const inset: Record<ViewTabsVariant, string> = { folder: 'pl-3', pill: '' };
+
+/** One tab in the variant's look. */
+const ViewTab = React.forwardRef<HTMLDivElement, TabProps & { variant: ViewTabsVariant }>(
+  function ViewTab({ variant, active, className, ...props }, ref) {
+    return variant === 'folder' ? (
+      <FolderTab
+        ref={ref}
+        active={active}
+        className={cn('max-w-none pr-3', className)}
+        {...props}
+      />
+    ) : (
+      <Tab
+        ref={ref}
+        active={active}
+        className={cn(
+          pillVariants({ size: 'sm', selected: !!active }),
+          'shrink-0 select-none',
+          className,
+        )}
+        {...props}
+      />
+    );
+  },
+);
 
 type Option<T> = {
   value: T;
@@ -46,18 +82,17 @@ function countBadge<T>(opt: Option<T>, counted: boolean) {
 }
 
 /**
- * A view switch drawn as a stack of case files (`FolderTab`): the picked view
- * is the open folder, joined to the sheet below it, which the host draws
- * (`folderSheet`) right under the row, as the editor's tabs sit on its
- * sheet. None is open while `value` names no option.
+ * A view switch: the sidebars' (Files | History | Agent; Tasks | Projects).
+ * One behaviour in two looks (`variant`). None is selected while `value`
+ * names no option; a double click on the selected one is `onReselect`.
  *
- * Its labels always read in full, its first tab inset clear of the sheet's
- * rounded corner. It takes its full width (counts included) when the row has
- * room and shrinks first when it hasn't, dropping the counts; it never goes
- * below its labels' width and the inset, which it reports through
- * `onMinWidth` so the host can keep that much room.
+ * Its labels always read in full. It takes its full width (counts included)
+ * when the row has room and shrinks first when it hasn't, dropping the
+ * counts; it never goes below its labels' width (and the folder's inset),
+ * which it reports through `onMinWidth` so the host can keep that much room.
  */
-export function FolderTabs<T extends string>({
+export function ViewTabs<T extends string>({
+  variant,
   value,
   options,
   onChange,
@@ -66,20 +101,21 @@ export function FolderTabs<T extends string>({
   className,
   'aria-label': ariaLabel,
 }: {
+  variant: ViewTabsVariant;
   value: T;
   options: Array<Option<T>>;
   onChange: (v: T) => void;
-  /** A double click on the option that was already open when the gesture
-   *  began. */
+  /** A double click on the option that was already selected when the
+   *  gesture began. */
   onReselect?: (v: T) => void;
-  /** The row's least width (its inset and labels, no counts), in px, once
-   *  measured. */
+  /** The row's least width (its labels, and the folder's inset; no counts),
+   *  in px, once measured. */
   onMinWidth?: (px: number) => void;
   className?: string;
   'aria-label'?: string;
 }) {
-  const { rootRef, sizerRef, density, needs } = useFittedDensity<FolderTabsDensity>(
-    fitFolderTabs,
+  const { rootRef, sizerRef, density, needs } = useFittedDensity<ViewTabsDensity>(
+    fitViewTabs,
     'full',
     options.length,
   );
@@ -95,7 +131,7 @@ export function FolderTabs<T extends string>({
       ref={rootRef}
       role="tablist"
       aria-label={ariaLabel}
-      className={cn('relative flex h-full items-end gap-0.5', inset, className)}
+      className={cn('relative flex gap-0.5', align[variant], inset[variant], className)}
       // Shrinks ahead of the row's other items (by far the largest factor),
       // from its full width down to its labels'.
       style={{ flexBasis: fullNeed, flexShrink: 1000, flexGrow: 0, minWidth: minNeed }}
@@ -104,15 +140,15 @@ export function FolderTabs<T extends string>({
         const tip = segmentTip(opt, counted);
         return (
           <Tooltip key={opt.value} content={tip}>
-            <FolderTab
+            <ViewTab
+              variant={variant}
               active={opt.value === value}
               onSelect={() => onChange(opt.value)}
               indicator={countBadge(opt, counted)}
-              className="max-w-none pr-3"
               {...reselect(opt.value)}
             >
               <Label opt={opt} counted={counted} />
-            </FolderTab>
+            </ViewTab>
           </Tooltip>
         );
       })}
@@ -123,20 +159,21 @@ export function FolderTabs<T extends string>({
         className="invisible absolute inset-x-0 top-0 h-0 overflow-hidden"
       >
         {measured.map((d) => (
-          <div key={d} className={cn('flex w-max gap-0.5', inset)}>
+          <div key={d} className={cn('flex w-max gap-0.5', inset[variant])}>
             {options.map((opt) => (
-              <FolderTab
+              <ViewTab
                 key={opt.value}
+                variant={variant}
                 // The open folder is outlined, 2px wider: measured as shown.
+                // (A pill measures the same either way.)
                 active={opt.value === value}
                 tabIndex={-1}
                 role="presentation"
                 onSelect={() => {}}
                 indicator={countBadge(opt, d !== 'uncounted')}
-                className="max-w-none pr-3"
               >
                 <Label opt={opt} counted={d !== 'uncounted'} />
-              </FolderTab>
+              </ViewTab>
             ))}
           </div>
         ))}

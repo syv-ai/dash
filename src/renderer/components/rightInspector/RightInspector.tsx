@@ -29,7 +29,7 @@ import { IconButton } from '../ui/IconButton';
 import { cn } from '../../lib/cn';
 import { track } from '../../lib/telemetry';
 import { useSettledTrack } from '../../lib/useSettledTrack';
-import { FolderTabs } from '../ui/FolderTabs';
+import { ViewTabs } from '../ui/ViewTabs';
 import { MovableSlot, useMovable } from '../ui/Movable';
 import { folderSheet, folderStripSlot } from '../ui/FolderTab';
 import { CountBadge } from '../ui/CountBadge';
@@ -552,7 +552,8 @@ export function RightInspector({
       extras={extras}
       endPressed={segment === 'details'}
       tabs={
-        <FolderTabs<Segment>
+        <ViewTabs<Segment>
+          variant="folder"
           aria-label="Task sidebar view"
           value={segment}
           onChange={(next) => next !== 'details' && onPickSegment(next, false)}

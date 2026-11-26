@@ -7,9 +7,13 @@ import { Tooltip, type TooltipContent } from './Tooltip';
 import { firstFitting, useFittedDensity } from './useFittedDensity';
 import { useReselect } from './useReselect';
 
-const segmentVariants = cva(
+/**
+ * A pill: one option of a row, the selected one on a select tint, no track or
+ * border. `Segmented`'s segments and `ViewTabs`' pill tabs share it.
+ */
+export const pillVariants = cva(
   cn(
-    'flex min-w-0 items-center justify-center rounded-md font-medium text-ink-2 transition-colors duration-150 hover:text-ink aria-checked:bg-select aria-checked:text-ink [&_svg]:shrink-0',
+    'flex min-w-0 items-center justify-center rounded-md font-medium transition-colors duration-150 [&_svg]:shrink-0',
     focusRing,
   ),
   {
@@ -17,8 +21,9 @@ const segmentVariants = cva(
       size: { sm: 'h-6 text-sm', md: 'h-7 text-sm' },
       fullWidth: { true: 'flex-1', false: '' },
       tight: { true: 'gap-1 px-1.5', false: 'gap-1.5 px-2.5' },
+      selected: { true: 'bg-select text-ink', false: 'text-ink-2 hover:text-ink' },
     },
-    defaultVariants: { tight: false },
+    defaultVariants: { fullWidth: false, tight: false, selected: false },
   },
 );
 
@@ -148,7 +153,7 @@ export function Segmented<T extends string | number | null>({
             onClick={opt.disabled ? undefined : () => onChange(opt.value)}
             {...reselect(opt.value, opt.disabled)}
             className={cn(
-              segmentVariants({ size, fullWidth, tight }),
+              pillVariants({ size, fullWidth, tight, selected: opt.value === value }),
               opt.disabled && 'opacity-40 hover:text-ink-2',
             )}
           >
@@ -175,7 +180,7 @@ export function Segmented<T extends string | number | null>({
             {options.map((opt) => (
               <span
                 key={String(opt.value)}
-                className={segmentVariants({ size, fullWidth: false, tight: d === 'tight' })}
+                className={pillVariants({ size, tight: d === 'tight' })}
               >
                 <SegmentBody opt={opt} density={d} />
               </span>
