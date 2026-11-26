@@ -16,8 +16,9 @@ export type { PanelImperativeHandle };
 /** How long an animated panel eases (see `[data-animating]` in index.css,
  *  which must match). */
 export const PANEL_EASE_MS = 280;
-/** The task sidebar's narrow ⇄ expanded ease, slower and calmer: the panels
- *  take it while an ancestor sets `--panel-ease` to it (D258). */
+/** The task sidebar's planned motion (narrow ⇄ expanded, closing the editor,
+ *  hide ⇄ show), slower and calmer: the panels take it while an ancestor sets
+ *  `--panel-ease` to it (D258, D264). */
 export const EXPAND_EASE_MS = 1000;
 
 /** The ease's length now (`ms`, the panels' own by default): 0 when the user

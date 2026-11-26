@@ -82,7 +82,8 @@
   /* `ease-panel`: the panels' ease-out (cubic), for anything that moves with
      a panel ease (PANEL_EASE_MS). */
   --ease-panel: cubic-bezier(0.33, 1, 0.68, 1);
-  /* `ease-calm`: the task sidebar's narrow ⇄ expanded motion (D258), an
+  /* `ease-calm`: the task sidebar's planned motion (narrow ⇄ expanded,
+     closing the editor, hide ⇄ show; D258, D264), an
      ease-in-out, so a long move neither lurches off nor brakes hard. */
   --ease-calm: cubic-bezier(0.4, 0, 0.2, 1);
 
@@ -509,7 +510,7 @@
    library sizes the outer [data-panel] element via flex-grow. 280ms is
    PANEL_EASE_MS in ui/Resizable; the curve is an ease-out (cubic). An
    ancestor can set both (`--panel-ease`, `--panel-curve`): the task
-   sidebar's narrow ⇄ expanded motion does (EXPAND_EASE_MS, `ease-calm`). */
+   sidebar's planned motion does (EXPAND_EASE_MS, `ease-calm`). */
 [data-panel][data-animating='true'] {
   transition:
     flex-grow var(--panel-ease, 280ms) var(--panel-curve, var(--ease-panel)),

@@ -76,23 +76,31 @@ const EditorGroups = lazy(() =>
  *  at the row's end, read least often). */
 type Segment = CodeSegment | 'details';
 
-/** The sidebar between narrow and expanded: its content is held at `width`
- *  (px, the expanded width) in the expanded layout, first still (`held`: the
- *  layout paints, the editor mounts clear), then while the width eases
- *  (`easing`), the editor fading in or out with it. The list splits at
- *  `listPct` of it, as wide as the narrow column was (where it was, going
- *  narrow), so only the panel's edge and the editor move (D258). */
+/** The sidebar mid-motion (App's `usePlannedMotion`): its content is held at
+ *  `width` (px), first still (`held`: the layout paints), then while the
+ *  panel's edge eases (`easing`), so the content clips rather than reflows.
+ *  Between narrow and expanded it holds the expanded layout at the expanded
+ *  width (the editor mounting clear, then fading in or out with the ease),
+ *  the list split at `listPct` of it, as wide as the narrow column was (where
+ *  it was, going narrow), so only the panel's edge and the editor move
+ *  (D258). Shown or hidden, it holds the layout it has, at its open width,
+ *  the editor as it is (D264). */
 export interface SidebarMotion {
   width: number;
-  to: 'expanded' | 'narrow';
+  to: 'expanded' | 'narrow' | 'shown' | 'hidden';
   phase: 'held' | 'easing';
   listPct?: number;
+}
+
+/** The motion goes between narrow and expanded: it holds the split. */
+function holdsSplit(motion: SidebarMotion | null): boolean {
+  return motion?.to === 'expanded' || motion?.to === 'narrow';
 }
 
 /** The editor's look mid-motion: shown before the ease going narrow and once
  *  it starts going expanded; fading only while it eases. */
 function editorMotionClass(motion: SidebarMotion | null): string | false {
-  if (!motion) return false;
+  if (!motion || !holdsSplit(motion)) return false;
   const easing = motion.phase === 'easing';
   const shown = motion.to === 'expanded' ? easing : !easing;
   return cn(
@@ -204,7 +212,7 @@ export function RightInspector({
   // ── The editor's state: one workspace per task, open or not ──
   const editorMounted = diff !== null;
   // Going narrow, the expanded layout holds until the ease ends.
-  const expanded = (expandedProp || motion !== null) && editorMounted;
+  const expanded = (expandedProp || holdsSplit(motion)) && editorMounted;
   // A task in review mode opens on Overview.
   const [segment, setSegment] = useState<Segment>(() => initialSegment(task.id));
   // Expanded, Details takes the whole body over the terminals, as narrow;

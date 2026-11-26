@@ -31,8 +31,8 @@ import {
   widthOnShow,
 } from './lib/inspectorWidths';
 import { headerModelName } from './lib/modelName';
-import { RightInspector, type SidebarMotion } from './components/rightInspector/RightInspector';
-import { whenFramesSettle } from './lib/framesSettled';
+import { RightInspector } from './components/rightInspector/RightInspector';
+import { usePlannedMotion } from './lib/usePlannedMotion';
 import { cn } from './lib/cn';
 const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
 import { useSetup } from './stores/setupStore';
@@ -115,8 +115,6 @@ const isMac = window.electronAPI.getPlatform() === 'darwin';
 /** How long expanding waits for an editor opening for the first time to
  *  mount before it eases anyway (it then fades in when it arrives). */
 const EDITOR_MOUNT_WAIT_MS = 300;
-/** The most the sidebar's ease waits for its new layout's long frames. */
-const SIDEBAR_SETTLE_CAP_MS = 250;
 
 export function App() {
   // Projects/tasks domain state lives in projectsStore; subscribe via selectors.
@@ -442,11 +440,23 @@ export function App() {
   // Close `cwd`'s editor (asking about unsaved edits) and hand the keyboard
   // back to the task's Claude Code TUI. RAF defers past React's commit so the
   // editor is gone before xterm grabs focus. Not while the memory modal is
-  // still up: typing would reach Claude unseen.
+  // still up: typing would reach Claude unseen. An editor shown in its task's
+  // sidebar goes narrow first, through the planned motion (D264), and closes
+  // once it has eased (`pendingCloseRef`, settled below), so the panel's
+  // edge eases rather than the split dropping at once.
+  const pendingCloseRef = useRef<string | null>(null);
   const closeEditorOf = useCallback((cwd: string) => {
     void mayCloseEditor(cwd).then((ok) => {
       if (!ok) return;
-      useEditors.getState().close(cwd);
+      const editors = useEditors.getState();
+      const shown =
+        editors.byCwd[cwd]?.hidden === false &&
+        selectActiveTask(useProjects.getState())?.path === cwd &&
+        changesPanelRef.current?.isCollapsed() === false;
+      if (shown) {
+        pendingCloseRef.current = cwd;
+        editors.hide(cwd);
+      } else editors.close(cwd);
       const id = useProjects.getState().activeTaskId;
       if (id && !useUi.getState().memoryProjectId) {
         requestAnimationFrame(() => sessionRegistry.get(id)?.focus());
@@ -992,13 +1002,10 @@ export function App() {
   // of the shell), given back as the sidebar goes narrow. Null once the user
   // toggles the left sidebar themselves.
   const leftFreedByExpandRef = useRef<number | null>(null);
-  // The panels' ease now: the slower expand ease while the task sidebar goes
-  // narrow or expanded, so no panel's `animate` flag clears mid-ease.
-  const expandMotionRef = useRef(false);
-  const easeNow = useCallback(
-    () => panelEaseMs(expandMotionRef.current ? EXPAND_EASE_MS : undefined),
-    [],
-  );
+  // The task sidebar's planned motion, for every way it moves (narrow ⇄
+  // expanded, closing the editor, hide ⇄ show); `easeNow` is the slower ease
+  // while one runs, so no panel's `animate` flag clears mid-ease.
+  const { motion: sidebarMotion, run: runMotion, stop: stopMotion, easeNow } = usePlannedMotion();
   const toggleSidebar = useCallback(() => {
     const panel = sidebarPanelRef.current;
     if (!panel) return;
@@ -1050,14 +1057,43 @@ export function App() {
   // The width before a side-car TUI sized the panel to hug it (below).
   const changesSizeBeforeTui = useRef<number | null>(null);
   const inspectorBodyRef = useRef<HTMLDivElement>(null);
+  // The width (%) the panel had when the user last hid it: showing goes back
+  // to it (the library's own is out of reach, and the motion holds the
+  // content at it before the panel opens).
+  const shownPctRef = useRef<number | null>(null);
+  // Hide ⇄ show is the planned motion too (D264): hiding, the content stays
+  // as it is, clipped by the closing panel, until it has closed; showing, it
+  // is there at the width the panel opens to before it opens. The editor,
+  // expanded, keeps its width and doesn't fade.
   const toggleInspector = useCallback(() => {
     const panel = changesPanelRef.current;
     if (!panel) return;
-    setChangesAnimating(true);
+    const groupPx =
+      inspectorBodyRef.current?.closest('[data-slot="resizable-panel-group"]')?.clientWidth ??
+      window.innerWidth;
     if (panel.isCollapsed()) {
-      panel.expand();
+      const expanded = inspectorExpandedRef.current;
+      const widths = loadInspectorWidths();
+      const restored = shownPctRef.current ?? (expanded ? widths.expanded : widths.narrow);
+      const pct =
+        widthOnShow({
+          expandedAtCollapse: expandedAtCollapseRef.current,
+          expanded,
+          restored,
+          widths,
+          narrowMax: TUI_PANEL_MAX_PCT,
+        }) ?? restored;
+      runMotion({
+        hold: { width: Math.round((groupPx * pct) / 100), to: 'shown' },
+        // The library clamps the width (its bounds, the centre's least).
+        move: () => {
+          panel.resize(`${pct}%`);
+          return Math.round((groupPx * panel.getSize().asPercentage) / 100);
+        },
+      });
       return;
     }
+    shownPctRef.current = panel.getSize().asPercentage;
     // The TUI's hugging width isn't a width the user chose.
     if (changesSizeBeforeTui.current === null) {
       saveInspectorWidth(
@@ -1066,10 +1102,13 @@ export function App() {
       );
     }
     const hadFocus = inspectorBodyRef.current?.contains(document.activeElement) ?? false;
-    panel.collapse();
+    runMotion({
+      hold: { width: Math.round(panel.getSize().inPixels), to: 'hidden' },
+      move: () => panel.collapse(),
+    });
     const id = useProjects.getState().activeTaskId;
     if (hadFocus && id) requestAnimationFrame(() => sessionRegistry.get(id)?.focus());
-  }, [setChangesAnimating]);
+  }, [runMotion]);
 
   // Expanding eases the task sidebar to its expanded width, going narrow back
   // to its narrow one, each remembered. One panel, resized: swapping panels
@@ -1091,7 +1130,6 @@ export function App() {
   useEffect(() => {
     inspectorExpandedRef.current = expanded;
   }, [expanded]);
-  const [sidebarMotion, setSidebarMotion] = useState<SidebarMotion | null>(null);
   const editorMounted = useRef(false);
   const onEditorMounted = useRef<(() => void) | null>(null);
   const handleEditorMounted = useCallback((mounted: boolean) => {
@@ -1160,9 +1198,17 @@ export function App() {
         listPct = (listPx / (panel.getSize().inPixels - SIDEBAR_GUTTER_PX)) * 100;
       }
     }
+    // The editor closing (`closeEditorOf`) closes once it has gone narrow;
+    // expanding again keeps it.
+    const settleClose = () => {
+      const cwd = pendingCloseRef.current;
+      pendingCloseRef.current = null;
+      if (cwd && useEditors.getState().byCwd[cwd]?.hidden) useEditors.getState().close(cwd);
+    };
+    if (expanded) pendingCloseRef.current = null;
     if (width === null) {
-      expandMotionRef.current = false;
-      setSidebarMotion(null);
+      stopMotion();
+      settleClose();
       // Narrow behind a collapsed task sidebar: nothing to move with.
       if (restoreLeft) {
         setSidebarAnimating(true);
@@ -1173,53 +1219,39 @@ export function App() {
     const targetWidth = width;
     // The expanded width: where expanding goes, where narrowing comes from.
     const heldPx = Math.round(Math.max(panel.getSize().inPixels, (groupPx * targetWidth) / 100));
-    const to = expanded ? 'expanded' : 'narrow';
-    expandMotionRef.current = true;
-    setSidebarMotion({ width: heldPx, to, phase: 'held', listPct });
-
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let cancelSettle = () => {};
-    const ease = () => {
-      setChangesAnimating(true);
-      if (collapseLeft || restoreLeft) setSidebarAnimating(true);
+    return runMotion({
+      hold: { width: heldPx, to: expanded ? 'expanded' : 'narrow', listPct },
+      // An editor opening for the first time is waited for, so Monaco's
+      // start-up lands before the ease, not in it.
+      ready:
+        expanded && !editorMounted.current
+          ? (go) => {
+              const timer = setTimeout(() => onEditorMounted.current?.(), EDITOR_MOUNT_WAIT_MS);
+              onEditorMounted.current = () => {
+                onEditorMounted.current = null;
+                clearTimeout(timer);
+                go();
+              };
+              return () => {
+                onEditorMounted.current = null;
+                clearTimeout(timer);
+              };
+            }
+          : undefined,
+      movesLeft: collapseLeft || restoreLeft,
       // Room is freed before it is taken, so the centre's minimum never
       // clamps a panel mid-plan.
-      if (collapseLeft) {
-        left.collapse();
-        leftFreedByExpandRef.current = freedPct;
-      }
-      panel.resize(`${targetWidth}%`);
-      if (restoreLeft) left.expand();
-      setSidebarMotion({ width: heldPx, to, phase: 'easing', listPct });
-      timer = setTimeout(() => {
-        expandMotionRef.current = false;
-        setChangesAnimating(false);
-        setSidebarAnimating(false);
-        setSidebarMotion(null);
-      }, panelEaseMs(EXPAND_EASE_MS));
-    };
-    // The ease starts once the held layout has painted and the long frames
-    // that lay it out (and mount the editor) are over, from a task of its
-    // own (D112): a transition's clock starts at the frame its style change
-    // lands in.
-    const settleThenEase = () => {
-      cancelSettle = whenFramesSettle(ease, SIDEBAR_SETTLE_CAP_MS);
-    };
-    if (!expanded || editorMounted.current) settleThenEase();
-    else {
-      onEditorMounted.current = () => {
-        onEditorMounted.current = null;
-        clearTimeout(timer);
-        settleThenEase();
-      };
-      timer = setTimeout(() => onEditorMounted.current?.(), EDITOR_MOUNT_WAIT_MS);
-    }
-    return () => {
-      onEditorMounted.current = null;
-      cancelSettle();
-      clearTimeout(timer);
-    };
-  }, [expanded, setChangesAnimating, setSidebarAnimating]);
+      move: () => {
+        if (collapseLeft) {
+          left.collapse();
+          leftFreedByExpandRef.current = freedPct;
+        }
+        panel.resize(`${targetWidth}%`);
+        if (restoreLeft) left.expand();
+      },
+      done: settleClose,
+    });
+  }, [expanded, runMotion, stopMotion, setSidebarAnimating]);
   const narrowEditor = useCallback(() => {
     if (activeTask) useEditors.getState().hide(activeTask.path);
   }, [activeTask]);
@@ -1583,7 +1615,8 @@ export function App() {
                 <div
                   ref={inspectorBodyRef}
                   className={cn(
-                    changesPanelCollapsed ? 'hidden' : 'h-full',
+                    // Hidden once it has closed, shown before it opens.
+                    changesPanelCollapsed && !sidebarMotion ? 'hidden' : 'h-full',
                     sidebarMotion && 'w-(--held-width)',
                   )}
                   style={
