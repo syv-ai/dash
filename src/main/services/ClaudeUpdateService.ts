@@ -16,6 +16,7 @@ import { findClaudePath } from './claudeCli';
 import { DatabaseService } from './DatabaseService';
 import { restartAndStartTaskSession } from './ptyManager';
 import { supervisorService } from './SupervisorService';
+import { TelemetryService } from './TelemetryService';
 import { claudeConfigDir } from '../utils/claudePaths';
 import { claudeVersionFor, noteTaskClaudeVersion } from '../claudeContract/claudeVersions';
 import { reportFindings } from '../claudeContract/driftReporter';
@@ -47,6 +48,7 @@ class ClaudeUpdateServiceImpl {
   private timer: ReturnType<typeof setInterval> | null = null;
   private binaryKey: string | null = null;
   private versionCache = new Map<string, string>();
+  private reportedUpdate: string | null = null;
   private readonly controller = new ClaudeUpdateController({
     getActivity: () => activityMonitor.getAll(),
     restartTask: async (taskId) => {
@@ -54,6 +56,15 @@ class ClaudeUpdateServiceImpl {
     },
     publish: (state) => {
       if (this.sender && !this.sender.isDestroyed()) this.sender.send('claudeUpdate:state', state);
+      // Once per installed version per run: an update live sessions don't run yet.
+      if (state.installedVersion && state.outdated.length > 0) {
+        if (state.installedVersion !== this.reportedUpdate) {
+          this.reportedUpdate = state.installedVersion;
+          TelemetryService.capture('claude_update_detected', {
+            outdated_count: state.outdated.length,
+          });
+        }
+      }
     },
   });
 
@@ -82,6 +93,10 @@ class ClaudeUpdateServiceImpl {
   }
 
   restart(mode: ClaudeUpdateMode): void {
+    TelemetryService.capture('claude_update_restart_requested', {
+      mode,
+      outdated_count: this.controller.getState().outdated.length,
+    });
     this.controller.restart(mode);
   }
 

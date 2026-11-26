@@ -163,8 +163,11 @@ void app.whenReady().then(async () => {
   });
 
   // Start activity monitor — must happen after window creation
-  const { activityMonitor } = await import('./services/ActivityMonitor');
+  const { activityMonitor, activityEvents } = await import('./services/ActivityMonitor');
   activityMonitor.start(mainWindow.webContents);
+  // Turns, waits and failed turns as analytics (docs/telemetry.md).
+  const { trackActivity } = await import('./services/activityTelemetry');
+  trackActivity(activityEvents, (event, props) => TelemetryService.capture(event, props));
 
   // Supervisor reconcile loop: `claude agents --json` is the truth for task
   // sessions Dash was not around to see (restart, idle stop, sleep).

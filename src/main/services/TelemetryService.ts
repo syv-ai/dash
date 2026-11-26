@@ -6,6 +6,7 @@ import * as crypto from 'crypto';
 import * as os from 'os';
 import { scrubText } from './telemetryScrub';
 import type { DriftReport } from '../claudeContract/types';
+import { claudeVersionFor } from '../claudeContract/claudeVersions';
 
 // ── Config ────────────────────────────────────────────────────
 const POSTHOG_KEY = 'phc_zEKzF3cpq9lpt1x3ONeDemYkilhWjC1XgZSGN6AyX01';
@@ -49,6 +50,25 @@ const ALLOWED_EVENTS = new Set([
   'terminal_started',
   'session_adopted',
 
+  // Sessions and turns (docs/telemetry.md)
+  'session_started',
+  'session_woken',
+  'session_slept',
+  'session_restarted',
+  'turn_completed',
+  'turn_failed',
+  'wait_ended',
+
+  // Review and editor
+  'review_mode_entered',
+  'review_mode_exited',
+  'pr_review_submitted',
+  'file_opened',
+
+  // Claude Code updates
+  'claude_update_detected',
+  'claude_update_restart_requested',
+
   // Errors
   '$exception',
 
@@ -73,6 +93,17 @@ const ALLOWED_PROPERTIES = new Set([
   'claude_version',
   'field_path',
   'enum_value',
+  'duration_bucket',
+  'interrupted',
+  'resumed',
+  'model',
+  'permission_mode',
+  'provider',
+  'verdict',
+  'comment_count',
+  'ok',
+  'mode',
+  'outdated_count',
   'moved',
   'removed',
   'failed',
@@ -247,6 +278,8 @@ export class TelemetryService {
       platform: process.platform,
       arch: os.arch(),
       is_dev: process.argv.includes('--dev'),
+      // The installed Claude Code (`M.m.p`), for the version mix.
+      claude_version: claudeVersionFor(),
     };
   }
 

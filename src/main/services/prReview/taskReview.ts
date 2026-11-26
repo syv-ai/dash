@@ -7,6 +7,7 @@ import type {
   SubmitResult,
 } from '@shared/types';
 import { prScope } from '@shared/prScope';
+import { TelemetryService } from '../TelemetryService';
 import { isPrDraft } from '@shared/diffComments';
 import { diffCommentsRepo, type AgentDraft, type DiffCommentsRepo } from '../diffCommentsRepo';
 import { prReviewSummariesRepo, type PrReviewSummariesRepo } from '../prReviewSummariesRepo';
@@ -116,6 +117,12 @@ export function createTaskReviews({ comments, summaries, changed }: TaskReviewDe
         changed(taskId);
       }
       if (!result.error) setSummary(taskId, pr, { body: '', author: 'user' });
+      TelemetryService.capture('pr_review_submitted', {
+        provider: pr.provider,
+        verdict,
+        comment_count: drafts.comments.length + drafts.replies.length,
+        ok: !result.error,
+      });
       return result;
     },
     async reply(taskId, pr, { adapter, ctx }, { threadId, body, draftId }) {

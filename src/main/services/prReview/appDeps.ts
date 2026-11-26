@@ -1,5 +1,6 @@
 import type { PrRef, RelevantPrs, TaskPrs } from '@shared/types';
 import { DatabaseService } from '../DatabaseService';
+import { TelemetryService } from '../TelemetryService';
 import { ConnectionConfigService } from '../ConnectionConfigService';
 import { GitService } from '../GitService';
 import { taskReviewModesRepo } from '../taskReviewModesRepo';
@@ -38,6 +39,10 @@ export function appTaskPrs(taskId: string): Promise<TaskPrs> {
 /** Enter review mode for `pr` (null exits it). */
 export function appSetReviewMode(taskId: string, pr: PrRef | null): void {
   reviewModeDeps.storeMode(taskId, pr);
+  TelemetryService.capture(
+    pr ? 'review_mode_entered' : 'review_mode_exited',
+    pr ? { provider: pr.provider } : {},
+  );
 }
 
 /** dashctl's PR without `--number` (see `defaultReviewPr`). */

@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import { app, type WebContents } from 'electron';
+import { TelemetryService } from './TelemetryService';
 import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
 import { contextUsageService } from './ContextUsageService';
@@ -337,6 +338,7 @@ async function ensureTaskSession(opts: {
     if (row && samePath(row.cwd, opts.cwd)) {
       if (opts.wakeStopped && (row.pid === undefined || row.state === 'stopped')) {
         await supervisorService.respawn(opts.jobId);
+        TelemetryService.capture('session_woken');
       }
       return opts.jobId;
     }
@@ -375,6 +377,11 @@ async function ensureTaskSession(opts: {
     throw new UntrustedWorkspaceError(err.message, root);
   }
   const { jobId, sessionId } = dispatched;
+  TelemetryService.capture('session_started', {
+    resumed: Boolean(resumeSessionId),
+    model: opts.model ?? 'default',
+    permission_mode: opts.permissionMode ?? 'default',
+  });
   // The supervisor accepted the folder, so it is trusted now (trusted outside
   // Dash, or after the trust prompt).
   untrustedRoots.delete(opts.id);
@@ -757,6 +764,7 @@ export async function stopTaskSession(taskId: string): Promise<void> {
   if (!task?.jobId) return;
   await supervisorService.stop(task.jobId);
   DatabaseService.markTaskSessionStopped(taskId);
+  TelemetryService.capture('session_slept');
 }
 
 /**
@@ -799,6 +807,7 @@ export async function restartTaskSession(
   await supervisorService.stop(task.jobId).catch(() => {});
   await supervisorService.remove(task.jobId).catch(() => {});
   DatabaseService.setTaskSession(taskId, { jobId: null, sessionId });
+  TelemetryService.capture('session_restarted');
 }
 
 /**

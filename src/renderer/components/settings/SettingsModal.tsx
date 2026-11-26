@@ -1371,9 +1371,10 @@ export function SettingsModal({
                       <div className="text-xs text-muted-foreground leading-relaxed space-y-1.5">
                         <p>
                           <span className="font-medium text-fg-fade-80">What we collect:</span> app
-                          start/close, session duration, daily active usage, project and task
-                          counts, worktree and terminal usage, app version, platform, and
-                          architecture.
+                          start/close and daily use; counts of projects, tasks, sessions, turns
+                          (with coarse durations), reviews and file opens; errors with paths
+                          removed; where Claude Code behaves differently than Dash expects; the Dash
+                          and Claude Code versions, platform, and architecture.
                         </p>
                         <p>
                           <span className="font-medium text-fg-fade-80">

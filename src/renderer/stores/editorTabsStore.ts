@@ -14,6 +14,7 @@ import {
   type GroupIndex,
   type OpenOptions,
 } from '../components/diffEditor/tabs/editorLayout';
+import { track } from '../lib/telemetry';
 
 /** A span of text, 1-based (Monaco's IRange shape, so LSP ranges convert to it). */
 export interface TextRange {
@@ -116,7 +117,10 @@ export const useEditorTabs = create<EditorTabsState>((set, get) => {
       const layout = (persist && readStored(key)) || EMPTY_LAYOUT;
       set((s) => ({ layouts: { ...s.layouts, [key]: layout } }));
     },
-    open: (key, path, opts) => update(key, (l) => openTab(l, path, opts)),
+    open: (key, path, opts) => {
+      update(key, (l) => openTab(l, path, opts));
+      track('file_opened');
+    },
     activate: (key, group, path) => update(key, (l) => activateTab(l, group, path)),
     close: (key, group, path) => update(key, (l) => closeTab(l, group, path)),
     closeMany: (key, group, paths) => update(key, (l) => closeTabs(l, group, paths)),
@@ -125,6 +129,7 @@ export const useEditorTabs = create<EditorTabsState>((set, get) => {
     focusGroup: (key, group) => update(key, (l) => focusGroup(l, group)),
     openAt: (key, path, range) => {
       update(key, (l) => openTab(l, path, { preview: true }));
+      track('file_opened');
       const group = (get().layouts[key] ?? EMPTY_LAYOUT).focused;
       set({ reveal: { key, group, path, range, nonce: ++nonce } });
     },
