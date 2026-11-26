@@ -38,6 +38,18 @@ The source of truth for what Dash sends to PostHog. Change this file in the same
 
 `usage_snapshot` measures parallel work: open projects, open tasks in them, live sessions (any not asleep) now, and `peak_busy_sessions`, the most sessions working at once on the last closed day (absent on the first day). All four are count buckets: `0`, `1`, `2_3`, `4_5`, `6_10`, `11_20`, `21_50`, `gt_50`.
 
+### Dash updates and setup
+
+| Event                   | When                                                                     | Properties                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| `app_update_available`  | electron-updater finds a newer Dash, once per version per run            | `from_version`, `to_version`                                                                      |
+| `app_update_downloaded` | it is downloaded (installs on quit), once per version per run            | `from_version`, `to_version`                                                                      |
+| `app_update_installed`  | the first launch on another version than the last launch (`lastVersion`) | `from_version`, `to_version`                                                                      |
+| `app_update_failed`     | a check, download or install fails, once per stage and code per run      | `stage` (`check`, `download`, `install`), `error_code`, `from_version`, `to_version` (when known) |
+| `claude_cli_missing`    | the `claude --version` probe finds no Claude Code CLI, once per run      |                                                                                                   |
+
+`error_code` is electron-updater's or Node's code (`ERR_UPDATER_…`, `ENOTFOUND`) when identifier-shaped, else `unknown`; never the message. `app_update_installed` counts any version change, a manual install included. Claude Code authentication failures are `turn_failed` with `error_type = authentication_failed` (StopFailure is the only place Dash sees them), so there is no separate event; `platform` is on every event.
+
 ### Projects and tasks
 
 | Event                                                                      | When                                | Properties                   |

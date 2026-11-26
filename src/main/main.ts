@@ -279,6 +279,9 @@ export function redetectClaudeCli(): Promise<void> {
   return claudeCliDetection;
 }
 
+/** `claude_cli_missing` goes once a run (the gate's "Check again" re-probes). */
+let claudeCliMissingSent = false;
+
 async function probeClaudeCli(): Promise<void> {
   try {
     const { devClaudeBinOverride } = await import('./services/claudeCli');
@@ -307,6 +310,11 @@ async function probeClaudeCli(): Promise<void> {
     reportFindings('cli-version', checkVersionOutput(versionOut), claudeVersionFor());
   } catch {
     claudeCliCache = { installed: false, version: null, path: null };
+    if (!claudeCliMissingSent) {
+      claudeCliMissingSent = true;
+      const { TelemetryService } = await import('./services/TelemetryService');
+      TelemetryService.capture('claude_cli_missing');
+    }
   }
 }
 

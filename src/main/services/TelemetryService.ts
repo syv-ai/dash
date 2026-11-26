@@ -11,6 +11,7 @@ import type { DriftReport } from '../claudeContract/types';
 import { claudeVersionFor } from '../claudeContract/claudeVersions';
 import { countBucket, minutesBucket } from './telemetryBuckets';
 import { UsageLedger, type UsageLedgerState } from './usageLedger';
+import { installedUpdate } from './autoUpdateTelemetry';
 
 // ── Config ────────────────────────────────────────────────────
 const POSTHOG_KEY = 'phc_zEKzF3cpq9lpt1x3ONeDemYkilhWjC1XgZSGN6AyX01';
@@ -78,6 +79,15 @@ const ALLOWED_EVENTS = new Set([
   'claude_update_detected',
   'claude_update_restart_requested',
 
+  // Setup
+  'claude_cli_missing',
+
+  // Dash's own updates (AutoUpdateService)
+  'app_update_available',
+  'app_update_downloaded',
+  'app_update_installed',
+  'app_update_failed',
+
   // Errors ($exception goes through captureException, not this list)
   'ipc_failed',
 
@@ -127,6 +137,9 @@ const ALLOWED_PROPERTIES = new Set([
   'open_task_count',
   'live_session_count',
   'peak_busy_sessions',
+  'from_version',
+  'to_version',
+  'stage',
 ]);
 
 // ── Persisted State ───────────────────────────────────────────
@@ -138,6 +151,8 @@ interface TelemetryConfig {
   lastSnapshotDate?: string | null;
   /** Active minutes and peak busy sessions (UsageLedger), saved as they change. */
   usage?: UsageLedgerState;
+  /** The Dash version of the last launch, for `app_update_installed`. */
+  lastVersion?: string;
 }
 
 /** What main tells telemetry about the app, for the daily usage reports. */
@@ -166,12 +181,21 @@ export class TelemetryService {
       this.startTime = Date.now();
       this.config = this.readConfig();
       this.usage = new UsageLedger(this.config.usage);
+      // Kept whether or not telemetry is on, so turning it on later doesn't
+      // report every version since as one jump.
+      const lastVersion = this.config.lastVersion;
+      if (lastVersion !== app.getVersion()) {
+        this.config.lastVersion = app.getVersion();
+        this.writeConfig(this.config);
+      }
 
       if (!this.isEnabled()) return;
 
       this.client = createClient();
 
       this.capture('app_started');
+      const installed = installedUpdate(lastVersion, app.getVersion());
+      if (installed) this.capture(installed.event, installed.properties);
       this.checkDailyActiveUser();
       this.dailyTimer = setInterval(() => {
         this.checkDailyActiveUser();

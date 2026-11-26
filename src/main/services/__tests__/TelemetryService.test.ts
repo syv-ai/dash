@@ -209,6 +209,35 @@ describe('error tracking', () => {
   });
 });
 
+describe('app_update_installed', () => {
+  it('fires on the first launch of a new version, once', async () => {
+    writeFileSync(
+      path.join(userData, 'telemetry.json'),
+      JSON.stringify({
+        instanceId: 'test',
+        enabled: true,
+        lastActiveDate: null,
+        lastVersion: '0.0.0-old',
+      }),
+    );
+    app.isPackaged = true;
+    let { TelemetryService } = await import('../TelemetryService');
+    TelemetryService.initialize();
+    const installs = () =>
+      captured.mock.calls
+        .map((c) => c[0] as { event: string; properties: Record<string, unknown> })
+        .filter((m) => m.event === 'app_update_installed');
+    expect(installs().map((m) => m.properties)).toEqual([
+      expect.objectContaining({ from_version: '0.0.0-old', to_version: '0.0.0' }),
+    ]);
+    await TelemetryService.shutdown();
+    vi.resetModules();
+    ({ TelemetryService } = await import('../TelemetryService'));
+    TelemetryService.initialize();
+    expect(installs()).toHaveLength(1);
+  });
+});
+
 describe('daily usage', () => {
   const sent = (event: string) =>
     captured.mock.calls

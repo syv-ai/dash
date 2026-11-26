@@ -12,6 +12,9 @@ import { join } from 'node:path';
 import type { BrowserWindow } from 'electron';
 import type { AutoUpdateStatus, IpcResponse } from '@shared/types';
 import { initialStatus, reduce, shouldCheck, type UpdateEvent } from './autoUpdateState';
+import { UpdateTelemetry } from './autoUpdateTelemetry';
+import type { TelemetryEvent } from './activityTelemetry';
+import { TelemetryService } from './TelemetryService';
 
 /**
  * Wires electron-updater to Dash. Updates download on their own and install on
@@ -25,6 +28,7 @@ let checkInterval: ReturnType<typeof setInterval> | null = null;
 let initialCheckTimer: ReturnType<typeof setTimeout> | null = null;
 let status: AutoUpdateStatus = initialStatus(false);
 let listening = false;
+let telemetry: UpdateTelemetry | null = null;
 
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 const INITIAL_DELAY_MS = 10 * 1000; // 10 seconds
@@ -68,6 +72,18 @@ const fileLogger = {
 function apply(event: UpdateEvent): void {
   status = reduce(status, event, Date.now());
   publish();
+}
+
+/** An update failure: reported (docs/telemetry.md) in the state it happened in, then folded in. */
+function fail(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  send(telemetry?.failed(status.state, err, status.availableVersion));
+  apply({ type: 'error', message });
+  return message;
+}
+
+function send(event: TelemetryEvent | null | undefined): void {
+  if (event) TelemetryService.capture(event.event, event.properties);
 }
 
 function publish(): void {
@@ -157,6 +173,7 @@ export class AutoUpdateService {
 
     mainWindow = window;
     status = initialStatus(true);
+    telemetry = new UpdateTelemetry(app.getVersion());
 
     // Download without being asked, and apply on quit. Under 0.16.0 a restart
     // costs nothing: task sessions live under Claude Code's supervisor and
@@ -167,6 +184,7 @@ export class AutoUpdateService {
 
     autoUpdater.on('update-available', (info: UpdateInfo) => {
       writeLog('info', `update available: ${info.version}`);
+      send(telemetry?.available(info.version));
       apply({
         type: 'available',
         version: info.version,
@@ -184,13 +202,13 @@ export class AutoUpdateService {
 
     autoUpdater.on('update-downloaded', () => {
       writeLog('info', `update downloaded: ${status.availableVersion ?? 'unknown'}`);
+      send(telemetry?.downloaded(status.availableVersion));
       apply({ type: 'downloaded' });
     });
 
     autoUpdater.on('error', (err: Error) => {
-      const detail = err?.message || String(err);
-      writeLog('error', `during ${status.state}: ${detail}`);
-      apply({ type: 'error', message: detail });
+      writeLog('error', `during ${status.state}: ${err?.message || String(err)}`);
+      fail(err);
     });
 
     if (AutoUpdateService.readPreference()) startTimers();
@@ -241,7 +259,7 @@ export class AutoUpdateService {
       return { success: true };
     } catch (err) {
       // `error` usually fires too, but not for every rejection.
-      apply({ type: 'error', message: err instanceof Error ? err.message : String(err) });
+      fail(err);
       return { success: false, error: String(err) };
     }
   }
@@ -259,9 +277,7 @@ export class AutoUpdateService {
       await autoUpdater.downloadUpdate();
       return { success: true };
     } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      apply({ type: 'error', message: detail });
-      return { success: false, error: detail };
+      return { success: false, error: fail(err) };
     }
   }
 
@@ -279,9 +295,7 @@ export class AutoUpdateService {
       autoUpdater.quitAndInstall();
       return { success: true };
     } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      apply({ type: 'error', message: detail });
-      return { success: false, error: detail };
+      return { success: false, error: fail(err) };
     }
   }
 
