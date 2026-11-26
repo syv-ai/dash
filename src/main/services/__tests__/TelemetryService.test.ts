@@ -278,6 +278,9 @@ describe('daily usage', () => {
 
   it('sends one usage snapshot a day, with bucketed counts and the closed day’s peak', async () => {
     vi.useFakeTimers();
+    // Local noon the day after the seeded one: the 65 minutes advanced below
+    // never cross midnight, whenever the suite runs.
+    vi.setSystemTime(new Date(2026, 0, 2, 12, 0, 0));
     try {
       writeFileSync(
         path.join(userData, 'telemetry.json'),
