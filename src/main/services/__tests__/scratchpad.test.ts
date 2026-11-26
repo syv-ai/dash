@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveScratchpadDir, scratchpadFromPayload } from '../scratchpad';
+import { deriveScratchpadDir, jobScratchDir, scratchpadFromPayload } from '../scratchpad';
 
 const mac = {
   platform: 'darwin' as const,
@@ -37,5 +37,12 @@ describe('scratchpadFromPayload', () => {
     expect(scratchpadFromPayload({ scratchpad_dir: 'rel/scratchpad' })).toBeNull();
     expect(scratchpadFromPayload({ scratchpad_dir: 3 })).toBeNull();
     expect(scratchpadFromPayload({})).toBeNull();
+  });
+});
+
+describe('jobScratchDir', () => {
+  it("is the background session's tmp folder, for a job id only", () => {
+    expect(jobScratchDir('/home/.claude', '0c76302b')).toBe('/home/.claude/jobs/0c76302b/tmp');
+    expect(jobScratchDir('/home/.claude', '../x')).toBeNull();
   });
 });

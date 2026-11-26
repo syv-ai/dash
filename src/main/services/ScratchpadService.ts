@@ -9,28 +9,33 @@ import { broadcast } from '../utils/broadcast';
 import { watchFolder } from '../utils/watchFolder';
 import { DatabaseService } from './DatabaseService';
 import { listPlainFolder } from './plainFolder';
-import { deriveScratchpadDir, scratchpadFromPayload } from './scratchpad';
+import { claudeConfigDir } from '../utils/claudePaths';
+import { deriveScratchpadDir, jobScratchDir, scratchpadFromPayload } from './scratchpad';
 
 /**
- * Each task's Claude Code scratchpad, for the task sidebar's Agent tab. The
- * dir is the last one the task's session named (SessionStart's inbox hook
- * first, then every statusLine), kept after the session sleeps or ends;
- * before any payload this run, it is derived from the task's recorded
- * session (`scratchpad.ts`). A resumed session keeps its id, so its
- * scratchpad too (checked live, 2.1.332). The renderer names a task, never a
- * path: main resolves the dir itself.
+ * Each task's Claude Code scratchpad, for the task sidebar's Agent tab: the
+ * folder its session writes scratch files to (`scratchpad.ts`). A task's
+ * session runs in the background, so that is its job's `tmp/` while the job
+ * exists (a sleeping task keeps it; `claude rm` removes it). Otherwise the
+ * session scratchpad its payloads last named (SessionStart's inbox hook
+ * first, then every statusLine), or, before any payload this run, the one
+ * derived from the task's recorded session. A resumed session keeps its id,
+ * so its scratchpad too (checked live, 2.1.332). The renderer names a task,
+ * never a path: main resolves the folder itself.
  */
 
 const DEBOUNCE_MS = 200;
 const CHANGED = 'agent:scratchpadChanged';
 
-/** The last dir a payload named, per task. */
+/** The last scratchpad a payload named, per task. */
 const named = new Map<string, string>();
+/** The folder each task's watch is on, and the renderer was last told of. */
+const current = new Map<string, string | null>();
 /** Dirs this run handed the renderer: the editor lists these as plain files. */
 const served = new Set<string>();
 
 interface Watch {
-  /** Null until the task has a scratchpad dir (its first session's payload). */
+  /** Null while the task has no folder (no session yet). */
   dir: string | null;
   refs: number;
   close: () => void;
@@ -41,11 +46,13 @@ function changed(taskId: string): void {
   broadcast(CHANGED, { taskId });
 }
 
-/** The task's scratchpad dir: named by a payload, else derived; null when neither. */
+/** The task's scratch folder (see above); null when it has had no session. */
 export function taskScratchpadDir(taskId: string): string | null {
+  const task = DatabaseService.getTask(taskId);
+  const job = task?.jobId ? jobScratchDir(claudeConfigDir(), task.jobId) : null;
+  if (job && fs.existsSync(path.dirname(job))) return job;
   const known = named.get(taskId);
   if (known) return known;
-  const task = DatabaseService.getTask(taskId);
   if (!task?.sessionId) return null;
   return deriveScratchpadDir(task.path, task.sessionId, {
     platform: process.platform,
@@ -55,24 +62,30 @@ export function taskScratchpadDir(taskId: string): string | null {
   });
 }
 
+/** Point the task's watch at `dir`; true when that moved it. */
+function follow(taskId: string, dir: string | null): boolean {
+  if (current.has(taskId) && current.get(taskId) === dir) return false;
+  current.set(taskId, dir);
+  const watch = watches.get(taskId);
+  if (watch && watch.dir !== dir) {
+    watch.close();
+    watch.dir = dir;
+    watch.close = arm(taskId, dir);
+  }
+  return true;
+}
+
 /**
  * A hook or statusLine payload from the task's session: note the scratchpad
- * it names. Checks its shape against the derived layout (claudeContract/);
- * never throws into the hook path.
+ * it names, and follow the task to a new folder (a new job, a new session).
+ * Checks the dir's shape (claudeContract/); never throws into the hook path.
  */
 export function noteScratchpad(taskId: string, payload: Record<string, unknown>): void {
   try {
     reportFindings('scratchpad', checkScratchpadDir(payload), claudeVersionFor(taskId));
     const dir = scratchpadFromPayload(payload);
-    if (!dir || named.get(taskId) === dir) return;
-    named.set(taskId, dir);
-    const watch = watches.get(taskId);
-    if (watch && watch.dir !== dir) {
-      watch.close();
-      watch.dir = dir;
-      watch.close = arm(taskId, dir);
-    }
-    changed(taskId);
+    if (dir) named.set(taskId, dir);
+    if (follow(taskId, taskScratchpadDir(taskId))) changed(taskId);
   } catch (err) {
     console.warn('[ScratchpadService] note failed:', err);
   }
@@ -81,6 +94,7 @@ export function noteScratchpad(taskId: string, payload: Record<string, unknown>)
 /** The task's scratchpad and its files; null when it has had no session. */
 export async function readTaskScratchpad(taskId: string): Promise<TaskScratchpad | null> {
   const dir = taskScratchpadDir(taskId);
+  follow(taskId, dir);
   if (!dir) return null;
   served.add(dir);
   const exists = fs.existsSync(dir);
@@ -105,6 +119,7 @@ export function watchTaskScratchpad(taskId: string): void {
     return;
   }
   const dir = taskScratchpadDir(taskId);
+  current.set(taskId, dir);
   watches.set(taskId, { dir, refs: 1, close: arm(taskId, dir) });
 }
 

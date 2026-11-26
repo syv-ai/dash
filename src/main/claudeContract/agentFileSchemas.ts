@@ -38,8 +38,9 @@ const MEMORY_TYPE = z.enum(['user', 'feedback', 'project', 'reference']);
 /**
  * A memory file's frontmatter: `name`, `description` and `type`, plus the
  * `modified` timestamp Claude Code stamps on each write (docs, fetched
- * 2026-11-26). Some files nest `type` under `metadata:`, which Dash reads too.
- * Loose: Claude may add keys (`originSessionId`), which don't report.
+ * 2026-11-26). 2.1.332 nests `type` and `modified` under `metadata:` beside
+ * `node_type` and `originSessionId` (live, 2026-11-26); older files keep
+ * `type` at the top. Loose: keys Claude adds don't report.
  */
 const memoryFrontmatterSchema = z.looseObject({
   name: z.string().min(1),

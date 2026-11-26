@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import * as path from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   isServedScratchpad,
@@ -8,7 +11,7 @@ import {
 
 const { sent, tasks } = vi.hoisted(() => ({
   sent: [] as unknown[][],
-  tasks: {} as Record<string, { path: string; sessionId: string | null }>,
+  tasks: {} as Record<string, { path: string; sessionId: string | null; jobId?: string }>,
 }));
 vi.mock('../../utils/broadcast', () => ({
   broadcast: (...args: unknown[]) => sent.push(args),
@@ -55,5 +58,24 @@ describe('ScratchpadService', () => {
       listing: { files: [], dirs: [] },
     });
     expect(isServedScratchpad('/nowhere/q/scratchpad/')).toBe(true);
+  });
+
+  it("prefers the background job's tmp folder while the job exists", () => {
+    const config = mkdtempSync(path.join(tmpdir(), 'cfg-'));
+    const was = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = config;
+    try {
+      tasks.t4 = { path: '/r', sessionId: 's4', jobId: 'job4' };
+      noteScratchpad('t4', { session_id: 's4', scratchpad_dir: '/t/s4/scratchpad' });
+      expect(taskScratchpadDir('t4')).toBe('/t/s4/scratchpad');
+      mkdirSync(path.join(config, 'jobs/job4'), { recursive: true });
+      sent.length = 0;
+      noteScratchpad('t4', { session_id: 's4', scratchpad_dir: '/t/s4/scratchpad' });
+      expect(taskScratchpadDir('t4')).toBe(path.join(config, 'jobs/job4/tmp'));
+      expect(sent).toEqual([['agent:scratchpadChanged', { taskId: 't4' }]]);
+    } finally {
+      process.env.CLAUDE_CONFIG_DIR = was;
+      rmSync(config, { recursive: true, force: true });
+    }
   });
 });
