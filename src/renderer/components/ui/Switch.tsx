@@ -5,7 +5,7 @@ import { focusRing } from './styles';
 
 const switchVariants = cva(
   cn(
-    'group/switch relative inline-flex shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-colors duration-200 bg-select aria-checked:bg-btn disabled:cursor-not-allowed disabled:opacity-40',
+    'group/switch relative inline-flex shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-colors duration-200 bg-select aria-checked:bg-ink-3 disabled:cursor-not-allowed disabled:opacity-40',
     focusRing,
   ),
   {
@@ -37,8 +37,9 @@ export type SwitchProps = Omit<React.ComponentProps<'button'>, 'onChange' | 'val
 
 /**
  * The on/off switch (shadcn Switch API: `checked` / `onCheckedChange`). On is
- * the neutral button tone, off a select tint. For a labelled row use
- * `SwitchField`.
+ * an ink-3 track under a ground thumb, off a select tint under an ink-2 one:
+ * clearly on without the button tone's glare in dark (G4). For a labelled
+ * row use `SwitchField`.
  */
 export function Switch({
   checked,
