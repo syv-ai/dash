@@ -270,6 +270,14 @@ export const openKey = (section: string, path: string) => `${section}:${path}`;
 
 const contains = (folder: TreeFolder, path: string) => path.startsWith(`${folder.path}/`);
 
+/** A row named in the `changed` gold (G1, G5), as VS Code tints it: a changed
+ *  file (not an ignored one), or a folder with a change anywhere beneath it,
+ *  its own included, open or closed. Reads the tally `buildTree` sums once. */
+export function isChanged(row: ItemRow): boolean {
+  if (row.kind === 'folder') return row.folder.tally.changed > 0;
+  return !!row.file.change && row.file.change.status !== 'ignored';
+}
+
 /** Open unless the user says otherwise: a folder holding changes (not too
  *  many to read through) or the selected file. A lazy folder starts closed:
  *  opening it is what reads it. */

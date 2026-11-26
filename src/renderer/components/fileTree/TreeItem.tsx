@@ -32,7 +32,7 @@ import { absolutePath } from '../diffEditor/editor/fileRef';
 import { copyText, revealLabel } from '../diffEditor/fileActions';
 import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
 import type { FileChangeStatus } from '../../../shared/types';
-import type { FileBadges, ItemRow, TreeColumns, TreeRow } from './model';
+import { isChanged, type FileBadges, type ItemRow, type TreeColumns, type TreeRow } from './model';
 
 const STATUS_LETTER: Record<FileChangeStatus, string> = {
   modified: 'M',
@@ -86,10 +86,6 @@ export function TreeItem({
   const folder = row.kind === 'folder';
   const path = folder ? row.folder.path : row.file.path;
   const Chevron = folder && row.open ? ChevronDown : ChevronRight;
-  const change = folder ? row.folder.change : row.file.change;
-  // A changed entry's name is gold, as in VS Code (G1): a file, or a folder
-  // git lists as one change. A quiet row (viewed, ignored) stays quiet.
-  const changed = !!change && change.status !== 'ignored';
   const item = (
     <ListRow
       as="div"
@@ -103,7 +99,7 @@ export function TreeItem({
       data-key={row.key}
       selected={selected}
       dimmed={quiet}
-      changed={changed}
+      changed={isChanged(row)}
       indent={row.depth}
       title={folder ? undefined : path}
       className="group/swap relative cursor-pointer"

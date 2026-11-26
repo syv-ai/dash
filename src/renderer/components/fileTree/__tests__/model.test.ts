@@ -5,6 +5,7 @@ import {
   flattenTree,
   folded,
   folderRowIndex,
+  isChanged,
   isSelected,
   revealKeys,
   subtreeChanges,
@@ -137,6 +138,27 @@ describe('subtreeChanges', () => {
       'src/a.ts',
       'src/x/b.ts',
     ]);
+  });
+});
+
+describe('isChanged', () => {
+  const tree = buildTree([f('src/deep/a.ts', 'untracked'), f('gone.ts', 'deleted')], {
+    paths: ['src/kept.ts', 'lib/b.ts', 'gone.ts'],
+    dirs: [],
+    ignored: { files: ['.env'], dirs: [] },
+  });
+  const changed = (open: Map<string, boolean>) =>
+    flattenTree(one(tree), state({ open }))
+      .filter((r) => r.kind === 'folder' || r.kind === 'file')
+      .filter(isChanged)
+      .map((r) => (r.kind === 'file' ? r.file.path : r.folder.path));
+
+  it('names changed files, any status, but not unchanged or ignored ones', () => {
+    expect(changed(new Map())).toEqual(['src', 'src/deep', 'src/deep/a.ts', 'gone.ts']);
+  });
+
+  it('names a closed folder holding a change deep beneath it', () => {
+    expect(changed(new Map([['t:src', false]]))).toEqual(['src', 'gone.ts']);
   });
 });
 
