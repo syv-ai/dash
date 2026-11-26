@@ -4,7 +4,6 @@ import {
   Copy,
   FileText,
   Folder,
-  GitMerge,
   GitPullRequestArrow,
   Inbox,
   MoreHorizontal,
@@ -16,6 +15,7 @@ import {
   Sun,
   Trash2,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import {
@@ -61,15 +61,15 @@ import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/Popove
 import { PrBadge } from '../components/ui/PrBadge';
 import { Segmented } from '../components/ui/Segmented';
 import { Select } from '../components/ui/Select';
-import { SettingsModalShell } from '../components/ui/SettingsModalShell';
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from '../components/ui/Dialog';
+import { Field } from '../components/ui/Field';
 import { Slider } from '../components/ui/Slider';
 import { StatusDot, type AgentState } from '../components/ui/StatusDot';
 import { Switch } from '../components/ui/Switch';
 import { SwitchField } from '../components/ui/SwitchField';
 import { PillTab } from '../components/ui/PillTab';
 import { Textarea } from '../components/ui/Textarea';
-import { toast } from '../components/ui/toast';
-import { Toaster } from '../components/ui/Toaster';
+import { Toaster } from '../components/ui/Toast';
 import { TokenBadge } from '../components/ui/TokenBadge';
 import { Tooltip } from '../components/ui/Tooltip';
 import type { PullRequestInfo } from '../../shared/types';
@@ -110,6 +110,15 @@ export function Gallery() {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
+  React.useEffect(() => {
+    toast('Task finished', {
+      description: 'feat/primitives is ready for review.',
+      action: { label: 'Open', onClick: noop },
+      duration: Infinity,
+      id: 'gallery',
+    });
+  }, []);
+
   return (
     <div className="h-screen overflow-y-auto bg-ground text-ink">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 p-6">
@@ -141,12 +150,11 @@ export function Gallery() {
           <PillTabs />
           <Menus pinned={pinned} />
           <TypeRoles />
-          <Toasts />
         </div>
 
         {pinned && <Dialogs />}
       </div>
-      <Toaster />
+      <Toaster theme={theme} />
     </div>
   );
 }
@@ -412,7 +420,7 @@ function Rails() {
             at,
             size,
             label,
-            onSelect: () => toast.info(label),
+            onSelect: () => toast(label),
           }))}
           spans={RAIL_SPANS.map(([tone, at, size, label]) => ({
             key: label,
@@ -420,99 +428,9 @@ function Rails() {
             at,
             size,
             label,
-            onSelect: () => toast.info(label),
+            onSelect: () => toast(label),
           }))}
         />
-      </div>
-    </Section>
-  );
-}
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** One button per toast variant, for review in both themes. */
-function Toasts() {
-  const raise: Array<[string, () => void]> = [
-    [
-      'Info',
-      () =>
-        toast.info('No failed checks on PR #212', { description: 'They may have been re-run.' }),
-    ],
-    ['Success', () => toast.success('Review posted', { meta: 'sidebar-rail' })],
-    [
-      'Warning',
-      () => toast.warning('Context at 80%', { description: 'sidebar-rail is near its limit.' }),
-    ],
-    [
-      'Error',
-      () =>
-        toast.error('Setup failed for sidebar-rail', {
-          description: 'pnpm install exited with code 1',
-          action: { label: 'View output', onClick: noop },
-        }),
-    ],
-    ['Copied', () => toast.copied('path', 'src/renderer/components/ui/Toaster.tsx')],
-    [
-      'Offer',
-      () =>
-        toast.offer('PR #212 merged', {
-          meta: 'Archive sidebar-rail?',
-          icon: GitMerge,
-          action: { label: 'Archive', onClick: noop },
-        }),
-    ],
-    [
-      'Progress → success',
-      () =>
-        void toast.progress(sleep(1500), {
-          loading: 'Fetching failed checks of PR #212…',
-          success: () => ({
-            kind: 'success',
-            title: 'Fix CI prompt typed into sidebar-rail',
-            description: 'Review it, then press Enter to send.',
-          }),
-          error: () => ({ kind: 'error', title: 'Unreachable' }),
-        }),
-    ],
-    [
-      'Progress → error',
-      () =>
-        void toast
-          .progress(
-            sleep(1500).then(() => Promise.reject(new Error('gh: not logged in'))),
-            {
-              loading: 'Fetching failed checks of PR #212…',
-              success: () => null,
-              error: (e) => ({
-                kind: 'error',
-                title: 'Couldn’t fetch checks',
-                description: String(e),
-              }),
-            },
-          )
-          .catch(noop),
-    ],
-    [
-      'Custom',
-      () =>
-        toast.custom('gallery-custom', (id) => (
-          <div className="flex items-center gap-2 px-3 py-2.5">
-            <span className="type-body flex-1">A persistent custom toast</span>
-            <Button size="sm" variant="ghost" onClick={() => toast.dismiss(String(id))}>
-              Close
-            </Button>
-          </div>
-        )),
-    ],
-  ];
-  return (
-    <Section title="Toast">
-      <div className="flex flex-wrap gap-2">
-        {raise.map(([label, run]) => (
-          <Button key={label} size="sm" variant="secondary" onClick={run}>
-            {label}
-          </Button>
-        ))}
       </div>
     </Section>
   );
@@ -789,10 +707,19 @@ function Dialogs() {
         />
       </div>
       <div className="relative h-72 transform-gpu overflow-hidden rounded-xl bg-well">
-        <SettingsModalShell title="Task settings" onClose={noop} size="w-96">
-          <SwitchField label="Let the agent reach Dash" checked onCheckedChange={noop} />
-          <Input defaultValue="feat/primitives" aria-label="Branch" />
-        </SettingsModalShell>
+        <Dialog size="sm" onClose={noop}>
+          <DialogHeader title="Task settings" description="smoke-review" />
+          <DialogBody>
+            <Field label="Branch">
+              <Input defaultValue="feat/primitives" />
+            </Field>
+            <SwitchField label="Let the agent reach Dash" checked onCheckedChange={noop} />
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="ghost">Cancel</Button>
+            <Button>Save</Button>
+          </DialogFooter>
+        </Dialog>
       </div>
     </div>
   );

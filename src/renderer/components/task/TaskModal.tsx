@@ -694,7 +694,6 @@ function TaskModalBody({
               <Expandable
                 label="Context prompt"
                 hint="optional"
-                labelClassName="text-fg-fade-70"
                 defaultOpen={!!contextPrompt.trim()}
               >
                 <textarea
@@ -750,12 +749,7 @@ function TaskModalBody({
             {/* Per-task worktree scripts (override the project default) */}
             {useWorktree && !repoHasNoCommits && (
               <div className="mb-4">
-                <Expandable
-                  label="Worktree scripts"
-                  hint="setup / teardown"
-                  labelClassName="text-fg-fade-70"
-                  defaultOpen={false}
-                >
+                <Expandable label="Worktree scripts" hint="setup / teardown" defaultOpen={false}>
                   <div className="space-y-3">
                     <div>
                       <label className="block text-xs font-medium text-muted-fade-60 mb-1.5">

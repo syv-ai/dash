@@ -12,6 +12,8 @@ export interface AutoGrow {
 const variants = {
   /** A filled field, styled as `Input`. */
   field: cn(fieldBase, 'py-1.5'),
+  /** A field for code (a script, command arguments): mono. */
+  code: cn(fieldBase, 'py-1.5 font-mono'),
   /** Bare text on its surface (a popover's comment draft): no fill, no ring. */
   bare: 'w-full min-w-0 bg-transparent text-base leading-relaxed text-ink outline-none placeholder:text-ink-3',
 };

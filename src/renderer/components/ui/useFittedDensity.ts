@@ -43,7 +43,14 @@ export function useFittedDensity<D>(
       // every copy measures 0, which would report a least width of nothing
       // and feed back into its host's layout. Keep the last real measure.
       if (root.getClientRects().length === 0) return;
-      const widths = Array.from(sizer.children, (row) => row.getBoundingClientRect().width);
+      // Rects are scaled by any transform above (a dialog's scale-in), and
+      // `clientWidth` isn't: unscale them, or a row measured mid-animation
+      // reads too narrow and truncates for good (no resize follows).
+      const scale = root.offsetWidth ? root.getBoundingClientRect().width / root.offsetWidth : 1;
+      const widths = Array.from(
+        sizer.children,
+        (row) => row.getBoundingClientRect().width / (scale || 1),
+      );
       const rounded = widths.map(Math.ceil);
       setNeeds((was) =>
         was.length === rounded.length && was.every((w, i) => w === rounded[i]) ? was : rounded,

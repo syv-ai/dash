@@ -1,6 +1,7 @@
 import { memo, useMemo, type ReactNode } from 'react';
 import { marked, type Token, type Tokens } from 'marked';
 import { CheckboxMark } from './Checkbox';
+import { Code } from './Code';
 
 /**
  * Markdown (GitHub-flavoured) rendered as React elements from marked's tokens,
@@ -163,14 +164,7 @@ function inline(tokens: Token[]): ReactNode[] {
       case 'del':
         return <del key={i}>{inline((t as Tokens.Del).tokens)}</del>;
       case 'codespan':
-        return (
-          <code
-            key={i}
-            className="rounded-sm bg-foreground/8 px-1 py-px font-mono text-[0.92em] wrap-anywhere"
-          >
-            {(t as Tokens.Codespan).text}
-          </code>
-        );
+        return <Code key={i}>{(t as Tokens.Codespan).text}</Code>;
       case 'br':
         return <br key={i} />;
       case 'link':

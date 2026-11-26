@@ -1,9 +1,10 @@
 import * as React from 'react';
+import { SettingRow } from './Field';
 import { Switch } from './Switch';
 
 /**
- * A labelled on/off field for dialogs and forms: the label (and optional hint
- * lines) on the left, a `Switch` on the right. The whole label is clickable.
+ * A labelled on/off setting: a `SettingRow` with a `Switch` at its end. The
+ * label toggles it too.
  */
 export function SwitchField({
   label,
@@ -12,30 +13,37 @@ export function SwitchField({
   checked,
   onCheckedChange,
   disabled,
+  children,
 }: {
   label: string;
   hint?: React.ReactNode;
-  /** A second, fainter line under the hint (e.g. "Applies the next time…"). */
+  /** A second line under the hint (e.g. "Applies the next time…"). */
   helperText?: React.ReactNode;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   disabled?: boolean;
+  /** Under the text at full width (a detail the switch reveals). */
+  children?: React.ReactNode;
 }) {
   const id = React.useId();
   return (
-    <div className="flex items-start gap-3">
-      <label htmlFor={id} className="min-w-0 flex-1 cursor-pointer">
-        <span className="block text-sm font-medium text-ink">{label}</span>
-        {hint && <span className="mt-1 block text-xs leading-relaxed text-ink-2">{hint}</span>}
-        {helperText && <span className="mt-0.5 block text-xs text-ink-3">{helperText}</span>}
-      </label>
-      <Switch
-        id={id}
-        className="mt-0.5"
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        disabled={disabled}
-      />
-    </div>
+    <SettingRow
+      label={label}
+      htmlFor={id}
+      disabled={disabled}
+      hint={
+        hint || helperText ? (
+          <>
+            {hint}
+            {helperText && <span className="mt-0.5 block">{helperText}</span>}
+          </>
+        ) : undefined
+      }
+      control={
+        <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
+      }
+    >
+      {children}
+    </SettingRow>
   );
 }
