@@ -135,7 +135,7 @@
     "qrcode": "^1.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "sonner": "^2.0.7",
+    "sonner": "^2.0.8",
     "typescript7": "npm:typescript@^7.0.2",
     "vscode-jsonrpc": "^10.0.1",
     "vscode-languageserver-protocol": "^3.18.6",
