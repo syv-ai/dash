@@ -170,8 +170,9 @@ class ActivityMonitorImpl {
    * `stopped` come only from the supervisor (or the permission hook) and
    * always apply, as does anything that lifts a `stopped`/`error` state.
    * One more asymmetry: for a task whose hooks reach us, the supervisor may
-   * take it to idle (a lost Stop hook) but never to busy — its `status` stays
-   * `busy` long after a turn has ended, and hooks land first anyway.
+   * take it to idle (a lost Stop hook) but never from idle to busy — its
+   * `status` stays `busy` long after a turn has ended, and hooks land first
+   * anyway. From waiting it may: that is a prompt answered.
    */
   applySupervisor(ptyId: string, activity: SupervisorActivity, pollIntervalMs: number): void {
     let a = this.activities.get(ptyId);
@@ -199,9 +200,11 @@ class ActivityMonitorImpl {
     // been sitting at the prompt for ten minutes still reported `busy`, and a
     // `done` job did so for hours. So for a task whose hooks talk to us
     // (registered, lastHookTime set — entries the listing created carry 0) the
-    // supervisor never *promotes* to busy: hooks own that transition. It still
-    // drives busy for listing-only tasks, which have no hooks to speak.
-    if (next === 'busy' && hookDriven && a.lastHookTime > 0) return;
+    // supervisor never *promotes* idle to busy: hooks own that transition. It
+    // still drives busy for listing-only tasks, which have no hooks to speak,
+    // and lifts a waiting task whose prompt was answered: approving a
+    // permission prompt fires no hook until the tool finishes (S4).
+    if (next === 'busy' && (a.state === 'busy' || a.state === 'idle') && a.lastHookTime > 0) return;
 
     const nextError = next === 'error' ? (activity.error ?? a.error) : null;
     const nextDetail = activity.detail ?? null;

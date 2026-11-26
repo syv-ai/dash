@@ -316,6 +316,17 @@ describe('ActivityMonitor — supervisor reconcile (applySupervisor)', () => {
     expect(activityMonitor.getAll()['t1']!.state).toBe('idle');
   });
 
+  // S4, live: approving a permission prompt fires no hook until the tool
+  // finishes, so the orb stayed purple while the command ran.
+  it('lifts a waiting task to busy once the listing says the prompt was answered', () => {
+    activityMonitor.register('t1', 1);
+    activityMonitor.setToolStart('t1', 'Bash', { command: 'make' });
+    activityMonitor.applySupervisor('t1', { state: 'waiting', detail: 'permission prompt' }, POLL);
+    vi.advanceTimersByTime(POLL + 1);
+    activityMonitor.applySupervisor('t1', { state: 'busy' }, POLL);
+    expect(activityMonitor.getAll()['t1']!.state).toBe('busy');
+  });
+
   it('still drives busy for a listing-only task that has no hooks', () => {
     activityMonitor.applySupervisor('t2', { state: 'idle' }, POLL);
     activityMonitor.applySupervisor('t2', { state: 'busy' }, POLL);
