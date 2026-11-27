@@ -391,25 +391,24 @@ export class TerminalSessionManager {
    * A kept task terminal that is hidden holds its output unparsed (see
    * hiddenOutput). Nothing reads its screen meanwhile: the status orb runs on
    * hooks in main, and search, selection and the veil only act while shown.
-   * Its mouse-mode tracker and any reply xterm owes the program catch up when
-   * the output is written, in the same order.
+   * A terminal query is parsed at once, so the program gets its reply; the
+   * mouse-mode tracker catches up when the rest is written, in order.
    */
   private get holdsOutput(): boolean {
     return this.isTaskPane && !this.isShown;
   }
 
-  /** Shown again: write the held output, or, if there was too much, reset
-   *  and let the attach below start a fresh client, which repaints the
-   *  whole screen (as a reconnect does). */
+  /** Shown again: write the held output, in order. */
   private writeHeldOutput(): void {
-    const held = this.hiddenOutput.take();
-    if (held.stale) {
-      this.ptyStarted = false;
-      this.resetTerminal();
-      return;
-    }
-    for (const chunk of held.chunks) this.terminal.write(chunk);
-    if (held.chunks.length > 0) this.onActivity?.('output');
+    this.writeOutput(this.hiddenOutput.take());
+  }
+
+  /** Parse output that skipped the live path (held while hidden). */
+  private writeOutput(chunks: readonly string[]): void {
+    if (chunks.length === 0) return;
+    for (const chunk of chunks) this.terminal.write(chunk);
+    this.onActivity?.('output');
+    this.checkMemory();
   }
 
   private createGpu(): WebglLifecycle<WebglAddon> | null {
@@ -1422,7 +1421,8 @@ export class TerminalSessionManager {
       }
 
       if (this.holdsOutput) {
-        this.hiddenOutput.push(data);
+        // Held, or written through at once for a terminal query or past the cap.
+        this.writeOutput(this.hiddenOutput.push(data));
         return;
       }
 
