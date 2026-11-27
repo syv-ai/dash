@@ -6,6 +6,7 @@ import {
   finishButton,
   finishOffered,
   ownReviewLine,
+  pendingReviewLine,
   threadsLineShort,
   offeredVerdict,
   postLabel,
@@ -178,5 +179,17 @@ describe('finishButton', () => {
       label: 'Re-review new commits…',
       title: 'Your review: Approved 4 days ago · new commits since',
     });
+  });
+});
+
+describe('pendingReviewLine', () => {
+  it('counts the drafts as Finish review does, the summary among them, then the notes', () => {
+    expect(pendingReviewLine({ drafts: 1, summary: 'LGTM', notes: 1 })).toBe('2 drafts · 1 note');
+    expect(pendingReviewLine({ drafts: 0, summary: ' ', notes: 3 })).toBe('3 notes');
+    expect(pendingReviewLine({ drafts: 1, summary: '', notes: 0 })).toBe('1 draft');
+  });
+
+  it('says nothing with nothing in hand', () => {
+    expect(pendingReviewLine({ drafts: 0, summary: '', notes: 0 })).toBe('');
   });
 });

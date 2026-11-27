@@ -11,7 +11,7 @@ import {
   type RefObject,
 } from 'react';
 import type { ITheme as XtermTheme } from '@xterm/xterm';
-import { Info, MessageSquareCode, X } from 'lucide-react';
+import { Info, X } from 'lucide-react';
 import { WorkingFiles, type RepoView } from '../changes/WorkingFiles';
 import { CommitBar } from '../changes/CommitBar';
 import { useCommitRun } from '../changes/useCommitRun';
@@ -32,7 +32,6 @@ import { useSettledTrack } from '../../lib/useSettledTrack';
 import { ViewPanel, ViewTabs, type ViewTabsOption } from '../ui/ViewTabs';
 import { MovableSlot, useMovable } from '../ui/Movable';
 import { folderSheet, folderStripSlot } from '../ui/FolderTab';
-import { CountBadge } from '../ui/CountBadge';
 import {
   ResizableHandle,
   ResizablePanel,
@@ -75,7 +74,6 @@ import { useUi } from '../../stores/uiStore';
 import { useEditorTabs } from '../../stores/editorTabsStore';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { matchesBinding, type KeyBinding } from '../../keybindings';
-import { needsAttention } from '../../../shared/diffComments';
 import type { ContextUsage, RateLimits, Task } from '../../../shared/types';
 import type { LimitPaces } from '../../lib/pace';
 
@@ -217,13 +215,8 @@ export function RightInspector({
   const setShellDrawerAnimating = useUi((s) => s.setShellDrawerAnimating);
   const run = useCommitRun(task.path, onCommitFinished);
 
-  // The task's notes to send and PR comments to submit, across every view.
-  const commentCount = useCommentsStore((s) => {
-    if (s.taskId !== task.id) return 0;
-    let n = 0;
-    for (const list of Object.values(s.byFile)) for (const c of list) if (needsAttention(c)) n++;
-    return n;
-  });
+  // The task's notes and PR drafts: the editor's "n to send" and the PR
+  // list's per-PR counts read them.
   useEffect(() => {
     if (useCommentsStore.getState().taskId !== task.id) {
       void useCommentsStore.getState().loadForTask(task.id);
@@ -458,9 +451,6 @@ export function RightInspector({
     setTimeout(() => setShellDrawerAnimating(false), panelEaseMs());
   };
 
-  // The comments to send: the editor holds them; the header's button opens
-  // it. Review mode's Threads tab counts and lists them itself.
-  const showComments = !reviewing && commentCount > 0;
   // The commit actions, as Files' footer while it lists changes (review
   // mode's Files are the PR's).
   const commitBar = !reviewing &&
@@ -527,28 +517,11 @@ export function RightInspector({
   }, [listMinPx, onMinWidth]);
 
   const extras: ViewRowExtra[] = [];
-  if (showComments) {
-    const commentsButton = (
-      <IconButton size="sm" title={`Comments: ${commentCount} to send`} onClick={onOpenEditor}>
-        <MessageSquareCode size={14} strokeWidth={1.8} />
-      </IconButton>
-    );
-    extras.push({
-      key: 'comments',
-      node: (
-        <>
-          {commentsButton}
-          <CountBadge count={commentCount} className="-ml-1" />
-        </>
-      ),
-      // The count stays in its tooltip.
-      compact: commentsButton,
-    });
-  }
   // The PR button's state, for the row and the rail; normal mode only.
   const prs = reviewing
     ? null
     : {
+        taskId: task.id,
         relevant: review.relevant,
         own: review.own,
         onOpen: review.refreshPrs,

@@ -138,6 +138,28 @@ export function threadsLineShort(threads: readonly Pick<PrReviewThread, 'resolve
   );
 }
 
+/** The drafts a review would post: the comments and replies, and the
+ *  summary when it has words. */
+export const draftCount = (drafts: number, summary: string): number =>
+  drafts + (summary.trim() ? 1 : 0);
+
+/** "2 drafts · 1 note": a PR's review still in hand, as Finish review counts
+ *  its drafts, and its notes not yet sent to the agent; '' with neither. */
+export function pendingReviewLine({
+  drafts,
+  summary,
+  notes,
+}: {
+  drafts: number;
+  summary: string;
+  notes: number;
+}): string {
+  const count = draftCount(drafts, summary);
+  return [count > 0 && plural(count, 'draft'), notes > 0 && plural(notes, 'note')]
+    .filter(Boolean)
+    .join(' · ');
+}
+
 /** What Finish review's button says: its label, and what the person's last
  *  review was (its tooltip; null before one). */
 export interface FinishButton {
@@ -166,7 +188,7 @@ export function finishButton(
   },
   now: number,
 ): FinishButton {
-  const count = drafts + (summary.trim() ? 1 : 0);
+  const count = draftCount(drafts, summary);
   const title = own ? `Your review: ${ownReviewLine(own, now)}` : null;
   if (count > 0) return { label: `${plural(count, 'draft')} · Finish review…`, title };
   if (own?.stale) return { label: 'Re-review new commits…', title };

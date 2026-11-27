@@ -1,8 +1,11 @@
 import { useState } from 'react';
-import { ExternalLink, GitPullRequestArrow, MessageSquare } from 'lucide-react';
+import { ExternalLink, GitPullRequestArrow, MessageSquare, Pencil } from 'lucide-react';
 import { formatTimeAgo } from '@shared/relativeTime';
+import { prScope } from '../../../shared/prScope';
 import type { PullRequest, RelevantPr, RelevantPrs } from '../../../shared/types';
 import { cn } from '../../lib/cn';
+import { useCommentsStore } from '../../stores/commentsStore';
+import { useTaskReview } from '../diffEditor/prReview/useTaskReview';
 import { Button } from '../ui/Button';
 import {
   Command,
@@ -20,7 +23,9 @@ import { RailItemButton } from '../ui/Rail';
 import { Tooltip } from '../ui/Tooltip';
 import { prStateIcon, prStatusText, sharedPrState, shownPrState } from '../ui/prStatusColors';
 import { ChecksRollupIcon } from './ChecksRollupIcon';
+import { draftCount, pendingReviewLine, unsentNoteCount } from './finishReview';
 import { plural, providerName } from './labels';
+import { reviewComments } from './outline';
 
 /** Past this many PRs the list offers a search. */
 const SEARCH_FROM = 8;
@@ -35,15 +40,19 @@ const SEARCH_FROM = 8;
  * tooltip (R12). On the collapsed sidebar's rail (`rail`) it is a rail item,
  * the icon over the count, its list opening beside the rail. When every PR
  * in the list shows the same state, the icon is that state's, in its colour
- * (D133); a mixed list keeps the neutral PR icon.
+ * (D133); a mixed list keeps the neutral PR icon. Each PR in the list says
+ * the task's review of it still in hand: its drafts and unsent notes.
  */
 export function PrButton({
+  taskId,
   relevant,
   own,
   onOpen,
   onPick,
   variant = 'row',
 }: {
+  /** The task whose drafts and notes each PR counts. */
+  taskId: string;
   relevant: RelevantPrs | null;
   /** The branch's own PR and its unresolved threads (0: no badge). */
   own: { number: number; threads: number } | null;
@@ -139,8 +148,20 @@ export function PrButton({
           {searchable && <CommandInput placeholder="Filter by number, title or author" />}
           <CommandList className="max-h-120">
             <CommandEmpty>No matching pull requests</CommandEmpty>
-            <PrGroup heading="From this branch" side="from" prs={from} onPick={pick} />
-            <PrGroup heading="Into this branch" side="into" prs={into} onPick={pick} />
+            <PrGroup
+              heading="From this branch"
+              side="from"
+              taskId={taskId}
+              prs={from}
+              onPick={pick}
+            />
+            <PrGroup
+              heading="Into this branch"
+              side="into"
+              taskId={taskId}
+              prs={into}
+              onPick={pick}
+            />
           </CommandList>
         </Command>
       </PopoverContent>
@@ -151,12 +172,14 @@ export function PrButton({
 function PrGroup({
   heading,
   side,
+  taskId,
   prs,
   onPick,
 }: {
   heading: string;
   /** Which end of the PR is this branch: the row names the other one. */
   side: 'from' | 'into';
+  taskId: string;
   prs: readonly RelevantPr[];
   onPick: (pr: PullRequest) => void;
 }) {
@@ -164,27 +187,48 @@ function PrGroup({
   return (
     <CommandGroup heading={heading} className="not-first:mt-2">
       {prs.map((p) => (
-        <PrItem key={p.number} pr={p} side={side} onPick={() => onPick(p)} />
+        <PrItem key={p.number} pr={p} side={side} taskId={taskId} onPick={() => onPick(p)} />
       ))}
     </CommandGroup>
   );
 }
 
+/** The task's review of `pr` still in hand: its drafts, as Finish review
+ *  counts them, and its notes not yet sent to the agent. */
+function usePendingReview(taskId: string, pr: PullRequest) {
+  const scope = prScope(pr.provider, pr.number);
+  const comments = useCommentsStore((s) =>
+    s.taskId === taskId ? reviewComments(s.byFile, scope).length : 0,
+  );
+  const notes = useCommentsStore((s) =>
+    s.taskId === taskId ? unsentNoteCount(s.byFile, scope) : 0,
+  );
+  const summary = useTaskReview(taskId, pr).summary?.body ?? '';
+  return {
+    drafts: draftCount(comments, summary),
+    notes,
+    line: pendingReviewLine({ drafts: comments, summary, notes }),
+  };
+}
+
 /**
  * One PR: its state icon and title, then who opened it from or into which
  * branch, then its threads, checks, lines and last update, as far as the
- * forge listed them. The row enters review mode; its link button opens the
- * PR on the forge instead.
+ * forge listed them, then the task's review of it still in hand. The row enters
+ * review mode; its link button opens the PR on the forge instead.
  */
 function PrItem({
   pr,
   side,
+  taskId,
   onPick,
 }: {
   pr: RelevantPr;
   side: 'from' | 'into';
+  taskId: string;
   onPick: () => void;
 }) {
+  const pending = usePendingReview(taskId, pr);
   const state = shownPrState(pr);
   const Icon = prStateIcon(state);
   const forge = providerName(pr.provider);
@@ -233,6 +277,23 @@ function PrItem({
             <span>updated {formatTimeAgo(updated, Date.now() / 1000)}</span>
           )}
         </span>
+        {pending.line && (
+          <Tooltip
+            content={{
+              icon: Pencil,
+              title: 'Your review, not posted',
+              rows: [
+                { label: 'Drafts', value: pending.drafts },
+                { label: 'Notes to send', value: pending.notes },
+              ],
+            }}
+          >
+            <span className="type-caption flex items-center gap-1 self-start tabular-nums">
+              <Pencil size={14} strokeWidth={1.8} className="text-icon" />
+              {pending.line}
+            </span>
+          </Tooltip>
+        )}
       </span>
       <IconButton
         size="sm"
