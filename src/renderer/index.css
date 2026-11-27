@@ -132,14 +132,25 @@
   /* `shadow-raised`: the menu/dialog/tooltip elevation (hairline + drop). */
   --shadow-raised: var(--elevation);
 
-  /* `animate-breathe`: a StatusDot that wants a look (work, needs,
-     unseen); pair with `motion-safe:`. */
+  /* `animate-breathe`: a StatusDot that wants a look and keeps wanting it
+     (work, needs); pair with `motion-safe:`. */
   --animate-breathe: breathe 2.4s ease-in-out infinite;
+  /* `animate-breathe-few`: finished, not yet seen: a few of the same breaths,
+     then it holds in its colour, so a window left on unseen dots stops
+     drawing (D59). Its own keyframes, so a dot that goes work → unseen starts
+     its breaths afresh rather than carrying on the work dot's timeline. Each
+     breath ends at full opacity, so the hold doesn't jump. */
+  --animate-breathe-few: breathe-few 2.4s ease-in-out 3;
   /* `animate-fade-in`: content arriving (dialogs, the left sidebar's content
      and rail as it opens or closes); a theme animation, so `motion-safe:`
      applies (`fadeIn` below). */
   --animate-fade-in: fadeIn var(--motion-calm) var(--ease-settle);
   @keyframes breathe {
+    50% {
+      opacity: 0.35;
+    }
+  }
+  @keyframes breathe-few {
     50% {
       opacity: 0.35;
     }

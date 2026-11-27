@@ -18,32 +18,41 @@ const dotVariants = cva('inline-block shrink-0 rounded-full', {
       idle: 'bg-state-done',
       asleep: 'invisible',
     },
-    pulse: { true: 'motion-safe:animate-breathe', false: '' },
+    // Work and needs breathe until they change; unseen breathes a few
+    // times, then holds (D59).
+    breath: {
+      on: 'motion-safe:animate-breathe',
+      few: 'motion-safe:animate-breathe-few',
+      none: '',
+    },
   },
 });
 
-/** The states that want a look, so they breathe. */
-const BREATHES: ReadonlySet<AgentState> = new Set(['work', 'needs', 'done']);
+/** How each state breathes: the ones that want a look do. */
+function breathOf(state: AgentState): 'on' | 'few' | 'none' {
+  if (state === 'work' || state === 'needs') return 'on';
+  if (state === 'done') return 'few';
+  return 'none';
+}
 
 /**
  * A task's agent state as an 8px dot (6px `sm`) — the one place colour means something
  * (S1): working amber, waiting on you purple, finished but unseen blue, a
- * live session at rest green, failed red, sleeping no dot. The first three
- * breathe (not under reduced motion, where their colours still differ);
+ * live session at rest green, failed red, sleeping no dot. Working and
+ * waiting breathe; finished-unseen breathes a few times, then holds (D59;
+ * none under reduced motion, where their colours still differ);
  * `asleep` holds the dot's place with nothing in it, so names line up. Give
  * it a `label` when nothing beside it says the state in words.
  */
 export function StatusDot({
   state,
   size = 'md',
-  pulse = BREATHES.has(state),
   label,
   className,
 }: {
   state: AgentState;
   /** `md` (8px) for a task; `sm` (6px) for a roll-up of several. */
   size?: 'sm' | 'md';
-  pulse?: boolean;
   label?: string;
   /** Layout only. */
   className?: string;
@@ -54,7 +63,7 @@ export function StatusDot({
       aria-label={label}
       aria-hidden={label ? undefined : true}
       data-state={state}
-      className={cn(dotVariants({ state, size, pulse }), className)}
+      className={cn(dotVariants({ state, size, breath: breathOf(state) }), className)}
     />
   );
 }

@@ -7,6 +7,7 @@ const classes = (state: AgentState) =>
   (StatusDot({ state }) as ReactElement<{ className: string }>).props.className.split(' ');
 
 const BREATHE = 'motion-safe:animate-breathe';
+const BREATHE_FEW = 'motion-safe:animate-breathe-few';
 
 describe('StatusDot (S1)', () => {
   it('gives each state its own colour', () => {
@@ -21,9 +22,16 @@ describe('StatusDot (S1)', () => {
     expect(classes('asleep')).toContain('invisible');
   });
 
-  it('breathes while it wants a look: working, waiting on you, finished unseen', () => {
-    for (const s of ['work', 'needs', 'done'] as const) expect(classes(s)).toContain(BREATHE);
-    for (const s of ['idle', 'fail', 'asleep'] as const) expect(classes(s)).not.toContain(BREATHE);
+  it('breathes on while working or waiting on you', () => {
+    for (const s of ['work', 'needs'] as const) expect(classes(s)).toContain(BREATHE);
+    for (const s of ['done', 'idle', 'fail', 'asleep'] as const)
+      expect(classes(s)).not.toContain(BREATHE);
+  });
+
+  it('breathes a few times when finished unseen, then holds (D59)', () => {
+    expect(classes('done')).toContain(BREATHE_FEW);
+    for (const s of ['work', 'needs', 'idle', 'fail', 'asleep'] as const)
+      expect(classes(s)).not.toContain(BREATHE_FEW);
   });
 
   it('wears no halo: colour and breath tell the states apart', () => {
