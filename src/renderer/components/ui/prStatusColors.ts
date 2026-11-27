@@ -33,6 +33,19 @@ export function prStateIcon(state: PrState): LucideIcon {
   }
 }
 
+/** The state a PR shows: a draft says draft, whatever its forge state. */
+export const shownPrState = (pr: { state: PrState; draft?: boolean }): PrState =>
+  pr.draft ? 'draft' : pr.state;
+
+/** The state every PR in a list shows alike; null when they differ or the
+ *  list is empty (a mixed or empty list stays neutral). */
+export function sharedPrState(prs: readonly { state: PrState; draft?: boolean }[]): PrState | null {
+  const first = prs[0];
+  if (!first) return null;
+  const state = shownPrState(first);
+  return prs.every((p) => shownPrState(p) === state) ? state : null;
+}
+
 /** Just the text/icon colour for a PR state (no background). */
 export function prStatusText(state: PrState): string {
   switch (state) {

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ExternalLink, GitPullRequestArrow, MessageSquare } from 'lucide-react';
 import { formatTimeAgo } from '@shared/relativeTime';
-import type { PrState, PullRequest, RelevantPr, RelevantPrs } from '../../../shared/types';
+import type { PullRequest, RelevantPr, RelevantPrs } from '../../../shared/types';
 import { cn } from '../../lib/cn';
 import { Button } from '../ui/Button';
 import {
@@ -18,7 +18,7 @@ import { LineStats } from '../ui/LineStats';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
 import { RailItemButton } from '../ui/Rail';
 import { Tooltip } from '../ui/Tooltip';
-import { prStateIcon, prStatusText } from '../ui/prStatusColors';
+import { prStateIcon, prStatusText, sharedPrState, shownPrState } from '../ui/prStatusColors';
 import { ChecksRollupIcon } from './ChecksRollupIcon';
 import { plural, providerName } from './labels';
 
@@ -33,7 +33,9 @@ const SEARCH_FROM = 8;
  * only: review mode says itself, and exits, in the PR's header. Where the
  * view row is tight (`compact`) it is the icon alone, the counts in its
  * tooltip (R12). On the collapsed sidebar's rail (`rail`) it is a rail item,
- * the icon over the count, its list opening beside the rail.
+ * the icon over the count, its list opening beside the rail. When every PR
+ * in the list shows the same state, the icon is that state's, in its colour
+ * (D133); a mixed list keeps the neutral PR icon.
  */
 export function PrButton({
   relevant,
@@ -66,6 +68,16 @@ export function PrButton({
     onPick(pr);
   };
   const badge = own && own.threads > 0 && <CountBadge count={own.threads} tone="outline" />;
+  const shared = sharedPrState([...from, ...into]);
+  const Icon = shared ? prStateIcon(shared) : GitPullRequestArrow;
+  const icon = (
+    <Icon
+      size={14}
+      strokeWidth={1.8}
+      className={shared ? prStatusText(shared) : rail ? 'text-icon' : undefined}
+      aria-hidden
+    />
+  );
 
   return (
     <Popover
@@ -92,7 +104,7 @@ export function PrButton({
         <PopoverTrigger asChild>
           {rail ? (
             <RailItemButton aria-label={label}>
-              <GitPullRequestArrow size={14} strokeWidth={1.8} className="text-icon" aria-hidden />
+              {icon}
               <span className="type-body flex items-center gap-0.5 tabular-nums">
                 {count}
                 {badge}
@@ -100,11 +112,11 @@ export function PrButton({
             </RailItemButton>
           ) : variant === 'compact' ? (
             <Button variant="ghost" size="icon-sm" aria-label={label}>
-              <GitPullRequestArrow size={14} strokeWidth={1.8} />
+              {icon}
             </Button>
           ) : (
             <Button variant="ghost" size="sm" aria-label={label}>
-              <GitPullRequestArrow size={14} strokeWidth={1.8} />
+              {icon}
               <span className="tabular-nums">{count}</span>
               {badge}
             </Button>
@@ -173,7 +185,7 @@ function PrItem({
   side: 'from' | 'into';
   onPick: () => void;
 }) {
-  const state: PrState = pr.draft ? 'draft' : pr.state;
+  const state = shownPrState(pr);
   const Icon = prStateIcon(state);
   const forge = providerName(pr.provider);
   const updated = pr.updatedAt ? Date.parse(pr.updatedAt) / 1000 : NaN;
