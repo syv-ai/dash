@@ -18,7 +18,7 @@ interface ProjectSettingsModalProps {
 
 export function ProjectSettingsModal({ project, onClose, onRename }: ProjectSettingsModalProps) {
   return (
-    <Dialog size="lg" onClose={onClose}>
+    <Dialog size="md" onClose={onClose}>
       <ProjectSettingsBody project={project} onRename={onRename} />
     </Dialog>
   );
@@ -77,7 +77,7 @@ function ProjectSettingsBody({ project, onRename }: Omit<ProjectSettingsModalPro
           </FormSection>
         )}
       </DialogBody>
-      <DialogFooter divided>
+      <DialogFooter>
         <Button variant="ghost" onClick={close}>
           Cancel
         </Button>
