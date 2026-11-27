@@ -2,6 +2,7 @@ import { BrowserWindow, shell } from 'electron';
 import * as path from 'path';
 import { getTuiHost } from './tui/hostInstance';
 import { applyZoom } from './zoom';
+import { isExternalWebUrl, mayNavigate } from './navigation';
 
 const isDev = process.argv.includes('--dev');
 
@@ -44,10 +45,17 @@ export function createWindow(): BrowserWindow {
     void getTuiHost().handleRendererReload();
   });
 
-  // Open external links in default browser
+  // A new window is a link leaving the app (an editor preview's links all
+  // are): web and mail links go to the browser, anything else nowhere.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url).catch(() => {});
+    if (isExternalWebUrl(url)) shell.openExternal(url).catch(() => {});
     return { action: 'deny' };
+  });
+  // Nothing navigates the app away, nor an editor preview's frame (`navigation.ts`).
+  mainWindow.webContents.on('will-frame-navigate', (event) => {
+    if (!mayNavigate(event.url, event.isMainFrame, mainWindow.webContents.getURL())) {
+      event.preventDefault();
+    }
   });
 
   if (isDev) {

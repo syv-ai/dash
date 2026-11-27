@@ -45,8 +45,8 @@ import { EditorHeader } from './editor/EditorHeader';
 import { EditorViewport } from './editor/EditorViewport';
 import { ReviewRail } from './editor/ReviewRail';
 import { EditorContextMenu, type Compose } from './editor/EditorContextMenu';
-import { HtmlPreview } from './editor/HtmlPreview';
-import { markdownToDocument } from './editor/markdownPreview';
+import { PreviewFrame } from './editor/PreviewFrame';
+import { previewKind } from './editor/previewDocument';
 import { LoadingPill } from './editor/LoadingPill';
 import { StaleBanner } from './editor/StaleBanner';
 import { SaveErrorBanner } from './editor/SaveErrorBanner';
@@ -57,14 +57,6 @@ const WORDWRAP_KEY = 'diffEditor.wordWrap';
 const BLAME_KEY = 'diffEditor.blame';
 const SIDE_BY_SIDE_KEY = 'diffEditor.sideBySide';
 const NO_COMMENTS: Record<string, DiffComment[]> = {};
-
-/** Which files get a Code | Preview toggle, and how their preview is rendered.
- *  HTML renders as-is; markdown is converted to a styled HTML document. */
-function previewKind(filePath: string): 'html' | 'markdown' | null {
-  if (/\.html?$/i.test(filePath)) return 'html';
-  if (/\.(md|markdown)$/i.test(filePath)) return 'markdown';
-  return null;
-}
 
 interface EditorPaneProps {
   /** This pane's id, unique on the page: it holds the models it shows. */
@@ -247,14 +239,6 @@ export function EditorPane({
   // Unchanged files open as a plain editor: never split into two columns.
   const changed =
     displayed.kind === 'loaded' && displayed.originalContent !== displayed.modifiedContent;
-
-  // Document fed to the preview iframe — the live editor buffer (so unsaved
-  // edits show immediately). Markdown is converted; HTML renders verbatim.
-  // Skipped entirely while showing source so we don't parse on every keystroke.
-  const previewHtml = useMemo(() => {
-    if (!previewing || !kind) return '';
-    return kind === 'markdown' ? markdownToDocument(draft, isDark) : draft;
-  }, [previewing, kind, draft, isDark]);
 
   // A fresh load is on screen: mirror its buffer (which may hold edits made
   // in another group) and drop the previous file's transient state.
@@ -664,9 +648,14 @@ export function EditorPane({
           )}
           {/* Rendered preview overlays the editor (kept mounted underneath so
             toggling back to Code preserves scroll, cursor, and comment state). */}
-          {canPreview && previewing && (
+          {kind && previewing && (
             <div className="absolute inset-0 z-30">
-              <HtmlPreview html={previewHtml} />
+              <PreviewFrame
+                kind={kind}
+                text={draft}
+                isDark={isDark}
+                background={terminalTheme.background}
+              />
             </div>
           )}
         </div>
