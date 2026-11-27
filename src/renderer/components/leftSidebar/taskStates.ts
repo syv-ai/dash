@@ -139,7 +139,7 @@ export interface TaskGroups {
   /** Live at rest, then tasks made this run that haven't started yet. */
   resting: TaskStateRow[];
   /** Sleeping sessions and older tasks that never ran, most recently updated first. */
-  inactive: TaskStateRow[];
+  sleeping: TaskStateRow[];
 }
 
 /** A task that never ran: asleep with no session ever dispatched. */
@@ -151,7 +151,7 @@ export const LAUNCHED_AT = new Date().toISOString();
 /**
  * Splits the state-ordered list into the Tasks view's groups: favourites
  * first, whatever their state; the live rest by what it asks of the user;
- * the sleeping ones last (the "Inactive sessions" group). A task that never
+ * the sleeping ones last (the "Sleeping tasks" group). A task that never
  * ran stays up with the live ones only if it was made since `launchedAt`, so
  * a task just made never hides; an old one never started from Dash has no
  * session to show and folds away with the sleeping ones (T18).
@@ -169,7 +169,7 @@ export function taskGroups(list: TaskStateList, launchedAt: string): TaskGroups 
     ],
     news: list.active.filter((r) => !isFavorite(r)),
     resting: [...rest.filter(live), ...rest.filter(justMade)],
-    inactive: rest.filter((r) => !live(r) && !justMade(r)),
+    sleeping: rest.filter((r) => !live(r) && !justMade(r)),
   };
 }
 

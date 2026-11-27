@@ -37,7 +37,7 @@ interface TaskStateListProps extends TaskRowActions {
 /**
  * The left sidebar's default view: favourites first (any state), then every
  * live task across projects by state (`taskGroups`), and the sleeping ones
- * folded under "Inactive sessions", open or closed as last left. Each row
+ * folded under "Sleeping tasks", open or closed as last left. Each row
  * is a `TaskCard`, as in the Projects view, with a second line: its project
  * (and why, for needs-you and failed).
  */
@@ -49,11 +49,11 @@ export function TaskStateList({
   onOpenFolder,
   ...actions
 }: TaskStateListProps) {
-  const inactiveOpen = useSettings((s) => s.inactiveSessionsOpen);
-  const setInactiveOpen = useSettings((s) => s.setInactiveSessionsOpen);
+  const sleepingOpen = useSettings((s) => s.sleepingTasksOpen);
+  const setSleepingOpen = useSettings((s) => s.setSleepingTasksOpen);
   const rows = useMemo(
-    () => taskTreeRows(taskGroups(list, LAUNCHED_AT), inactiveOpen),
-    [list, inactiveOpen],
+    () => taskTreeRows(taskGroups(list, LAUNCHED_AT), sleepingOpen),
+    [list, sleepingOpen],
   );
 
   if (projects.length === 0) {
@@ -83,14 +83,14 @@ export function TaskStateList({
       variant="sidebar"
       className="min-h-0 flex-1"
       isSelected={(r) => r.kind === 'task' && r.row.task.id === activeTaskId}
-      onToggle={() => setInactiveOpen(!inactiveOpen)}
+      onToggle={() => setSleepingOpen(!sleepingOpen)}
       estimateSize={estimate}
       renderRow={(r, ctx) => {
         if (r.kind === 'gap') return <div className="h-4" />;
-        if (r.kind === 'inactive') {
+        if (r.kind === 'sleeping') {
           return (
-            <TreeRow ctx={ctx} dimmed size="sm" onActivate={() => setInactiveOpen(!inactiveOpen)}>
-              {`Inactive sessions (${r.count})`}
+            <TreeRow ctx={ctx} faint size="sm" onActivate={() => setSleepingOpen(!sleepingOpen)}>
+              {`Sleeping tasks (${r.count})`}
             </TreeRow>
           );
         }
@@ -111,7 +111,7 @@ export function TaskStateList({
 /** A row's height before it is measured: a task is two lines. */
 function estimate(r: TaskTreeRow): number {
   if (r.kind === 'gap') return 16;
-  if (r.kind === 'inactive') return 32;
+  if (r.kind === 'sleeping') return 32;
   return 54;
 }
 
@@ -138,8 +138,8 @@ function TaskStateRowItem({
       ctx={ctx}
       state={state}
       usage={usage}
-      // Flush at every depth: an inactive task lines up with the live ones
-      // (the tree still nests it under "Inactive sessions" for keys and AT).
+      // Flush at every depth: a sleeping task lines up with the live ones
+      // (the tree still nests it under "Sleeping tasks" for keys and AT).
       indentStep={0}
       spacedEnd
       description={

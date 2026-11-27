@@ -70,7 +70,8 @@ export type ListRowProps = Omit<React.ComponentProps<'button'>, 'children'> &
     /** Quiet row (ink-3) that reads normally on hover or when selected. */
     dimmed?: boolean;
     /** Quieter than `dimmed` (ink-4), as readable on hover or selected: a
-     *  path listed but outside the work (gitignored). */
+     *  row listed but outside the work (a gitignored path, the left
+     *  sidebar's "Archived projects" and "Sleeping tasks" folds). */
     faint?: boolean;
     /** A changed file or folder: its label in the `changed` gold (G1). */
     changed?: boolean;

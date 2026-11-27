@@ -27,8 +27,8 @@ export interface SettingsState {
   /** The left sidebar's view: the project tree (the default) or the
    *  state-ordered task list. */
   sidebarView: 'tasks' | 'projects';
-  /** The Tasks view's "Inactive sessions" group is open. */
-  inactiveSessionsOpen: boolean;
+  /** The Tasks view's "Sleeping tasks" group is open. */
+  sleepingTasksOpen: boolean;
   showProjectTokens: boolean;
   desktopNotification: boolean;
   syncShellEnv: boolean;
@@ -106,7 +106,8 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   // showContextBarOnTaskCards, shellDrawerPosition) are simply no longer read;
   // stored values linger, unused.
   entry('sidebarView', 'sidebarView', strEnum(['tasks', 'projects'] as const, 'projects')),
-  entry('inactiveSessionsOpen', 'inactiveSessionsOpen', boolDefaultFalse()),
+  // Renamed from inactiveSessionsOpen; the stored key stays, so the fold carries over.
+  entry('sleepingTasksOpen', 'inactiveSessionsOpen', boolDefaultFalse()),
   entry('showProjectTokens', 'showProjectTokens', boolDefaultTrue()),
   entry('desktopNotification', 'desktopNotification', boolDefaultFalse()),
   entry('syncShellEnv', 'syncShellEnv', boolDefaultFalse()),

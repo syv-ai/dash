@@ -164,7 +164,7 @@ describe('taskGroups', () => {
   const launchedAt = '2026-11-26T09:00:00.000Z';
   const groups = taskGroups(list, launchedAt);
 
-  it('puts favourites first, whatever their state, live ones ahead of sleeping (never in Inactive)', () => {
+  it('puts favourites first, whatever their state, live ones ahead of sleeping (never in Sleeping tasks)', () => {
     expect(ids(groups.favorites)).toEqual(['favBusy', 'favSeen', 'favAsleep']);
   });
 
@@ -174,12 +174,12 @@ describe('taskGroups', () => {
   });
 
   it('lists the sleeping sessions apart, most recent first; a task made this run stays up', () => {
-    expect(ids(groups.inactive)).toEqual(['asleepNew', 'asleepOld']);
+    expect(ids(groups.sleeping)).toEqual(['asleepNew', 'asleepOld']);
   });
 
   // The FNF "main" task on the real data: a main-checkout task made months
   // ago and never started from Dash (no job, no session, no activity).
-  it('folds an old task that never ran into Inactive, with no live session to show (T18)', () => {
+  it('folds an old task that never ran into Sleeping tasks, with no live session to show (T18)', () => {
     const fnfMain = task('fnfMain', '2026-08-26T20:51:50.050Z', {
       name: 'main',
       branch: 'main',
@@ -192,11 +192,11 @@ describe('taskGroups', () => {
     });
     const fnf = taskGroups(orderTasksByState([fnfMain], {}, new Set(), []), launchedAt);
     expect(fnf.resting).toEqual([]);
-    expect(ids(fnf.inactive)).toEqual(['fnfMain']);
+    expect(ids(fnf.sleeping)).toEqual(['fnfMain']);
   });
 
   it('places every task exactly once', () => {
-    const all = [...groups.favorites, ...groups.news, ...groups.resting, ...groups.inactive];
+    const all = [...groups.favorites, ...groups.news, ...groups.resting, ...groups.sleeping];
     expect(ids(all).sort()).toEqual(ids([...list.active, ...list.idle]).sort());
   });
 });

@@ -476,7 +476,7 @@ export function ProjectsSection({
         );
       case 'archivedProjects':
         return (
-          <TreeRow ctx={ctx} size="sm" dimmed onActivate={() => setArchivedProjectsOpen((v) => !v)}>
+          <TreeRow ctx={ctx} size="sm" faint onActivate={() => setArchivedProjectsOpen((v) => !v)}>
             {`Archived projects (${row.projects.length})`}
           </TreeRow>
         );

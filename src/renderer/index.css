@@ -41,7 +41,8 @@
   --color-ink-2: hsl(var(--ink-2));
   --color-ink-3: hsl(var(--ink-3));
   /* The faintest ink, a step under ink-3: what a list shows but the work
-     leaves out (a file tree's gitignored paths, U3). */
+     leaves out (a file tree's gitignored paths, U3; the left sidebar's
+     "Archived projects" and "Sleeping tasks" folds). Via `ListRow`'s `faint`. */
   --color-ink-4: hsl(var(--ink-4));
   --color-icon: hsl(var(--icon));
   /* A link in running text (TextLink, Markdown): a soft blue, the one
