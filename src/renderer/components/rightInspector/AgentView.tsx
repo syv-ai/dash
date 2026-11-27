@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   AtSign,
   Brain,
@@ -44,6 +44,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../ui/DropdownMenu';
+import { DetailSection } from '../ui/DetailList';
 import { EmptyState } from '../ui/EmptyState';
 import { IconButton } from '../ui/IconButton';
 import { Input } from '../ui/Input';
@@ -51,6 +52,7 @@ import { ListRow } from '../ui/ListRow';
 import { Notice } from '../ui/Notice';
 import { Segmented } from '../ui/Segmented';
 import { formatRelativeTime } from '../../../shared/relativeTime';
+import { useSectionOpen } from '../review/useSectionOpen';
 import { instructionFiles, memoryGroups, type AgentPane } from './agentTab';
 
 /**
@@ -328,38 +330,39 @@ function MemoryPane({
   const noMemory = entries.length === 0 && !hasIndex;
   const now = Date.now() / 1000;
   return (
-    <div className="scrollbar-thin-hover min-h-0 flex-1 overflow-y-auto px-1.5 pt-2 pb-2">
-      {notices.map((notice) => (
-        <Notice key={notice} className="mx-1 mb-2">
-          {notice}
-        </Notice>
-      ))}
-      {entries.length > 0 && (
-        <div className="mx-1 mb-1">
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape' && query) {
-                e.stopPropagation();
-                setQuery('');
-              }
-            }}
-            placeholder="Search memories"
-            aria-label="Search memories"
+    <div className="scrollbar-thin-hover min-h-0 flex-1 overflow-y-auto pt-2 pb-2">
+      <div className="px-1.5">
+        {notices.map((notice) => (
+          <Notice key={notice} className="mx-1 mb-2">
+            {notice}
+          </Notice>
+        ))}
+        {entries.length > 0 && (
+          <div className="mx-1 mb-1">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape' && query) {
+                  e.stopPropagation();
+                  setQuery('');
+                }
+              }}
+              placeholder="Search memories"
+              aria-label="Search memories"
+            />
+          </div>
+        )}
+        {noMemory ? (
+          <EmptyState
+            illustration={Brain}
+            title="No memories yet"
+            description="Claude writes memories here as it learns about the project."
+            className="flex-none"
           />
-        </div>
-      )}
-      {noMemory ? (
-        <EmptyState
-          illustration={Brain}
-          title="No memories yet"
-          description="Claude writes memories here as it learns about the project."
-          className="flex-none"
-        />
-      ) : (
-        <>
-          {hasIndex && !query.trim() && (
+        ) : (
+          hasIndex &&
+          !query.trim() && (
             <ListRow
               size="sm"
               selected={activePath === pathOf(MEMORY_INDEX_FILE)}
@@ -369,10 +372,18 @@ function MemoryPane({
             >
               {MEMORY_INDEX_FILE}
             </ListRow>
-          )}
+          )
+        )}
+      </div>
+      {!noMemory && (
+        <>
           {groups.map((group) => (
-            <section key={group.type}>
-              <GroupHeading label={MEMORY_TYPE_LABELS[group.type]} count={group.entries.length} />
+            <GroupSection
+              key={group.type}
+              id={`memory.${group.type}`}
+              label={MEMORY_TYPE_LABELS[group.type]}
+              count={group.entries.length}
+            >
               {group.entries.map((entry) => {
                 const listed = issues.get(entry.file);
                 const flags = (listed?.issues ?? []).filter((i) => i !== 'untyped');
@@ -435,16 +446,15 @@ function MemoryPane({
                   </ContextMenu>
                 );
               })}
-            </section>
+            </GroupSection>
           ))}
           {query.trim() && groups.length === 0 && (
-            <p className="type-caption px-2.5 py-3">No matches</p>
+            <p className="type-caption px-4 py-3">No matches</p>
           )}
         </>
       )}
       {instructions.length > 0 && !query.trim() && (
-        <section>
-          <GroupHeading label="Instructions" count={instructions.length} />
+        <GroupSection id="memory.instructions" label="Instructions" count={instructions.length}>
           {instructions.map((path) => (
             <ListRow
               key={path}
@@ -456,17 +466,29 @@ function MemoryPane({
               {path}
             </ListRow>
           ))}
-        </section>
+        </GroupSection>
       )}
     </div>
   );
 }
 
-/** A group's title ("Feedback · 4"), as the file tree's sections are headed. */
-function GroupHeading({ label, count }: { label: string; count: number }) {
+/** A group ("Feedback · 4") that folds away, as the PR overview's sections
+ *  do; open until folded, and kept for the session under `id`. */
+function GroupSection({
+  id,
+  label,
+  count,
+  children,
+}: {
+  id: string;
+  label: string;
+  count: number;
+  children: ReactNode;
+}) {
+  const section = useSectionOpen(id, true);
   return (
-    <div className="type-subheading px-2.5 pt-3 pb-1">
-      {label} · <span className="tabular-nums">{count}</span>
-    </div>
+    <DetailSection title={label} summary={String(count)} collapsible {...section}>
+      <div>{children}</div>
+    </DetailSection>
   );
 }
