@@ -1,17 +1,19 @@
 /*
  * Dash's motion tokens for script: the same values `index.css` sets
- * (`--motion-quick`, `--motion-calm`, `--motion-slow`, `--ease-settle`,
+ * (`--motion-quick`, `--motion-tooltip`, `--motion-calm`, `--motion-slow`, `--ease-settle`,
  * `--ease-calm`), for Web Animations and timers, which can't take a `var()`.
  * `motion.test.ts` keeps the two in step.
  *
  * Motion is calm (U6): longer than you'd expect, small distances, eased out,
  * no bounce. `quick` is only for direct manipulation (hover, colour, press);
- * `calm` is most movement; `slow` is panels and large reveals.
+ * `tooltip` is ui/Tooltip's arrival only (a hover label shouldn't lag the
+ * pointer); `calm` is most movement; `slow` is panels and large reveals.
  */
 
 /** Durations (ms). */
-export const MOTION_MS: Readonly<Record<'quick' | 'calm' | 'slow', number>> = {
+export const MOTION_MS: Readonly<Record<'quick' | 'tooltip' | 'calm' | 'slow', number>> = {
   quick: 150,
+  tooltip: 240,
   calm: 320,
   slow: 480,
 };

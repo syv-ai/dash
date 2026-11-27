@@ -15,8 +15,9 @@ describe('motion tokens', () => {
     expect(token(`ease-${name}`)).toBe(curve);
   });
 
-  it('keeps quick < calm < slow', () => {
-    expect(MOTION_MS.quick).toBeLessThan(MOTION_MS.calm);
+  it('keeps quick < tooltip < calm < slow', () => {
+    expect(MOTION_MS.quick).toBeLessThan(MOTION_MS.tooltip);
+    expect(MOTION_MS.tooltip).toBeLessThan(MOTION_MS.calm);
     expect(MOTION_MS.calm).toBeLessThan(MOTION_MS.slow);
   });
 });

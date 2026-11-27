@@ -117,8 +117,11 @@
   --ease-calm: cubic-bezier(0.4, 0, 0.2, 1);
   /* Durations: `quick` only for direct manipulation (hover, colour, press),
      `calm` for most movement, `slow` for panels and large reveals (see
-     `duration-quick|calm|slow` below). */
+     `duration-quick|calm|slow` below). `tooltip` is one surface's own:
+     a hover label arrives a beat sooner than a menu (`.animate-tooltip-in`),
+     so it never reads as lagging behind the pointer. */
   --motion-quick: 150ms;
+  --motion-tooltip: 240ms;
   --motion-calm: 320ms;
   --motion-slow: 480ms;
   /* Tailwind's bare `transition*` utilities: hover and colour, quick. */
@@ -213,7 +216,7 @@
 /* ── Motion durations (U6): the only lengths a transition or animation
    takes. `quick` only for direct manipulation (hover, colour, press);
    `calm` for most movement (tab indicators, view switches, dialogs, menus,
-   tooltips, toasts, folds, list rows); `slow` for panels and large reveals.
+   toasts, folds, list rows); `tooltip` (240) for ui/Tooltip's arrival only; `slow` for panels and large reveals.
    Never an ad-hoc `duration-N` or `Nms`. `duration-quick|calm|slow`. The
    values are `@theme`'s (`--motion-*`). Reduced motion: every token-timed
    motion lands at once. Zero, not `none`, so an animation still ends (a
@@ -221,6 +224,7 @@
 @media (prefers-reduced-motion: reduce) {
   html {
     --motion-quick: 0s;
+    --motion-tooltip: 0s;
     --motion-calm: 0s;
     --motion-slow: 0s;
   }
@@ -919,7 +923,7 @@
   }
 }
 .animate-tooltip-in {
-  animation: tooltip-in var(--motion-calm) var(--ease-settle);
+  animation: tooltip-in var(--motion-tooltip) var(--ease-settle);
   transform-origin: var(--radix-tooltip-content-transform-origin);
 }
 
