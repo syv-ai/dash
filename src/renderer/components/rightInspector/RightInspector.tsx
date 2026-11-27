@@ -848,6 +848,14 @@ export function RightInspector({
                   // Review mode's wider default needs more room.
                   maxSize={reviewing ? '60%' : '50%'}
                   {...treePanel}
+                  // Dragged out of its rail (the panel's own drag, not the
+                  // library's), the width it settles at is the user's.
+                  onExpand={(how) => {
+                    treePanel.onExpand();
+                    if (how.dragged && listPanelRef.current) {
+                      saveListWidth(listMode, listPanelRef.current);
+                    }
+                  }}
                 >
                   {/* Folded, the rail; the column stays mounted out of
                       sight (its tree's open folders and scroll), held at its
