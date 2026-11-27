@@ -3,7 +3,7 @@ import { Plus, Search, Settings } from 'lucide-react';
 import type { ContextUsage, Project, Task } from '../../../shared/types';
 import { ClaudeUpdateButton } from '../claudeUpdate/ClaudeUpdateButton';
 import { IconButton } from '../ui/IconButton';
-import { ViewTabs } from '../ui/ViewTabs';
+import { ViewPanel, ViewTabs } from '../ui/ViewTabs';
 import { StatusDot } from '../ui/StatusDot';
 import { ProjectsSection } from './ProjectsSection';
 import { TaskStateList } from './TaskStateList';
@@ -108,6 +108,21 @@ export function LeftSidebar(props: LeftSidebarProps) {
   }
 
   const projectsView = view === 'projects';
+  // One list feeds both the tabs and the panel's slide order, so they can't drift.
+  const viewOptions = [
+    {
+      value: 'projects' as const,
+      label: 'Projects',
+      count: projects.length,
+      countLabel: 'Projects',
+    },
+    {
+      value: 'tasks' as const,
+      label: 'Tasks',
+      count: liveRows(rows).length,
+      countLabel: 'Live sessions',
+    },
+  ];
 
   return (
     <div className="flex h-full min-w-0 flex-col bg-ground">
@@ -121,20 +136,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
           value={view}
           onChange={setView}
           onMinWidth={setTabsMinPx}
-          options={[
-            {
-              value: 'projects',
-              label: 'Projects',
-              count: projects.length,
-              countLabel: 'Projects',
-            },
-            {
-              value: 'tasks',
-              label: 'Tasks',
-              count: liveRows(rows).length,
-              countLabel: 'Live sessions',
-            },
-          ]}
+          options={viewOptions}
         />
         <div className="min-w-0 flex-1" />
         <IconButton
@@ -154,44 +156,50 @@ export function LeftSidebar(props: LeftSidebarProps) {
         )}
       </div>
 
-      {projectsView ? (
-        <ProjectsSection
-          projects={projects}
-          activeProjectId={activeProjectId}
-          tasksByProject={tasksByProject}
-          activeTaskId={activeTaskId}
-          unseenTaskIds={props.unseenTaskIds}
-          contextUsage={props.contextUsage}
-          onSelectProject={props.onSelectProject}
-          onOpenFolder={props.onOpenFolder}
-          onDeleteProject={props.onDeleteProject}
-          onProjectSettings={props.onProjectSettings}
-          onShowCommitGraph={props.onShowCommitGraph}
-          onSelectTask={props.onSelectTask}
-          onNewTask={props.onNewTask}
-          onDeleteTask={props.onDeleteTask}
-          onArchiveTask={props.onArchiveTask}
-          onRestoreTask={props.onRestoreTask}
-          onCloseTask={props.onCloseTask}
-          onTaskSettings={props.onTaskSettings}
-          onReorderProjects={props.onReorderProjects}
-          onReorderTasks={props.onReorderTasks}
-          onReorderTasksCommit={props.onReorderTasksCommit}
-        />
-      ) : (
-        <TaskStateList
-          rows={rows}
-          projects={projects}
-          activeTaskId={activeTaskId}
-          contextUsage={props.contextUsage}
-          onOpenFolder={props.onOpenFolder}
-          onSelectTask={props.onSelectTask}
-          onCloseTask={props.onCloseTask}
-          onTaskSettings={props.onTaskSettings}
-          onArchiveTask={props.onArchiveTask}
-          onDeleteTask={props.onDeleteTask}
-        />
-      )}
+      <ViewPanel
+        value={view}
+        order={viewOptions.map((o) => o.value)}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        {projectsView ? (
+          <ProjectsSection
+            projects={projects}
+            activeProjectId={activeProjectId}
+            tasksByProject={tasksByProject}
+            activeTaskId={activeTaskId}
+            unseenTaskIds={props.unseenTaskIds}
+            contextUsage={props.contextUsage}
+            onSelectProject={props.onSelectProject}
+            onOpenFolder={props.onOpenFolder}
+            onDeleteProject={props.onDeleteProject}
+            onProjectSettings={props.onProjectSettings}
+            onShowCommitGraph={props.onShowCommitGraph}
+            onSelectTask={props.onSelectTask}
+            onNewTask={props.onNewTask}
+            onDeleteTask={props.onDeleteTask}
+            onArchiveTask={props.onArchiveTask}
+            onRestoreTask={props.onRestoreTask}
+            onCloseTask={props.onCloseTask}
+            onTaskSettings={props.onTaskSettings}
+            onReorderProjects={props.onReorderProjects}
+            onReorderTasks={props.onReorderTasks}
+            onReorderTasksCommit={props.onReorderTasksCommit}
+          />
+        ) : (
+          <TaskStateList
+            rows={rows}
+            projects={projects}
+            activeTaskId={activeTaskId}
+            contextUsage={props.contextUsage}
+            onOpenFolder={props.onOpenFolder}
+            onSelectTask={props.onSelectTask}
+            onCloseTask={props.onCloseTask}
+            onTaskSettings={props.onTaskSettings}
+            onArchiveTask={props.onArchiveTask}
+            onDeleteTask={props.onDeleteTask}
+          />
+        )}
+      </ViewPanel>
 
       <UpdateBanner />
       <div className="flex shrink-0 items-center gap-0.5 px-2 pt-1 pb-3">
