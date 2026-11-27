@@ -148,11 +148,14 @@ export function LeftSidebar(props: LeftSidebarProps) {
           <Search size={14} strokeWidth={1.8} />
         </IconButton>
         {/* Tasks are made under their project, so only the Projects view
-            creates (a project). */}
-        {projectsView && (
+            creates (a project); the Tasks view keeps its slot empty, so the
+            row (the tabs' fit, find) is the same in both views. */}
+        {projectsView ? (
           <IconButton size="sm" title="Create project" onClick={props.onOpenFolder}>
             <Plus size={14} strokeWidth={1.8} />
           </IconButton>
+        ) : (
+          <div aria-hidden className="size-6 shrink-0" />
         )}
       </div>
 

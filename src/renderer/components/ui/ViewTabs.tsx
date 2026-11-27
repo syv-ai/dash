@@ -86,10 +86,16 @@ function Label<T>({ opt, counted }: { opt: ViewTabsOption<T>; counted: boolean }
   );
 }
 
+/** The count's look: a folder's on the badge's fill; a pill's bare, as on
+ *  the selected pill's tint a fill would sit on a fill. */
+const countTone: Record<ViewTabsVariant, 'neutral' | 'bare'> = { folder: 'neutral', pill: 'bare' };
+
 /** The count badge, only where there is one to show: an empty indicator would
  *  still take `Tab`'s gap and push the label off centre. */
-function countBadge<T>(opt: ViewTabsOption<T>, counted: boolean) {
-  return counted && opt.count != null ? <CountBadge count={opt.count} /> : undefined;
+function countBadge<T>(opt: ViewTabsOption<T>, counted: boolean, variant: ViewTabsVariant) {
+  return counted && opt.count != null ? (
+    <CountBadge count={opt.count} tone={countTone[variant]} />
+  ) : undefined;
 }
 
 /**
@@ -169,7 +175,7 @@ export function ViewTabs<T extends string>({
               variant={variant}
               active={opt.value === value}
               onSelect={() => onChange(opt.value)}
-              indicator={countBadge(opt, counted)}
+              indicator={countBadge(opt, counted, variant)}
               {...reselect(opt.value)}
             >
               <Label opt={opt} counted={counted} />
@@ -196,7 +202,7 @@ export function ViewTabs<T extends string>({
                 tabIndex={-1}
                 role="presentation"
                 onSelect={() => {}}
-                indicator={countBadge(opt, d !== 'uncounted')}
+                indicator={countBadge(opt, d !== 'uncounted', variant)}
               >
                 <Label opt={opt} counted={d !== 'uncounted'} />
               </ViewTab>
