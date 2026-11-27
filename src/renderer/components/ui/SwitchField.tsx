@@ -13,6 +13,7 @@ export function SwitchField({
   checked,
   onCheckedChange,
   disabled,
+  locked,
   children,
 }: {
   label: string;
@@ -21,7 +22,11 @@ export function SwitchField({
   helperText?: React.ReactNode;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
+  /** Not applicable now (it hangs on another setting): the switch and its text dim. */
   disabled?: boolean;
+  /** Held where it is for a reason the helper text gives: the switch is
+   *  disabled, but the text keeps its ink, since it still describes the task. */
+  locked?: boolean;
   /** Under the text at full width (a detail the switch reveals). */
   children?: React.ReactNode;
 }) {
@@ -40,7 +45,12 @@ export function SwitchField({
         ) : undefined
       }
       control={
-        <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
+        <Switch
+          id={id}
+          checked={checked}
+          onCheckedChange={onCheckedChange}
+          disabled={disabled || locked}
+        />
       }
     >
       {children}

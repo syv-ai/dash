@@ -432,7 +432,7 @@ function TaskModalBody({
                   onCheckedChange={(on) => {
                     if (!worktreeForced) setUseWorktree(on);
                   }}
-                  disabled={worktreeForced}
+                  locked={worktreeForced}
                 />
                 {useWorktree && (
                   <SwitchField
