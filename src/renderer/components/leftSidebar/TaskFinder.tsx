@@ -20,7 +20,7 @@ interface TaskFinderProps {
 /** ⌘K: find a task by name or project, grouped by state like the sidebar. */
 export function TaskFinder({ onSelectTask, onClose }: TaskFinderProps) {
   return (
-    <Modal onClose={onClose} size="w-120">
+    <Modal onClose={onClose} size="w-120" aria-label="Find a task">
       <TaskFinderList onSelectTask={onSelectTask} />
     </Modal>
   );

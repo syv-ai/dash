@@ -1,4 +1,12 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from 'react';
 import { cn } from '../../lib/cn';
 import { MOTION_MS, reducedMotion } from '../../lib/motion';
 
@@ -6,6 +14,15 @@ import { MOTION_MS, reducedMotion } from '../../lib/motion';
 // fade-out + scale-out animation instead of calling the parent's onClose directly,
 // which would unmount the modal mid-animation.
 const ModalCloseContext = createContext<(() => void) | undefined>(undefined);
+
+// The id the modal's title takes, so the dialog is named by it (aria-labelledby).
+const ModalTitleIdContext = createContext<string | undefined>(undefined);
+
+/** The id for the element that titles the enclosing <Modal> (DialogHeader's
+ *  title, a confirm's question); undefined outside one. */
+export function useModalTitleId(): string | undefined {
+  return useContext(ModalTitleIdContext);
+}
 
 /** Use inside a <Modal>. Returns the animated close fn — backs out via fade-out and
  *  scale-out before unmounting. Throws if called outside <Modal>; use
@@ -49,6 +66,11 @@ interface ModalProps {
    *  fixed offset down and grows it downward, so a card that grows as you
    *  type (rows appearing under an input) never moves the input. */
   anchor?: 'center' | 'top';
+  /** `alertdialog` for a confirm that interrupts to ask; `dialog` otherwise. */
+  role?: 'dialog' | 'alertdialog';
+  /** The dialog's name when nothing inside renders a title (a palette);
+   *  otherwise the title found by useModalTitleId names it. */
+  'aria-label'?: string;
   children: React.ReactNode;
 }
 
@@ -69,8 +91,11 @@ export function Modal({
   cardStyle,
   elevated = false,
   anchor = 'center',
+  role = 'dialog',
+  'aria-label': ariaLabel,
   children,
 }: ModalProps) {
+  const titleId = useId();
   const [closing, setClosing] = useState(false);
   // The latest onClose, called once however the exit ends (animation, the
   // fallback timer, or at once under reduced motion).
@@ -143,45 +168,51 @@ export function Modal({
 
   return (
     <ModalCloseContext.Provider value={requestClose}>
-      {/* The scrim token dims the app behind; it is dark ink in the light theme. */}
-      <div
-        className={cn(
-          'fixed inset-0 flex justify-center bg-scrim',
-          // Top: 10vh down, which with a dialog's 86vh cap still fits the window.
-          anchor === 'top' ? 'items-start pt-[10vh]' : 'items-center',
-          elevated ? 'z-[60]' : 'z-50',
-          closing ? 'animate-fade-out' : 'animate-fade-in',
-        )}
-        onMouseDown={(e) => {
-          mouseDownOnBackdrop.current = e.target === e.currentTarget;
-        }}
-        onClick={(e) => {
-          if (e.target === e.currentTarget && mouseDownOnBackdrop.current) {
-            requestClose();
-          }
-          mouseDownOnBackdrop.current = false;
-        }}
-        onAnimationEnd={(e) => {
-          // Only the backdrop's own fade ends the exit, not a child's animation.
-          if (closing && e.target === e.currentTarget) finishClose();
-        }}
-      >
-        {/* no-drag: Electron applies the titlebar's drag region regardless of
-            stacking, so without it a tall modal's top edge (the diff editor's
-            header buttons) sits under the drag strip and swallows clicks. */}
+      <ModalTitleIdContext.Provider value={titleId}>
+        {/* The scrim token dims the app behind; it is dark ink in the light theme. */}
         <div
           className={cn(
-            'titlebar-no-drag relative flex flex-col rounded-2xl bg-dialog text-ink shadow-raised',
-            size,
-            overflow === 'visible' ? 'overflow-visible' : 'overflow-hidden',
-            closing ? 'animate-scale-out' : 'animate-scale-in',
+            'fixed inset-0 flex justify-center bg-scrim',
+            // Top: 10vh down, which with a dialog's 86vh cap still fits the window.
+            anchor === 'top' ? 'items-start pt-[10vh]' : 'items-center',
+            elevated ? 'z-[60]' : 'z-50',
+            closing ? 'animate-fade-out' : 'animate-fade-in',
           )}
-          style={cardStyle}
-          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => {
+            mouseDownOnBackdrop.current = e.target === e.currentTarget;
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && mouseDownOnBackdrop.current) {
+              requestClose();
+            }
+            mouseDownOnBackdrop.current = false;
+          }}
+          onAnimationEnd={(e) => {
+            // Only the backdrop's own fade ends the exit, not a child's animation.
+            if (closing && e.target === e.currentTarget) finishClose();
+          }}
         >
-          {children}
+          {/* no-drag: Electron applies the titlebar's drag region regardless of
+            stacking, so without it a tall modal's top edge (the diff editor's
+            header buttons) sits under the drag strip and swallows clicks. */}
+          <div
+            className={cn(
+              'titlebar-no-drag relative flex flex-col rounded-2xl bg-dialog text-ink shadow-raised',
+              size,
+              overflow === 'visible' ? 'overflow-visible' : 'overflow-hidden',
+              closing ? 'animate-scale-out' : 'animate-scale-in',
+            )}
+            style={cardStyle}
+            role={role}
+            aria-modal="true"
+            aria-label={ariaLabel}
+            aria-labelledby={ariaLabel ? undefined : titleId}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {children}
+          </div>
         </div>
-      </div>
+      </ModalTitleIdContext.Provider>
     </ModalCloseContext.Provider>
   );
 }

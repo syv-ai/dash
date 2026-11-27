@@ -4,7 +4,7 @@ import { cn } from '../../lib/cn';
 import { IconButton } from './IconButton';
 import { InfoTip } from './InfoTip';
 import { ListRow } from './ListRow';
-import { Modal, useModalClose } from './Modal';
+import { Modal, useModalClose, useModalTitleId } from './Modal';
 import type { TooltipContent } from './Tooltip';
 
 /**
@@ -47,6 +47,7 @@ export function Dialog({
   elevated,
   overflow,
   anchor,
+  role,
   children,
 }: {
   size?: DialogSize;
@@ -56,10 +57,13 @@ export function Dialog({
   overflow?: 'hidden' | 'visible';
   /** `top` for a dialog that grows as you fill it in (see `Modal`). */
   anchor?: 'center' | 'top';
+  /** `alertdialog` for a confirm (see `Modal`). */
+  role?: 'dialog' | 'alertdialog';
   children: React.ReactNode;
 }) {
   return (
     <Modal
+      role={role}
       onClose={onClose}
       canClose={canClose}
       elevated={elevated}
@@ -107,6 +111,7 @@ export function DialogHeader({
   /** A rule under the header, for a body that scrolls under it. */
   divided?: boolean;
 }) {
+  const titleId = useModalTitleId();
   return (
     <header
       className={cn(
@@ -115,7 +120,7 @@ export function DialogHeader({
       )}
     >
       <div className="grid min-w-0 flex-1 gap-0.5 pt-1">
-        <TitleLine title={title} hint={hint} />
+        <TitleLine id={titleId} title={title} hint={hint} />
         {description && <p className="type-caption truncate">{description}</p>}
       </div>
       <div className="flex shrink-0 items-center gap-1">
@@ -127,10 +132,21 @@ export function DialogHeader({
 }
 
 /** A dialog or section title with its ⓘ. */
-function TitleLine({ title, hint }: { title: React.ReactNode; hint?: TooltipContent }) {
+function TitleLine({
+  id,
+  title,
+  hint,
+}: {
+  /** Set when this title names the dialog (useModalTitleId). */
+  id?: string;
+  title: React.ReactNode;
+  hint?: TooltipContent;
+}) {
   return (
     <div className="flex min-w-0 items-center gap-1.5">
-      <h2 className="type-title truncate">{title}</h2>
+      <h2 id={id} className="type-title truncate">
+        {title}
+      </h2>
       {hint && <InfoTip content={hint} side="bottom" />}
     </div>
   );
@@ -217,10 +233,13 @@ export function NavDialogLayout<T extends string>({
   navFooter?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const titleId = useModalTitleId();
   return (
     <div className="flex min-h-0 flex-1">
       <nav aria-label={title} className="flex w-52 shrink-0 flex-col bg-dialog-well">
-        <h2 className="type-title px-5 pt-5 pb-3">{title}</h2>
+        <h2 id={titleId} className="type-title px-5 pt-5 pb-3">
+          {title}
+        </h2>
         <div className="scrollbar-thin-hover grid min-h-0 flex-1 content-start gap-4 overflow-y-auto px-2.5 pb-3">
           {groups.map((group) => (
             <div key={group.label} className="grid gap-0.5">

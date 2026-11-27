@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Button } from './Button';
 import { Dialog, DialogFooter } from './Dialog';
+import { useModalTitleId } from './Modal';
 
 /** A confirmation with Cancel / confirm buttons, rendered as a nested
  *  dialog over whatever asked (e.g. task settings), or on its own (an agent
@@ -29,7 +30,7 @@ export function ConfirmModal({
   useEffect(() => panelRef.current?.focus(), []);
 
   return (
-    <Dialog size="sm" onClose={onCancel}>
+    <Dialog size="sm" role="alertdialog" onClose={onCancel}>
       {/* Focused on open, so keys stop reaching whatever asked (an editor
           beneath would take the Enter). A focused button handles its own. */}
       <div
@@ -42,10 +43,7 @@ export function ConfirmModal({
           onConfirm();
         }}
       >
-        <div className="grid gap-1.5 px-5 pt-5 pb-2">
-          {title && <h2 className="type-title">{title}</h2>}
-          <p className="type-body">{message}</p>
-        </div>
+        <ConfirmText title={title} message={message} />
         <DialogFooter>
           <Button variant="ghost" onClick={onCancel}>
             {cancelLabel}
@@ -56,5 +54,23 @@ export function ConfirmModal({
         </DialogFooter>
       </div>
     </Dialog>
+  );
+}
+
+/** The question and message; the title names the alertdialog, or the
+ *  message does when there is no title. Inside the Modal, for its title id. */
+function ConfirmText({ title, message }: { title?: string; message: string }) {
+  const titleId = useModalTitleId();
+  return (
+    <div className="grid gap-1.5 px-5 pt-5 pb-2">
+      {title && (
+        <h2 id={titleId} className="type-title">
+          {title}
+        </h2>
+      )}
+      <p id={title ? undefined : titleId} className="type-body">
+        {message}
+      </p>
+    </div>
   );
 }
