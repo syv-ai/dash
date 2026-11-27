@@ -160,7 +160,15 @@ export function ListRow({
       style={indent ? { ...style, paddingLeft: 10 + indent * indentStep } : style}
       {...(props as React.HTMLAttributes<HTMLElement>)}
     >
-      {leading && <span className="flex h-5 shrink-0 items-center text-icon">{leading}</span>}
+      {/* A faint row's leading icon (a fold's chevron) fades with its label:
+          it takes the row's ink-4, and the row's hover and selected ink. */}
+      {leading && (
+        <span
+          className={cn('flex h-5 shrink-0 items-center', faint ? 'text-current' : 'text-icon')}
+        >
+          {leading}
+        </span>
+      )}
       {/* Label and trailing keep the badges' gap (gap-1), not the row's: a
           truncated name runs as close to the end as its marks sit to each
           other (T26). */}
