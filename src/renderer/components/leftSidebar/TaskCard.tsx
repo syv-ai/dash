@@ -119,8 +119,12 @@ export function TaskCard({
         onActivate={onSelect}
         leading={
           // A little more room than the row's gap between the orb and the
-          // name and project (T28).
-          <span className="flex pr-1">
+          // name and project (T28). On a one-line row the orb sits a pixel
+          // low: it centres on the line box, which the 13px system font's
+          // caps (and the M, the star, the percent) share, but a name reads
+          // by its lowercase, whose x-height centres ~1px lower. A two-line
+          // row's orb centres on both lines (T21) and stays put.
+          <span className={cn('flex pr-1', !description && 'translate-y-px')}>
             {state === 'asleep' ? (
               <StatusDot state={state} />
             ) : (
