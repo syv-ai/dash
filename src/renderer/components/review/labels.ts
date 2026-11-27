@@ -101,11 +101,13 @@ export function diffTotals(files: readonly Pick<PrFile, 'additions' | 'deletions
   return { files: files.length, additions, deletions };
 }
 
-/** "4 threads (1 of 4 resolved)"; null with none. */
-export function threadsLine(threads: readonly Pick<PrReviewThread, 'resolved'>[]): string | null {
+/** "(1 of 4 resolved)", what follows About's "4 threads"; null with none. */
+export function threadsResolved(
+  threads: readonly Pick<PrReviewThread, 'resolved'>[],
+): string | null {
   if (threads.length === 0) return null;
   const resolved = threads.filter((t) => t.resolved).length;
-  return `${plural(threads.length, 'thread')} (${resolved} of ${threads.length} resolved)`;
+  return `(${resolved} of ${threads.length} resolved)`;
 }
 
 /** A PR's date (ISO 8601) in full, in the user's locale: "Thu 26/11/2026, 09:00";

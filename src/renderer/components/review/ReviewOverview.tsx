@@ -14,7 +14,7 @@ import {
   plural,
   prDateTime,
   reviewerGroups,
-  threadsLine,
+  threadsResolved,
 } from './labels';
 import { ChecksRollupIcon } from './ChecksRollupIcon';
 import { checksRollup, checksSummary } from './outline';
@@ -69,16 +69,29 @@ function Issues({ issues }: { issues: PrIssue[] }) {
 
 /**
  * The Review view's Overview tab, under the PR's header: About (a bulleted list: how far the PR is behind its base, when it was
- * opened and last moved, its files and lines changed, threads, reviewers,
+ * opened and last moved, its files and lines changed (the count a link to
+ * Files), threads (the count a link to Threads), reviewers,
  * assignees and linked issues), its checks and its description, each a band that folds; the
  * open ones are remembered for the session. The general conversation lives
  * in the Threads tab.
  */
-export function ReviewOverview({ review, remote }: { review: PrReview; remote: string | null }) {
+export function ReviewOverview({
+  review,
+  remote,
+  onShowFiles,
+  onShowThreads,
+}: {
+  review: PrReview;
+  remote: string | null;
+  /** Show the Files tab. */
+  onShowFiles: () => void;
+  /** Show the Threads tab, on its threads. */
+  onShowThreads: () => void;
+}) {
   const about = useSectionOpen('overview.about', true);
   const description = useSectionOpen('overview.description', true);
   const baseHref = remote ? branchUrl(remote, review.baseRef) : null;
-  const threads = threadsLine(review.threads);
+  const resolved = threadsResolved(review.threads);
   const totals = diffTotals(review.files);
   const created = prDateTime(review.createdAt);
   const active = prDateTime(review.lastActivityAt);
@@ -104,11 +117,20 @@ export function ReviewOverview({ review, remote }: { review: PrReview; remote: s
             {created && <li className="tabular-nums">Created {created}</li>}
             {active && <li className="tabular-nums">Last activity {active}</li>}
             <li className="tabular-nums">
-              {plural(totals.files, 'file')} changed
+              <TextLink title="Show them in Files" onClick={onShowFiles}>
+                {plural(totals.files, 'file')} changed
+              </TextLink>
               {(totals.additions > 0 || totals.deletions > 0) && ', '}
               <LineStats add={totals.additions} del={totals.deletions} />
             </li>
-            {threads && <li className="tabular-nums">{threads}</li>}
+            {resolved && (
+              <li className="tabular-nums">
+                <TextLink title="Show them in Threads" onClick={onShowThreads}>
+                  {plural(review.threads.length, 'thread')}
+                </TextLink>{' '}
+                {resolved}
+              </li>
+            )}
             <Reviewers reviewers={review.reviewers} />
             {review.assignees.length > 0 && (
               <li>

@@ -731,6 +731,7 @@ export function RightInspector({
       onOpenFile={review.openFile}
       canOpenToSide={ws.layout.groups.length < 2}
       onShowCommits={showPrCommits}
+      onShowTab={selectSegment}
       notice={checkout.notice}
       onNavigate={review.navigate}
       onExit={review.exit}

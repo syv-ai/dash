@@ -7,7 +7,7 @@ import {
   mergeVerb,
   prDateTime,
   reviewerGroups,
-  threadsLine,
+  threadsResolved,
 } from '../labels';
 
 describe('diffTotals', () => {
@@ -42,12 +42,10 @@ describe('reviewerGroups', () => {
   });
 });
 
-describe('threadsLine', () => {
-  it('says how many threads and how many are resolved', () => {
-    expect(threadsLine([{ resolved: true }, { resolved: false }])).toBe(
-      '2 threads (1 of 2 resolved)',
-    );
-    expect(threadsLine([])).toBeNull();
+describe('threadsResolved', () => {
+  it('says how many of the threads are resolved', () => {
+    expect(threadsResolved([{ resolved: true }, { resolved: false }])).toBe('(1 of 2 resolved)');
+    expect(threadsResolved([])).toBeNull();
   });
 });
 

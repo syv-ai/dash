@@ -44,6 +44,8 @@ interface ReviewViewProps {
   canOpenToSide: boolean;
   /** Show the PR's commits (History). */
   onShowCommits: () => void;
+  /** Show another of the column's views (About's counts: Files, Threads). */
+  onShowTab: (tab: CodeSegment) => void;
   /** How the task's checkout differs from the PR, when it does (the diff
    *  then shows the PR's head read-only). */
   notice: string | null;
@@ -78,6 +80,7 @@ function Review({
   onOpenFile,
   canOpenToSide,
   onShowCommits,
+  onShowTab,
   notice,
   onNavigate,
   onExit,
@@ -141,7 +144,15 @@ function Review({
         {/* The header stays put on a switch; only the view below it moves. */}
         <ViewPanelBody className="min-h-0 flex-1">
           {tab === 'overview' ? (
-            <ReviewOverview review={review} remote={remote} />
+            <ReviewOverview
+              review={review}
+              remote={remote}
+              onShowFiles={() => onShowTab('files')}
+              onShowThreads={() => {
+                useUi.getState().setReviewThreadsPane('threads');
+                onShowTab('threads');
+              }}
+            />
           ) : tab === 'files' ? (
             <ReviewFiles
               review={review}
