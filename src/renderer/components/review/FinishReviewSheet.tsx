@@ -63,8 +63,8 @@ const PR_STATE_LABELS: Record<PrReview['state'], string> = {
  * the verdict and the summary (the review's PR-level comment, a stored draft
  * the agent may have written), which takes the column's height left; on
  * the right every thread a comment or reply of the review posts in, as the
- * Threads tab draws them (threads fold), scrolling on its own. Then a button that says what
- * posts where. Nothing posts from the keyboard.
+ * Threads tab draws them (threads fold), on a sheet that scrolls on its own.
+ * Then a button that says what posts where. Nothing posts from the keyboard.
  */
 export function FinishReviewSheet(props: Props) {
   // Read when a close is asked for, which can come before a re-render.
@@ -232,9 +232,11 @@ function Sheet({
             />
           </Field>
         </div>
+        {/* A sheet inside the dialog's 20px sides, as the left column is: its
+            right edge on the footer's button's, its top on the column's. */}
         <section
           aria-label="Threads that post"
-          className="flex min-w-0 flex-1 flex-col rounded-l-xl bg-dialog-well"
+          className="mt-1 mr-5 flex min-w-0 flex-1 flex-col rounded-xl bg-dialog-well"
         >
           <h3 className="type-heading shrink-0 px-5 pt-4 pb-2">
             {items.length > 0 ? plural(items.length, 'thread') : 'No threads'}
