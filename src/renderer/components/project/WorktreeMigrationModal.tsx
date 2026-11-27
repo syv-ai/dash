@@ -3,7 +3,7 @@ import { FolderGit2, Loader2, AlertCircle, Check } from 'lucide-react';
 import type { WorktreeMigrationProject, WorktreeMigrationResult } from '../../../shared/types';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
-import { Code } from '../ui/Code';
+import { cn } from '../../lib/cn';
 import { DetailItem, DetailList } from '../ui/DetailList';
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from '../ui/Dialog';
 import { useModalClose } from '../ui/Modal';
@@ -121,28 +121,25 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
   const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
   return (
     <>
-      <DialogHeader title="Move task worktrees" closeDisabled={busy} />
+      <DialogHeader
+        title="Move task worktrees"
+        hint="Dash now keeps each task’s worktree inside its project, at .claude/worktrees/, where Claude Code expects it. Moving keeps every branch, file and setting. Untick a project to leave it for a later launch."
+        closeDisabled={busy}
+      />
       <DialogBody>
         {phase.kind !== 'done' ? (
           <>
             <p className="type-body">
-              Dash now keeps each task&rsquo;s worktree inside its project, at{' '}
-              <Code>.claude/worktrees/</Code>, where Claude Code expects it.{' '}
               {count(taskCount, 'worktree')} in {count(plan.length, 'project')} still{' '}
-              {taskCount === 1 ? 'lives' : 'live'} at the old location. Moving keeps every branch,
-              file and setting; running task terminals restart afterwards. Untick a project to leave
-              it for a later launch.
+              {taskCount === 1 ? 'lives' : 'live'} at the old location. Running task terminals
+              restart after the move.
             </p>
 
-            <div className="grid gap-3">
+            <div className="grid gap-5">
               {plan.map((project) => (
                 <div
                   key={project.projectId}
-                  className={
-                    selected.has(project.projectId)
-                      ? 'grid gap-2 rounded-lg border border-line p-3'
-                      : 'grid gap-2 rounded-lg border border-line p-3 opacity-50'
-                  }
+                  className={cn('grid gap-2', !selected.has(project.projectId) && 'opacity-50')}
                 >
                   <label className="flex min-w-0 cursor-pointer items-center gap-2 select-none">
                     <Checkbox
@@ -208,7 +205,7 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
             {failures.length > 0 && (
               <ul className="grid gap-1.5">
                 {failures.map((f) => (
-                  <li key={f.taskId} className="grid gap-1 rounded-lg border border-line px-3 py-2">
+                  <li key={f.taskId} className="grid gap-1">
                     <span className="type-body">{f.taskName}</span>
                     <pre className="font-mono text-xs break-words whitespace-pre-wrap text-ink-2">
                       {f.error}
