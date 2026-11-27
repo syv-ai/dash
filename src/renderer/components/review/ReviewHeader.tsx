@@ -19,7 +19,8 @@ export function Branch({ remote, name }: { remote: string | null; name: string }
 
 /**
  * Review mode's head (spec Revision 3), under the mode's banner and views:
- * the PR's state icon (GitHub's shape and colour) and title (to the forge)
+ * the PR's state icon (GitHub's shape and colour) and title (to the forge,
+ * in the heading's ink: D274)
  * with its number; then "who wants to merge n
  * commits into base from head" in secondary ink, its links in the link
  * colour (the commits to History). The diff totals are About's (Overview). A failed
@@ -50,7 +51,11 @@ export function ReviewHeader({
           <StateIcon size={14} strokeWidth={1.8} aria-label={`${review.state} pull request`} />
         </span>
         <h2 className="type-heading min-w-0 flex-1 wrap-break-word">
-          <TextLink href={review.url} title={`Open on ${providerName(review.provider)}`}>
+          <TextLink
+            href={review.url}
+            inkAt="review-title"
+            title={`Open on ${providerName(review.provider)}`}
+          >
             {review.title}
           </TextLink>{' '}
           <span className="type-label tabular-nums">#{review.number}</span>

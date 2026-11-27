@@ -2,15 +2,26 @@ import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { focusRing } from './styles';
 
+const linkBase = cn(
+  'cursor-pointer rounded-sm underline-offset-2 transition-colors hover:underline',
+  focusRing,
+);
+
 /**
  * The one link look (D191, D272): the `link` colour, no underline until
  * hovered; it inherits size, weight and wrapping. Markdown's links take it
- * too; there are no other looks.
+ * too; the only other look is `InkLinkSite`'s.
  */
-export const linkClass = cn(
-  'cursor-pointer rounded-sm text-link underline-offset-2 transition-colors hover:underline',
-  focusRing,
-);
+export const linkClass = cn(linkBase, 'text-link');
+
+/**
+ * The places a link keeps the ink of the text around it, not link blue, and
+ * still underlines on hover (D274, user-requested, each by name): the review
+ * header's PR title, Files' "n commits ahead, m behind" and the task header's
+ * branch. A closed list, not a look: a new place is a logged decision and a
+ * new member here.
+ */
+export type InkLinkSite = 'review-title' | 'sync-text' | 'task-branch';
 
 const isWebUrl = (href: string) => /^https?:\/\//i.test(href);
 
@@ -25,6 +36,7 @@ export function TextLink({
   href,
   onClick,
   title,
+  inkAt,
   children,
 }: {
   /** An http(s) URL, opened with the system browser. */
@@ -32,14 +44,17 @@ export function TextLink({
   onClick?: () => void;
   /** Hover text. */
   title?: string;
+  /** One of the logged places that keeps its text's ink (D274). */
+  inkAt?: InkLinkSite;
   children: React.ReactNode;
 }) {
+  const className = inkAt ? linkBase : linkClass;
   if (href) {
     return (
       <a
         href={href}
         title={title}
-        className={linkClass}
+        className={className}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -60,7 +75,7 @@ export function TextLink({
       role="button"
       tabIndex={0}
       title={title}
-      className={linkClass}
+      className={className}
       onClick={act}
       onKeyDown={(e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;

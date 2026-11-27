@@ -135,7 +135,7 @@ function SyncLine({
     const text = <SyncPart count={count} words={words[side]} side={side} density={density} />;
     if (!links) return text;
     return (
-      <TextLink title={titled ? title : undefined} onClick={onClick}>
+      <TextLink inkAt="sync-text" title={titled ? title : undefined} onClick={onClick}>
         {text}
       </TextLink>
     );
@@ -169,7 +169,8 @@ export function SyncTextLeast({ status }: { status: Sync }) {
 /**
  * "3 commits ahead, 1 behind", for a branch and upstream that have moved apart
  * (`isOutOfSync`): Files' top row, always. Secondary ink, the counts green and
- * red, each part a link to those commits; it inherits size. Where the words
+ * red, each part a link to those commits that keeps that ink (D274); it
+ * inherits size. Where the words
  * don't fit (measured, `fitSync`) it reads "↑3 ↓1", the words in its tooltip.
  * It takes the room it is given (it grows to fill a flex row).
  */

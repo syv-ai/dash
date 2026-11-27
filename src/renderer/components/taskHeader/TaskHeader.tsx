@@ -104,7 +104,9 @@ export function TaskHeader({
           {/* Capped so a long branch doesn't crowd the row; the tooltip names it. */}
           {branchHref ? (
             <span className="max-w-64 truncate">
-              <TextLink href={branchHref}>{branch}</TextLink>
+              <TextLink href={branchHref} inkAt="task-branch">
+                {branch}
+              </TextLink>
             </span>
           ) : (
             <span className="max-w-64 truncate">{branch}</span>
