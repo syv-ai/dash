@@ -123,7 +123,7 @@ export function ReviewOverview({ review, remote }: { review: PrReview; remote: s
       <DetailSection title="Description" collapsible {...description}>
         <div className="type-body">
           {review.body.trim() ? (
-            <Markdown text={review.body} />
+            <Markdown text={review.body} codeLook="outline" />
           ) : (
             <p className="type-caption">No description.</p>
           )}
