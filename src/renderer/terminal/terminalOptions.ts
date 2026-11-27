@@ -1,6 +1,6 @@
 import type { ITheme } from '@xterm/xterm';
 
-/** Font metrics every Dash xterm uses (task panes, drawer tabs, the Setup log). */
+/** Font metrics every Dash xterm uses (task panes, drawer tabs). */
 export const TERMINAL_BASE_OPTIONS = { fontSize: 13, lineHeight: 1.2 } as const;
 
 /**

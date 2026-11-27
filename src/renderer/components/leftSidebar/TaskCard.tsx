@@ -10,7 +10,6 @@ import { HoverSwapSlot } from '../ui/HoverSwapSlot';
 import { MainRepoBadge } from '../ui/MainRepoBadge';
 import { FavoriteStar } from '../ui/FavoriteStar';
 import { PrBadge } from '../ui/PrBadge';
-import { SetupStatus } from '../task/SetupStatus';
 import type { DragHandlers } from '../../hooks/useDragReorder';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useGit } from '../../stores/gitStore';
@@ -140,7 +139,6 @@ export function TaskCard({
                 </span>
               </Tooltip>
             )}
-            {task.useWorktree && <SetupStatus worktreePath={task.path} variant="inline" />}
             {(prs || allPrs) && (
               <PrBadge prs={prs ?? []} allPrs={allPrs} variant="icon" taskId={task.id} />
             )}

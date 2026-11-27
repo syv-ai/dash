@@ -3,10 +3,8 @@ import type { PermissionMode, TaskModel, Task } from '../../../shared/types';
 import { Dialog, DialogBody, DialogHeader } from '../ui/Dialog';
 import { Field } from '../ui/Field';
 import { Input } from '../ui/Input';
-import { Textarea } from '../ui/Textarea';
 import { PermissionModePicker } from './PermissionModePicker';
 import { ModelPicker } from './ModelPicker';
-import { Expandable } from '../ui/Expandable';
 import { SwitchField } from '../ui/SwitchField';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { useControlInfo } from '../../hooks/useControlInfo';
@@ -22,7 +20,6 @@ interface TaskSettingsModalProps {
   onRename: (id: string, name: string) => void;
   onPermissionModeChange: (id: string, mode: PermissionMode) => void;
   onModelChange: (id: string, model: TaskModel) => void;
-  onScriptsChange: (id: string, setupScript: string, teardownScript: string) => void;
   /** `restart` is true when the task has a session to restart (running or a
    *  parked job): its spawn args are fixed at dispatch, so the change needs a new one. */
   onDashAccessChange: (id: string, enabled: boolean, restart: boolean) => void;
@@ -37,13 +34,10 @@ export function TaskSettingsModal({
   onRename,
   onPermissionModeChange,
   onModelChange,
-  onScriptsChange,
   onDashAccessChange,
 }: TaskSettingsModalProps) {
   const [name, setName] = useState(task.name);
   const branch = useTaskBranch(task);
-  const [setupScript, setSetupScript] = useState(task.setupScript ?? '');
-  const [teardownScript, setTeardownScript] = useState(task.teardownScript ?? '');
   const controlSupported = useControlInfo()?.supported ?? false;
   // A live session, or a parked job: either needs a restart, which rewrites its
   // settings file, for a Dash access change. 'stopped' with no job has nothing to restart.
@@ -55,15 +49,6 @@ export function TaskSettingsModal({
   function handleDashAccessToggle(enabled: boolean) {
     if (hasSession) setPendingDashAccess(enabled);
     else onDashAccessChange(task.id, enabled, false);
-  }
-
-  function handleSaveScripts() {
-    if (
-      setupScript !== (task.setupScript ?? '') ||
-      teardownScript !== (task.teardownScript ?? '')
-    ) {
-      onScriptsChange(task.id, setupScript, teardownScript);
-    }
   }
 
   function handleSaveName() {
@@ -109,37 +94,6 @@ export function TaskSettingsModal({
             checked={task.dashAccess}
             onCheckedChange={handleDashAccessToggle}
           />
-        )}
-
-        {task.useWorktree && (
-          <Expandable
-            label="Worktree scripts"
-            hint="setup, teardown"
-            defaultOpen={!!(task.setupScript || task.teardownScript)}
-          >
-            <div className="grid gap-3" onBlur={handleSaveScripts}>
-              <Field label="Setup" hint="Already ran for this worktree; edits apply to re-runs.">
-                <Textarea
-                  variant="code"
-                  value={setupScript}
-                  onChange={(e) => setSetupScript(e.target.value)}
-                  rows={3}
-                  placeholder="pnpm install"
-                  className="resize-none"
-                />
-              </Field>
-              <Field label="Teardown" hint="Runs before this worktree is removed.">
-                <Textarea
-                  variant="code"
-                  value={teardownScript}
-                  onChange={(e) => setTeardownScript(e.target.value)}
-                  rows={2}
-                  placeholder="docker compose down"
-                  className="resize-none"
-                />
-              </Field>
-            </div>
-          </Expandable>
         )}
       </DialogBody>
 

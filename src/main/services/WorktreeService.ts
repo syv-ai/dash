@@ -1,4 +1,4 @@
-import { execFile, exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -9,34 +9,8 @@ import { branchSlug, slugify } from '@shared/slug';
 import { GithubService } from './GithubService';
 import { GitService } from './GitService';
 import { WORKTREES_EXCLUDE_ENTRY } from './gitExclude';
-import {
-  loadWorkspaceConfig,
-  resolveSetupCommand,
-  resolveTeardownCommand,
-  buildWorkspaceEnv,
-} from './WorkspaceConfigService';
-import { recordSetupFailure, runSetupCommand } from './setupRuns';
 
 const execFileAsync = promisify(execFile);
-const execAsync = promisify(exec);
-
-/** Turn a newline-separated per-task script into a single shell command
- *  (commands joined with " && " so a failure short-circuits), or null when
- *  there are no non-empty commands. */
-function scriptStringToCommand(script: string | null | undefined): string | null {
-  const commands = (script ?? '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-  return commands.length > 0 ? commands.join(' && ') : null;
-}
-
-/** Setup scripts do cold installs (`pnpm install`, `pip install`, …) that can
- *  take minutes on a fresh worktree. Anything still running after this is
- *  killed, so scripts must not stay in the foreground (start servers
- *  detached or via a service instead). Teardown should be quick. */
-const SETUP_SCRIPT_TIMEOUT_MS = 10 * 60_000;
-const TEARDOWN_SCRIPT_TIMEOUT_MS = 30_000;
 
 const PRESERVE_PATTERNS = [
   '.env',
@@ -59,7 +33,6 @@ export class WorktreeService {
       projectId: string;
       linkedIssueNumbers?: number[];
       pushRemote?: boolean;
-      setupScript?: string | null;
     },
   ): Promise<WorktreeInfo> {
     // The branch keeps the name's slashes (`feature/foo-1nfe`); the folder is flat.
@@ -91,9 +64,6 @@ export class WorktreeService {
         this.pushBranchAsync(worktreePath, branchName);
       }
     }
-
-    // Run worktree setup script (async, non-blocking)
-    this.runSetupScriptAsync(worktreePath, branchName, projectPath, options.setupScript);
 
     const id = this.stableIdFromPath(worktreePath);
     return {
@@ -143,9 +113,6 @@ export class WorktreeService {
       } catch {
         // If list fails, continue with removal anyway
       }
-
-      // Run teardown before removal so the script can still read .dash/* in the worktree.
-      await this.runTeardownAsync(worktreePath, projectPath, branch, options?.teardownScript);
 
       // Remove worktree
       try {
@@ -324,110 +291,13 @@ export class WorktreeService {
   }
 
   /**
-   * Resolve and run workspace teardown in the worktree just before it's removed.
-   *
-   * Sources, in priority order:
-   *   1. `.dash/config.json` teardown commands (joined with ` && `)
-   *   2. `bash <projectPath>/.dash/teardown.sh` if the script exists
-   *
-   * Awaited so cleanup (e.g. `docker compose down`) finishes before files vanish.
-   * Failures are toasted but do not block removal — the user asked for the worktree gone.
-   */
-  async runTeardownAsync(
-    worktreePath: string,
-    projectPath: string,
-    branch: string,
-    teardownOverride?: string | null,
-  ): Promise<void> {
-    try {
-      const config = loadWorkspaceConfig(worktreePath);
-      let command: string | null;
-      if (teardownOverride !== undefined && teardownOverride !== null) {
-        command = scriptStringToCommand(teardownOverride);
-      } else {
-        const fallbackPath = path.join(projectPath, '.dash', 'teardown.sh');
-        const fallbackScriptPath = fs.existsSync(fallbackPath) ? fallbackPath : null;
-        command = resolveTeardownCommand({ config, fallbackScriptPath });
-      }
-      if (!command) return;
-
-      const env = buildWorkspaceEnv({ worktreePath, projectPath, branch });
-      const cwd = config?.cwd ? path.join(worktreePath, config.cwd) : worktreePath;
-
-      await execAsync(command, {
-        cwd,
-        timeout: TEARDOWN_SCRIPT_TIMEOUT_MS,
-        env: { ...process.env, ...env },
-      });
-    } catch (error: unknown) {
-      const stderr =
-        error && typeof error === 'object' && 'stderr' in error
-          ? String((error as { stderr: unknown }).stderr).trim()
-          : '';
-      const msg = stderr || (error instanceof Error ? error.message : String(error));
-      toastRenderer({
-        kind: 'error',
-        title: 'Workspace teardown failed',
-        description: msg.slice(0, 200),
-      });
-    }
-  }
-
-  /**
-   * Resolve and run workspace setup in the worktree directory.
-   *
-   * Sources, in priority order:
-   *   1. A per-task override (even an empty one: "no setup for this worktree")
-   *   2. `.dash/config.json` setup commands (joined with ` && `)
-   *   3. `bash <projectPath>/.dash/setup.sh` if the script exists
-   *
-   * Non-blocking: the run's state and output stream to the renderer through
-   * `setupRuns`. Returns false when there is no setup to run.
-   */
-  runSetupScriptAsync(
-    worktreePath: string,
-    branchName: string,
-    projectPath: string,
-    setupOverride?: string | null,
-  ): boolean {
-    let command: string | null;
-    let cwd: string;
-    let env: Record<string, string>;
-    try {
-      const config = loadWorkspaceConfig(worktreePath);
-      if (setupOverride !== undefined && setupOverride !== null) {
-        command = scriptStringToCommand(setupOverride);
-      } else {
-        const fallbackPath = path.join(projectPath, '.dash', 'setup.sh');
-        const fallbackScriptPath = fs.existsSync(fallbackPath) ? fallbackPath : null;
-        command = resolveSetupCommand({ config, fallbackScriptPath });
-      }
-      env = buildWorkspaceEnv({ worktreePath, projectPath, branch: branchName });
-      cwd = config?.cwd ? path.join(worktreePath, config.cwd) : worktreePath;
-    } catch (error: unknown) {
-      recordSetupFailure(worktreePath, error instanceof Error ? error.message : String(error));
-      return true;
-    }
-    if (!command) return false;
-
-    void runSetupCommand({
-      worktreePath,
-      command,
-      cwd,
-      env: { ...process.env, ...env },
-      timeoutMs: SETUP_SCRIPT_TIMEOUT_MS,
-    });
-    return true;
-  }
-
-  /**
    * Create a git worktree for an existing branch (no new branch created).
    */
   async createWorktreeFromExistingBranch(
     projectPath: string,
     taskName: string,
     branch: string,
-    options: { projectId: string; setupScript?: string | null },
+    options: { projectId: string },
   ): Promise<WorktreeInfo> {
     // eslint-disable-next-line no-control-regex
     const hasControlChars = /[\x00-\x1f\x7f]/.test(branch);
@@ -514,8 +384,6 @@ export class WorktreeService {
     // No GitHub branch link for an existing branch: createLinkedBranch creates
     // the branch on the remote (a push nobody asked for), and fails for one
     // already there. TaskService comments the branch on linked issues instead.
-
-    this.runSetupScriptAsync(worktreePath, branch, projectPath, options.setupScript);
 
     const id = this.stableIdFromPath(worktreePath);
     return {

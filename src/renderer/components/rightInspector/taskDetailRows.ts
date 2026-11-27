@@ -35,7 +35,7 @@ export interface TaskDetailsInput {
 }
 
 /** The Details tab's plain sections; the rich ones (git, PRs, linked items,
- *  prompt, scripts) render from their own sources. */
+ *  prompt) render from their own sources. */
 export interface TaskDetailSections {
   task: DetailRow[];
   session: DetailRow[];

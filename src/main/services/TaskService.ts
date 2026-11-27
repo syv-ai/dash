@@ -35,7 +35,6 @@ import { portLivenessService } from './PortLivenessService';
 import { removeShellHistory } from './ptyShellConfig';
 import { getTuiHost } from '../tui/hostInstance';
 import { taskEvents } from './taskEvents';
-import { forgetSetupRun } from './setupRuns';
 import { FolderOccupiedError } from './FolderOccupiedError';
 import { removeTaskSettings } from './taskSettings';
 import { forgetTask as forgetTaskInbox } from './taskInbox';
@@ -45,12 +44,9 @@ import { languageServers } from '../lsp/languageServers';
 export const UNATTENDED_INSTRUCTION =
   "You were started by an orchestrator and may be running unattended. Don't use AskUserQuestion; state your assumptions and continue. Messages may reach you from an orchestrator through Dash, headed [Message from … via Dash …]: your last message of the turn one starts is read as your reply, so answer there; no need to SendMessage.";
 
-/** End a task's shell and service terminals, its setup run and its language servers (not its agent pane). */
+/** End a task's shell and service terminals and its language servers (not its agent pane). */
 async function stopTaskProcesses(taskId: string, why: string): Promise<void> {
-  // A setup script still running in the worktree goes too (quietly: the
-  // renderer drops its Setup tab).
   const task = DatabaseService.getTask(taskId);
-  if (task?.useWorktree) forgetSetupRun(task.path);
   await Promise.all([
     ...listForTask(taskId, { kinds: ['shell', 'service'] }).map((ptyId) =>
       killPtyAwait(ptyId).catch((err) =>
@@ -74,7 +70,7 @@ export class TaskService {
   ): Promise<CreateTaskResult> {
     const project = DatabaseService.getProjects().find((p) => p.id === input.projectId);
     if (!project) throw new Error(`Project not found: ${input.projectId}`);
-    const { name, linkedItems, contextPrompt, setupScript, teardownScript } = input;
+    const { name, linkedItems, contextPrompt } = input;
 
     // saveTask enforces one active in-place task per project folder; check it
     // before the checkout too, or a refused task would still switch the
@@ -102,7 +98,6 @@ export class TaskService {
           projectId: project.id,
           linkedIssueNumbers,
           pushRemote: input.pushRemote,
-          setupScript,
         });
         TelemetryService.capture('worktree_created');
         break;
@@ -118,7 +113,7 @@ export class TaskService {
           project.path,
           name,
           input.branch,
-          { projectId: project.id, setupScript },
+          { projectId: project.id },
         );
         TelemetryService.capture('worktree_created_existing_branch');
         break;
@@ -157,8 +152,6 @@ export class TaskService {
       branchCreatedByDash: input.kind === 'worktree-new-branch' && !!worktreeInfo,
       linkedItems: linkedItems ?? null,
       contextPrompt: contextPrompt ?? null,
-      setupScript: setupScript ?? null,
-      teardownScript: teardownScript ?? null,
       dashAccess: resolveDashAccess(input.dashAccess, project.path),
       parentTaskId: input.parentTaskId ?? null,
     });
@@ -293,7 +286,6 @@ export class TaskService {
           deleteWorktreeDir: options.deleteWorktreeDir === true,
           deleteLocalBranch: options.deleteLocalBranch === true && task.branchCreatedByDash,
           deleteRemoteBranch: options.deleteRemoteBranch === true && task.branchCreatedByDash,
-          teardownScript: task.teardownScript,
         });
         TelemetryService.capture('worktree_removed');
       } catch (err) {

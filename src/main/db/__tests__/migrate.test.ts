@@ -116,3 +116,27 @@ describe('runMigrations: memory_seen_at on projects', () => {
     expect(seenAt('p1')).toBe(5);
   });
 });
+
+describe('runMigrations: worktree script columns', () => {
+  const columns = (table: string) =>
+    (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+
+  it('drops them from a DB that has them, keeps the rows, and runs again cleanly', () => {
+    runMigrations();
+    // As a DB from before the scripts went.
+    db.exec(`ALTER TABLE projects ADD COLUMN worktree_setup_script TEXT`);
+    db.exec(`ALTER TABLE tasks ADD COLUMN setup_script TEXT`);
+    db.exec(`ALTER TABLE tasks ADD COLUMN teardown_script TEXT`);
+    db.prepare(`INSERT INTO projects (id, name, path) VALUES ('p1', 'p', '/repo')`).run();
+    insertTask('t1', 0);
+    db.prepare(`UPDATE tasks SET setup_script = 'pnpm install' WHERE id = 't1'`).run();
+
+    runMigrations();
+    expect(columns('projects')).not.toContain('worktree_setup_script');
+    expect(columns('tasks')).not.toContain('setup_script');
+    expect(columns('tasks')).not.toContain('teardown_script');
+    expect(db.prepare(`SELECT id FROM tasks`).all()).toEqual([{ id: 't1' }]);
+
+    expect(() => runMigrations()).not.toThrow();
+  });
+});

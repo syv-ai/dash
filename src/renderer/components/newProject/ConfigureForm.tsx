@@ -1,7 +1,6 @@
 import React from 'react';
 import { type ConfigureValues } from './types';
 import { PermissionModePicker } from '../task/PermissionModePicker';
-import { Code } from '../ui/Code';
 import { Expandable } from '../ui/Expandable';
 import { Field, FormSection } from '../ui/Field';
 import { Input } from '../ui/Input';
@@ -16,8 +15,7 @@ interface ConfigureFormProps {
   showName?: boolean;
 }
 
-/** A project's `.dash/config.json`: its name, the new-task defaults and the
- *  worktree scripts. Sections for a `DialogBody` (the new-project wizard,
+/** A project's `.dash/config.json`: its name and the new-task defaults. Sections for a `DialogBody` (the new-project wizard,
  *  project settings). */
 export function ConfigureForm({ value, onChange, showName = true }: ConfigureFormProps) {
   const set = <K extends keyof ConfigureValues>(key: K, v: ConfigureValues[K]) =>
@@ -76,39 +74,6 @@ export function ConfigureForm({ value, onChange, showName = true }: ConfigureFor
             className="resize-none"
           />
         </Expandable>
-      </FormSection>
-
-      <FormSection
-        title="Worktree scripts"
-        description={
-          <>
-            One command per line. They see <Code>DASH_WORKTREE_PATH</Code>,{' '}
-            <Code>DASH_PROJECT_PATH</Code> and <Code>DASH_BRANCH</Code>.
-          </>
-        }
-      >
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Setup" hint="In each new worktree.">
-            <Textarea
-              variant="code"
-              value={value.setup}
-              onChange={(e) => set('setup', e.target.value)}
-              rows={3}
-              placeholder={'pnpm install\ncp ../.env .env'}
-              className="resize-none"
-            />
-          </Field>
-          <Field label="Teardown" hint="Before a worktree is removed.">
-            <Textarea
-              variant="code"
-              value={value.teardown}
-              onChange={(e) => set('teardown', e.target.value)}
-              rows={3}
-              placeholder="docker compose down"
-              className="resize-none"
-            />
-          </Field>
-        </div>
       </FormSection>
     </>
   );

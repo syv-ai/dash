@@ -242,8 +242,6 @@ export class DatabaseService {
           branchCreatedByDash: data.branchCreatedByDash ?? false,
           linkedItems: linkedItemsJson,
           contextPrompt: data.contextPrompt ?? null,
-          setupScript: data.setupScript ?? null,
-          teardownScript: data.teardownScript ?? null,
           dashAccess: data.dashAccess ?? false,
           parentTaskId: data.parentTaskId ?? null,
           sortOrder: sortOrder ?? 0,
@@ -252,12 +250,11 @@ export class DatabaseService {
         })
         // The update set is INSERT-only for the deep config fields on purpose.
         // `useWorktree` is immutable after creation (no setter; updateTask
-        // passes the existing value), and `contextPrompt`/`setupScript`/
-        // `teardownScript` have dedicated setters (setTaskContextPrompt,
-        // setTaskScripts) precisely so a partial save like a rename can't
-        // clobber them. Adding them here would null them out on every update
-        // call that doesn't resend them (e.g. updateTask → rename wipes the
-        // context prompt). Leave them out. Same for `dashAccess` (its setter is
+        // passes the existing value), and `contextPrompt` has a dedicated
+        // setter (setTaskContextPrompt) precisely so a partial save like a
+        // rename can't clobber it. Adding it here would null it out on every
+        // update call that doesn't resend it (e.g. updateTask → rename wipes
+        // the context prompt). Leave it out. Same for `dashAccess` (its setter is
         // setTaskDashAccess), `favorite` (setTaskFavorite) and `parentTaskId`
         // (fixed at creation).
         .onConflictDoUpdate({
@@ -301,23 +298,6 @@ export class DatabaseService {
       .set({ linkedItems: JSON.stringify(items), updatedAt: new Date().toISOString() })
       .where(eq(tasks.id, id))
       .run();
-  }
-
-  /** Update a task's per-task worktree scripts (Task Settings edit). Null clears
-   *  the override. Kept separate from saveTask so partial saves (rename, etc.)
-   *  can't clobber these. */
-  static setTaskScripts(
-    id: string,
-    setupScript: string | null,
-    teardownScript: string | null,
-  ): Task {
-    const db = getDb();
-    db.update(tasks)
-      .set({ setupScript, teardownScript, updatedAt: new Date().toISOString() })
-      .where(eq(tasks.id, id))
-      .run();
-    const row = db.select().from(tasks).where(eq(tasks.id, id)).get();
-    return this.mapTask(row!);
   }
 
   /** Turn a task's Dash access (dashctl, the control API) on or off. Kept
@@ -698,8 +678,6 @@ export class DatabaseService {
       branchCreatedByDash: row.branchCreatedByDash ?? false,
       linkedItems,
       contextPrompt: row.contextPrompt ?? null,
-      setupScript: row.setupScript ?? null,
-      teardownScript: row.teardownScript ?? null,
       previousPath: row.previousPath ?? null,
       jobId: row.jobId ?? null,
       sessionId: row.sessionId ?? null,

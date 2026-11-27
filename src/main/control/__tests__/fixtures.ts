@@ -13,8 +13,6 @@ export function makeTask(over: Partial<Task> & { id: string; projectId: string }
     branchCreatedByDash: true,
     linkedItems: null,
     contextPrompt: null,
-    setupScript: null,
-    teardownScript: null,
     previousPath: null,
     jobId: null,
     sessionId: null,

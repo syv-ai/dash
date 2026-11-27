@@ -38,11 +38,6 @@ export interface DatabaseApi {
   /** Create a task through main's TaskService (worktree, row, ports, first prompt). */
   createTask: (input: CreateTaskInput) => Promise<IpcResponse<CreateTaskResult>>;
   deleteTask: (id: string, options?: DeleteTaskOptions) => Promise<IpcResponse<void>>;
-  setTaskScripts: (args: {
-    id: string;
-    setupScript: string | null;
-    teardownScript: string | null;
-  }) => Promise<IpcResponse<Task>>;
   archiveTask: (id: string) => Promise<IpcResponse<void>>;
   restoreTask: (id: string) => Promise<IpcResponse<void>>;
   /** Turn a task's Dash access on or off; returns the updated task. Applies at its next dispatch. */

@@ -81,10 +81,6 @@ export interface Task {
   branchCreatedByDash: boolean;
   linkedItems: LinkedItem[] | null;
   contextPrompt: string | null;
-  /** Per-task override of the project's default worktree setup/teardown scripts
-   *  (newline-separated commands). Null = no per-task scripts. */
-  setupScript: string | null;
-  teardownScript: string | null;
   /** Worktree path before the 0.16 move to `<repo>/.claude/worktrees/`; null
    *  when the task was never moved. Claude transcripts written before the move
    *  live under this path's encoded dir. */
@@ -131,10 +127,6 @@ export type CreateTaskOptions = {
    *  never persisted, so /clear and /compact don't re-run it. The control API's
    *  `prompt`; the task dialog doesn't use it. */
   initialPrompt?: string;
-  /** Per-task worktree scripts (newline-separated), snapshotted from the project
-   *  default and editable per task. Only meaningful for worktree tasks. */
-  setupScript?: string | null;
-  teardownScript?: string | null;
   /** undefined → project taskDefaults.dashAccess → false. Resolved only in TaskService.create. */
   dashAccess?: boolean;
 } & (
@@ -298,9 +290,6 @@ export interface RemoveWorktreeOptions {
   deleteWorktreeDir?: boolean;
   deleteLocalBranch?: boolean;
   deleteRemoteBranch?: boolean;
-  /** Per-task teardown override (newline-separated commands) run before removal.
-   *  Undefined → fall back to the project's .dash/config.json teardown. */
-  teardownScript?: string | null;
 }
 
 export interface PtyOptions {

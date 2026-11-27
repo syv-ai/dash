@@ -168,12 +168,6 @@ export function runMigrations(): void {
     backfillTxn();
   }
   try {
-    rawDb.exec(`ALTER TABLE projects ADD COLUMN worktree_setup_script TEXT`);
-  } catch {
-    /* already exists */
-  }
-
-  try {
     rawDb.exec(`ALTER TABLE projects ADD COLUMN is_git_repo INTEGER DEFAULT 1`);
   } catch {
     /* already exists */
@@ -188,18 +182,21 @@ export function runMigrations(): void {
     }
   }
 
-  // Per-task overrides for the project's default worktree setup/teardown scripts.
-  // Null = no per-task scripts. Snapshotted from .dash/config.json at task
-  // creation and editable per task.
-  for (const col of ['setup_script', 'teardown_script']) {
-    try {
-      rawDb.exec(`ALTER TABLE tasks ADD COLUMN ${col} TEXT`);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (!msg.includes('duplicate column')) {
-        console.error(`[migrate] Failed to add ${col} column:`, err);
-      }
-    }
+  // Worktree setup and teardown scripts are gone: drop their columns (the
+  // project-wide one, deprecated since 0.13, and the per-task overrides). Each
+  // is checked first, so this runs once per column.
+  for (const [table, col] of [
+    ['projects', 'worktree_setup_script'],
+    ['tasks', 'setup_script'],
+    ['tasks', 'teardown_script'],
+  ] as const) {
+    const has =
+      (
+        rawDb
+          .prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('${table}') WHERE name = ?`)
+          .get(col) as { c: number }
+      ).c > 0;
+    if (has) rawDb.exec(`ALTER TABLE ${table} DROP COLUMN ${col}`);
   }
 
   // Deprecated since 0.9.9 — kept so existing DBs don't break, but no longer

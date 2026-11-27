@@ -267,7 +267,7 @@ describe('TaskService.create', () => {
       '/repo/app',
       'review',
       'feature/x',
-      { projectId: 'p1', setupScript: undefined },
+      { projectId: 'p1' },
     );
     await vi.waitFor(() => expect(githubComments).toEqual([[7, task.branch, false]]));
   });
@@ -386,7 +386,6 @@ describe('TaskService.delete', () => {
       path: '/wt/x',
       useWorktree: true,
       branchCreatedByDash: false,
-      teardownScript: 'make clean',
       archivedAt: null,
       jobId: null,
       sessionId: null,
@@ -407,7 +406,6 @@ describe('TaskService.delete', () => {
       deleteWorktreeDir: true,
       deleteLocalBranch: false,
       deleteRemoteBranch: false,
-      teardownScript: 'make clean',
     });
   });
 
@@ -418,7 +416,6 @@ describe('TaskService.delete', () => {
       deleteWorktreeDir: false,
       deleteLocalBranch: false,
       deleteRemoteBranch: false,
-      teardownScript: 'make clean',
     });
   });
 
@@ -479,7 +476,6 @@ describe('TaskService.deleteProject', () => {
         path: `/wt/${id}`,
         useWorktree: true,
         branchCreatedByDash: true,
-        teardownScript: null,
         archivedAt: null,
         jobId: `job-${id}`,
         sessionId: null,
@@ -498,7 +494,6 @@ describe('TaskService.deleteProject', () => {
       deleteWorktreeDir: true,
       deleteLocalBranch: true,
       deleteRemoteBranch: false,
-      teardownScript: null,
     });
     expect(db.tasks.map((t) => t.id)).toEqual(['elsewhere']);
     expect(db.projects.map((p) => p.id)).not.toContain('p1');

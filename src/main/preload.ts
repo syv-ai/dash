@@ -50,11 +50,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Database - Tasks
   getTasks: (projectId: string) => ipcRenderer.invoke('db:getTasks', projectId),
   saveTask: (task: unknown) => ipcRenderer.invoke('db:saveTask', task),
-  setTaskScripts: (args: {
-    id: string;
-    setupScript: string | null;
-    teardownScript: string | null;
-  }) => ipcRenderer.invoke('db:setTaskScripts', args),
   // Task lifecycle (TaskService in main)
   createTask: (input: unknown) => ipcRenderer.invoke('task:create', input),
   deleteTask: (id: string, options?: unknown) => ipcRenderer.invoke('task:delete', id, options),
@@ -101,12 +96,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Worktree
   worktreeMigrationPlan: () => ipcRenderer.invoke('worktree:migrationPlan'),
   worktreeMigrate: (args: unknown) => ipcRenderer.invoke('worktree:migrate', args),
-  worktreeSetupList: () => ipcRenderer.invoke('worktree:setupList'),
-  worktreeSetupLog: (worktreePath: string) => ipcRenderer.invoke('worktree:setupLog', worktreePath),
-  worktreeSetupRerun: (taskId: string) => ipcRenderer.invoke('worktree:setupRerun', taskId),
-  onWorktreeSetupChanged: listen<unknown>('worktree:setupChanged'),
-  onWorktreeSetupForgotten: listen<{ worktreePath: string }>('worktree:setupForgotten'),
-  onWorktreeSetupOutput: listen<{ worktreePath: string; chunk: string }>('worktree:setupOutput'),
 
   // PTY
   ptyStartDirect: (args: unknown) => ipcRenderer.invoke('pty:startDirect', args),

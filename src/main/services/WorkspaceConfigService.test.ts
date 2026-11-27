@@ -25,7 +25,6 @@ describe('loadWorkspaceConfig taskDefaults', () => {
     fs.writeFileSync(
       path.join(proj, '.dash', 'config.json'),
       JSON.stringify({
-        setup: ['pnpm install'],
         taskDefaults: {
           baseRef: 'origin/main',
           permissionMode: 'acceptEdits',
@@ -43,17 +42,15 @@ describe('loadWorkspaceConfig taskDefaults', () => {
     });
   });
 
-  it('drops an invalid permissionMode but keeps the rest of the config', () => {
+  it('drops an invalid permissionMode but keeps the other defaults', () => {
     const proj = tmpProject();
     dirs.push(proj);
     fs.mkdirSync(path.join(proj, '.dash'));
     fs.writeFileSync(
       path.join(proj, '.dash', 'config.json'),
-      JSON.stringify({ setup: ['x'], taskDefaults: { permissionMode: 'nope' } }),
+      JSON.stringify({ taskDefaults: { permissionMode: 'nope', useWorktree: false } }),
     );
-    const cfg = loadWorkspaceConfig(proj);
-    expect(cfg?.setup).toEqual(['x']);
-    expect(cfg?.taskDefaults?.permissionMode).toBeUndefined();
+    expect(loadWorkspaceConfig(proj)?.taskDefaults).toEqual({ useWorktree: false });
   });
 });
 
@@ -73,7 +70,7 @@ describe('loadWorkspaceConfig taskDefaults.dashAccess', () => {
   it('drops a non-boolean dashAccess', () => {
     const proj = tmpProject();
     dirs.push(proj);
-    writeDash(proj, 'config.json', { setup: ['x'], taskDefaults: { dashAccess: 'yes' } });
+    writeDash(proj, 'config.json', { taskDefaults: { dashAccess: 'yes' } });
     expect(loadWorkspaceConfig(proj)?.taskDefaults).toBeUndefined();
   });
 });
@@ -112,7 +109,7 @@ describe('loadWorkspaceConfig config.local.json taskDefaults overlay', () => {
   it('adds taskDefaults when only the local file has them', () => {
     const proj = tmpProject();
     dirs.push(proj);
-    writeDash(proj, 'config.json', { setup: ['x'] });
+    writeDash(proj, 'config.json', {});
     writeDash(proj, 'config.local.json', { taskDefaults: { dashAccess: true } });
     expect(loadWorkspaceConfig(proj)?.taskDefaults).toEqual({ dashAccess: true });
   });
@@ -122,18 +119,15 @@ describe('loadSharedWorkspaceConfig', () => {
   it('reads config.json and ignores config.local.json', () => {
     const proj = tmpProject();
     dirs.push(proj);
-    writeDash(proj, 'config.json', { setup: ['x'], taskDefaults: { dashAccess: true } });
+    writeDash(proj, 'config.json', { taskDefaults: { dashAccess: true } });
     writeDash(proj, 'config.local.json', {
-      setup: { after: ['mine'] },
       taskDefaults: { dashAccess: false, baseRef: 'origin/dev' },
     });
     expect(loadSharedWorkspaceConfig(proj)).toEqual({
-      setup: ['x'],
       taskDefaults: { dashAccess: true },
     });
     // The merged read still overlays the local file.
     expect(loadWorkspaceConfig(proj)).toEqual({
-      setup: ['x', 'mine'],
       taskDefaults: { dashAccess: false, baseRef: 'origin/dev' },
     });
   });
@@ -153,25 +147,19 @@ describe('writeWorkspaceConfig', () => {
     fs.mkdirSync(path.join(proj, '.dash'));
     fs.writeFileSync(
       path.join(proj, '.dash', 'config.json'),
-      JSON.stringify({ run: ['serve'], custom: { keep: true } }),
+      JSON.stringify({ setup: ['pnpm install'], custom: { keep: true } }),
     );
-    writeWorkspaceConfig(proj, {
-      setup: ['pnpm install'],
-      teardown: ['docker compose down'],
-      taskDefaults: { baseRef: 'origin/main' },
-    });
+    writeWorkspaceConfig(proj, { taskDefaults: { baseRef: 'origin/main' } });
     const raw = JSON.parse(fs.readFileSync(path.join(proj, '.dash', 'config.json'), 'utf-8'));
-    expect(raw.setup).toEqual(['pnpm install']);
-    expect(raw.teardown).toEqual(['docker compose down']);
     expect(raw.taskDefaults).toEqual({ baseRef: 'origin/main' });
-    expect(raw.run).toEqual(['serve']); // untouched known key
+    expect(raw.setup).toEqual(['pnpm install']); // an old key nobody reads, left alone
     expect(raw.custom).toEqual({ keep: true }); // untouched unknown key
   });
 
   it('creates .dash/ when missing', () => {
     const proj = tmpProject();
     dirs.push(proj);
-    writeWorkspaceConfig(proj, { setup: ['echo hi'] });
+    writeWorkspaceConfig(proj, { taskDefaults: { useWorktree: true } });
     expect(fs.existsSync(path.join(proj, '.dash', 'config.json'))).toBe(true);
   });
 });

@@ -37,8 +37,6 @@ function task(over: Partial<Task> = {}): Task {
     branchCreatedByDash: true,
     linkedItems: null,
     contextPrompt: null,
-    setupScript: null,
-    teardownScript: null,
     previousPath: null,
     jobId: null,
     sessionId: null,

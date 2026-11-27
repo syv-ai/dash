@@ -81,8 +81,8 @@ function Rows({ rows }: { rows: DetailRow[] }) {
 /**
  * The Details tab: everything about the task in calm sections, each shown
  * only when it has something to say: the task, its session, usage, git,
- * pull requests, linked items, the context prompt and its scripts (read
- * only; the line on top opens the task settings).
+ * pull requests, linked items and the context prompt (read only; the line
+ * on top opens the task settings).
  */
 export function TaskDetails({
   task,
@@ -133,10 +133,6 @@ export function TaskDetails({
 
   const branch = gitStatus?.branch || task.branch;
   const linked = task.linkedItems ?? [];
-  const scripts = [
-    { label: 'Setup', script: task.setupScript },
-    { label: 'Teardown', script: task.teardownScript },
-  ].filter((s): s is { label: string; script: string } => !!s.script?.trim());
 
   return (
     <div className="scrollbar-gutter-stable min-h-0 flex-1 overflow-y-auto pb-3 animate-fade-in">
@@ -242,22 +238,6 @@ export function TaskDetails({
               <Markdown text={task.contextPrompt} />
             </div>
           </Expandable>
-        </DetailSection>
-      )}
-
-      {scripts.length > 0 && (
-        <DetailSection title="Scripts">
-          <div className="grid gap-2">
-            {scripts.map(({ label, script }) => (
-              <div key={label} className="grid gap-1">
-                <span className="type-label">{label}</span>
-                {/* Scripts are code: the one place here in mono. */}
-                <pre className="overflow-x-auto rounded-md bg-hover px-2 py-1.5 font-mono text-xs text-ink-2">
-                  {script}
-                </pre>
-              </div>
-            ))}
-          </div>
         </DetailSection>
       )}
     </div>

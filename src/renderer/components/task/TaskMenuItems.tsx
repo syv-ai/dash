@@ -5,8 +5,6 @@ import {
   Trash2,
   AtSign,
   Brain,
-  ScrollText,
-  RotateCw,
   Star,
   FolderOpen,
   GitBranch,
@@ -18,7 +16,6 @@ import { usePreferredIde } from '../../hooks/usePreferredIde';
 import { copyTaskMessageAddress } from '../../utils/copyMessageAddress';
 import { useProjects, selectTaskById } from '../../stores/projectsStore';
 import { sessionRegistry } from '../../terminal/SessionRegistry';
-import { useSetup } from '../../stores/setupStore';
 import { copyText, revealLabel } from '../diffEditor/fileActions';
 import { showTaskMemory } from '../memory/showMemory';
 
@@ -84,9 +81,6 @@ export function TaskMenuItems({
   const { Item, Separator } = parts;
   const { ideId, openLabel } = usePreferredIde();
   const task = useProjects((s) => selectTaskById(s, taskId));
-  const setupRun = useSetup((s) => (task ? s.runs[task.path] : undefined));
-  const showSetup = useSetup((s) => s.showSetup);
-  const rerunSetup = useSetup((s) => s.rerun);
   const setFavorite = useProjects((s) => s.setFavorite);
   return (
     <>
@@ -126,18 +120,6 @@ export function TaskMenuItems({
         <Settings size={13} strokeWidth={1.8} />
         Task settings
       </Item>
-      {task?.useWorktree && setupRun && (
-        <Item onSelect={() => showSetup(task.path)}>
-          <ScrollText size={13} strokeWidth={1.8} />
-          Setup output
-        </Item>
-      )}
-      {task?.useWorktree && (
-        <Item disabled={setupRun?.status === 'running'} onSelect={() => void rerunSetup(task)}>
-          <RotateCw size={13} strokeWidth={1.8} />
-          {setupRun ? 'Run setup again' : 'Run setup'}
-        </Item>
-      )}
       <Item
         onSelect={() => {
           focusTerminalOnClose = true;

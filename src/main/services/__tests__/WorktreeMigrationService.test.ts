@@ -114,8 +114,6 @@ function legacySetup(name = 'fix-login-a1b') {
       branchCreatedByDash: true,
       linkedItems: null,
       contextPrompt: null,
-      setupScript: null,
-      teardownScript: null,
       previousPath: null,
       jobId: null,
       sessionId: null,

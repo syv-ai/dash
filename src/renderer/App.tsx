@@ -28,7 +28,6 @@ import { RightInspector } from './components/rightInspector/RightInspector';
 import { usePlannedMotion } from './lib/usePlannedMotion';
 import { whenFramesSettle } from './lib/framesSettled';
 import { cn } from './lib/cn';
-import { useSetup } from './stores/setupStore';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
 import { TaskModal } from './components/task/TaskModal';
 import { NewProjectWizard } from './components/newProject/NewProjectWizard';
@@ -1310,17 +1309,6 @@ export function App() {
     [narrowEditor, showInspector],
   );
 
-  // A Setup tab request shows the drawer: a collapsed task sidebar hides
-  // it, so open the sidebar. Once per request: a later collapse must not
-  // reopen it.
-  const setupTabRequest = useSetup((s) => s.setupTabRequest);
-  const handledSetupSeqRef = useRef(0);
-  useEffect(() => {
-    if (!setupTabRequest || handledSetupSeqRef.current === setupTabRequest.seq) return;
-    handledSetupSeqRef.current = setupTabRequest.seq;
-    if (changesPanelCollapsed) toggleInspector();
-  }, [setupTabRequest, changesPanelCollapsed, toggleInspector]);
-
   // Reads the panel, not the setting, so the keyboard handler's closure can't go stale.
   const toggleShellDrawer = useCallback(() => {
     const panel = shellDrawerPanelRef.current;
@@ -1414,12 +1402,8 @@ export function App() {
   }
 
   // Loaded before the modal mounts so its fields render with the project's
-  // taskDefaults + default worktree scripts already applied (prefill only).
+  // taskDefaults already applied (prefill only).
   const [taskModalDefaults, setTaskModalDefaults] = useState<TaskModalDefaults | null>(null);
-  const [taskModalDefaultScripts, setTaskModalDefaultScripts] = useState<{
-    setup: string;
-    teardown: string;
-  } | null>(null);
 
   async function handleNewTask(projectId: string) {
     setActiveProjectId(projectId);
@@ -1427,18 +1411,11 @@ export function App() {
     // Read from the store (not a closure) so a freshly-created project resolves.
     const project = useProjects.getState().projects.find((p) => p.id === projectId);
     let defaults: TaskModalDefaults | null = null;
-    let scripts: { setup: string; teardown: string } | null = null;
     if (project) {
       const resp = await window.electronAPI.readWorkspaceConfig(project.path);
-      const config = resp.success ? resp.data : null;
-      defaults = config?.taskDefaults ?? null;
-      scripts = {
-        setup: (config?.setup ?? []).join('\n'),
-        teardown: (config?.teardown ?? []).join('\n'),
-      };
+      defaults = resp.success ? (resp.data?.taskDefaults ?? null) : null;
     }
     setTaskModalDefaults(defaults);
-    setTaskModalDefaultScripts(scripts);
     setShowTaskModal(true);
   }
 
@@ -1748,7 +1725,6 @@ export function App() {
               adoConfigured={modalProjectId ? (adoConfiguredById[modalProjectId] ?? false) : false}
               initialBranches={modalProjectId ? branchesByProject[modalProjectId] : undefined}
               taskDefaults={taskModalDefaults}
-              defaultScripts={taskModalDefaultScripts}
               onClose={() => setShowTaskModal(false)}
               onCreate={handleCreateTask}
               onGitInit={() => {
@@ -1805,19 +1781,6 @@ export function App() {
               .then((updated) => {
                 if (updated) setTaskSettingsTarget((prev) => (prev?.id === id ? updated : prev));
               });
-          }}
-          onScriptsChange={(id, setupScript, teardownScript) => {
-            void (async () => {
-              const resp = await window.electronAPI.setTaskScripts({
-                id,
-                setupScript: setupScript.trim() ? setupScript : null,
-                teardownScript: teardownScript.trim() ? teardownScript : null,
-              });
-              if (resp.success && resp.data) {
-                setTaskSettingsTarget((prev) => (prev?.id === id ? resp.data! : prev));
-                if (taskSettingsTarget) await loadTasksForProject(taskSettingsTarget.projectId);
-              }
-            })();
           }}
         />
       )}

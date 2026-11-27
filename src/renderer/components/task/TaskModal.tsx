@@ -59,9 +59,6 @@ interface TaskModalProps {
   adoConfigured: boolean;
   initialBranches?: BranchInfo[];
   taskDefaults?: TaskModalDefaults | null;
-  /** Project default worktree scripts (newline-separated), prefilled into the
-   *  per-task override fields. */
-  defaultScripts?: { setup: string; teardown: string } | null;
   onClose: () => void;
   onCreate: (options: CreateTaskOptions) => Promise<boolean>;
   onGitInit?: () => void;
@@ -81,7 +78,6 @@ export function TaskModal(props: TaskModalProps) {
         adoConfigured={props.adoConfigured}
         initialBranches={props.initialBranches}
         taskDefaults={props.taskDefaults}
-        defaultScripts={props.defaultScripts}
         onCreate={props.onCreate}
         onGitInit={props.onGitInit}
       />
@@ -99,7 +95,6 @@ interface TaskModalBodyProps {
   adoConfigured: boolean;
   initialBranches?: BranchInfo[];
   taskDefaults?: TaskModalDefaults | null;
-  defaultScripts?: { setup: string; teardown: string } | null;
   onCreate: (options: CreateTaskOptions) => Promise<boolean>;
   onGitInit?: () => void;
 }
@@ -152,7 +147,6 @@ function TaskModalBody({
   adoConfigured,
   initialBranches,
   taskDefaults,
-  defaultScripts,
   onCreate,
   onGitInit,
 }: TaskModalBodyProps) {
@@ -170,10 +164,6 @@ function TaskModalBody({
   const [contextPrompt, setContextPrompt] = useState(taskDefaults?.contextPrompt ?? '');
   const [dashAccess, setDashAccess] = useState(taskDefaults?.dashAccess ?? false);
   const controlSupported = useControlInfo()?.supported ?? false;
-  // Per-task worktree scripts, prefilled from the project default; edit to
-  // override for just this worktree.
-  const [setupScript, setSetupScript] = useState(defaultScripts?.setup ?? '');
-  const [teardownScript, setTeardownScript] = useState(defaultScripts?.teardown ?? '');
   const [pushRemote, setPushRemote] = useState(true);
   const [gitInitLoading, setGitInitLoading] = useState(false);
   const [createNewBranch, setCreateNewBranch] = useState(false);
@@ -316,16 +306,12 @@ function TaskModalBody({
     const allLinkedItems: LinkedItem[] = [...ghItems, ...adoItems];
     const linkedItems = allLinkedItems.length > 0 ? allLinkedItems : undefined;
 
-    // Per-task scripts only apply to worktree tasks; persist null otherwise.
-    const scriptsApply = useWorktree && !repoHasNoCommits;
     const base = {
       name: name.trim(),
       permissionMode,
       model,
       linkedItems,
       contextPrompt: contextPrompt.trim() || undefined,
-      setupScript: scriptsApply ? setupScript : null,
-      teardownScript: scriptsApply ? teardownScript : null,
       // Hidden toggle (win32, or info not loaded yet) → no access, as shown.
       dashAccess: controlSupported ? dashAccess : false,
     };
@@ -633,37 +619,6 @@ function TaskModalBody({
                   />
                 )}
               </Field>
-            )}
-
-            {/* Per-task worktree scripts (override the project default) */}
-            {useWorktree && !repoHasNoCommits && (
-              <Expandable label="Worktree scripts" hint="setup, teardown">
-                <div className="grid gap-3">
-                  <Field label="Setup" hint="Runs in the new worktree.">
-                    <Textarea
-                      variant="code"
-                      value={setupScript}
-                      onChange={(e) => setSetupScript(e.target.value)}
-                      rows={3}
-                      placeholder={'pnpm install\ncp ../.env .env'}
-                      className="resize-none"
-                    />
-                  </Field>
-                  <Field label="Teardown" hint="Runs before the worktree is removed.">
-                    <Textarea
-                      variant="code"
-                      value={teardownScript}
-                      onChange={(e) => setTeardownScript(e.target.value)}
-                      rows={2}
-                      placeholder="docker compose down"
-                      className="resize-none"
-                    />
-                  </Field>
-                  <p className="type-caption">
-                    Prefilled from the project&rsquo;s scripts; edits apply to this task only.
-                  </p>
-                </div>
-              </Expandable>
             )}
           </div>
         </div>

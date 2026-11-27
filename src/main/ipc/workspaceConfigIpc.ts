@@ -20,9 +20,6 @@ const taskDefaultsSchema = z
   .optional();
 
 const configSchema = z.looseObject({
-  setup: z.array(z.string()).optional(),
-  teardown: z.array(z.string()).optional(),
-  cwd: z.string().optional(),
   taskDefaults: taskDefaultsSchema,
 });
 

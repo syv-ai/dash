@@ -10,17 +10,7 @@ export interface ConfigureValues {
   contextPrompt: string;
   /** Default for the New Task dialog's Dash access switch. */
   dashAccess: boolean;
-  setup: string; // newline-separated; split on save
-  teardown: string; // newline-separated; split on save
 }
-
-const lines = (s: string): string[] =>
-  s
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-
-const joinLines = (arr: string[] | undefined): string => (arr ?? []).join('\n');
 
 /** Build form values from a loaded config + fallbacks (project name, detected base ref). */
 export function configToValues(
@@ -35,15 +25,11 @@ export function configToValues(
     useWorktree: td?.useWorktree ?? true,
     contextPrompt: td?.contextPrompt ?? '',
     dashAccess: td?.dashAccess ?? false,
-    setup: joinLines(config?.setup),
-    teardown: joinLines(config?.teardown),
   };
 }
 
 /** Build the `.dash/config.json` payload from form values (name is persisted separately). */
 export function valuesToConfig(value: ConfigureValues): WorkspaceConfig {
-  const setup = lines(value.setup);
-  const teardown = lines(value.teardown);
   const taskDefaults = {
     baseRef: value.baseRef.trim() || undefined,
     // Auto is the built-in default, so saving a config with no mode doesn't
@@ -54,9 +40,5 @@ export function valuesToConfig(value: ConfigureValues): WorkspaceConfig {
     // Off is the built-in default, so only an opt-in is written.
     dashAccess: value.dashAccess || undefined,
   };
-  return {
-    setup: setup.length > 0 ? setup : undefined,
-    teardown: teardown.length > 0 ? teardown : undefined,
-    taskDefaults,
-  };
+  return { taskDefaults };
 }

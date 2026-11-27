@@ -52,8 +52,6 @@ export const taskInputSchema = z.looseObject({
   branchCreatedByDash: z.boolean().optional(),
   linkedItems: z.array(linkedItemSchema).nullable().optional(),
   contextPrompt: z.string().nullable().optional(),
-  setupScript: z.string().nullable().optional(),
-  teardownScript: z.string().nullable().optional(),
   archivedAt: z.string().nullable().optional(),
   dashAccess: z.boolean().optional(),
   parentTaskId: z.string().nullable().optional(),
@@ -72,8 +70,6 @@ const createTaskCommon = {
   model: taskModelSchema,
   linkedItems: z.array(linkedItemSchema).optional(),
   contextPrompt: z.string().optional(),
-  setupScript: z.string().nullable().optional(),
-  teardownScript: z.string().nullable().optional(),
   dashAccess: z.boolean().optional(),
   parentTaskId: z.string().nullable().optional(),
 };

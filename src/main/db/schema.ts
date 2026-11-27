@@ -19,9 +19,6 @@ export const projects = sqliteTable(
     gitRemote: text('git_remote'),
     gitBranch: text('git_branch'),
     baseRef: text('base_ref'),
-    // Deprecated since 0.13: replaced by .dash/config.json setup commands.
-    // Column kept so existing DBs don't break; do not read or write.
-    worktreeSetupScript: text('worktree_setup_script'),
     // Set while the project is archived: hidden from the project list, its
     // task sessions asleep. Restoring clears it.
     archivedAt: text('archived_at'),
@@ -59,11 +56,6 @@ export const tasks = sqliteTable(
     model: text('model').notNull().default('default'),
     linkedItems: text('linked_items'),
     contextPrompt: text('context_prompt'),
-    // Per-task overrides of the project's default worktree scripts (newline-
-    // separated commands). Null = no per-task scripts. Snapshotted from
-    // .dash/config.json at creation; editable per task.
-    setupScript: text('setup_script'),
-    teardownScript: text('teardown_script'),
     branchCreatedByDash: integer('branch_created_by_dash', { mode: 'boolean' }).default(false),
     // Deprecated since 0.9.9: was used to pin Claude session_id captured by a
     // SessionStart hook before we switched to `claude --continue`. Column kept
