@@ -128,6 +128,14 @@ describe('buildDispatchArgs', () => {
     expect(buildDispatchArgs({ name: 't', effort: null })).not.toContain('--effort');
   });
 
+  it("passes the project's appended system prompt as one value", () => {
+    const args = buildDispatchArgs({ name: 't', appendSystemPrompt: 'Use pnpm.\n- Never npm.' });
+    expect(args.slice(5)).toEqual(['--append-system-prompt', 'Use pnpm.\n- Never npm.']);
+    expect(buildDispatchArgs({ name: 't', appendSystemPrompt: '' })).not.toContain(
+      '--append-system-prompt',
+    );
+  });
+
   it('passes the task folders as one --add-dir, ended by the next flag', () => {
     const args = buildDispatchArgs({
       name: 't',

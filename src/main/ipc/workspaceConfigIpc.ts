@@ -26,6 +26,7 @@ const taskDefaultsSchema = z
 
 const configSchema = z.looseObject({
   taskDefaults: taskDefaultsSchema,
+  session: z.object({ appendSystemPrompt: z.string().optional() }).optional(),
 });
 
 const localTaskDefaultsSchema = z.object({

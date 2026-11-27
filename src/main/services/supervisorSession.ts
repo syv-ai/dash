@@ -29,6 +29,8 @@ export interface DispatchArgsOptions {
   model?: TaskModel;
   /** `--effort`; undefined → none (Claude Code decides). */
   effort?: TaskEffort | null;
+  /** The project's text for the end of the system prompt → `--append-system-prompt`. */
+  appendSystemPrompt?: string;
   /** Extra folders the session may read and edit → one `--add-dir` with all. */
   addDirs?: readonly string[];
   /** The task's settings file (buildSessionSettings) → `--settings`. */
@@ -110,6 +112,9 @@ export function buildDispatchArgs(opts: DispatchArgsOptions): string[] {
   }
   if (opts.effort) {
     args.push('--effort', opts.effort);
+  }
+  if (opts.appendSystemPrompt) {
+    args.push('--append-system-prompt', opts.appendSystemPrompt);
   }
   // Variadic: the flags after it (or the `--`) end its list.
   if (opts.addDirs && opts.addDirs.length > 0) {

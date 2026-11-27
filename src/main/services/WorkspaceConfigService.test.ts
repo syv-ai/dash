@@ -197,3 +197,16 @@ describe('local-only extraArgs', () => {
     });
   });
 });
+
+describe('session.appendSystemPrompt', () => {
+  it('reads it from config.json, trimmed, and writes it back beside taskDefaults', () => {
+    const proj = tmpProject();
+    dirs.push(proj);
+    writeDash(proj, 'config.json', { session: { appendSystemPrompt: ' Use pnpm. ' } });
+    expect(loadWorkspaceConfig(proj)?.session).toEqual({ appendSystemPrompt: 'Use pnpm.' });
+    writeWorkspaceConfig(proj, { taskDefaults: { useWorktree: true }, session: undefined });
+    expect(loadSharedWorkspaceConfig(proj)).toEqual({ taskDefaults: { useWorktree: true } });
+    writeWorkspaceConfig(proj, { session: { appendSystemPrompt: 'Be brief.' } });
+    expect(loadSharedWorkspaceConfig(proj)?.session).toEqual({ appendSystemPrompt: 'Be brief.' });
+  });
+});

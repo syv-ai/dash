@@ -2,11 +2,14 @@ import React, { useId } from 'react';
 import { type ConfigureValues } from './configureValues';
 import { PermissionModePicker } from '../task/PermissionModePicker';
 import { Expandable } from '../ui/Expandable';
-import { FormSection, SettingRow } from '../ui/Field';
+import { Field, FormSection, SettingRow } from '../ui/Field';
 import { Input } from '../ui/Input';
 import { SwitchField } from '../ui/SwitchField';
 import { Textarea } from '../ui/Textarea';
 import { useControlInfo } from '../../hooks/useControlInfo';
+
+const APPEND_HINT =
+  "Added to the end of Claude Code's system prompt in every task's session (claude --append-system-prompt), unlike the context prompt, which opens a new task's first message. A session takes it when it starts or restarts, not when a sleeping one wakes. A resumed conversation keeps the prompt it was first sent with, so a change reaches a running task only after its next compaction (/compact).";
 
 interface ConfigureFormProps {
   value: ConfigureValues;
@@ -92,6 +95,18 @@ export function ConfigureForm({ value, onChange, showName = true }: ConfigureFor
             />
           </Expandable>
         </div>
+      </FormSection>
+
+      <FormSection title="Sessions">
+        <Field label="Append to system prompt" hint={APPEND_HINT} trailing="optional">
+          <Textarea
+            value={value.appendSystemPrompt}
+            onChange={(e) => set('appendSystemPrompt', e.target.value)}
+            rows={3}
+            placeholder="Rules every task's agent follows, after Claude Code's own."
+            className="resize-none"
+          />
+        </Field>
       </FormSection>
     </>
   );

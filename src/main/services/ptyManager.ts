@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import { sessionTranscriptPath } from './claudeSessionRegistry';
+import { loadWorkspaceConfig } from './WorkspaceConfigService';
 import { app, type WebContents } from 'electron';
 import { TelemetryService } from './TelemetryService';
 import { activityMonitor } from './ActivityMonitor';
@@ -290,6 +291,8 @@ async function ensureTaskSession(opts: {
   addDirs: string[];
   /** The task's own; null → Settings → Claude's default at this start. */
   effort: TaskEffort | null;
+  /** The project's (`.dash/config.json` session.appendSystemPrompt), read at this start. */
+  appendSystemPrompt?: string;
   env: Record<string, string>;
   wakeStopped?: boolean;
 }): Promise<string> {
@@ -365,6 +368,7 @@ async function ensureTaskSession(opts: {
       extraArgs: opts.extraArgs,
       addDirs: opts.addDirs,
       effort,
+      appendSystemPrompt: opts.appendSystemPrompt,
       env: opts.env,
     });
   } catch (err) {
@@ -519,6 +523,17 @@ type TaskSessionStart = {
   claudePath: string;
 };
 
+/** The project's `session.appendSystemPrompt`, read fresh at each start; none on a read error. */
+function projectAppendSystemPrompt(projectId: string): string | undefined {
+  try {
+    const project = DatabaseService.getProjects().find((p) => p.id === projectId);
+    return project ? loadWorkspaceConfig(project.path)?.session?.appendSystemPrompt : undefined;
+  } catch (err) {
+    console.warn('[ptyManager] could not read the project session config:', err);
+    return undefined;
+  }
+}
+
 /** Per task, the start in flight: a second caller (a pane and the control API
  *  at once) awaits it instead of reading the same empty job id and
  *  dispatching a second job. */
@@ -579,6 +594,7 @@ async function startTaskSessionNow(
       extraArgs: task.extraArgs,
       addDirs: task.addDirs,
       effort: task.effort,
+      appendSystemPrompt: projectAppendSystemPrompt(task.projectId),
       env,
       wakeStopped: opts.wakeStopped,
     });

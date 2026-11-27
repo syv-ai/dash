@@ -33,6 +33,17 @@ describe('configure form permissionMode', () => {
   });
 });
 
+describe('appended system prompt', () => {
+  it('round-trips it, and writes no session block when blank', () => {
+    const v = configToValues({ session: { appendSystemPrompt: 'Use pnpm.' } }, fallbacks);
+    expect(v.appendSystemPrompt).toBe('Use pnpm.');
+    expect(valuesToConfig({ ...v, appendSystemPrompt: ' Be brief. ' }).session).toEqual({
+      appendSystemPrompt: 'Be brief.',
+    });
+    expect(valuesToConfig({ ...v, appendSystemPrompt: '  ' }).session).toBeUndefined();
+  });
+});
+
 describe('local-only defaults', () => {
   it('round-trips extra arguments and drops a blank line', () => {
     expect(localToValues({ extraArgs: '--chrome', addDirs: ['/a'] })).toEqual({

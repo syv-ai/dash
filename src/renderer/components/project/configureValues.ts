@@ -15,6 +15,8 @@ export interface ConfigureValues {
   contextPrompt: string;
   /** Default for the New Task dialog's Dash access switch. */
   dashAccess: boolean;
+  /** Every task's `--append-system-prompt` (session.appendSystemPrompt). */
+  appendSystemPrompt: string;
 }
 
 /** Build form values from a loaded config + fallbacks (project name, detected base ref). */
@@ -30,6 +32,7 @@ export function configToValues(
     useWorktree: td?.useWorktree ?? true,
     contextPrompt: td?.contextPrompt ?? '',
     dashAccess: td?.dashAccess ?? false,
+    appendSystemPrompt: config?.session?.appendSystemPrompt ?? '',
   };
 }
 
@@ -45,7 +48,8 @@ export function valuesToConfig(value: ConfigureValues): WorkspaceConfig {
     // Off is the built-in default, so only an opt-in is written.
     dashAccess: value.dashAccess || undefined,
   };
-  return { taskDefaults };
+  const appendSystemPrompt = value.appendSystemPrompt.trim();
+  return { taskDefaults, session: appendSystemPrompt ? { appendSystemPrompt } : undefined };
 }
 
 /** The personal, local-only defaults (`.dash/config.local.json`) as the form edits them. */

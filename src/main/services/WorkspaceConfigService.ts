@@ -29,8 +29,18 @@ export type LocalTaskDefaults = Pick<
   (typeof LOCAL_ONLY_TASK_DEFAULTS)[number]
 >;
 
+/** How every task's session in the project launches, read at each dispatch. */
+export interface WorkspaceSessionConfig {
+  /** Passed as `--append-system-prompt`. Claude Code records a conversation's
+   *  prompt on its first request, so a change reaches a resumed session only
+   *  after it compacts (cli-reference, "System prompt flags in resumed
+   *  conversations"). */
+  appendSystemPrompt?: string;
+}
+
 export interface WorkspaceConfig {
   taskDefaults?: WorkspaceTaskDefaults;
+  session?: WorkspaceSessionConfig;
   /** Read from config.json only: local-only keys it sets, which were ignored
    *  (Project settings says so). Never written. */
   ignoredLocalOnlyKeys?: string[];
@@ -75,6 +85,20 @@ function parseTaskDefaults(
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
+function parseSession(value: unknown, source: string): WorkspaceSessionConfig | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    console.error(`[WorkspaceConfig] ${source}: 'session' must be an object`);
+    return undefined;
+  }
+  const obj = value as Record<string, unknown>;
+  const result: WorkspaceSessionConfig = {};
+  if (typeof obj.appendSystemPrompt === 'string' && obj.appendSystemPrompt.trim()) {
+    result.appendSystemPrompt = obj.appendSystemPrompt.trim();
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
 /** The local-only taskDefaults keys a shared config.json sets anyway. */
 function localOnlyKeysIn(value: unknown): string[] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
@@ -87,6 +111,8 @@ function parseBaseConfig(parsed: unknown, source: string): WorkspaceConfig | nul
   const result: WorkspaceConfig = {};
   const taskDefaults = parseTaskDefaults(obj.taskDefaults, source, { local: false });
   if (taskDefaults) result.taskDefaults = taskDefaults;
+  const session = parseSession(obj.session, source);
+  if (session) result.session = session;
   const ignored = localOnlyKeysIn(obj.taskDefaults);
   if (ignored.length > 0) result.ignoredLocalOnlyKeys = ignored;
   return result;
@@ -186,8 +212,8 @@ export function writeLocalTaskDefaults(projectPath: string, patch: LocalTaskDefa
 
 /**
  * Persist a WorkspaceConfig to `<projectPath>/.dash/config.json`, preserving any
- * keys we don't model (e.g. custom keys). Only taskDefaults is overwritten from
- * `config`; passing `undefined` for it removes it.
+ * keys we don't model (e.g. custom keys). Only taskDefaults and session are
+ * overwritten from `config`; passing `undefined` for one removes it.
  */
 export function writeWorkspaceConfig(projectPath: string, config: WorkspaceConfig): void {
   const dashDir = path.join(projectPath, DASH_DIR);
@@ -203,6 +229,7 @@ export function writeWorkspaceConfig(projectPath: string, config: WorkspaceConfi
     else base[key] = config[key];
   };
   assign('taskDefaults');
+  assign('session');
 
   if (!fs.existsSync(dashDir)) fs.mkdirSync(dashDir, { recursive: true });
   fs.writeFileSync(configPath, JSON.stringify(base, null, 2) + '\n', 'utf-8');

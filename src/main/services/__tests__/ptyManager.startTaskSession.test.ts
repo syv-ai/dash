@@ -37,6 +37,7 @@ const tasks = new Map<string, Task>();
 const sessions: Array<[string, unknown]> = [];
 vi.mock('../DatabaseService', () => ({
   DatabaseService: {
+    getProjects: () => [],
     getTask: (id: string) => tasks.get(id),
     setTaskSession: (id: string, s: unknown) => sessions.push([id, s]),
     getTasksWithSessions: () => [],
