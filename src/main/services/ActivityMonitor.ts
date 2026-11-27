@@ -3,6 +3,7 @@ import type { WebContents } from 'electron';
 import type {
   ActivityState,
   ActivityInfo,
+  ActivityTiming,
   ToolActivity,
   ActivityError,
   SessionPermissionMode,
@@ -116,6 +117,33 @@ function buildToolLabel(toolName: string, toolInput: Record<string, unknown> | u
       }
       return toolName;
   }
+}
+
+/** How long a tool's input summary may be. */
+export const TOOL_INPUT_MAX = 200;
+
+/**
+ * What a tool call acts on, for an API reader deciding on a waiting task:
+ * the command, path, URL or query it names, else its input as JSON; cut to
+ * TOOL_INPUT_MAX. Undefined when it has no input.
+ */
+export function toolInputSummary(
+  toolInput: Record<string, unknown> | undefined,
+): string | undefined {
+  if (!toolInput) return undefined;
+  const named = ['command', 'file_path', 'notebook_path', 'url', 'pattern', 'query']
+    .map((k) => toolInput[k])
+    .find((v): v is string => typeof v === 'string' && v.length > 0);
+  const text = named ?? JSON.stringify(toolInput);
+  if (!text || text === '{}') return undefined;
+  return text.length > TOOL_INPUT_MAX ? `${text.slice(0, TOOL_INPUT_MAX - 1)}…` : text;
+}
+
+function toolActivity(toolName: string, toolInput?: Record<string, unknown>): ToolActivity {
+  const tool: ToolActivity = { toolName, label: buildToolLabel(toolName, toolInput) };
+  const input = toolInputSummary(toolInput);
+  if (input) tool.input = input;
+  return tool;
 }
 
 /** What a task parked on its subagents is doing, for the tool label. */
@@ -268,7 +296,8 @@ class ActivityMonitorImpl {
       a.interrupted = true;
     }
     if (next !== 'busy' && next !== 'waiting') a.waitUnheard = false;
-    if (next !== 'busy') a.tool = null;
+    // A wait keeps the tool it waits on (the permission prompt's).
+    if (next !== 'busy' && next !== 'waiting') a.tool = null;
     if (next === 'idle' || next === 'stopped') a.compacting = false;
     this.emitAll();
   }
@@ -330,16 +359,27 @@ class ActivityMonitorImpl {
     this.emitAll();
   }
 
-  setWaitingForPermission(ptyId: string): void {
+  /**
+   * A prompt waits on the person. `tool`: the call it asks about (the
+   * PermissionRequest's), kept so a reader can name what waits; without
+   * one, the tool the turn last started is kept.
+   */
+  setWaitingForPermission(
+    ptyId: string,
+    tool?: { toolName: string; toolInput?: Record<string, unknown> },
+  ): void {
     const a = this.activities.get(ptyId);
     if (!a) return;
     a.lastHookTime = Date.now();
     this.cancelSettle(a);
-    if (a.state === 'waiting') return;
+    if (tool) a.tool = toolActivity(tool.toolName, tool.toolInput);
+    if (a.state === 'waiting') {
+      if (tool) this.emitAll();
+      return;
+    }
     a.waitSince = a.lastHookTime;
     a.waitUnheard = true;
     a.state = 'waiting';
-    a.tool = null;
     a.detail = null;
     a.interrupted = false;
     this.emitAll();
@@ -479,7 +519,7 @@ class ActivityMonitorImpl {
     a.waitUnheard = false;
     this.cancelSettle(a);
     a.mainTurn = true;
-    a.tool = { toolName, label: buildToolLabel(toolName, toolInput) };
+    a.tool = toolActivity(toolName, toolInput);
     if (a.state !== 'busy') {
       a.state = 'busy';
       a.error = null;
@@ -569,6 +609,18 @@ class ActivityMonitorImpl {
       if (a.interrupted && a.state === 'idle') info.interrupted = true;
       if (a.permissionMode) info.permissionMode = a.permissionMode;
       result[id] = info;
+    }
+    return result;
+  }
+
+  /** When each session last spoke and since when it waits (the control API's task view). */
+  getTiming(): Record<string, ActivityTiming> {
+    const result: Record<string, ActivityTiming> = {};
+    for (const [id, a] of this.activities) {
+      result[id] = {
+        lastActiveAt: a.lastHookTime > 0 ? a.lastHookTime : null,
+        waitingSince: a.state === 'waiting' && a.waitSince > 0 ? a.waitSince : null,
+      };
     }
     return result;
   }

@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import { DatabaseService } from '../../services/DatabaseService';
 import { TaskService } from '../../services/TaskService';
 import { activityMonitor, activityEvents } from '../../services/ActivityMonitor';
+import { contextUsageService } from '../../services/ContextUsageService';
 import { supervisorService } from '../../services/SupervisorService';
 import { worktreeService } from '../../services/WorktreeService';
 import {
@@ -109,6 +110,8 @@ export function taskDeps(): TaskCapabilityDeps {
     getTask: (id) => DatabaseService.getTask(id),
     getTasks: (projectId) => DatabaseService.getTasks(projectId),
     getActivity: () => activityMonitor.getAll(),
+    getActivityTiming: () => activityMonitor.getTiming(),
+    getStatusLine: () => contextUsageService.getAllStatusLine(),
     getUntrustedRoot,
     getLiveSessions: () => readLiveSessions(),
     onActivityChange: (listener) => {

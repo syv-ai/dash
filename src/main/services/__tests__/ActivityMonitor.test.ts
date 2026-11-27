@@ -7,6 +7,7 @@ vi.mock('electron', () => ({ default: {} }));
 import {
   activityMonitor,
   activityEvents,
+  toolInputSummary,
   SUBAGENT_QUIET_MS,
   TURN_SETTLE_MS,
   WAIT_LISTING_GRACE_MS,
@@ -152,6 +153,66 @@ describe('ActivityMonitor — tool tracking', () => {
     activityMonitor.setToolStart('pty1', 'Read', { file_path: '/foo/bar.ts' });
     activityMonitor.setIdle('pty1');
     expect(activityMonitor.getAll()['pty1']!.tool).toBeUndefined();
+  });
+
+  it('keeps the tool a wait is about, the permission request naming it with its input', () => {
+    activityMonitor.register('pty1', 12345);
+    activityMonitor.setToolStart('pty1', 'Bash', { command: 'rm -rf build', description: 'Clean' });
+    activityMonitor.setWaitingForPermission('pty1');
+    expect(activityMonitor.getAll()['pty1']!.tool).toEqual({
+      toolName: 'Bash',
+      label: 'Clean',
+      input: 'rm -rf build',
+    });
+    activityMonitor.setWaitingForPermission('pty1', {
+      toolName: 'WebFetch',
+      toolInput: { url: 'https://example.com', prompt: 'x' },
+    });
+    expect(activityMonitor.getAll()['pty1']!).toMatchObject({
+      state: 'waiting',
+      tool: { toolName: 'WebFetch', input: 'https://example.com' },
+    });
+  });
+
+  it('a supervisor reading of waiting keeps the tool', () => {
+    activityMonitor.register('pty1', 12345);
+    activityMonitor.setToolStart('pty1', 'Bash', { command: 'make' });
+    vi.advanceTimersByTime(10_000);
+    activityMonitor.applySupervisor('pty1', { state: 'waiting', detail: 'permission' }, 5_000);
+    expect(activityMonitor.getAll()['pty1']!.tool?.input).toBe('make');
+  });
+});
+
+describe('toolInputSummary', () => {
+  it('names what the call acts on, else its input as JSON, cut to 200', () => {
+    expect(toolInputSummary(undefined)).toBeUndefined();
+    expect(toolInputSummary({})).toBeUndefined();
+    expect(toolInputSummary({ file_path: '/a.ts', old_string: 'x' })).toBe('/a.ts');
+    expect(toolInputSummary({ questions: [1] })).toBe('{"questions":[1]}');
+    const long = toolInputSummary({ command: 'x'.repeat(500) })!;
+    expect(long).toHaveLength(200);
+    expect(long.endsWith('…')).toBe(true);
+  });
+});
+
+describe('ActivityMonitor — timing', () => {
+  it('gives the last hook time, and the wait start only while waiting', () => {
+    vi.setSystemTime(1_000_000);
+    activityMonitor.ensure('pty1');
+    expect(activityMonitor.getTiming()['pty1']).toEqual({ lastActiveAt: null, waitingSince: null });
+    activityMonitor.setBusy('pty1');
+    vi.setSystemTime(1_005_000);
+    activityMonitor.setWaitingForPermission('pty1');
+    expect(activityMonitor.getTiming()['pty1']).toEqual({
+      lastActiveAt: 1_005_000,
+      waitingSince: 1_005_000,
+    });
+    vi.setSystemTime(1_009_000);
+    activityMonitor.setIdle('pty1');
+    expect(activityMonitor.getTiming()['pty1']).toEqual({
+      lastActiveAt: 1_009_000,
+      waitingSince: null,
+    });
   });
 });
 

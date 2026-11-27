@@ -4,7 +4,12 @@ import { ControlError, createRegistry, type Registry } from '../../registry';
 import { fakeLookups, makeProject, makeTask } from '../../__tests__/fixtures';
 import { registerProjectCapabilities } from '../projects';
 import type { LiveSession } from '../../../services/claudeSessionRegistry';
-import { registerTaskCapabilities, toTaskView, type TaskCapabilityDeps } from '../tasks';
+import {
+  registerTaskCapabilities,
+  toTaskView,
+  type TaskCapabilityDeps,
+  type TaskViewSources,
+} from '../tasks';
 import { FolderOccupiedError } from '../../../services/FolderOccupiedError';
 import { DASH_ACCESS_OFF, ORCHESTRATOR_ACCESS_OFF } from '../../scope';
 
@@ -61,6 +66,8 @@ beforeEach(() => {
     getTask: vi.fn((id: string) => tasks.find((t) => t.id === id)),
     getTasks: vi.fn((projectId: string) => tasks.filter((t) => t.projectId === projectId)),
     getActivity: vi.fn(() => activity),
+    getActivityTiming: vi.fn(() => ({})),
+    getStatusLine: vi.fn(() => ({})),
     getUntrustedRoot: vi.fn((id: string) => untrusted[id]),
     getLiveSessions: vi.fn(() => sessions),
     onActivityChange: vi.fn((l: () => void) => {
@@ -162,10 +169,20 @@ const live = (socket: string | null = '/tmp/cc-socks/7.sock'): LiveSession => ({
   status: 'idle',
 });
 
+/** Sources with nothing known, over which a test sets what it needs. */
+const sources = (over: Partial<TaskViewSources> = {}): TaskViewSources => ({
+  activity: {},
+  timing: {},
+  statusLine: {},
+  untrustedRoot: () => undefined,
+  sessions: new Map(),
+  ...over,
+});
+
 describe('toTaskView', () => {
   const t = makeTask({ id: 't', projectId: 'p' });
   const view = (info: ActivityInfo | undefined, root?: string) =>
-    toTaskView(t, info ? { t: info } : {}, () => root, new Map());
+    toTaskView(t, sources({ activity: info ? { t: info } : {}, untrustedRoot: () => root }));
 
   it.each([
     ['busy', 'working'],
@@ -194,7 +211,7 @@ describe('toTaskView', () => {
   it("gives a live session's socket as its message address, else null", () => {
     const withJob = makeTask({ id: 't', projectId: 'p', jobId: 'job-t' });
     const at = (s: Map<string, LiveSession>, task: Task = withJob) =>
-      toTaskView(task, {}, () => undefined, s).messageAddress;
+      toTaskView(task, sources({ sessions: s })).messageAddress;
     expect(at(new Map([['job-t', live()]]))).toBe('uds:/tmp/cc-socks/7.sock');
     expect(at(new Map([['job-t', live(null)]]))).toBeNull();
     expect(at(new Map([['job-other', live()]]))).toBeNull();
@@ -204,7 +221,10 @@ describe('toTaskView', () => {
   it('reads a live session the monitor still calls stopped as idle, or working when it is busy', () => {
     const withJob = makeTask({ id: 't', projectId: 'p', jobId: 'job-t' });
     const state = (info: ActivityInfo | undefined, s: LiveSession) =>
-      toTaskView(withJob, info ? { t: info } : {}, () => undefined, new Map([['job-t', s]])).state;
+      toTaskView(
+        withJob,
+        sources({ activity: info ? { t: info } : {}, sessions: new Map([['job-t', s]]) }),
+      ).state;
     expect(state({ state: 'stopped' }, live())).toBe('idle');
     expect(state(undefined, live())).toBe('idle');
     expect(state({ state: 'stopped' }, { ...live(), status: 'busy' })).toBe('working');
@@ -214,15 +234,68 @@ describe('toTaskView', () => {
 
   it('marks a bypassPermissions task as needing approval for messages', () => {
     const mode = (permissionMode: Task['permissionMode']) =>
-      toTaskView(
-        makeTask({ id: 't', projectId: 'p', permissionMode }),
-        {},
-        () => undefined,
-        new Map(),
-      ).messaging;
+      toTaskView(makeTask({ id: 't', projectId: 'p', permissionMode }), sources()).messaging;
     expect(mode('bypassPermissions')).toBe('needs-approval');
     expect(mode('default')).toBe('direct');
     expect(mode('acceptEdits')).toBe('direct');
+  });
+
+  it('names the tool a wait asks about, the live mode, the times, context and cost', () => {
+    const v = toTaskView(
+      makeTask({ id: 't', projectId: 'p', totalTokens: 1200, totalCostUsd: 0.5 }),
+      sources({
+        activity: {
+          t: {
+            state: 'waiting',
+            tool: { toolName: 'Bash', label: 'Clean', input: 'rm -rf build' },
+            permissionMode: 'default',
+          },
+        },
+        timing: { t: { lastActiveAt: Date.UTC(2026, 0, 2), waitingSince: Date.UTC(2026, 0, 1) } },
+        statusLine: {
+          t: {
+            contextUsage: { used: 50_000, total: 200_000, percentage: 25 },
+            cost: {
+              totalCostUsd: 0.12,
+              totalDurationMs: 0,
+              totalApiDurationMs: 0,
+              totalLinesAdded: 0,
+              totalLinesRemoved: 0,
+            },
+            updatedAt: 0,
+          },
+        },
+      }),
+    );
+    expect(v).toMatchObject({
+      state: 'waiting',
+      tool: { name: 'Bash', label: 'Clean', input: 'rm -rf build' },
+      permissionMode: 'default',
+      lastActiveAt: '2026-01-02T00:00:00.000Z',
+      waitingSince: '2026-01-01T00:00:00.000Z',
+      context: { used: 50_000, total: 200_000, percentage: 25 },
+      costUsd: 0.12,
+      totalTokens: 1200,
+      totalCostUsd: 0.5,
+    });
+  });
+
+  it('gives null for what is not known, and no wait start unless waiting', () => {
+    const v = toTaskView(
+      t,
+      sources({
+        activity: { t: { state: 'idle' } },
+        timing: { t: { lastActiveAt: null, waitingSince: 5 } },
+      }),
+    );
+    expect(v).toMatchObject({
+      tool: null,
+      permissionMode: null,
+      lastActiveAt: null,
+      waitingSince: null,
+      context: null,
+      costUsd: null,
+    });
   });
 });
 
@@ -896,7 +969,7 @@ describe('tasks.watch', () => {
     expect(ids(all.lines)).toEqual(['me', 'child', 'sibling', 'other']);
     expect(all.lines[0]).toEqual({
       event: 'task',
-      task: toTaskView(task('me'), activity, () => undefined, sessions),
+      task: toTaskView(task('me'), sources({ activity, sessions })),
     });
     const mine = watch(asTask('me'));
     expect(ids(mine.lines)).toEqual(['me', 'child']);

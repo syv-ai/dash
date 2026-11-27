@@ -2,6 +2,8 @@ import { randomBytes } from 'crypto';
 import { z } from 'zod';
 import type {
   ActivityInfo,
+  ActivityTiming,
+  ContextUsage,
   CreateTaskInput,
   CreateTaskResult,
   CreateTaskRunOptions,
@@ -11,6 +13,8 @@ import type {
   LinkedItem,
   PermissionMode,
   Project,
+  SessionPermissionMode,
+  StatusLineData,
   Task,
   TaskLaunchOptions,
 } from '../../../shared/types';
@@ -72,6 +76,22 @@ export interface TaskView {
   /** The task's own env vars for its session. */
   env: Record<string, string>;
   denyInsteadOfPrompting: boolean;
+  /** The tool call at work, or the one a wait asks about: its name, Dash's
+   *  label and its input cut short (the command, path, URL…). */
+  tool: { name: string; label: string; input?: string } | null;
+  /** The mode the session reports (Shift+Tab can change it); null before its first hook. */
+  permissionMode: SessionPermissionMode | null;
+  /** The session's last hook, ISO; null when none since Dash started. */
+  lastActiveAt: string | null;
+  /** When the current wait began, ISO; null unless waiting. */
+  waitingSince: string | null;
+  /** The context window, from the session's status line; null until it reports. */
+  context: ContextUsage | null;
+  /** The current session's cost so far (status line), USD; null until it reports. */
+  costUsd: number | null;
+  /** All the task's sessions, from their transcripts. */
+  totalTokens: number;
+  totalCostUsd: number;
 }
 
 /** Everything the task capabilities touch outside `control/`; index.ts wires the real services. */
@@ -81,6 +101,10 @@ export interface TaskCapabilityDeps {
   /** Every task of the project, archived ones included. */
   getTasks(projectId: string): Task[];
   getActivity(): Record<string, ActivityInfo>;
+  /** When each session last spoke and since when it waits (ActivityMonitor.getTiming). */
+  getActivityTiming(): Record<string, ActivityTiming>;
+  /** Each session's last status line: context and cost (ContextUsageService). */
+  getStatusLine(): Record<string, StatusLineData>;
   getUntrustedRoot(taskId: string): string | undefined;
   /** Claude Code's running sessions by job id (claudeSessionRegistry). */
   getLiveSessions(): ReadonlyMap<string, LiveSession>;
@@ -145,15 +169,40 @@ const STATE_FROM_ACTIVITY: Record<ActivityInfo['state'], TaskApiState> = {
   stopped: 'stopped',
 };
 
+/** What a task view reads besides the row, all keyed by task id. */
+export interface TaskViewSources {
+  activity: Record<string, ActivityInfo>;
+  timing: Record<string, ActivityTiming>;
+  statusLine: Record<string, StatusLineData>;
+  untrustedRoot: (taskId: string) => string | undefined;
+  sessions: ReadonlyMap<string, LiveSession>;
+}
+
+/** The sources as the deps give them now. */
+export function viewSources(
+  deps: Pick<
+    TaskCapabilityDeps,
+    'getActivity' | 'getActivityTiming' | 'getStatusLine' | 'getUntrustedRoot' | 'getLiveSessions'
+  >,
+): TaskViewSources {
+  return {
+    activity: deps.getActivity(),
+    timing: deps.getActivityTiming(),
+    statusLine: deps.getStatusLine(),
+    untrustedRoot: deps.getUntrustedRoot,
+    sessions: deps.getLiveSessions(),
+  };
+}
+
+const iso = (ms: number | null | undefined) => (ms ? new Date(ms).toISOString() : null);
+
 /** The one place the API's task view comes from (tasks.get/list/wait/wake). */
-export function toTaskView(
-  task: Task,
-  activity: Record<string, ActivityInfo>,
-  getUntrustedRoot: (taskId: string) => string | undefined,
-  sessions: ReadonlyMap<string, LiveSession>,
-): TaskView {
-  const info = activity[task.id];
-  const trustRoot = getUntrustedRoot(task.id);
+export function toTaskView(task: Task, sources: TaskViewSources): TaskView {
+  const info = sources.activity[task.id];
+  const timing = sources.timing[task.id];
+  const line = sources.statusLine[task.id];
+  const trustRoot = sources.untrustedRoot(task.id);
+  const sessions = sources.sessions;
   const address = messageAddress(task.jobId, sessions);
   let state: TaskApiState = info ? STATE_FROM_ACTIVITY[info.state] : 'stopped';
   // The registry sees a started session before the monitor's next poll does:
@@ -185,6 +234,20 @@ export function toTaskView(
     agent: task.agent,
     env: task.env,
     denyInsteadOfPrompting: task.denyInsteadOfPrompting,
+    tool: info?.tool
+      ? {
+          name: info.tool.toolName,
+          label: info.tool.label,
+          ...(info.tool.input ? { input: info.tool.input } : {}),
+        }
+      : null,
+    permissionMode: info?.permissionMode ?? null,
+    lastActiveAt: iso(timing?.lastActiveAt),
+    waitingSince: state === 'waiting' ? iso(timing?.waitingSince) : null,
+    context: line ? { ...line.contextUsage } : null,
+    costUsd: line?.cost ? line.cost.totalCostUsd : null,
+    totalTokens: task.totalTokens,
+    totalCostUsd: task.totalCostUsd,
   };
   if (detail) view.detail = detail;
   return view;
@@ -358,8 +421,7 @@ function matchesUntil(until: WaitUntil, view: TaskView, initial: TaskView): bool
 }
 
 export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilityDeps): void {
-  const view = (task: Task): TaskView =>
-    toTaskView(task, deps.getActivity(), deps.getUntrustedRoot, deps.getLiveSessions());
+  const view = (task: Task): TaskView => toTaskView(task, viewSources(deps));
   /** view, after re-reading trust for a task marked untrusted (it may have
    *  been accepted outside Dash since). */
   const freshView = async (task: Task): Promise<TaskView> => {
@@ -1168,6 +1230,8 @@ type ReplyDeps = Pick<
   TaskCapabilityDeps,
   | 'getTask'
   | 'getActivity'
+  | 'getActivityTiming'
+  | 'getStatusLine'
   | 'getUntrustedRoot'
   | 'getLiveSessions'
   | 'transcriptPathFor'
@@ -1194,12 +1258,7 @@ export function createReplyReader(deps: ReplyDeps) {
     const file = record.transcriptPath ?? deps.transcriptPathFor(task);
     const jsonl = file ? await deps.readTranscript(file) : null;
     const { text } = jsonl ? replyAfterMessage(jsonl, record.messageId) : { text: null };
-    const state = toTaskView(
-      task,
-      deps.getActivity(),
-      deps.getUntrustedRoot,
-      deps.getLiveSessions(),
-    ).state;
+    const state = toTaskView(task, viewSources(deps)).state;
     // Waiting for a person is a turn not finished yet.
     const done = text !== null && state !== 'working' && state !== 'waiting';
     return { status: done ? 'done' : 'pending', text };

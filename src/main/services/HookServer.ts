@@ -74,6 +74,20 @@ export function inboxFromHeaders(
 /** Maximum JSON body size for hook payloads (64KB). */
 const MAX_HOOK_BODY_BYTES = 65_536;
 
+/** A PreToolUse or PermissionRequest payload's tool: its name and input object. */
+function toolOf(payload: Record<string, unknown>): {
+  toolName: string;
+  toolInput: Record<string, unknown> | undefined;
+} {
+  return {
+    toolName: typeof payload.tool_name === 'string' ? payload.tool_name : 'unknown',
+    toolInput:
+      payload.tool_input && typeof payload.tool_input === 'object'
+        ? (payload.tool_input as Record<string, unknown>)
+        : undefined,
+  };
+}
+
 /**
  * File the hook commands read the HookServer port from. The port changes on
  * every Dash launch while task sessions live on under Claude Code's supervisor
@@ -372,9 +386,10 @@ class HookServerImpl {
           // the permission_prompt notification: Claude Code sends it only
           // once the user seems away.
           if (pathname === '/hook/permission-request') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
               noteWait(ptyId, 'permission');
-              activityMonitor.setWaitingForPermission(ptyId);
+              // The call it asks about, so the control API can name it.
+              activityMonitor.setWaitingForPermission(ptyId, toolOf(payload));
               res.writeHead(200);
               res.end();
             });
@@ -421,18 +436,13 @@ class HookServerImpl {
 
           if (pathname === '/hook/tool-start') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
-              const toolName =
-                typeof payload.tool_name === 'string' ? payload.tool_name : 'unknown';
-              const toolInput =
-                payload.tool_input && typeof payload.tool_input === 'object'
-                  ? (payload.tool_input as Record<string, unknown>)
-                  : undefined;
+              const { toolName, toolInput } = toolOf(payload);
               hookEvents.emit('tool-called', { ptyId });
               // AskUserQuestion is "user attention required", not "Claude is
               // working" — mirror the Notification(permission_prompt) path.
               if (toolName === 'AskUserQuestion') {
                 noteWait(ptyId, 'question');
-                activityMonitor.setWaitingForPermission(ptyId);
+                activityMonitor.setWaitingForPermission(ptyId, { toolName, toolInput });
                 const taskName = this.getTaskName(ptyId);
                 this.showDesktopNotification(ptyId, `${taskName} is asking a question`);
               } else if (isSubagentHook(payload)) {

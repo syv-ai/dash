@@ -445,6 +445,9 @@ export interface ToolActivity {
   toolName: string;
   /** Short human-readable description (e.g. "Running command", "Editing main.ts"). */
   label: string;
+  /** What the call acts on, cut short: a Bash command, a file path, a URL,
+   *  else its input as JSON (toolInputSummary). Absent when it had none. */
+  input?: string;
 }
 
 /**
@@ -489,6 +492,14 @@ export interface ActivityInfo {
   interrupted?: true;
   /** The mode the session last reported (the main agent's hooks), when it has. */
   permissionMode?: SessionPermissionMode;
+}
+
+/** When a task's session last spoke, and since when it waits; epoch ms, null when not known. */
+export interface ActivityTiming {
+  /** The last hook from the session (a prompt, a tool call, a turn's end). */
+  lastActiveAt: number | null;
+  /** When the current wait began; null unless the task waits. */
+  waitingSince: number | null;
 }
 
 // ── Claude Code session supervisor ─────────────────────────────

@@ -61,6 +61,8 @@ beforeEach(() => {
     getTask: vi.fn((id: string) => tasks.find((t) => t.id === id)),
     getTasks: vi.fn((projectId: string) => tasks.filter((t) => t.projectId === projectId)),
     getActivity: vi.fn(() => activity),
+    getActivityTiming: vi.fn(() => ({})),
+    getStatusLine: vi.fn(() => ({})),
     getUntrustedRoot: vi.fn((id: string) => untrusted[id]),
     getLiveSessions: vi.fn(() => sessions),
     onActivityChange: vi.fn(() => () => {}),
