@@ -5,6 +5,22 @@ import checkFile from 'eslint-plugin-check-file';
 import globals from 'globals';
 import { plugin as shadcn } from '@shadcn/lint';
 
+// Motion is calm (U6): every transition and animation takes a motion token
+// (`duration-quick|calm|slow`, `ease-settle|calm`, or `MOTION_MS`/`EASE` from
+// lib/motion), never an ad-hoc length or curve. Flags a Tailwind
+// `duration-N`/`duration-[…]` or stock `ease-*` class, and an inline
+// `'<prop> Nms <curve>'` transition, in strings and templates alike.
+const AD_HOC_MOTION =
+  '/(^|[\\s:])(duration-(\\d|\\[)|ease-(in|out|in-out|linear|\\[))|\\d+m?s (ease|linear|cubic-bezier)/';
+const adHocMotion = [
+  `Literal[value=${AD_HOC_MOTION}]`,
+  `TemplateElement[value.raw=${AD_HOC_MOTION}]`,
+].map((selector) => ({
+  selector,
+  message:
+    'Motion is calm: use a motion token (duration-quick|calm|slow, ease-settle|calm, lib/motion), never an ad-hoc duration or curve.',
+}));
+
 export default tseslint.config(
   {
     ignores: ['dist/**', 'release/**', 'node_modules/**', '**/*.config.{js,cjs,mjs,ts}'],
@@ -98,6 +114,7 @@ export default tseslint.config(
           selector: 'JSXOpeningElement[name.name=/^(button|input|select|textarea)$/]',
           message: 'Use the components/ui/ primitive instead of a raw form element.',
         },
+        ...adHocMotion,
       ],
     },
   },
@@ -110,7 +127,8 @@ export default tseslint.config(
       'shadcn/no-unknown-classes': 'off',
       'shadcn/no-restyle': 'off',
       'shadcn/require-static-classes': 'off',
-      'no-restricted-syntax': 'off',
+      // ui/ may use raw elements, but its motion takes the tokens too.
+      'no-restricted-syntax': ['warn', ...adHocMotion],
     },
   },
   // One way to raise a toast: components/ui/toast (on sonner, headless).
