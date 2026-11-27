@@ -1,5 +1,5 @@
 /*
- * Normal mode's Files scope ("Show filetree" off or on). The user's pick is kept
+ * Normal mode's Files scope ("All files" off or on). The user's pick is kept
  * per task in localStorage (`dash:files-scope:<task id>`, renderer-only like
  * the editor's tabs); until one, Files follows `defaultFilesScope`.
  */

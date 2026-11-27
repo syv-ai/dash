@@ -10,14 +10,14 @@ export type FilesTopRowFit = 'both' | 'start';
 export const FILES_TOP_ROW_COMFORT_PX = 16;
 
 /** Both while the least row (`needs[0]`) plus `FILES_TOP_ROW_COMFORT_PX` fits
- *  `available`, else the start alone: the end (Files' "Show filetree") gives
+ *  `available`, else the start alone: the end (Files' "All files") gives
  *  way whole, as a tree that narrow isn't worth showing. */
 export const fitFilesTopRow = (available: number, needs: readonly number[]): FilesTopRowFit =>
   firstFitting(available - FILES_TOP_ROW_COMFORT_PX, needs, ['both'] as const) ?? 'start';
 
 /**
  * A Files pane's top row: what it says at the start (Files' sync text, review
- * Files' tally) and its "Show filetree" switch at the end, over a centred hairline
+ * Files' tally) and its "All files" switch at the end, over a centred hairline
  * across 80 % of the pane, with room above and below it so the row reads as
  * a band of its own. The start takes the room the end leaves (the sync text
  * fits itself to it). Where even `startLeast` (the start at its most compact;

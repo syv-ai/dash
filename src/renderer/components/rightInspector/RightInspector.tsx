@@ -714,7 +714,7 @@ export function RightInspector({
   );
 
   // Review mode's column: the PR's header over the picked view; its Files
-  // list every file at the PR's head (the editor's view) on "Show filetree".
+  // list every file at the PR's head (the editor's view) on "All files".
   const reviewColumn = mode && segment !== 'details' && segment !== 'agent' && (
     <ReviewView
       task={task}

@@ -77,7 +77,7 @@ export type SyncDensity = 'words' | 'arrows';
 const SYNC_MEASURED = ['words'] as const;
 
 /** Room the words must leave beyond their natural width, so they never run
- *  up against what follows them in the row (Files' "Show filetree"). */
+ *  up against what follows them in the row (Files' "All files"). */
 export const SYNC_COMFORT_PX = 16;
 
 /** Words while their natural width (`needs[0]`) plus `SYNC_COMFORT_PX` fits
@@ -161,7 +161,7 @@ export function SyncArrowsStacked({ ahead, behind }: { ahead: number; behind: nu
 }
 
 /** The sync text at its most compact, "↑3 ↓1", bare: what Files' top row
- *  measures to tell whether "Show filetree" still fits beside it. */
+ *  measures to tell whether "All files" still fits beside it. */
 export function SyncTextLeast({ status }: { status: Sync }) {
   return <SyncLine status={status} density="arrows" />;
 }

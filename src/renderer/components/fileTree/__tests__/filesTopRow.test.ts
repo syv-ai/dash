@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { FILES_TOP_ROW_COMFORT_PX as comfort, fitFilesTopRow } from '../FilesTopRow';
 
 describe('fitFilesTopRow', () => {
-  // The least row: "↑3 ↓1", the gap and "Show filetree", padding included.
+  // The least row: "↑3 ↓1", the gap and "All files", padding included.
   const needs = [170];
 
   it('shows both while the least row fits with room to spare', () => {

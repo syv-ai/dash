@@ -58,7 +58,7 @@ interface RepoTreeProps {
   actions?: (row: ItemRow) => React.ReactNode;
   /** A row's Space action (Files' stage); see `FileTree`. */
   spaceAction?: (row: ItemRow) => (() => void) | null;
-  /** A control at the header's end (review Files' "Show filetree"): the header
+  /** A control at the header's end (review Files' "All files"): the header
    *  is then the pane's top row. */
   headerAction?: React.ReactNode;
   /** Draws its tally; false: the host's top row shows it (Files, D269). */
@@ -95,7 +95,7 @@ export function RepoTree({
   // Plain files have no changes to filter on, and nothing git ignores.
   const changedOnly = git && changedOnlyProp;
 
-  // "Show filetree" means every local file, gitignored ones included, so a
+  // "All files" means every local file, gitignored ones included, so a
   // local-only config or scratch file can be reached. Ignored files are a
   // working-tree concept (a commit's tree can't contain them); git collapses
   // fully ignored folders to one entry (quiet, read when opened), which keeps
@@ -181,7 +181,7 @@ export function RepoTree({
 }
 
 /** A tree's tally ("7 changed · 2 viewed +580 −10"); with a control at its
- *  end (review Files' "Show filetree" switch), as the pane's divided top row.
+ *  end (review Files' "All files" switch), as the pane's divided top row.
  *  Nothing with neither. */
 export function TreeHeader({
   tally,

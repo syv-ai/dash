@@ -6,7 +6,7 @@
  *
  * Normal mode's views are Files, History and Agent (spec Revision 5; Agent,
  * A1: the session's scratchpad and the project's memory, `agentTab`). Files
- * is one tree scoped by its "Show filetree" switch (`filesScope`): the
+ * is one tree scoped by its "All files" switch (`filesScope`): the
  * changes (Staged / Unstaged, the commit footer) or the whole repo with them.
  *
  * Review mode (spec Revision 4) has its own views, each scoped to a PR:

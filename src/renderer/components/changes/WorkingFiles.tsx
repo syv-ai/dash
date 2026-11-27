@@ -68,7 +68,7 @@ const NO_FILES: readonly FileChange[] = [];
 /**
  * Normal mode's Files: a top row with where the branch stands against its
  * upstream (while they differ; else the changes' tally, as review Files' row
- * has, D269) and the "Show filetree" switch, then one tree. Off
+ * has, D269) and the "All files" switch, then one tree. Off
  * (`changed`), the working tree's changes as staged and unstaged sections,
  * or the commit run while one is shown (no switch), or "No changes" with the
  * sync text under it instead; on (`all`), every file with its changes, a staged one's letter boxed. Changed
