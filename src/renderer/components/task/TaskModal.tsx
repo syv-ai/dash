@@ -40,6 +40,7 @@ import { validateExtraArgs } from '../../../shared/extraArgs';
 import { addDirProblem, normalizeAddDirs } from '../../../shared/addDirs';
 import { AddDirsField } from './AddDirsField';
 import { EffortPicker } from './EffortPicker';
+import { AgentPicker } from './AgentPicker';
 import type { TaskEffort } from '../../../shared/effort';
 
 // Lives in shared/types (main's TaskService takes it too); re-exported so
@@ -175,6 +176,7 @@ function TaskModalBody({
   );
   const [model, setModel] = useState<TaskModel>(() => readInitialModel());
   const [effort, setEffort] = useState<TaskEffort | null>(null);
+  const [agent, setAgent] = useState<string | null>(null);
   const [contextPrompt, setContextPrompt] = useState(taskDefaults?.contextPrompt ?? '');
   const contextField = useRef<HTMLTextAreaElement>(null);
   const slash = useSlashCommands({
@@ -339,6 +341,7 @@ function TaskModalBody({
       permissionMode,
       model,
       effort,
+      agent,
       linkedItems,
       contextPrompt: contextPrompt.trim() || undefined,
       // Hidden toggle (win32, or info not loaded yet) → no access, as shown.
@@ -599,6 +602,7 @@ function TaskModalBody({
                 }}
               />
               <EffortPicker width="sm" value={effort} onChange={setEffort} />
+              <AgentPicker projectPath={projectPath} value={agent} onChange={setAgent} />
               {controlSupported && (
                 <SwitchField
                   label="Dash access"

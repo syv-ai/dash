@@ -128,6 +128,14 @@ describe('buildDispatchArgs', () => {
     expect(buildDispatchArgs({ name: 't', effort: null })).not.toContain('--effort');
   });
 
+  it('passes the agent the session runs as', () => {
+    expect(buildDispatchArgs({ name: 't', agent: 'p:review:security' }).slice(5)).toEqual([
+      '--agent',
+      'p:review:security',
+    ]);
+    expect(buildDispatchArgs({ name: 't', agent: null })).not.toContain('--agent');
+  });
+
   it("passes the project's appended system prompt as one value", () => {
     const args = buildDispatchArgs({ name: 't', appendSystemPrompt: 'Use pnpm.\n- Never npm.' });
     expect(args.slice(5)).toEqual(['--append-system-prompt', 'Use pnpm.\n- Never npm.']);

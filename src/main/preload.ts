@@ -335,6 +335,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('workspaceConfig:writeLocal', args),
   slashCommandsList: (args: { projectPath: string }) =>
     ipcRenderer.invoke('slashCommands:list', args),
+  agentsList: (args: { projectPath: string }) => ipcRenderer.invoke('agents:list', args),
 
   // Project sources (clone / empty / scaffold)
   projectInspectPath: (input: string) => ipcRenderer.invoke('project:inspectPath', input),

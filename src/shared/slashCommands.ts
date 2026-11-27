@@ -1,4 +1,4 @@
-/** Where a slash command or skill comes from, as Claude Code finds it. */
+/** Where a slash command, skill or agent comes from, as Claude Code finds it. */
 export type SlashCommandSource = 'user' | 'project' | 'plugin';
 
 /**
@@ -11,5 +11,17 @@ export interface SlashCommand {
   description: string;
   /** The frontmatter's `argument-hint`, e.g. `[issue-number]`. */
   argumentHint?: string;
+  source: SlashCommandSource;
+}
+
+/**
+ * A custom subagent a session can run as (`claude --agent <name>`): a user or
+ * project `.claude/agents/**\/*.md`, or an enabled plugin's `agents/`
+ * (code.claude.com/docs/en/sub-agents). `name` is what `--agent` takes: the
+ * frontmatter name, or for a plugin's its scoped `<plugin>:<folders>:<name>`.
+ */
+export interface AgentDefinition {
+  name: string;
+  description: string;
   source: SlashCommandSource;
 }

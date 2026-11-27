@@ -464,6 +464,12 @@ export function runMigrations(): void {
   } catch {
     /* already exists */
   }
+  // The custom agent a task's session runs as (`--agent`), fixed at creation.
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN agent TEXT`);
+  } catch {
+    /* already exists */
+  }
 
   // The PR a task reviews, when the person picked one (else its own open PR is
   // the target): main and dashctl default to it.

@@ -178,6 +178,7 @@ export function taskDetailSections(input: TaskDetailsInput): TaskDetailSections 
           : undefined,
       },
       { label: 'Effort', value: task.effort ? EFFORT_LABELS[task.effort] : 'Default' },
+      !!task.agent && { label: 'Agent', value: task.agent, copy: task.agent },
       {
         label: 'Permissions',
         value: PERMISSION_LABELS[input.livePermissionMode ?? task.permissionMode],

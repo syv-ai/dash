@@ -291,6 +291,7 @@ async function ensureTaskSession(opts: {
   addDirs: string[];
   /** The task's own; null → Settings → Claude's default at this start. */
   effort: TaskEffort | null;
+  agent: string | null;
   /** The project's (`.dash/config.json` session.appendSystemPrompt), read at this start. */
   appendSystemPrompt?: string;
   env: Record<string, string>;
@@ -369,6 +370,7 @@ async function ensureTaskSession(opts: {
       addDirs: opts.addDirs,
       effort,
       appendSystemPrompt: opts.appendSystemPrompt,
+      agent: opts.agent,
       env: opts.env,
     });
   } catch (err) {
@@ -595,6 +597,7 @@ async function startTaskSessionNow(
       addDirs: task.addDirs,
       effort: task.effort,
       appendSystemPrompt: projectAppendSystemPrompt(task.projectId),
+      agent: task.agent,
       env,
       wakeStopped: opts.wakeStopped,
     });

@@ -139,6 +139,8 @@ export interface Task {
   addDirs: string[];
   /** `--effort` for the session; null → Settings → Claude's default. */
   effort: TaskEffort | null;
+  /** The custom agent the session runs as (`--agent`); null for none. Fixed at creation. */
+  agent: string | null;
   /** The task that created this one through the control API; null when a
    *  person created it. Fixed at creation. */
   parentTaskId: string | null;
@@ -181,6 +183,8 @@ export type CreateTaskOptions = {
   addDirs?: string[];
   /** null/undefined → Settings → Claude's default at each start. */
   effort?: TaskEffort | null;
+  /** `--agent` name (listAgents); fixed for the task's life. */
+  agent?: string | null;
 } & (
   | { kind: 'worktree-new-branch'; baseRef: string; pushRemote: boolean }
   | { kind: 'worktree-existing'; branch: string; updateFromRemote?: boolean }

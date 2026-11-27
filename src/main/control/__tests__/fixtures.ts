@@ -22,6 +22,7 @@ export function makeTask(over: Partial<Task> & { id: string; projectId: string }
     extraArgs: null,
     addDirs: [],
     effort: null,
+    agent: null,
     parentTaskId: null,
     favorite: false,
     sortOrder: 0,

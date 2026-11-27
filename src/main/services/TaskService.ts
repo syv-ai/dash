@@ -169,6 +169,7 @@ export class TaskService {
       extraArgs: extraArgs?.trim() || null,
       addDirs,
       effort: input.effort ?? null,
+      agent: input.agent?.trim() || null,
       parentTaskId: input.parentTaskId ?? null,
     });
 

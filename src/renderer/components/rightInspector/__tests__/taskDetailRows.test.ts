@@ -32,6 +32,7 @@ const TASK: Task = {
   extraArgs: null,
   addDirs: [],
   effort: null,
+  agent: null,
   parentTaskId: null,
   favorite: false,
   sortOrder: 0,
@@ -225,6 +226,16 @@ describe('extraArgsRow', () => {
       copy: '/Users/me/lib\n/opt/docs',
     });
     expect(taskDetailSections(input()).session.some((r) => r.label === 'Folders')).toBe(false);
+  });
+
+  it('names the agent the session runs as, only when it has one', () => {
+    const rows = taskDetailSections(input({}, { agent: 'p:review:security' })).session;
+    expect(rows.find((r) => r.label === 'Agent')).toEqual({
+      label: 'Agent',
+      value: 'p:review:security',
+      copy: 'p:review:security',
+    });
+    expect(taskDetailSections(input()).session.some((r) => r.label === 'Agent')).toBe(false);
   });
 
   it('sits in the session section', () => {

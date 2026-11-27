@@ -1,14 +1,15 @@
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import type { SlashCommand, SlashCommandSource } from '@shared/slashCommands';
+import type { AgentDefinition, SlashCommand, SlashCommandSource } from '@shared/slashCommands';
 import { claudeConfigDir, claudeUserSettingsFile } from '../utils/claudePaths';
 import { checkInstalledPlugins } from '../claudeContract/internalSchemas';
 import { reportFindings } from '../claudeContract/driftReporter';
 import { claudeVersionFor } from '../claudeContract/claudeVersions';
 
 /*
- * The slash commands and skills a project's sessions can run, read where
- * Claude Code finds them (code.claude.com/docs/en/skills, /plugins-reference):
+ * The slash commands, skills and custom agents a project's sessions can use,
+ * read where Claude Code finds them (code.claude.com/docs/en/skills,
+ * /plugins-reference, /sub-agents):
  * skills at `<root>/skills/<name>/SKILL.md`, commands at
  * `<root>/commands/**\/*.md` (a subfolder namespaces: `frontend/x.md` is
  * `/frontend:x`), for the user (`~/.claude`), the project (`<repo>/.claude`)
@@ -203,7 +204,8 @@ function pluginsDir(): string {
   return process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR || path.join(claudeConfigDir(), 'plugins');
 }
 
-async function pluginCommands(projectPath: string): Promise<SlashCommand[]> {
+/** The plugins enabled for `projectPath`, as `[plugin name, install path]` (see enabledPluginRoots). */
+async function pluginRootsFor(projectPath: string): Promise<[string, string][]> {
   const raw = await readJson(path.join(pluginsDir(), 'installed_plugins.json'));
   if (raw === undefined) return [];
   reportFindings('installed-plugins', checkInstalledPlugins(raw), claudeVersionFor());
@@ -222,8 +224,12 @@ async function pluginCommands(projectPath: string): Promise<SlashCommand[]> {
     ...enabledPluginsOf(await readJson(path.join(projectPath, '.claude', 'settings.json'))),
     ...enabledPluginsOf(await readJson(path.join(projectPath, '.claude', 'settings.local.json'))),
   };
+  return enabledPluginRoots(installed, enabled, projectPath);
+}
+
+async function pluginCommands(projectPath: string): Promise<SlashCommand[]> {
   const lists = await Promise.all(
-    enabledPluginRoots(installed, enabled, projectPath).map(async ([name, root]) => [
+    (await pluginRootsFor(projectPath)).map(async ([name, root]) => [
       ...(await skillsIn(path.join(root, 'skills'), 'plugin', `${name}:`)),
       ...(await commandsIn(path.join(root, 'commands'), 'plugin', `${name}:`)),
     ]),
@@ -248,5 +254,106 @@ export async function listSlashCommands(projectPath: string): Promise<SlashComma
   ]);
   const byName = new Map<string, SlashCommand>();
   for (const cmd of lists.flat()) if (!byName.has(cmd.name)) byName.set(cmd.name, cmd);
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// ── Agents ──────────────────────────────────────────────────
+
+/**
+ * One agent file's definition, or null when Claude Code wouldn't load it. A
+ * user or project file needs a frontmatter `name` (one without is
+ * documentation kept beside the agents, and `:` is reserved for plugins); a
+ * plugin's loads under its file name when it has none, and is scoped by the
+ * plugin and its folders: `agents/review/security.md` in `my-plugin` is
+ * `my-plugin:review:security` (sub-agents docs, fetched 2026-11-27).
+ */
+export function agentFromFile(
+  text: string,
+  fileName: string,
+  opts: { source: SlashCommandSource; scope?: string[] },
+): AgentDefinition | null {
+  const { fields } = parseFrontmatter(text);
+  const own = fields.name?.trim();
+  if (opts.source === 'plugin') {
+    const name = [...(opts.scope ?? []), own || fileName].join(':');
+    return { name, description: fields.description?.trim() ?? '', source: 'plugin' };
+  }
+  if (!own || own.includes(':')) return null;
+  return { name: own, description: fields.description?.trim() ?? '', source: opts.source };
+}
+
+/** Every agent file under `dir`, folders included (Claude Code scans them recursively). */
+async function agentsIn(
+  dir: string,
+  source: SlashCommandSource,
+  scope?: string[],
+): Promise<AgentDefinition[]> {
+  const out: AgentDefinition[] = [];
+  for (const entry of await dirEntries(dir)) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      // A plugin's folders are part of the name; a user's or project's aren't.
+      out.push(...(await agentsIn(full, source, scope && [...scope, entry.name])));
+    } else if (entry.name.endsWith('.md')) {
+      const text = await readText(full);
+      if (text === null) continue;
+      const agent = agentFromFile(text, entry.name.slice(0, -'.md'.length), { source, scope });
+      if (agent) out.push(agent);
+    }
+  }
+  return out;
+}
+
+/**
+ * One plugin's agents: its `agents/` folder, plus the files and folders its
+ * manifest's `agents` names (`.claude-plugin/plugin.json`, a path or a list,
+ * relative to the plugin root; plugins-reference: custom paths add to the
+ * default folder). A manifest file is named `<plugin>:<name>`.
+ */
+async function pluginAgents(plugin: string, root: string): Promise<AgentDefinition[]> {
+  const manifest = await readJson(path.join(root, '.claude-plugin', 'plugin.json'));
+  const listed = (manifest as { agents?: unknown } | undefined)?.agents;
+  const extra = (Array.isArray(listed) ? listed : [listed]).filter(
+    (p): p is string => typeof p === 'string',
+  );
+  const lists = await Promise.all([
+    agentsIn(path.join(root, 'agents'), 'plugin', [plugin]),
+    ...extra.map(async (rel) => {
+      const full = path.resolve(root, rel);
+      // Only inside the plugin: a manifest can't point Dash elsewhere.
+      if (full !== root && !full.startsWith(root + path.sep)) return [];
+      if (full.endsWith('.md')) {
+        const text = await readText(full);
+        const agent =
+          text === null
+            ? null
+            : agentFromFile(text, path.basename(full, '.md'), {
+                source: 'plugin',
+                scope: [plugin],
+              });
+        return agent ? [agent] : [];
+      }
+      return agentsIn(full, 'plugin', [plugin]);
+    }),
+  ]);
+  return lists.flat();
+}
+
+/**
+ * The custom agents a session in `projectPath` can run as (`--agent`), by
+ * name. On a clash the project's wins over the user's, and both over a
+ * plugin's (the docs' priority; managed and `--agents` ones aren't listed).
+ * Built-in agents aren't listed either.
+ */
+export async function listAgents(projectPath: string): Promise<AgentDefinition[]> {
+  const lists = await Promise.all([
+    agentsIn(path.join(projectPath, '.claude', 'agents'), 'project'),
+    agentsIn(path.join(claudeConfigDir(), 'agents'), 'user'),
+    pluginRootsFor(projectPath).then(async (roots) =>
+      (await Promise.all(roots.map(([name, root]) => pluginAgents(name, root)))).flat(),
+    ),
+  ]);
+  const byName = new Map<string, AgentDefinition>();
+  for (const agent of lists.flat()) if (!byName.has(agent.name)) byName.set(agent.name, agent);
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 }

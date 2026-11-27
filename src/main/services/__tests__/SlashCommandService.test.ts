@@ -1,5 +1,14 @@
-import { describe, it, expect } from 'vitest';
-import { commandFromFile, enabledPluginRoots, parseFrontmatter } from '../SlashCommandService';
+import { describe, it, expect, afterEach } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import {
+  agentFromFile,
+  commandFromFile,
+  enabledPluginRoots,
+  listAgents,
+  parseFrontmatter,
+} from '../SlashCommandService';
 
 describe('parseFrontmatter', () => {
   it('reads scalars, quoted values, continued and block scalars', () => {
@@ -87,6 +96,88 @@ describe('enabledPluginRoots', () => {
     ).toEqual([
       ['a', '/c/a'],
       ['b', '/c/b'],
+    ]);
+  });
+});
+
+describe('agentFromFile', () => {
+  it('needs a frontmatter name for a user or project agent, without a colon', () => {
+    expect(
+      agentFromFile('---\nname: reviewer\ndescription: Reviews code\n---\nYou review.', 'x', {
+        source: 'project',
+      }),
+    ).toEqual({ name: 'reviewer', description: 'Reviews code', source: 'project' });
+    expect(agentFromFile('# Notes about agents', 'README', { source: 'user' })).toBeNull();
+    expect(agentFromFile('---\nname: a:b\n---\n', 'x', { source: 'user' })).toBeNull();
+  });
+
+  it("scopes a plugin's agent by plugin and folders, under its file name when unnamed", () => {
+    expect(
+      agentFromFile('---\nname: security\n---\n', 'sec', {
+        source: 'plugin',
+        scope: ['my-plugin', 'review'],
+      })?.name,
+    ).toBe('my-plugin:review:security');
+    expect(agentFromFile('no frontmatter', 'helper', { source: 'plugin', scope: ['p'] })).toEqual({
+      name: 'p:helper',
+      description: '',
+      source: 'plugin',
+    });
+  });
+});
+
+describe('listAgents', () => {
+  const env = {
+    config: process.env.CLAUDE_CONFIG_DIR,
+    plugins: process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR,
+  };
+  const dirs: string[] = [];
+  afterEach(() => {
+    process.env.CLAUDE_CONFIG_DIR = env.config;
+    process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR = env.plugins;
+    if (env.config === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    if (env.plugins === undefined) delete process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR;
+    for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
+  });
+  const write = (file: string, text: string) => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, text);
+  };
+  const agent = (name: string, description: string) =>
+    `---\nname: ${name}\ndescription: ${description}\n---\nPrompt.`;
+
+  it('lists project, user and enabled plugin agents, folders included, the project winning a clash', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-agents-'));
+    dirs.push(root);
+    const user = path.join(root, 'user');
+    const repo = path.join(root, 'repo');
+    const plugins = path.join(root, 'plugins');
+    process.env.CLAUDE_CONFIG_DIR = user;
+    process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR = plugins;
+    write(path.join(repo, '.claude/agents/review/reviewer.md'), agent('reviewer', 'Project one'));
+    write(path.join(user, 'agents/reviewer.md'), agent('reviewer', 'User one'));
+    write(path.join(user, 'agents/writer.md'), agent('writer', 'Writes'));
+    write(path.join(user, 'agents/README.md'), '# Notes');
+    write(path.join(plugins, 'p/1/agents/deep/scan.md'), agent('scan', 'Scans'));
+    write(path.join(plugins, 'p/1/skills/x/subagents/auditor.md'), agent('auditor', 'Audits'));
+    write(
+      path.join(plugins, 'p/1/.claude-plugin/plugin.json'),
+      JSON.stringify({ agents: ['./skills/x/subagents/auditor.md', '../../outside.md'] }),
+    );
+    write(
+      path.join(plugins, 'installed_plugins.json'),
+      JSON.stringify({
+        version: 2,
+        plugins: { 'p@m': [{ scope: 'user', installPath: path.join(plugins, 'p/1') }] },
+      }),
+    );
+    write(path.join(user, 'settings.json'), JSON.stringify({ enabledPlugins: { 'p@m': true } }));
+
+    expect(await listAgents(repo)).toEqual([
+      { name: 'p:auditor', description: 'Audits', source: 'plugin' },
+      { name: 'p:deep:scan', description: 'Scans', source: 'plugin' },
+      { name: 'reviewer', description: 'Project one', source: 'project' },
+      { name: 'writer', description: 'Writes', source: 'user' },
     ]);
   });
 });

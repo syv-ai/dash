@@ -46,6 +46,7 @@ function task(over: Partial<Task> = {}): Task {
     extraArgs: null,
     addDirs: [],
     effort: null,
+    agent: null,
     parentTaskId: null,
     favorite: false,
     sortOrder: 0,

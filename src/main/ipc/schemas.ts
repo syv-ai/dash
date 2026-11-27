@@ -18,6 +18,14 @@ export const taskModelSchema = z.enum(['default', 'opus', 'sonnet', 'haiku', 'fa
 
 export const taskEffortSchema = z.enum(TASK_EFFORTS);
 
+/** An `--agent` name: one argv word, never a flag. */
+export const agentNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(300)
+  .refine((n) => !n.startsWith('-') && !/\s/.test(n), 'must be an agent name');
+
 /** A single linked issue / work item. Kept permissive (passthrough) — the
  *  provider-specific fields are renderer-built and reflected back as-is. */
 const linkedItemSchema = z.looseObject({
@@ -77,6 +85,7 @@ const createTaskCommon = {
   extraArgs: z.string().optional(),
   addDirs: z.array(z.string()).optional(),
   effort: taskEffortSchema.nullable().optional(),
+  agent: agentNameSchema.nullable().optional(),
   parentTaskId: z.string().nullable().optional(),
 };
 

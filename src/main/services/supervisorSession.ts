@@ -29,6 +29,8 @@ export interface DispatchArgsOptions {
   model?: TaskModel;
   /** `--effort`; undefined → none (Claude Code decides). */
   effort?: TaskEffort | null;
+  /** The custom agent the session runs as → `--agent`. */
+  agent?: string | null;
   /** The project's text for the end of the system prompt → `--append-system-prompt`. */
   appendSystemPrompt?: string;
   /** Extra folders the session may read and edit → one `--add-dir` with all. */
@@ -112,6 +114,9 @@ export function buildDispatchArgs(opts: DispatchArgsOptions): string[] {
   }
   if (opts.effort) {
     args.push('--effort', opts.effort);
+  }
+  if (opts.agent) {
+    args.push('--agent', opts.agent);
   }
   if (opts.appendSystemPrompt) {
     args.push('--append-system-prompt', opts.appendSystemPrompt);

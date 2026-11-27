@@ -83,6 +83,8 @@ export const tasks = sqliteTable(
     addDirs: text('add_dirs'),
     // `--effort` for the session (TaskEffort); null → Settings → Claude's default.
     effort: text('effort'),
+    // The custom agent the session runs as (`--agent`); fixed at creation.
+    agent: text('agent'),
     parentTaskId: text('parent_task_id'),
     // Pinned to the top of the sidebar's task list.
     favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false),
