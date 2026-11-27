@@ -74,7 +74,11 @@ export function registerPtyIpc(): void {
         return { success: true, data: result };
       } catch (error) {
         if (error instanceof UntrustedWorkspaceError) {
-          return ipcError(error.message, 'UNTRUSTED_WORKSPACE');
+          // The pane runs the same trust prompt for both, in `root`; an
+          // added folder is named, since it isn't the task's own.
+          return error.kind === 'addDir'
+            ? { ...ipcError(error.message, 'UNTRUSTED_ADD_DIR'), data: { folder: error.root } }
+            : ipcError(error.message, 'UNTRUSTED_WORKSPACE');
         }
         return errorResponse(error);
       }

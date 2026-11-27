@@ -79,6 +79,8 @@ export const tasks = sqliteTable(
     // The person's own `claude` flags for the task's session, as typed; null
     // when none (validateExtraArgs checks them at save and at dispatch).
     extraArgs: text('extra_args'),
+    // `--add-dir` folders, a JSON array of full paths; null when none.
+    addDirs: text('add_dirs'),
     parentTaskId: text('parent_task_id'),
     // Pinned to the top of the sidebar's task list.
     favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false),

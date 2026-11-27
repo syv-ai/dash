@@ -46,7 +46,9 @@ function save(task: Task, change: SessionSettingChange): Promise<Task | null> {
     case 'model':
       return store.updateTask(task, { model: change.to });
     case 'extraArgs':
-      return store.setLaunchOptions(task, { [change.setting]: change.to });
+      return store.setLaunchOptions(task, { extraArgs: change.to });
+    case 'addDirs':
+      return store.setLaunchOptions(task, { addDirs: change.to });
   }
 }
 

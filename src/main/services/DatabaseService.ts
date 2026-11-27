@@ -18,6 +18,26 @@ import type {
 } from '@shared/types';
 import { isPermissionMode } from '@shared/types';
 import { FolderOccupiedError } from './FolderOccupiedError';
+import { normalizeAddDirs } from '@shared/addDirs';
+
+/** `add_dirs` as stored: a JSON array, null for none. */
+function addDirsJson(folders: readonly string[] | undefined): string | null {
+  const list = normalizeAddDirs(folders);
+  return list.length > 0 ? JSON.stringify(list) : null;
+}
+
+/** `add_dirs` as read: a broken value reads as none. */
+function parseAddDirs(value: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? normalizeAddDirs(parsed.filter((f): f is string => typeof f === 'string'))
+      : [];
+  } catch {
+    return [];
+  }
+}
 import { syncMemoryWatches } from './MemoryWatcher';
 
 function normalizePermissionMode(value: string | null | undefined): PermissionMode {
@@ -245,6 +265,7 @@ export class DatabaseService {
           contextPrompt: data.contextPrompt ?? null,
           dashAccess: data.dashAccess ?? false,
           extraArgs: data.extraArgs ?? null,
+          addDirs: addDirsJson(data.addDirs),
           parentTaskId: data.parentTaskId ?? null,
           sortOrder: sortOrder ?? 0,
           createdAt: now,
@@ -317,6 +338,7 @@ export class DatabaseService {
   static setTaskLaunchOptions(id: string, patch: Partial<TaskLaunchOptions>): void {
     const set: Partial<typeof tasks.$inferInsert> = {};
     if (patch.extraArgs !== undefined) set.extraArgs = patch.extraArgs?.trim() || null;
+    if (patch.addDirs !== undefined) set.addDirs = addDirsJson(patch.addDirs);
     if (Object.keys(set).length === 0) return;
     const db = getDb();
     db.update(tasks)
@@ -700,6 +722,7 @@ export class DatabaseService {
       archivedAt: row.archivedAt,
       dashAccess: row.dashAccess ?? false,
       extraArgs: row.extraArgs ?? null,
+      addDirs: parseAddDirs(row.addDirs),
       parentTaskId: row.parentTaskId ?? null,
       favorite: row.favorite ?? false,
       sortOrder: row.sortOrder,

@@ -7,15 +7,17 @@ import {
   sessionModeNote,
   sessionModelNote,
   type SessionSettingChange,
+  type SessionSettingsOf,
 } from '../sessionSettingChange';
 
 const AVAILABLE = { available: true } as const;
-const TASK = {
+const TASK: SessionSettingsOf = {
   permissionMode: 'auto',
   model: 'haiku',
   dashAccess: false,
   extraArgs: '--chrome',
-} as const;
+  addDirs: ['/lib'],
+};
 
 const plan = (
   change: SessionSettingChange,
@@ -29,6 +31,18 @@ describe('planSessionSettingChange', () => {
     expect(plan({ setting: 'model', to: 'haiku' }, true)).toEqual({ kind: 'none' });
     expect(plan({ setting: 'dashAccess', to: false }, true)).toEqual({ kind: 'none' });
     expect(plan({ setting: 'extraArgs', to: ' --chrome ' }, true)).toEqual({ kind: 'none' });
+  });
+
+  it('restarts for new folders, comparing the lists once normalized', () => {
+    expect(plan({ setting: 'addDirs', to: [' /lib', ''] }, true)).toEqual({ kind: 'none' });
+    expect(plan({ setting: 'addDirs', to: ['/lib', '/docs'] }, true)).toMatchObject({
+      kind: 'apply',
+      restart: true,
+      confirm: { title: 'Restart with these folders?' },
+    });
+    expect(plan({ setting: 'addDirs', to: [] }, true)).toMatchObject({
+      confirm: { title: 'Drop the added folders?' },
+    });
   });
 
   it('restarts for new extra arguments, and treats a blank line as none', () => {

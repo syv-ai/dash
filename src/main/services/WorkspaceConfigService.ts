@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { isPermissionMode, type PermissionMode } from '../../shared/types';
+import { normalizeAddDirs } from '../../shared/addDirs';
 
 const DASH_DIR = '.dash';
 const CONFIG_FILE = 'config.json';
@@ -16,10 +17,13 @@ export interface WorkspaceTaskDefaults {
   /** Default extra `claude` flags for a new task. Read from
    *  `config.local.json` only, so a cloned repo can't plant flags. */
   extraArgs?: string;
+  /** Default `--add-dir` folders for a new task (full paths, so this
+   *  machine's): `config.local.json` only, as for extraArgs. */
+  addDirs?: string[];
 }
 
 /** taskDefaults keys only `config.local.json` may set. */
-export const LOCAL_ONLY_TASK_DEFAULTS = ['extraArgs'] as const;
+export const LOCAL_ONLY_TASK_DEFAULTS = ['extraArgs', 'addDirs'] as const;
 export type LocalTaskDefaults = Pick<
   WorkspaceTaskDefaults,
   (typeof LOCAL_ONLY_TASK_DEFAULTS)[number]
@@ -63,6 +67,10 @@ function parseTaskDefaults(
   if (typeof obj.dashAccess === 'boolean') result.dashAccess = obj.dashAccess;
   if (opts.local && typeof obj.extraArgs === 'string' && obj.extraArgs.trim()) {
     result.extraArgs = obj.extraArgs.trim();
+  }
+  if (opts.local && Array.isArray(obj.addDirs)) {
+    const dirs = normalizeAddDirs(obj.addDirs.filter((d): d is string => typeof d === 'string'));
+    if (dirs.length > 0) result.addDirs = dirs;
   }
   return Object.keys(result).length > 0 ? result : undefined;
 }
@@ -139,9 +147,8 @@ export function loadLocalTaskDefaults(projectPath: string): LocalTaskDefaults {
     local: true,
   });
   const result: LocalTaskDefaults = {};
-  for (const key of LOCAL_ONLY_TASK_DEFAULTS) {
-    if (all?.[key] !== undefined) result[key] = all[key];
-  }
+  if (all?.extraArgs !== undefined) result.extraArgs = all.extraArgs;
+  if (all?.addDirs !== undefined) result.addDirs = all.addDirs;
   return result;
 }
 
@@ -164,11 +171,12 @@ export function writeLocalTaskDefaults(projectPath: string, patch: LocalTaskDefa
     prev && typeof prev === 'object' && !Array.isArray(prev)
       ? { ...(prev as Record<string, unknown>) }
       : {};
-  for (const key of LOCAL_ONLY_TASK_DEFAULTS) {
-    const value = patch[key]?.trim();
-    if (value) defaults[key] = value;
-    else delete defaults[key];
-  }
+  const extraArgs = patch.extraArgs?.trim();
+  if (extraArgs) defaults.extraArgs = extraArgs;
+  else delete defaults.extraArgs;
+  const addDirs = normalizeAddDirs(patch.addDirs);
+  if (addDirs.length > 0) defaults.addDirs = addDirs;
+  else delete defaults.addDirs;
   if (Object.keys(defaults).length > 0) base.taskDefaults = defaults;
   else delete base.taskDefaults;
 

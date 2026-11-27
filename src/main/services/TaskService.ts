@@ -19,6 +19,7 @@ import { TelemetryService } from './TelemetryService';
 import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
 import { loadWorkspaceConfig, type WorkspaceTaskDefaults } from './WorkspaceConfigService';
 import { flagNoteText, validateExtraArgs } from '@shared/extraArgs';
+import { addDirProblem, normalizeAddDirs } from '@shared/addDirs';
 import {
   ensureWatching as ensurePortsConfigWatch,
   stop as stopPortsConfigWatch,
@@ -74,6 +75,9 @@ export class TaskService {
     const { name, linkedItems, contextPrompt } = input;
     const projectDefaults = readTaskDefaults(project.path);
     const extraArgs = input.extraArgs ?? projectDefaults?.extraArgs;
+    const addDirs = normalizeAddDirs(input.addDirs ?? projectDefaults?.addDirs);
+    const dirProblem = addDirs.map(addDirProblem).find(Boolean);
+    if (dirProblem) throw new Error(`Folders: ${dirProblem}`);
     const extraCheck = validateExtraArgs(extraArgs);
     if (!extraCheck.ok) {
       throw new Error(
@@ -163,6 +167,7 @@ export class TaskService {
       contextPrompt: contextPrompt ?? null,
       dashAccess: input.dashAccess ?? projectDefaults?.dashAccess ?? false,
       extraArgs: extraArgs?.trim() || null,
+      addDirs,
       parentTaskId: input.parentTaskId ?? null,
     });
 

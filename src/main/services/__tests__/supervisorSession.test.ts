@@ -6,6 +6,7 @@ import {
   parseDispatchOutput,
   isDispatchFailure,
   parseUntrustedRoot,
+  parseUntrustedAddDir,
   parseAgentsJson,
   activityFromSupervisor,
   isUnderDir,
@@ -123,6 +124,28 @@ describe('buildDispatchArgs', () => {
     expect(buildDispatchArgs({ name: 't', extraArgs: '  ' })).toEqual(
       buildDispatchArgs({ name: 't' }),
     );
+  });
+
+  it('passes the task folders as one --add-dir, ended by the next flag', () => {
+    const args = buildDispatchArgs({
+      name: 't',
+      model: 'opus',
+      addDirs: ['/a', '/b c'],
+      settingsPath: '/s.json',
+      prompt: 'go',
+    });
+    expect(args.slice(5)).toEqual([
+      '--model',
+      'opus',
+      '--add-dir',
+      '/a',
+      '/b c',
+      '--settings',
+      '/s.json',
+      '--',
+      'go',
+    ]);
+    expect(buildDispatchArgs({ name: 't', addDirs: [] })).not.toContain('--add-dir');
   });
 
   it('refuses extra arguments that name a flag Dash owns, so Dash always wins', () => {
@@ -267,5 +290,26 @@ describe('parseUntrustedRoot', () => {
 
   it('is null for any other failure', () => {
     expect(parseUntrustedRoot("couldn't start a background session")).toBeNull();
+  });
+});
+
+describe('parseUntrustedAddDir', () => {
+  const LIVE =
+    'Added folder not trusted: /Users/me/jobs/agent-flags/untrusted-dir. Leave out its --add-dir or, if you trust it and everything in its repository or below it, start `claude` there once and accept the trust prompt.';
+
+  it('reads the added folder Claude Code wants trusted (2.1.332, live)', () => {
+    expect(parseUntrustedAddDir(LIVE)).toBe('/Users/me/jobs/agent-flags/untrusted-dir');
+    expect(
+      parseUntrustedAddDir(`\x1b[31m${LIVE.replace('/Users/me', '/Users/my name')}\x1b[0m`),
+    ).toBe('/Users/my name/jobs/agent-flags/untrusted-dir');
+  });
+
+  it('is null for the workspace refusal and anything else', () => {
+    expect(
+      parseUntrustedAddDir(
+        'Workspace not trusted. Run `claude` in /p once and accept the trust prompt, then retry.',
+      ),
+    ).toBeNull();
+    expect(parseUntrustedAddDir('backgrounded · 12345678 · t')).toBeNull();
   });
 });

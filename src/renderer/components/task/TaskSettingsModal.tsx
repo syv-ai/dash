@@ -8,6 +8,7 @@ import { ModelPicker } from './ModelPicker';
 import { SwitchField } from '../ui/SwitchField';
 import { Expandable } from '../ui/Expandable';
 import { ExtraArgsField } from './ExtraArgsField';
+import { AddDirsField } from './AddDirsField';
 import { useControlInfo } from '../../hooks/useControlInfo';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useTaskBranch } from '../../stores/gitStore';
@@ -42,8 +43,10 @@ export function TaskSettingsModal({
   const sessionMode = useRuntime((s) => s.taskActivity[task.id]?.permissionMode);
   const bypass = useBypassAvailability(task.path);
   const [extraArgs, setExtraArgs] = useState(task.extraArgs ?? '');
+  const [addDirs, setAddDirs] = useState<string[]>(task.addDirs);
   // A saved change (or one made elsewhere) replaces the draft.
   useEffect(() => setExtraArgs(task.extraArgs ?? ''), [task.extraArgs]);
+  useEffect(() => setAddDirs(task.addDirs), [task.addDirs]);
 
   function handleSaveName() {
     const trimmed = name.trim();
@@ -96,7 +99,13 @@ export function TaskSettingsModal({
           )}
         </FormSection>
         <FormSection>
-          <Expandable label="Advanced" defaultOpen={!!task.extraArgs}>
+          <Expandable label="Advanced" defaultOpen={!!task.extraArgs || task.addDirs.length > 0}>
+            <AddDirsField
+              value={addDirs}
+              onChange={setAddDirs}
+              saved={task.addDirs}
+              onApply={(to) => onSessionSettingChange({ setting: 'addDirs', to })}
+            />
             <ExtraArgsField
               value={extraArgs}
               onChange={setExtraArgs}

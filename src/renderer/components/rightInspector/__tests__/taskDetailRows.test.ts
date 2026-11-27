@@ -30,6 +30,7 @@ const TASK: Task = {
   archivedAt: null,
   dashAccess: false,
   extraArgs: null,
+  addDirs: [],
   parentTaskId: null,
   favorite: false,
   sortOrder: 0,
@@ -209,6 +210,19 @@ describe('extraArgsRow', () => {
     expect(extraArgsRow({ extraArgs: '--mcp-config m.json --tools Read' })?.caution).toBe(
       '--mcp-config loads MCP servers, which can run any command.\n--tools limits the built-in tools; an empty list also stops dashctl.',
     );
+  });
+
+  it('shows added folders beside it, with ~ for home', () => {
+    const rows = taskDetailSections(
+      input({ homeDir: '/Users/me' }, { addDirs: ['/Users/me/lib', '/opt/docs'] }),
+    ).session;
+    expect(rows.find((r) => r.label === 'Folders')).toEqual({
+      label: 'Folders',
+      value: '~/lib, /opt/docs',
+      title: '/Users/me/lib\n/opt/docs',
+      copy: '/Users/me/lib\n/opt/docs',
+    });
+    expect(taskDetailSections(input()).session.some((r) => r.label === 'Folders')).toBe(false);
   });
 
   it('sits in the session section', () => {

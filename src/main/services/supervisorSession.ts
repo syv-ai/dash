@@ -26,6 +26,8 @@ export interface DispatchArgsOptions {
   permissionMode?: PermissionMode;
   /** Model alias (opus|sonnet|haiku|fable). 'default'/undefined → no --model. */
   model?: TaskModel;
+  /** Extra folders the session may read and edit → one `--add-dir` with all. */
+  addDirs?: readonly string[];
   /** The task's settings file (buildSessionSettings) → `--settings`. */
   settingsPath?: string;
   /** Claude session UUID to continue (migrated or re-dispatched task). */
@@ -106,6 +108,10 @@ export function buildDispatchArgs(opts: DispatchArgsOptions): string[] {
   if (opts.model && opts.model !== 'default') {
     args.push('--model', opts.model);
   }
+  // Variadic: the flags after it (or the `--`) end its list.
+  if (opts.addDirs && opts.addDirs.length > 0) {
+    args.push('--add-dir', ...opts.addDirs);
+  }
   // Single-valued, so its position is free; a second one would replace it.
   if (opts.settingsPath) {
     args.push('--settings', opts.settingsPath);
@@ -139,6 +145,18 @@ export function parseUntrustedRoot(output: string): string | null {
   const m = output
     .replace(ANSI_RE, '')
     .match(/Workspace not trusted\.\s+Run `claude` in (.+?) once\b/);
+  return m ? m[1]!.trim() : null;
+}
+
+/**
+ * The folder `claude --bg` refused because a `--add-dir` folder isn't
+ * covered by workspace trust ("Added folder not trusted: <path>. Leave out
+ * its --add-dir or, … start `claude` there once and accept the trust
+ * prompt."; 2.1.332, live), or null. Accepting Claude Code's own trust
+ * prompt in that folder is the supported fix.
+ */
+export function parseUntrustedAddDir(output: string): string | null {
+  const m = output.replace(ANSI_RE, '').match(/Added folder not trusted: (.+?)\. Leave out\b/);
   return m ? m[1]!.trim() : null;
 }
 

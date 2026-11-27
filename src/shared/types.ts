@@ -131,6 +131,8 @@ export interface Task {
   /** The person's own `claude` flags for the session, as typed (shell
    *  quoting, no expansion); null when none. Checked by validateExtraArgs. */
   extraArgs: string | null;
+  /** Extra folders the session may read and edit (`--add-dir`), full paths. */
+  addDirs: string[];
   /** The task that created this one through the control API; null when a
    *  person created it. Fixed at creation. */
   parentTaskId: string | null;
@@ -168,6 +170,9 @@ export type CreateTaskOptions = {
   /** Extra `claude` flags, as typed. undefined → the project's default from
    *  `.dash/config.local.json`. Resolved only in TaskService.create. */
   extraArgs?: string;
+  /** `--add-dir` folders. undefined → the project's default from
+   *  `.dash/config.local.json`. Resolved only in TaskService.create. */
+  addDirs?: string[];
 } & (
   | { kind: 'worktree-new-branch'; baseRef: string; pushRemote: boolean }
   | { kind: 'worktree-existing'; branch: string; updateFromRemote?: boolean }
@@ -189,7 +194,7 @@ export type SetTaskDashAccessInput = { taskId: string; enabled: boolean };
  * besides mode and model). Only the keys given change; a running session
  * picks them up when it restarts (changeSessionSetting does that).
  */
-export type TaskLaunchOptions = Pick<Task, 'extraArgs'>;
+export type TaskLaunchOptions = Pick<Task, 'extraArgs' | 'addDirs'>;
 export type SetTaskLaunchOptionsInput = { taskId: string } & Partial<TaskLaunchOptions>;
 
 /** `task:setFavorite`: pin a task to the top of the sidebar's task list, or unpin it. */
@@ -288,6 +293,8 @@ export interface TokenStatsRollup {
  * - `UNTRUSTED_WORKSPACE`: Claude Code refused to start a background session
  *   because its workspace trust prompt was never accepted for the folder; the
  *   pane shows that prompt (`ptyTrustWorkspace`) and starts again.
+ * - `UNTRUSTED_ADD_DIR`: the same, for a folder the task adds (`--add-dir`);
+ *   `data.folder` names it. The pane offers the same prompt, in that folder.
  * - `UNKNOWN`: any other caught error (the default).
  */
 export type IpcErrorCode =
@@ -295,6 +302,7 @@ export type IpcErrorCode =
   | 'NOT_FOUND'
   | 'UNSUPPORTED_CLI'
   | 'UNTRUSTED_WORKSPACE'
+  | 'UNTRUSTED_ADD_DIR'
   /** The caller cancelled the request (`lsp:cancel`). */
   | 'CANCELLED'
   /** The language server for the document isn't installed or has failed. */

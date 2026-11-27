@@ -1212,6 +1212,9 @@ export class TerminalSessionManager {
       : await startDirect();
     if (!resp.success && resp.code === 'UNTRUSTED_WORKSPACE') {
       if (await this.promptWorkspaceTrust(cols, rows)) resp = await startDirect();
+    } else if (!resp.success && resp.code === 'UNTRUSTED_ADD_DIR') {
+      const folder = (resp.data as { folder?: string } | undefined)?.folder ?? 'a folder';
+      if (await this.promptWorkspaceTrust(cols, rows, folder)) resp = await startDirect();
     }
     this.lastStartOk = resp.success;
     if (resp.success) {
@@ -1266,20 +1269,32 @@ export class TerminalSessionManager {
 
   /**
    * Claude Code refused the background session because its workspace trust
-   * prompt was never accepted for the folder. Run that prompt in this pane —
-   * live, so the startup buffer is flushed first — and clear the pane once it
-   * is answered, for the session (or the error) that follows.
+   * prompt was never accepted for the folder: the task's own, or `addedFolder`,
+   * one the task adds with `--add-dir`. Run that prompt in this pane — live,
+   * so the startup buffer is flushed first — and clear the pane once it is
+   * answered, for the session (or the error, naming the way out) that follows.
    */
-  private async promptWorkspaceTrust(cols: number, rows: number): Promise<boolean> {
+  private async promptWorkspaceTrust(
+    cols: number,
+    rows: number,
+    addedFolder?: string,
+  ): Promise<boolean> {
     const buffered = this.dataBuffer;
     this.dataBuffer = null;
     for (const chunk of buffered ?? []) this.terminal.write(chunk);
     this.terminal.write(
-      clackBlock(
-        'info',
-        'Claude Code needs you to trust this folder first.',
-        'Accept its prompt and the task session starts.',
-      ),
+      addedFolder
+        ? clackBlock(
+            'info',
+            `Claude Code doesn't trust ${addedFolder}, a folder this task adds.`,
+            'Accept its prompt for that folder and the task session starts.',
+            'Or decline, and remove the folder in Task settings → Advanced → Folders.',
+          )
+        : clackBlock(
+            'info',
+            'Claude Code needs you to trust this folder first.',
+            'Accept its prompt and the task session starts.',
+          ),
     );
     const resp = await window.electronAPI.ptyTrustWorkspace({
       id: this.id,

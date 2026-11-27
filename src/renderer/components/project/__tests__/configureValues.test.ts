@@ -35,14 +35,24 @@ describe('configure form permissionMode', () => {
 
 describe('local-only defaults', () => {
   it('round-trips extra arguments and drops a blank line', () => {
-    expect(localToValues({ extraArgs: '--chrome' })).toEqual({ extraArgs: '--chrome' });
-    expect(localToValues(undefined)).toEqual({ extraArgs: '' });
-    expect(valuesToLocal({ extraArgs: ' --chrome ' })).toEqual({ extraArgs: '--chrome' });
-    expect(valuesToLocal({ extraArgs: '  ' })).toEqual({ extraArgs: undefined });
+    expect(localToValues({ extraArgs: '--chrome', addDirs: ['/a'] })).toEqual({
+      extraArgs: '--chrome',
+      addDirs: ['/a'],
+    });
+    expect(localToValues(undefined)).toEqual({ extraArgs: '', addDirs: [] });
+    expect(valuesToLocal({ extraArgs: ' --chrome ', addDirs: [' /a', ''] })).toEqual({
+      extraArgs: '--chrome',
+      addDirs: ['/a'],
+    });
+    expect(valuesToLocal({ extraArgs: '  ', addDirs: [''] })).toEqual({
+      extraArgs: undefined,
+      addDirs: undefined,
+    });
   });
 
-  it("can't be saved with extra arguments a task couldn't launch with", () => {
-    expect(localValuesOk({ extraArgs: '--chrome' })).toBe(true);
-    expect(localValuesOk({ extraArgs: '--settings x' })).toBe(false);
+  it("can't be saved with flags or folders a task couldn't launch with", () => {
+    expect(localValuesOk({ extraArgs: '--chrome', addDirs: ['/a', ''] })).toBe(true);
+    expect(localValuesOk({ extraArgs: '--settings x', addDirs: [] })).toBe(false);
+    expect(localValuesOk({ extraArgs: '', addDirs: ['~/a'] })).toBe(false);
   });
 });

@@ -44,6 +44,7 @@ function task(over: Partial<Task> = {}): Task {
     archivedAt: null,
     dashAccess: false,
     extraArgs: null,
+    addDirs: [],
     parentTaskId: null,
     favorite: false,
     sortOrder: 0,

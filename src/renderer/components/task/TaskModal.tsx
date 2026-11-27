@@ -37,6 +37,8 @@ import { useSlashCommands } from './useSlashCommands';
 import { useBypassAvailability } from './changeSessionSetting';
 import { ExtraArgsField } from './ExtraArgsField';
 import { validateExtraArgs } from '../../../shared/extraArgs';
+import { addDirProblem, normalizeAddDirs } from '../../../shared/addDirs';
+import { AddDirsField } from './AddDirsField';
 
 // Lives in shared/types (main's TaskService takes it too); re-exported so
 // imports don't churn.
@@ -52,6 +54,8 @@ export interface TaskModalDefaults {
   dashAccess?: boolean;
   /** From `.dash/config.local.json` only. */
   extraArgs?: string;
+  /** From `.dash/config.local.json` only. */
+  addDirs?: string[];
 }
 
 interface TaskModalProps {
@@ -179,6 +183,8 @@ function TaskModalBody({
   const [dashAccess, setDashAccess] = useState(taskDefaults?.dashAccess ?? false);
   const [extraArgs, setExtraArgs] = useState(taskDefaults?.extraArgs ?? '');
   const extraArgsOk = validateExtraArgs(extraArgs).ok;
+  const [addDirs, setAddDirs] = useState<string[]>(taskDefaults?.addDirs ?? []);
+  const addDirsOk = addDirs.every((d) => !addDirProblem(d));
   // The project's folder decides it for a task not made yet: a worktree reads
   // the same project files, and its local file sits at this root.
   const bypass = useBypassAvailability(projectPath);
@@ -335,6 +341,8 @@ function TaskModalBody({
       dashAccess: controlSupported ? dashAccess : false,
       // '' (not undefined) when cleared: the project default was prefilled.
       extraArgs: extraArgs.trim(),
+      // [] (not undefined) when cleared, as above.
+      addDirs: normalizeAddDirs(addDirs),
     };
 
     // The "Update from remote" choice only applies to a direct checkout of a
@@ -392,7 +400,8 @@ function TaskModalBody({
     !requiresBranchSelection &&
     // Worktree on an already-checked-out branch would fail at create.
     !branchInUse &&
-    extraArgsOk;
+    extraArgsOk &&
+    addDirsOk;
 
   return (
     <form
@@ -675,7 +684,12 @@ function TaskModalBody({
               </Field>
             )}
 
-            <Expandable label="Advanced" hint="optional" defaultOpen={!!extraArgs.trim()}>
+            <Expandable
+              label="Advanced"
+              hint="optional"
+              defaultOpen={!!extraArgs.trim() || addDirs.length > 0}
+            >
+              <AddDirsField value={addDirs} onChange={setAddDirs} />
               <ExtraArgsField value={extraArgs} onChange={setExtraArgs} />
             </Expandable>
           </div>

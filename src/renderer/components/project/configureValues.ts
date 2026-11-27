@@ -4,6 +4,7 @@ import type {
   WorkspaceConfig,
 } from '../../../main/services/WorkspaceConfigService';
 import { validateExtraArgs } from '../../../shared/extraArgs';
+import { addDirProblem, normalizeAddDirs } from '../../../shared/addDirs';
 
 /** The editable shape of the Project Settings form. */
 export interface ConfigureValues {
@@ -50,18 +51,24 @@ export function valuesToConfig(value: ConfigureValues): WorkspaceConfig {
 /** The personal, local-only defaults (`.dash/config.local.json`) as the form edits them. */
 export interface LocalValues {
   extraArgs: string;
+  /** The draft, blank rows included. */
+  addDirs: string[];
 }
 
 export function localToValues(defaults: LocalTaskDefaults | undefined): LocalValues {
-  return { extraArgs: defaults?.extraArgs ?? '' };
+  return { extraArgs: defaults?.extraArgs ?? '', addDirs: defaults?.addDirs ?? [] };
 }
 
 /** Empty fields are dropped (main removes their keys). */
 export function valuesToLocal(value: LocalValues): LocalTaskDefaults {
-  return { extraArgs: value.extraArgs.trim() || undefined };
+  const addDirs = normalizeAddDirs(value.addDirs);
+  return {
+    extraArgs: value.extraArgs.trim() || undefined,
+    addDirs: addDirs.length > 0 ? addDirs : undefined,
+  };
 }
 
-/** Whether the form can be saved: extra arguments a task could launch with. */
+/** Whether the form can be saved: what a task could launch with. */
 export function localValuesOk(value: LocalValues): boolean {
-  return validateExtraArgs(value.extraArgs).ok;
+  return validateExtraArgs(value.extraArgs).ok && value.addDirs.every((d) => !addDirProblem(d));
 }

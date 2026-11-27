@@ -1,4 +1,5 @@
 import React from 'react';
+import { AddDirsField } from '../task/AddDirsField';
 import { ExtraArgsField } from '../task/ExtraArgsField';
 import { FormSection } from '../ui/Field';
 import { Notice } from '../ui/Notice';
@@ -24,6 +25,11 @@ export function LocalDefaultsForm({
       title="Just for you"
       hint="Kept in .dash/config.local.json, which Dash keeps out of git. Only this file can add flags, so a cloned repository can't put any into your sessions."
     >
+      <AddDirsField
+        value={value.addDirs}
+        onChange={(addDirs) => onChange({ ...value, addDirs })}
+        hint="Prefilled into each new task's Folders: more folders Claude may read and edit (claude --add-dir), each a full path on this machine."
+      />
       <ExtraArgsField
         value={value.extraArgs}
         onChange={(extraArgs) => onChange({ ...value, extraArgs })}

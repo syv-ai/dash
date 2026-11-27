@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { checkShape } from '../check';
 import { statusLineSchema } from '../statusLineSchema';
-import { checkAgentsJson, checkVersionOutput, exitCodeDrift } from '../cliSchemas';
+import {
+  checkAgentsJson,
+  checkDispatchOutput,
+  checkVersionOutput,
+  exitCodeDrift,
+} from '../cliSchemas';
 import {
   checkInstalledPlugins,
   checkJobState,
@@ -70,6 +75,20 @@ describe('CLI output and exit codes', () => {
   it('reads `claude --version`', () => {
     expect(checkVersionOutput('2.1.332 (Claude Code)\n')).toEqual([]);
     expect(checkVersionOutput('Claude Code v3')).toEqual([
+      { kind: 'unparseable-output', path: 'stdout' },
+    ]);
+  });
+
+  it("knows `claude --bg`'s job line and the refusals Dash acts on (2.1.332, live)", () => {
+    for (const output of [
+      'backgrounded · 2a684244 · agentflags-extra\n',
+      "Couldn't start a background session: the supervisor is not running",
+      'Workspace not trusted. Run `claude` in /p/proj once and accept the trust prompt, then retry.',
+      'Added folder not trusted: /p/untrusted-dir. Leave out its --add-dir or, if you trust it and everything in its repository or below it, start `claude` there once and accept the trust prompt.',
+    ]) {
+      expect(checkDispatchOutput(output), output).toEqual([]);
+    }
+    expect(checkDispatchOutput('Error: something new')).toEqual([
       { kind: 'unparseable-output', path: 'stdout' },
     ]);
   });

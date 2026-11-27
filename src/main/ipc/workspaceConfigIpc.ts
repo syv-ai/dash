@@ -28,7 +28,10 @@ const configSchema = z.looseObject({
   taskDefaults: taskDefaultsSchema,
 });
 
-const localTaskDefaultsSchema = z.object({ extraArgs: z.string().optional() });
+const localTaskDefaultsSchema = z.object({
+  extraArgs: z.string().optional(),
+  addDirs: z.array(z.string()).optional(),
+});
 
 export function registerWorkspaceConfigIpc(): void {
   // `shared: true` reads config.json without the config.local.json overlay

@@ -5,6 +5,7 @@ import type {
   Task,
   TaskModel,
 } from '../../../shared/types';
+import { normalizeAddDirs, sameAddDirs } from '../../../shared/addDirs';
 
 /**
  * What changing a task's session settings takes. Pure, so it is tested.
@@ -32,16 +33,22 @@ export type SessionSettingChange =
   | { setting: 'model'; to: TaskModel }
   | { setting: 'dashAccess'; to: boolean }
   /** The person's own flags, as typed; null for none. */
-  | { setting: 'extraArgs'; to: string | null };
+  | { setting: 'extraArgs'; to: string | null }
+  /** Extra folders the session may read and edit (`--add-dir`). */
+  | { setting: 'addDirs'; to: string[] };
 
 /** The task fields a session setting change reads. */
-export type SessionSettingsOf = Pick<Task, 'permissionMode' | 'model' | 'dashAccess' | 'extraArgs'>;
+export type SessionSettingsOf = Pick<
+  Task,
+  'permissionMode' | 'model' | 'dashAccess' | 'extraArgs' | 'addDirs'
+>;
 
 /** Whether the change leaves the setting as it is (extra arguments compare trimmed). */
 function isUnchanged(task: SessionSettingsOf, change: SessionSettingChange): boolean {
   if (change.setting === 'extraArgs') {
     return (task.extraArgs?.trim() || null) === (change.to?.trim() || null);
   }
+  if (change.setting === 'addDirs') return sameAddDirs(task.addDirs, change.to);
   return task[change.setting] === change.to;
 }
 
@@ -105,6 +112,10 @@ function restartTitle(change: SessionSettingChange): string {
       return change.to?.trim()
         ? 'Restart with these extra arguments?'
         : 'Drop the extra arguments?';
+    case 'addDirs':
+      return normalizeAddDirs(change.to).length > 0
+        ? 'Restart with these folders?'
+        : 'Drop the added folders?';
   }
 }
 
@@ -137,7 +148,8 @@ export function planSessionSettingChange(opts: {
     restart: true,
     confirm: {
       title: restartTitle(change),
-      message: change.setting === 'extraArgs' ? RESTART_CHANGE : RESTART,
+      message:
+        change.setting === 'extraArgs' || change.setting === 'addDirs' ? RESTART_CHANGE : RESTART,
       confirmLabel: RESTART_LABEL,
     },
   };

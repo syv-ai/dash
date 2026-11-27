@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { parseClaudeVersion } from '../services/claudeCli';
-import { SUPERVISOR_STATES, SUPERVISOR_STATUSES } from '../services/supervisorSession';
+import {
+  SUPERVISOR_STATES,
+  SUPERVISOR_STATUSES,
+  isDispatchFailure,
+  parseDispatchOutput,
+  parseUntrustedAddDir,
+  parseUntrustedRoot,
+} from '../services/supervisorSession';
 import { checkShape } from './check';
 import { driftValue, type DriftFinding } from './types';
 
@@ -37,6 +44,22 @@ export function checkAgentsJson(stdout: string): DriftFinding[] {
     return [{ kind: 'unparseable-output', path: 'stdout' }];
   }
   return checkShape(z.array(agentsRowSchema), raw);
+}
+
+/**
+ * `claude --bg`'s output should be one Dash knows the words for: the
+ * `backgrounded · <id>` line, or a refusal it acts on: couldn't start, the
+ * workspace isn't trusted, or an `--add-dir` folder isn't ("Added folder not
+ * trusted: <path>. Leave out its --add-dir …", 2.1.332, live). Anything else
+ * is drift: Dash shows the CLI's words as they are.
+ */
+export function checkDispatchOutput(output: string): DriftFinding[] {
+  const known =
+    parseDispatchOutput(output) !== null ||
+    isDispatchFailure(output) ||
+    parseUntrustedRoot(output) !== null ||
+    parseUntrustedAddDir(output) !== null;
+  return known ? [] : [{ kind: 'unparseable-output', path: 'stdout' }];
 }
 
 /** `claude --version` should start with `M.m.p`. */

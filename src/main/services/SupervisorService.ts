@@ -16,9 +16,8 @@ import {
   isDispatchFailure,
   parseAgentsJson,
   parseDispatchOutput,
-  parseUntrustedRoot,
 } from './supervisorSession';
-import { checkAgentsJson, exitCodeDrift } from '../claudeContract/cliSchemas';
+import { checkAgentsJson, checkDispatchOutput, exitCodeDrift } from '../claudeContract/cliSchemas';
 import { claudeVersionFor } from '../claudeContract/claudeVersions';
 import { reportFindings } from '../claudeContract/driftReporter';
 
@@ -47,13 +46,9 @@ export class DispatchError extends Error {
   }
 }
 
-/**
- * A dispatch that printed no job id: drift unless it is one of the failures
- * Dash knows the words for (couldn't start, workspace not trusted).
- */
+/** A dispatch that printed no job id: drift unless Dash knows its words (checkDispatchOutput). */
 function reportDispatchOutput(output: string): void {
-  if (isDispatchFailure(output) || parseUntrustedRoot(output)) return;
-  reportFindings('dispatch', [{ kind: 'unparseable-output', path: 'stdout' }], claudeVersionFor());
+  reportFindings('dispatch', checkDispatchOutput(output), claudeVersionFor());
 }
 
 /** `<claude config dir>/jobs`: watched as a change trigger only. */

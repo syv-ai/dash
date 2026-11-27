@@ -72,6 +72,7 @@ const createTaskCommon = {
   contextPrompt: z.string().optional(),
   dashAccess: z.boolean().optional(),
   extraArgs: z.string().optional(),
+  addDirs: z.array(z.string()).optional(),
   parentTaskId: z.string().nullable().optional(),
 };
 

@@ -191,6 +191,12 @@ export function taskDetailSections(input: TaskDetailsInput): TaskDetailSections 
       !!task.sessionId && { label: 'Session', value: task.sessionId, copy: task.sessionId },
       !!task.jobId && { label: 'Job', value: task.jobId, copy: task.jobId },
       { label: 'Dash access', value: task.dashAccess ? 'On' : 'Off' },
+      task.addDirs.length > 0 && {
+        label: task.addDirs.length === 1 ? 'Folder' : 'Folders',
+        value: task.addDirs.map((d) => tildePath(d, input.homeDir)).join(', '),
+        title: task.addDirs.join('\n'),
+        copy: task.addDirs.join('\n'),
+      },
       extraArgsRow(task),
     ]),
     usage: present([

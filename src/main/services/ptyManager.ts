@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import { sessionTranscriptPath } from './claudeSessionRegistry';
 import { app, type WebContents } from 'electron';
 import { TelemetryService } from './TelemetryService';
 import { activityMonitor } from './ActivityMonitor';
@@ -12,7 +13,12 @@ import { ensureShellConfig, shellHistoryPath } from './ptyShellConfig';
 import { findClaudePath, findLatestSessionId, requireSupportedClaude } from './claudeCli';
 import { buildClaudeEnv, buildSessionEnv, isUltracode } from './claudeEnv';
 import { supervisorService, DispatchError } from './SupervisorService';
-import { buildSessionSettings, ExtraArgsError, parseUntrustedRoot } from './supervisorSession';
+import {
+  buildSessionSettings,
+  ExtraArgsError,
+  parseUntrustedAddDir,
+  parseUntrustedRoot,
+} from './supervisorSession';
 import { extraArgFlagNames, validateExtraArgs } from '@shared/extraArgs';
 import { isWorkspaceTrusted } from '../utils/claudePaths';
 import { DatabaseService } from './DatabaseService';
@@ -116,14 +122,17 @@ export function setInitialPrompt(taskId: string, prompt: string): void {
 }
 
 /**
- * `claude --bg` refused the task's folder: Claude Code's workspace trust
- * prompt was never accepted for `root`. A background session cannot show that
- * prompt, so the pane runs it via runTrustPrompt() and then starts again.
+ * `claude --bg` refused a folder: Claude Code's workspace trust prompt was
+ * never accepted for `root`. `kind` says which: the task's own folder
+ * (`workspace`), or one it adds with `--add-dir` (`addDir`). A background
+ * session cannot show that prompt, so the pane runs it via runTrustPrompt()
+ * in `root` and then starts again.
  */
 export class UntrustedWorkspaceError extends Error {
   constructor(
     message: string,
     readonly root: string,
+    readonly kind: 'workspace' | 'addDir' = 'workspace',
   ) {
     super(message);
     this.name = 'UntrustedWorkspaceError';
@@ -277,6 +286,7 @@ async function ensureTaskSession(opts: {
   dashAccess: boolean;
   /** The person's own flags, as typed (buildDispatchArgs checks them). */
   extraArgs: string | null;
+  addDirs: string[];
   env: Record<string, string>;
   wakeStopped?: boolean;
 }): Promise<string> {
@@ -350,6 +360,7 @@ async function ensureTaskSession(opts: {
       resumeSessionId,
       settingsPath,
       extraArgs: opts.extraArgs,
+      addDirs: opts.addDirs,
       env: opts.env,
     });
   } catch (err) {
@@ -361,12 +372,24 @@ async function ensureTaskSession(opts: {
     }
     if (!(err instanceof DispatchError)) throw err;
     const root = parseUntrustedRoot(err.output);
-    if (!root) throw err;
+    const addDir = root ? null : parseUntrustedAddDir(err.output);
+    if (!root && !addDir) throw err;
     // No job was created, so the first prompt is still unsent: keep it for
     // the dispatch that follows the trust prompt.
     if (prompt !== undefined) setInitialPrompt(opts.id, prompt);
-    untrustedRoots.set(opts.id, root);
-    throw new UntrustedWorkspaceError(err.message, root);
+    if (addDir) {
+      console.warn(
+        `[ptyManager] task ${opts.id}: Claude Code refused the added folder ${addDir} as untrusted`,
+      );
+      untrustedRoots.set(opts.id, addDir);
+      throw new UntrustedWorkspaceError(
+        `Claude Code doesn't trust ${addDir}, a folder this task adds. Accept its trust prompt for the folder, or remove it in Task settings → Advanced → Folders.`,
+        addDir,
+        'addDir',
+      );
+    }
+    untrustedRoots.set(opts.id, root!);
+    throw new UntrustedWorkspaceError(err.message, root!);
   }
   const { jobId, sessionId } = dispatched;
   const extra = validateExtraArgs(opts.extraArgs);
@@ -549,6 +572,7 @@ async function startTaskSessionNow(
       sessionId: task.sessionId,
       dashAccess: task.dashAccess,
       extraArgs: task.extraArgs,
+      addDirs: task.addDirs,
       env,
       wakeStopped: opts.wakeStopped,
     });
@@ -806,6 +830,11 @@ export async function restartTaskSession(
     sessionId = (await supervisorService.find(task.jobId))?.sessionId ?? sessionId;
   } catch {
     // Listing unavailable — the recorded id is the best we have.
+  }
+  // A session that never took a turn has no transcript, and `--resume` of it
+  // fails the job ("source session … not found"): start it fresh instead.
+  if (sessionId && !fs.existsSync(sessionTranscriptPath({ ...task, jobId: null, sessionId })!)) {
+    sessionId = null;
   }
   await supervisorService.stop(task.jobId).catch(() => {});
   await supervisorService.remove(task.jobId).catch(() => {});

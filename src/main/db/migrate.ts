@@ -452,6 +452,12 @@ export function runMigrations(): void {
   } catch {
     /* already exists */
   }
+  // Extra folders a task's session may read and edit (`--add-dir`), as JSON.
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN add_dirs TEXT`);
+  } catch {
+    /* already exists */
+  }
 
   // The PR a task reviews, when the person picked one (else its own open PR is
   // the target): main and dashctl default to it.
