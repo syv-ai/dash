@@ -162,6 +162,15 @@ void app.whenReady().then(async () => {
     });
   });
 
+  // A reload or a crash drops the page that started the agent panes' attach
+  // clients, and the next page never re-adopts them (shells it does). Release
+  // them at the commit of the next page, before its scripts run; `did-navigate`
+  // is main-frame only and skips navigations `will-frame-navigate` refused.
+  const { releasePageClients } = await import('./services/ptyManager');
+  const page = mainWindow.webContents;
+  page.on('did-navigate', () => releasePageClients(page));
+  page.on('render-process-gone', () => releasePageClients(page));
+
   // Start activity monitor — must happen after window creation
   const { activityMonitor, activityEvents } = await import('./services/ActivityMonitor');
   activityMonitor.start(mainWindow.webContents);

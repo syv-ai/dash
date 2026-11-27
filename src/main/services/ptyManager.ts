@@ -703,6 +703,7 @@ export async function startDirectPty(options: {
   isDirectSpawn: boolean;
   jobId: string;
 }> {
+  const page = pageOf(options.sender);
   const existing = ptys.get(options.id);
   if (existing) {
     // A shell PTY at the task id (stray) or a previous attach client: either
@@ -713,6 +714,7 @@ export async function startDirectPty(options: {
   const { jobId, cwd, env, claudePath } = await ensureTaskSessionFor(options.id, {
     isDark: options.isDark,
   });
+  assertSamePage(options.sender, page);
 
   spawnAttach({
     id: options.id,
@@ -748,6 +750,7 @@ export async function runTrustPrompt(options: {
 }): Promise<boolean> {
   const root = untrustedRoots.get(options.id);
   if (!root) return false;
+  const page = pageOf(options.sender);
   if (await isWorkspaceTrusted(root)) {
     untrustedRoots.delete(options.id);
     return true;
@@ -755,6 +758,7 @@ export async function runTrustPrompt(options: {
   const claudePath = await findClaudePath();
   if (!claudePath) return false;
   await killPtyInternal(options.id);
+  assertSamePage(options.sender, page);
 
   const proc = getPty().spawn(claudePath, [], {
     name: 'xterm-256color',
@@ -818,11 +822,13 @@ export async function startSessionAttach(options: {
   sender?: WebContents;
 }): Promise<{ id: string }> {
   const id = `${FOREIGN_SESSION_PTY_PREFIX}${options.jobId}`;
+  const page = pageOf(options.sender);
   if (ptys.has(id)) await killPtyInternal(id);
   const claudePath = await findClaudePath();
   if (!claudePath) {
     throw new Error('Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code');
   }
+  assertSamePage(options.sender, page);
   spawnAttach({
     id,
     jobId: options.jobId,
@@ -1281,8 +1287,55 @@ export async function killAll(): Promise<void> {
  * exit to race, but the child still gets its SIGTERM flush window.
  */
 export function killByOwner(owner: WebContents): void {
+  killOwned(owner, () => true);
+}
+
+/**
+ * Pages each WebContents has dropped (reload, crash). A reload keeps the
+ * WebContents, so the owner alone can't tell the old page from the new one.
+ */
+const droppedPages = new WeakMap<WebContents, number>();
+
+function pageOf(owner: WebContents | undefined): number {
+  return owner ? (droppedPages.get(owner) ?? 0) : 0;
+}
+
+/**
+ * A start that awaited across a page drop must not spawn: nothing on the new
+ * page would ever own or kill the client.
+ */
+function assertSamePage(owner: WebContents | undefined, page: number): void {
+  if (owner && pageOf(owner) !== page) {
+    throw new Error('The page that started this terminal has reloaded');
+  }
+}
+
+/**
+ * Whether a PTY outlives the page that started it. Shells and services do:
+ * main keeps their mirror and the next page re-adopts them by id (startPty,
+ * startCommandPty). An agent PTY is an attach client (or the trust prompt)
+ * that the next page never re-adopts, since startDirectPty always spawns
+ * afresh, so it would run until quit. TUI side-cars go with TuiHost's own
+ * reload teardown.
+ */
+export function outlivesPage(kind: PtyKind): boolean {
+  return kind !== 'agent';
+}
+
+/**
+ * The owner's page is gone (reload, crash): kill the PTYs no later page can
+ * re-adopt. Killing an attach client only detaches it; the session runs on
+ * under the supervisor, mid-turn or not. No exit event: the page that would
+ * show it is gone.
+ */
+export function releasePageClients(owner: WebContents): void {
+  droppedPages.set(owner, pageOf(owner) + 1);
+  killOwned(owner, (record) => !outlivesPage(record.kind));
+}
+
+function killOwned(owner: WebContents, which: (record: PtyRecord) => boolean): void {
   for (const [id, record] of ptys) {
-    if (record.owner === owner) {
+    if (record.owner === owner && which(record)) {
       teardownRecord(id, record);
       void gracefulKillProc(record.proc);
     }

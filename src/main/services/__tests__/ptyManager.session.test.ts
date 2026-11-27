@@ -118,6 +118,8 @@ import {
   restartTaskSession,
   restartAndStartTaskSession,
   hasPty,
+  releasePageClients,
+  outlivesPage,
   __testReset,
   __setPtyModuleForTest,
 } from '../ptyManager';
@@ -273,5 +275,47 @@ describe('stopping or restarting the session under an open pane', () => {
     await startDirectPty({ id: 't1', cols: 80, rows: 24, sender: owner as never });
     await startDirectPty({ id: 't1', cols: 80, rows: 24, sender: owner as never });
     expect(exitSends(owner)).toHaveLength(0);
+  });
+});
+
+describe('a page reload or crash', () => {
+  it('kills the attach clients the page started, quietly, and leaves the session running', async () => {
+    const page = fakeOwner();
+    await startDirectPty({ id: 't1', cols: 80, rows: 24, sender: page as never });
+    releasePageClients(page as never);
+    expect(procs()[0]!.kill).toHaveBeenCalledWith('SIGTERM');
+    expect(hasPty('t1')).toBe(false);
+    expect(page.send).not.toHaveBeenCalled();
+    expect(sup.stop).not.toHaveBeenCalled();
+  });
+
+  it("leaves another page's attach clients alone", async () => {
+    await startDirectPty({ id: 't1', cols: 80, rows: 24, sender: fakeOwner() as never });
+    releasePageClients(fakeOwner() as never);
+    expect(hasPty('t1')).toBe(true);
+  });
+
+  it('refuses a start that awaited the session across the reload', async () => {
+    const page = fakeOwner();
+    let found!: () => void;
+    sup.find.mockImplementationOnce(
+      () => new Promise((r) => (found = () => r({ cwd: '/wt/t1', sessionId: 's1', pid: 7 }))),
+    );
+    const start = startDirectPty({ id: 't1', cols: 80, rows: 24, sender: page as never });
+    const refused = expect(start).rejects.toThrow(/reloaded/);
+    await flush();
+    releasePageClients(page as never);
+    found();
+    await refused;
+    expect(ptySpawn).not.toHaveBeenCalled();
+    // The next page starts as usual.
+    await startDirectPty({ id: 't1', cols: 80, rows: 24, sender: page as never });
+    expect(hasPty('t1')).toBe(true);
+  });
+
+  it('keeps what the next page re-adopts: shells and services, not attach clients', () => {
+    expect(outlivesPage('agent')).toBe(false);
+    expect(outlivesPage('shell')).toBe(true);
+    expect(outlivesPage('service')).toBe(true);
   });
 });
