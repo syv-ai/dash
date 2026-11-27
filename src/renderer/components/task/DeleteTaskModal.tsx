@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Trash2, Loader2 } from 'lucide-react';
+import { Trash2, Loader2, Shield } from 'lucide-react';
 import type { Task } from '../../../shared/types';
 import { Button } from '../ui/Button';
 import { CheckboxField } from '../ui/CheckboxField';
+import { Notice } from '../ui/Notice';
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from '../ui/Dialog';
 import { useModalClose } from '../ui/Modal';
 
@@ -69,6 +70,11 @@ function DeleteTaskBody({ task, onConfirm }: DeleteTaskBodyProps) {
     <>
       <DialogHeader title="Delete task?" description={task.name} closeDisabled={isDeleting} />
       <DialogBody>
+        {task.protected && (
+          <Notice icon={<Shield size={14} strokeWidth={1.8} />} className="mb-2.5">
+            {task.name} is protected: agents can't archive or delete it.
+          </Notice>
+        )}
         {task.useWorktree ? (
           <div className="grid gap-2.5">
             <CheckboxField

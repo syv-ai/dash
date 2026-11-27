@@ -5,6 +5,7 @@ import type {
   DeleteTaskOptions,
   SetTaskDashAccessInput,
   SetTaskFavoriteInput,
+  SetTaskProtectedInput,
   SetTaskLaunchOptionsInput,
   TaskMessageAddresses,
   IpcResponse,
@@ -45,6 +46,8 @@ export interface DatabaseApi {
   /** Turn a task's Dash access on or off; returns the updated task. Applies at its next dispatch. */
   setTaskDashAccess: (input: SetTaskDashAccessInput) => Promise<IpcResponse<Task>>;
   setTaskFavorite: (input: SetTaskFavoriteInput) => Promise<IpcResponse<Task>>;
+  /** Keep agents (dashctl) from archiving or deleting the task, or let them again. */
+  setTaskProtected: (input: SetTaskProtectedInput) => Promise<IpcResponse<Task>>;
   /** Change how the task's session launches (extra arguments, …); restart applies it. */
   setTaskLaunchOptions: (input: SetTaskLaunchOptionsInput) => Promise<IpcResponse<Task>>;
   /** Whether Claude Code's settings let a session in `cwd` (a task's checkout, or a

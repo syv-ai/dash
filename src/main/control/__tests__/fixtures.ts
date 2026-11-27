@@ -27,6 +27,7 @@ export function makeTask(over: Partial<Task> & { id: string; projectId: string }
     denyInsteadOfPrompting: false,
     parentTaskId: null,
     favorite: false,
+    protected: false,
     sortOrder: 0,
     totalTokens: 0,
     totalCostUsd: 0,

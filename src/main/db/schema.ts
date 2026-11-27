@@ -95,6 +95,8 @@ export const tasks = sqliteTable(
     parentTaskId: text('parent_task_id'),
     // Pinned to the top of the sidebar's task list.
     favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false),
+    // Agents (dashctl) can't archive or delete it; a person can.
+    protected: integer('is_protected', { mode: 'boolean' }).notNull().default(false),
     sortOrder: integer('sort_order').notNull().default(0),
     totalTokens: integer('total_tokens').notNull().default(0),
     totalCostUsd: real('total_cost_usd').notNull().default(0),

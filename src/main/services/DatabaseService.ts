@@ -290,6 +290,7 @@ export class DatabaseService {
           agent: data.agent ?? null,
           env: envJson(data.env),
           denyInsteadOfPrompting: data.denyInsteadOfPrompting ?? false,
+          protected: data.protected ?? false,
           parentTaskId: data.parentTaskId ?? null,
           sortOrder: sortOrder ?? 0,
           createdAt: now,
@@ -372,6 +373,16 @@ export class DatabaseService {
     const db = getDb();
     db.update(tasks)
       .set({ ...set, updatedAt: new Date().toISOString() })
+      .where(eq(tasks.id, id))
+      .run();
+  }
+
+  /** Protect a task from agents archiving or deleting it, or not. Kept
+   *  separate from saveTask so partial saves can't lift it. */
+  static setTaskProtected(id: string, value: boolean): void {
+    const db = getDb();
+    db.update(tasks)
+      .set({ protected: value, updatedAt: new Date().toISOString() })
       .where(eq(tasks.id, id))
       .run();
   }
@@ -758,6 +769,7 @@ export class DatabaseService {
       denyInsteadOfPrompting: row.denyInsteadOfPrompting ?? false,
       parentTaskId: row.parentTaskId ?? null,
       favorite: row.favorite ?? false,
+      protected: row.protected ?? false,
       sortOrder: row.sortOrder,
       totalTokens: row.totalTokens ?? 0,
       totalCostUsd: row.totalCostUsd ?? 0,

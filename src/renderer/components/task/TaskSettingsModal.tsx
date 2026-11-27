@@ -13,6 +13,8 @@ import { EnvVarsField } from './EnvVarsField';
 import { EffortPicker } from './EffortPicker';
 import { useControlInfo } from '../../hooks/useControlInfo';
 import { useRuntime } from '../../stores/runtimeStore';
+import { useProjects } from '../../stores/projectsStore';
+import { PROTECTED_HINT } from '../../lib/protectedTask';
 import { useTaskBranch } from '../../stores/gitStore';
 import { useBypassAvailability } from './changeSessionSetting';
 import {
@@ -105,6 +107,12 @@ export function TaskSettingsModal({
               onCheckedChange={(to) => onSessionSettingChange({ setting: 'dashAccess', to })}
             />
           )}
+          <SwitchField
+            label="Protected"
+            hint={PROTECTED_HINT}
+            checked={task.protected}
+            onCheckedChange={(to) => void useProjects.getState().setProtected(task, to)}
+          />
           <SwitchField
             label="Deny instead of prompting"
             hint="A tool call that would wait on a permission prompt is denied, and the turn goes on: for a session nobody watches. Needs Claude Code 2.1.319 or later."

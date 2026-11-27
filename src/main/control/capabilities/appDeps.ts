@@ -137,6 +137,12 @@ export function taskDeps(): TaskCapabilityDeps {
       taskEvents.emitChanged(task.projectId);
       return task;
     },
+    setProtected: (id, value) => {
+      DatabaseService.setTaskProtected(id, value);
+      const task = DatabaseService.getTask(id)!;
+      taskEvents.emitChanged(task.projectId);
+      return task;
+    },
     listAgents,
     restartSession: restartAndStartTaskSession,
     startSession: (id) => startTaskSession(id),

@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { toast } from '../components/ui/toast';
+import { confirm } from '../components/ui/ConfirmHost';
+import { protectedArchiveConfirm } from '../lib/protectedTask';
 import { sessionRegistry } from '../terminal/SessionRegistry';
 import type {
   Project,
@@ -84,6 +86,8 @@ export interface ProjectsActions {
   /** Pin a task to the top of the task list, or unpin it. Shown at once;
    *  put back (with a toast) if main refuses. */
   setFavorite: (taskItem: Task, favorite: boolean) => Promise<void>;
+  /** Protect the task from agents archiving or deleting it; resolves with the saved task. */
+  setProtected: (taskItem: Task, value: boolean) => Promise<Task | null>;
 }
 
 /** Dispose the Claude session + shell sessions for a task. */
@@ -272,7 +276,10 @@ export const useProjects = create<ProjectsStore>((set, get) => ({
   },
   // Archive, restore, delete and the Dash-access flag reload the task list
   // through main's `tasks:changed` push (App.tsx), not here.
+  // A protected task is archived by a person only after a confirm that says so.
   archiveTask: async (id) => {
+    const task = selectTaskById(get(), id);
+    if (task?.protected && !(await confirm(protectedArchiveConfirm(task.name)))) return;
     await window.electronAPI.archiveTask(id);
   },
   restoreTask: async (id) => {
@@ -412,6 +419,17 @@ export const useProjects = create<ProjectsStore>((set, get) => ({
     const resp = await window.electronAPI.setTaskLaunchOptions({ taskId: taskItem.id, ...patch });
     if (!resp.success || !resp.data) {
       toast.error(resp.error || 'Failed to save the task settings');
+      return null;
+    }
+    return resp.data;
+  },
+  setProtected: async (taskItem, value) => {
+    const resp = await window.electronAPI.setTaskProtected({
+      taskId: taskItem.id,
+      protected: value,
+    });
+    if (!resp.success || !resp.data) {
+      toast.error(resp.error || 'Failed to change the protection');
       return null;
     }
     return resp.data;

@@ -88,6 +88,7 @@ const createTaskCommon = {
   agent: agentNameSchema.nullable().optional(),
   env: z.record(z.string(), z.string()).optional(),
   denyInsteadOfPrompting: z.boolean().optional(),
+  protected: z.boolean().optional(),
   parentTaskId: z.string().nullable().optional(),
 };
 

@@ -76,6 +76,8 @@ export interface TaskView {
   /** The task's own env vars for its session. */
   env: Record<string, string>;
   denyInsteadOfPrompting: boolean;
+  /** No agent can archive or delete it; a person can, in Dash. */
+  protected: boolean;
   /** The tool call at work, or the one a wait asks about: its name, Dash's
    *  label and its input cut short (the command, path, URL…). */
   tool: { name: string; label: string; input?: string } | null;
@@ -128,6 +130,8 @@ export interface TaskCapabilityDeps {
   deleteTask(id: string, opts: DeleteTaskOptions): Promise<void>;
   /** Save a task's launch options (the keys given), as Task settings does. */
   setLaunchOptions(id: string, patch: Partial<TaskLaunchOptions>): Task;
+  /** Protect a task from agents archiving or deleting it. */
+  setProtected(id: string, value: boolean): Task;
   /** The custom agents a session in the project can run as (`--agent`),
    *  with the plugins of its `--plugin-dir` folders. */
   listAgents(projectPath: string, pluginDirs: string[]): Promise<AgentDefinition[]>;
@@ -234,6 +238,7 @@ export function toTaskView(task: Task, sources: TaskViewSources): TaskView {
     agent: task.agent,
     env: task.env,
     denyInsteadOfPrompting: task.denyInsteadOfPrompting,
+    protected: task.protected,
     tool: info?.tool
       ? {
           name: info.tool.toolName,
@@ -325,6 +330,30 @@ function assertLaunchOptions(
       403,
       `a task can't give another task ${env.map((e) => e.key).join(', ')}: ${env.map((e) => e.problem).join(' ')} It would run outside that task's permission checks. A person can set it in Task settings.`,
     );
+  }
+}
+
+/** `protected`: only true from the API. Lifting it would let the same agent archive next. */
+const protectedInput = z
+  .boolean()
+  .optional()
+  .describe(
+    'Protect the task: no agent can archive or delete it over dashctl (only true; a person lifts it in Task settings)',
+  );
+
+function assertCanSetProtected(value: boolean | undefined): void {
+  if (value === false) {
+    throw new ControlError(
+      403,
+      "only a person can lift a task's protection, in Task settings: an agent that could would then archive it",
+    );
+  }
+}
+
+/** The refusal for an agent archiving or deleting a protected task. */
+function assertNotProtected(task: Task, action: 'archive' | 'delete'): void {
+  if (task.protected) {
+    throw new ControlError(403, `${task.name} is protected; a person ${action}s it in Dash.`);
   }
 }
 
@@ -548,6 +577,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
             'Run the session as this custom agent (claude --agent), one of the project, the user, an enabled plugin or a plugin the task loads with --plugin-dir in --extra-args (named <plugin>:<agent>, the plugin name from its .claude-plugin/plugin.json); fixed for the task',
           ),
         ...launchInputs,
+        protected: protectedInput,
         ...linkInputs,
       }),
       callers: ['orchestrator', 'task'],
@@ -565,6 +595,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           addDirs: input.addDir,
           env,
         });
+        assertCanSetProtected(input.protected);
         if (input.agent) {
           // The task's own --plugin-dir plugins count: its extra arguments, or
           // the project's default when it gives none (as TaskService resolves them).
@@ -598,6 +629,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           agent: input.agent ?? null,
           env,
           denyInsteadOfPrompting: input.denyInsteadOfPrompting,
+          protected: input.protected,
           parentTaskId: ctx.caller.kind === 'task' ? ctx.caller.taskId : null,
         } as const;
 
@@ -1032,7 +1064,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.archive',
       summary:
-        'Archive a task: its session is put to sleep and it leaves the active list; the worktree stays. Returns the task. A task cannot archive itself.',
+        'Archive a task: its session is put to sleep and it leaves the active list; the worktree stays. Returns the task. A task cannot archive itself, and no agent can archive a protected task.',
       input: taskIdInput,
       callers: ['orchestrator', 'task'],
       cli: { args: ['taskId'] },
@@ -1040,6 +1072,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
       target: { taskId: 'taskId' },
       allowSelf: false,
       handler: async (_ctx, input) => {
+        assertNotProtected(taskOrThrow(input.taskId), 'archive');
         await deps.archiveTask(input.taskId);
         return view(taskOrThrow(input.taskId));
       },
@@ -1066,7 +1099,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.delete',
       summary:
-        "Delete a task: its session, its worktree folder and, with deleteBranch, the branch Dash created for it (locally and on the remote). Branches Dash didn't create are kept. Cannot be undone.",
+        "Delete a task: its session, its worktree folder and, with deleteBranch, the branch Dash created for it (locally and on the remote). Branches Dash didn't create are kept. Cannot be undone. Refused for a protected task.",
       input: z.object({ taskId: z.string(), deleteBranch: z.boolean().optional() }),
       callers: ['orchestrator'],
       cli: { args: ['taskId'] },
@@ -1074,6 +1107,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
       target: { taskId: 'taskId' },
       allowSelf: false,
       handler: async (_ctx, input) => {
+        assertNotProtected(taskOrThrow(input.taskId), 'delete');
         const deleteBranch = input.deleteBranch === true;
         await deps.deleteTask(input.taskId, {
           deleteWorktreeDir: true,
@@ -1166,7 +1200,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.configure',
       summary:
-        "Change how a task's Claude Code session launches, as Task settings does: its effort, extra folders (--add-dir), extra arguments, env vars (--env) and whether it denies instead of prompting. Only what is given changes. A task with a session restarts it to resume the same conversation with them. Returns the task and whether it restarted. A task cannot configure itself.",
+        "Change how a task's Claude Code session launches, as Task settings does: its effort, extra folders (--add-dir), extra arguments, env vars (--env) and whether it denies instead of prompting; and --protected. Only what is given changes. A task with a session restarts it to resume the same conversation with the launch settings (protecting it needs no restart). Returns the task and whether it restarted. A task cannot configure itself.",
       input: z.object({
         taskId: z.string().describe('The task id'),
         effort: z
@@ -1183,6 +1217,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           "The task's env vars, all of them, KEY=VALUE: repeat for more, --env '' for none. Dash's own keys, ANTHROPIC_*, CLAUDE_CODE_* and credentials are refused, and from a task also keys that make a program run code (NODE_OPTIONS, LD_*, GIT_SSH_COMMAND, EDITOR, …)",
         ),
         denyInsteadOfPrompting: launchInputs.denyInsteadOfPrompting,
+        protected: protectedInput,
       }),
       callers: ['orchestrator', 'task'],
       cli: { args: ['taskId'], paths: ['addDir'] },
@@ -1207,15 +1242,18 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           addDirs: patch.addDirs,
           env: patch.env,
         });
-        if (Object.keys(patch).length === 0) {
+        assertCanSetProtected(input.protected);
+        const relaunch = Object.keys(patch).length > 0;
+        if (!relaunch && input.protected === undefined) {
           throw new ControlError(
             400,
-            'nothing to change: give --effort, --add-dir, --extra-args, --env or --deny-instead-of-prompting',
+            'nothing to change: give --effort, --add-dir, --extra-args, --env, --deny-instead-of-prompting or --protected',
           );
         }
-        deps.setLaunchOptions(task.id, patch);
+        if (input.protected !== undefined) deps.setProtected(task.id, input.protected);
+        if (relaunch) deps.setLaunchOptions(task.id, patch);
         // Like Task settings: a session (live or parked) holds the old flags.
-        const started = task.jobId !== null ? await deps.restartSession(task.id) : null;
+        const started = relaunch && task.jobId !== null ? await deps.restartSession(task.id) : null;
         return {
           task: view(taskOrThrow(task.id)),
           restarted: !!started && 'jobId' in started,

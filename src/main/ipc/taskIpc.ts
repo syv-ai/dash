@@ -13,6 +13,7 @@ import type {
   SetTaskDashAccessInput,
   SetTaskFavoriteInput,
   SetTaskLaunchOptionsInput,
+  SetTaskProtectedInput,
 } from '@shared/types';
 import { launchOptionsProblem } from '@shared/launchOptions';
 
@@ -127,6 +128,24 @@ export function registerTaskIpc(): void {
       const task = DatabaseService.getTask(input.taskId);
       if (!task) throw new Error(`Task not found: ${input.taskId}`);
       DatabaseService.setTaskFavorite(input.taskId, input.favorite);
+      taskEvents.emitChanged(task.projectId);
+      return { success: true, data: DatabaseService.getTask(input.taskId) };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  // Only the flag: it takes effect at the next archive or delete over dashctl.
+  ipcMain.handle('task:setProtected', (_event, input: SetTaskProtectedInput) => {
+    try {
+      parseArgs(
+        'task:setProtected',
+        z.looseObject({ taskId: z.string(), protected: z.boolean() }),
+        input,
+      );
+      const task = DatabaseService.getTask(input.taskId);
+      if (!task) throw new Error(`Task not found: ${input.taskId}`);
+      DatabaseService.setTaskProtected(input.taskId, input.protected);
       taskEvents.emitChanged(task.projectId);
       return { success: true, data: DatabaseService.getTask(input.taskId) };
     } catch (error) {

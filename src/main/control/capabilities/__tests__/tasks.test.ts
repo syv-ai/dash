@@ -119,6 +119,11 @@ beforeEach(() => {
       state: 'New',
     })),
     linkItems: vi.fn(async (taskId: string) => tasks.find((t) => t.id === taskId)!),
+    setProtected: vi.fn((id: string, value: boolean) => {
+      const task = tasks.find((t) => t.id === id)!;
+      task.protected = value;
+      return task;
+    }),
     setLaunchOptions: vi.fn((id: string, patch: Partial<Task>) => {
       const task = tasks.find((t) => t.id === id)!;
       Object.assign(task, patch);
@@ -710,6 +715,52 @@ describe('tasks.restart', () => {
     emitActivity({ child: { state: 'stopped' } });
     expect(deps.restartSession).not.toHaveBeenCalled();
     expect(listeners).toHaveLength(0);
+  });
+});
+
+describe('protected tasks', () => {
+  it('refuses every agent archiving or deleting one, naming the protection', async () => {
+    tasks.find((t) => t.id === 'child')!.protected = true;
+    expect(
+      await refusalOf(registry.call(asTask('me'), 'tasks.archive', { taskId: 'child' })),
+    ).toEqual({ status: 403, message: 'Child is protected; a person archives it in Dash.' });
+    expect(await refusalOf(registry.call(orch, 'tasks.archive', { taskId: 'child' }))).toEqual({
+      status: 403,
+      message: 'Child is protected; a person archives it in Dash.',
+    });
+    expect(await refusalOf(registry.call(orch, 'tasks.delete', { taskId: 'child' }))).toEqual({
+      status: 403,
+      message: 'Child is protected; a person deletes it in Dash.',
+    });
+    expect(deps.archiveTask).not.toHaveBeenCalled();
+    expect(deps.deleteTask).not.toHaveBeenCalled();
+  });
+
+  it('creates and configures a task protected, without a restart, and never lifts it', async () => {
+    await registry.call(asTask('me'), 'tasks.create', {
+      projectId: 'pA',
+      name: 'seat',
+      protected: true,
+    });
+    expect(deps.createTask.mock.calls[0]![0]).toMatchObject({ protected: true });
+    tasks.find((t) => t.id === 'child')!.jobId = 'job-c';
+    const result = await registry.call(asTask('me'), 'tasks.configure', {
+      taskId: 'child',
+      protected: true,
+    });
+    expect(result).toMatchObject({ restarted: false, task: { protected: true } });
+    expect(deps.setLaunchOptions).not.toHaveBeenCalled();
+    expect(deps.restartSession).not.toHaveBeenCalled();
+    for (const call of [
+      registry.call(orch, 'tasks.configure', { taskId: 'child', protected: false }),
+      registry.call(orch, 'tasks.create', { projectId: 'pA', name: 'x', protected: false }),
+    ]) {
+      expect(await refusalOf(call)).toMatchObject({
+        status: 403,
+        message: expect.stringMatching(/^only a person can lift a task's protection/),
+      });
+    }
+    expect(tasks.find((t) => t.id === 'child')!.protected).toBe(true);
   });
 });
 

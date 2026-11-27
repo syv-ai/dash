@@ -51,6 +51,7 @@ function task(over: Partial<Task> = {}): Task {
     denyInsteadOfPrompting: false,
     parentTaskId: null,
     favorite: false,
+    protected: false,
     sortOrder: 0,
     totalTokens: 0,
     totalCostUsd: 0,

@@ -481,6 +481,12 @@ export function runMigrations(): void {
   } catch {
     /* already exists */
   }
+  // A protected task: agents (dashctl) can't archive or delete it.
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN is_protected INTEGER NOT NULL DEFAULT 0`);
+  } catch {
+    /* already exists */
+  }
 
   // The PR a task reviews, when the person picked one (else its own open PR is
   // the target): main and dashctl default to it.

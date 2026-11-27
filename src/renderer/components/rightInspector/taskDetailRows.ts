@@ -179,6 +179,10 @@ export function taskDetailSections(input: TaskDetailsInput): TaskDetailSections 
         copy: task.path,
       },
       !!input.parentTaskName && { label: 'Created by', value: input.parentTaskName },
+      task.protected && {
+        label: 'Protected',
+        value: "Agents can't archive or delete it",
+      },
       !!created && { label: 'Created', value: formatWhen(task.createdAt) ?? '' },
       lastActiveRow(input),
     ]),

@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   restoreTask: (id: string) => ipcRenderer.invoke('task:restore', id),
   setTaskDashAccess: (input: unknown) => ipcRenderer.invoke('task:setDashAccess', input),
   setTaskFavorite: (input: unknown) => ipcRenderer.invoke('task:setFavorite', input),
+  setTaskProtected: (input: unknown) => ipcRenderer.invoke('task:setProtected', input),
   setTaskLaunchOptions: (input: unknown) => ipcRenderer.invoke('task:setLaunchOptions', input),
   getBypassAvailability: (cwd: string) => ipcRenderer.invoke('claude:bypassAvailability', cwd),
   getTaskMessageAddresses: (id: string) => ipcRenderer.invoke('task:messageAddresses', id),

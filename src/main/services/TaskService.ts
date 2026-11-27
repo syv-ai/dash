@@ -166,6 +166,7 @@ export class TaskService {
       agent: input.agent?.trim() || null,
       env: input.env,
       denyInsteadOfPrompting: input.denyInsteadOfPrompting ?? false,
+      protected: input.protected ?? false,
       parentTaskId: input.parentTaskId ?? null,
     });
 

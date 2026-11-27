@@ -128,6 +128,7 @@ function legacySetup(name = 'fix-login-a1b') {
       denyInsteadOfPrompting: false,
       parentTaskId: null,
       favorite: false,
+      protected: false,
       sortOrder: 0,
       totalTokens: 0,
       totalCostUsd: 0,

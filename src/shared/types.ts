@@ -152,6 +152,8 @@ export interface Task {
   parentTaskId: string | null;
   /** Pinned to the top of the sidebar's task list, asleep or not. */
   favorite: boolean;
+  /** Agents can't archive or delete it (dashctl); a person can, after a confirm. */
+  protected: boolean;
   sortOrder: number;
   totalTokens: number;
   totalCostUsd: number;
@@ -194,6 +196,8 @@ export type CreateTaskOptions = {
   /** The task's own env vars (Task.env); undefined → none. */
   env?: Record<string, string>;
   denyInsteadOfPrompting?: boolean;
+  /** Task.protected; undefined → not protected. */
+  protected?: boolean;
 } & (
   | { kind: 'worktree-new-branch'; baseRef: string; pushRemote: boolean }
   | { kind: 'worktree-existing'; branch: string; updateFromRemote?: boolean }
@@ -223,6 +227,9 @@ export type SetTaskLaunchOptionsInput = { taskId: string } & Partial<TaskLaunchO
 
 /** `task:setFavorite`: pin a task to the top of the sidebar's task list, or unpin it. */
 export type SetTaskFavoriteInput = { taskId: string; favorite: boolean };
+
+/** `task:setProtected`: keep agents from archiving or deleting a task, or let them again. */
+export type SetTaskProtectedInput = { taskId: string; protected: boolean };
 
 /**
  * The ways another Claude Code session's SendMessage can reach a task's live
