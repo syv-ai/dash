@@ -78,13 +78,12 @@ export function registerTaskIpc(): void {
     }
   });
 
-  // Read per ask: a settings file can change while Dash runs.
-  ipcMain.handle('task:bypassAvailability', async (_event, taskId: string) => {
+  // Keyed by folder, so a task not made yet (the New task dialog) asks for its
+  // project's. Read per ask: a settings file can change while Dash runs.
+  ipcMain.handle('claude:bypassAvailability', async (_event, cwd: string) => {
     try {
-      parseArgs('task:bypassAvailability', z.string(), taskId);
-      const task = DatabaseService.getTask(taskId);
-      if (!task) throw new Error(`Task not found: ${taskId}`);
-      return { success: true, data: await readBypassAvailability(task.path) };
+      parseArgs('claude:bypassAvailability', z.string().min(1), cwd);
+      return { success: true, data: await readBypassAvailability(cwd) };
     } catch (error) {
       return errorResponse(error);
     }

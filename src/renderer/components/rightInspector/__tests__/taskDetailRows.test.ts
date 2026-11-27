@@ -118,9 +118,11 @@ describe('taskDetailSections', () => {
     expect(labels(s.usage)).toEqual(['Tokens']);
   });
 
-  it('prefers the live model, keeping the configured one in the tooltip', () => {
+  it('prefers the live model, naming the configured one on hover when they differ', () => {
     const live = taskDetailSections(input({ liveModel: 'Opus 5.5' })).session[0]!;
-    expect(live).toMatchObject({ value: 'Opus 5.5', title: 'Configured: Opus' });
+    expect(live).toMatchObject({ value: 'Opus 5.5', title: undefined });
+    const switched = taskDetailSections(input({ liveModel: 'Sonnet 4.6' })).session[0]!;
+    expect(switched).toMatchObject({ value: 'Sonnet 4.6', title: 'Configured: Opus' });
     const configured = taskDetailSections(input({}, { model: 'default' })).session[0]!;
     expect(configured.value).toBe('Claude Code default');
   });

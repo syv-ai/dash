@@ -19,7 +19,7 @@ import { useProjects, selectTaskById } from '../../stores/projectsStore';
 import { sessionRegistry } from '../../terminal/SessionRegistry';
 import { copyText, revealLabel } from '../diffEditor/fileActions';
 import { showTaskMemory } from '../memory/showMemory';
-import { switchPermissionMode, useBypassAvailability } from './switchPermissionMode';
+import { changeSessionSetting, useBypassAvailability } from './changeSessionSetting';
 
 /** What the favourite toggle says. */
 const favoriteLabel = (favorite: boolean) =>
@@ -86,7 +86,7 @@ export function TaskMenuItems({
   const setFavorite = useProjects((s) => s.setFavorite);
   // Read as the menu opens. While unknown, or when a setting turns it off,
   // the item stays out: Task settings shows it off with the reason.
-  const bypass = useBypassAvailability(taskId);
+  const bypass = useBypassAvailability(task?.path);
   const canSwitchToYolo =
     !!task && task.permissionMode !== 'bypassPermissions' && !!bypass?.available;
   return (
@@ -128,7 +128,11 @@ export function TaskMenuItems({
         Task settings
       </Item>
       {canSwitchToYolo && (
-        <Item onSelect={() => void switchPermissionMode(task, 'bypassPermissions')}>
+        <Item
+          onSelect={() =>
+            void changeSessionSetting(task, { setting: 'permissionMode', to: 'bypassPermissions' })
+          }
+        >
           <Flame size={13} strokeWidth={1.8} />
           Switch to Yolo…
         </Item>

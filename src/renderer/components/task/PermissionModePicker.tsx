@@ -7,14 +7,11 @@ import {
 } from '../../../shared/types';
 import { Field, SettingRow } from '../ui/Field';
 import { Select, type SelectOption } from '../ui/Select';
-import { bypassUnavailableReason } from './permissionSwitch';
+import { bypassUnavailableReason, MODE_LABELS } from './sessionSettingChange';
 
-const OPTIONS: SelectOption<PermissionMode>[] = [
-  { value: 'default', label: 'Default' },
-  { value: 'acceptEdits', label: 'Accept edits' },
-  { value: 'auto', label: 'Auto' },
-  { value: 'bypassPermissions', label: 'Yolo' },
-];
+const OPTIONS: SelectOption<PermissionMode>[] = (
+  ['default', 'acceptEdits', 'auto', 'bypassPermissions'] as const
+).map((value) => ({ value, label: MODE_LABELS[value] }));
 
 const DESCRIPTIONS: Record<PermissionMode, string> = {
   default: 'Prompts for every tool use',
@@ -34,7 +31,7 @@ function ModeIcon({ mode }: { mode: PermissionMode }) {
 export function PermissionModePicker({
   value,
   onChange,
-  /** A short line kept in view (e.g. "Applies on next start"). */
+  /** A short line kept in view (e.g. the mode the session is in now). */
   helperText,
   layout = 'field',
   width = 'md',

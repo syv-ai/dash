@@ -68,7 +68,7 @@ import { useGit } from './stores/gitStore';
 import { useEditors } from './stores/editorsStore';
 import { mayCloseEditor } from './components/diffEditor/closeGuard';
 import { ConfirmHost } from './components/ui/ConfirmHost';
-import { switchPermissionMode } from './components/task/switchPermissionMode';
+import { changeSessionSetting } from './components/task/changeSessionSetting';
 import { ClaudeUpdateHost } from './components/claudeUpdate/ClaudeUpdateHost';
 import { useRuntime } from './stores/runtimeStore';
 import { useAppBootstrap } from './hooks/useAppBootstrap';
@@ -1772,28 +1772,20 @@ export function App() {
       {taskSettingsTarget && (
         <TaskSettingsModal
           task={taskSettingsTarget}
-          hasActiveSession={!!taskActivity[taskSettingsTarget.id]?.state}
+          liveModel={headerModelName(
+            statusLineData[taskSettingsTarget.id]?.model,
+            taskSettingsTarget.model,
+          )}
           onClose={() => setTaskSettingsTarget(null)}
           onRename={(id, newName) => {
             if (!taskSettingsTarget || taskSettingsTarget.id !== id) return;
             void persistTaskUpdate(taskSettingsTarget, { name: newName });
           }}
-          onPermissionModeChange={(id, mode) => {
-            if (!taskSettingsTarget || taskSettingsTarget.id !== id) return;
-            void switchPermissionMode(taskSettingsTarget, mode, persistTaskUpdate);
-          }}
-          onModelChange={(id, model) => {
-            if (!taskSettingsTarget || taskSettingsTarget.id !== id) return;
-            void persistTaskUpdate(taskSettingsTarget, { model });
-          }}
-          onDashAccessChange={(id, enabled, restart) => {
-            if (taskSettingsTarget?.id !== id) return;
-            void useProjects
-              .getState()
-              .setDashAccess(taskSettingsTarget, enabled, restart)
-              .then((updated) => {
-                if (updated) setTaskSettingsTarget((prev) => (prev?.id === id ? updated : prev));
-              });
+          onSessionSettingChange={(change) => {
+            const id = taskSettingsTarget.id;
+            void changeSessionSetting(taskSettingsTarget, change).then((updated) => {
+              if (updated) setTaskSettingsTarget((prev) => (prev?.id === id ? updated : prev));
+            });
           }}
         />
       )}

@@ -619,40 +619,21 @@ describe('projectsStore setDashAccess', () => {
   });
   afterEach(() => resetWindow());
 
-  async function registry() {
-    const { sessionRegistry } = await import('../../terminal/SessionRegistry');
-    return sessionRegistry as unknown as { restartAgent: ReturnType<typeof vi.fn> };
-  }
-
   it('sets the flag in main and returns the updated task, leaving the reload to the push', async () => {
     const useProjects = await freshStore();
     const updated = task('t1', 'p1', { dashAccess: true });
     api.setTaskDashAccess.mockResolvedValue({ success: true, data: updated });
-    const result = await useProjects.getState().setDashAccess(task('t1', 'p1'), true, false);
+    const result = await useProjects.getState().setDashAccess(task('t1', 'p1'), true);
     expect(api.setTaskDashAccess).toHaveBeenCalledWith({ taskId: 't1', enabled: true });
     expect(result).toEqual(updated);
     expect(api.getTasks).not.toHaveBeenCalled();
   });
 
-  it('restarts the session only when it is running', async () => {
+  it('toasts when main refuses', async () => {
     const useProjects = await freshStore();
-    const reg = await registry();
-    reg.restartAgent.mockClear();
-    api.setTaskDashAccess.mockResolvedValue({ success: true, data: task('t1', 'p1') });
-    await useProjects.getState().setDashAccess(task('t1', 'p1'), false, false);
-    expect(reg.restartAgent).not.toHaveBeenCalled();
-    await useProjects.getState().setDashAccess(task('t1', 'p1'), true, true);
-    expect(reg.restartAgent).toHaveBeenCalledWith('t1');
-  });
-
-  it('toasts and skips the restart when main refuses', async () => {
-    const useProjects = await freshStore();
-    const reg = await registry();
-    reg.restartAgent.mockClear();
     api.setTaskDashAccess.mockResolvedValue({ success: false, error: 'nope' });
-    const result = await useProjects.getState().setDashAccess(task('t1', 'p1'), true, true);
+    const result = await useProjects.getState().setDashAccess(task('t1', 'p1'), true);
     expect(result).toBeNull();
-    expect(reg.restartAgent).not.toHaveBeenCalled();
     const { toast } = await import('../../components/ui/toast');
     expect(toast.error).toHaveBeenCalledWith('nope');
   });

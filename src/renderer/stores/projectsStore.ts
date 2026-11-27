@@ -69,9 +69,9 @@ export interface ProjectsActions {
   archiveProject: (id: string) => Promise<void>;
   restoreProject: (id: string) => Promise<void>;
   createTask: (options: CreateTaskOptions, projectId?: string) => Promise<boolean>;
-  /** Turn a task's Dash access on or off. A running session restarts so its
-   *  settings file gains or drops dashctl; returns the updated task. */
-  setDashAccess: (taskItem: Task, enabled: boolean, running: boolean) => Promise<Task | null>;
+  /** Turn a task's Dash access on or off; returns the updated task. A session
+   *  picks it up when it restarts (changeSessionSetting does that). */
+  setDashAccess: (taskItem: Task, enabled: boolean) => Promise<Task | null>;
   /** Pin a task to the top of the task list, or unpin it. Shown at once;
    *  put back (with a toast) if main refuses. */
   setFavorite: (taskItem: Task, favorite: boolean) => Promise<void>;
@@ -391,17 +391,11 @@ export const useProjects = create<ProjectsStore>((set, get) => ({
       set({ isCreatingTask: false });
     }
   },
-  setDashAccess: async (taskItem, enabled, running) => {
+  setDashAccess: async (taskItem, enabled) => {
     const resp = await window.electronAPI.setTaskDashAccess({ taskId: taskItem.id, enabled });
     if (!resp.success || !resp.data) {
       toast.error(resp.error || 'Failed to change Dash access');
       return null;
-    }
-    // Not awaited: the switch shows the new value while the session restarts.
-    if (running) {
-      void sessionRegistry.restartAgent(taskItem.id).catch((err: unknown) => {
-        toast.error(`Failed to restart the session: ${String(err)}`);
-      });
     }
     return resp.data;
   },

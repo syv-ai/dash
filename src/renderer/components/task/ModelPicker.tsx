@@ -3,14 +3,11 @@ import { Sparkles } from 'lucide-react';
 import type { TaskModel } from '../../../shared/types';
 import { Field, SettingRow } from '../ui/Field';
 import { Select, type SelectOption } from '../ui/Select';
+import { MODEL_LABELS } from './sessionSettingChange';
 
-const OPTIONS: SelectOption<TaskModel>[] = [
-  { value: 'default', label: 'Default' },
-  { value: 'opus', label: 'Opus' },
-  { value: 'sonnet', label: 'Sonnet' },
-  { value: 'haiku', label: 'Haiku' },
-  { value: 'fable', label: 'Fable' },
-];
+const OPTIONS: SelectOption<TaskModel>[] = (
+  Object.entries(MODEL_LABELS) as [TaskModel, string][]
+).map(([value, label]) => ({ value, label }));
 
 const DESCRIPTIONS: Record<TaskModel, string> = {
   default: 'Uses your Claude Code model setting (no --model)',
@@ -25,7 +22,7 @@ const STORAGE_KEY = 'taskModel';
 export function ModelPicker({
   value,
   onChange,
-  /** A short line kept in view (e.g. "Applies on next start"). */
+  /** A short line kept in view (e.g. the model the session is on now). */
   helperText,
   layout = 'field',
   width = 'md',

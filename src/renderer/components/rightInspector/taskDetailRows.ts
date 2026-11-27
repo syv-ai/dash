@@ -1,5 +1,6 @@
 import type { ActivityState, SessionPermissionMode, Task, TaskModel } from '../../../shared/types';
 import { formatTimeAgo } from '../../../shared/relativeTime';
+import { liveModelDiffers } from '../task/sessionSettingChange';
 import { tildePath } from '../../lib/displayPath';
 import { formatCost, formatTokensPrecise } from '../../utils/format';
 
@@ -149,7 +150,9 @@ export function taskDetailSections(input: TaskDetailsInput): TaskDetailSections 
       {
         label: 'Model',
         value: input.liveModel ?? MODEL_LABELS[task.model],
-        title: input.liveModel ? `Configured: ${MODEL_LABELS[task.model]}` : undefined,
+        title: liveModelDiffers(task.model, input.liveModel)
+          ? `Configured: ${MODEL_LABELS[task.model]}`
+          : undefined,
       },
       {
         label: 'Permissions',

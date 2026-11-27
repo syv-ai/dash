@@ -1,61 +1,44 @@
 import React, { useId, useState } from 'react';
-import type { PermissionMode, TaskModel, Task } from '../../../shared/types';
+import type { Task } from '../../../shared/types';
 import { Dialog, DialogBody, DialogHeader } from '../ui/Dialog';
 import { FormSection, SettingRow } from '../ui/Field';
 import { Input } from '../ui/Input';
 import { PermissionModePicker } from './PermissionModePicker';
 import { ModelPicker } from './ModelPicker';
 import { SwitchField } from '../ui/SwitchField';
-import { ConfirmModal } from '../ui/ConfirmModal';
 import { useControlInfo } from '../../hooks/useControlInfo';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useTaskBranch } from '../../stores/gitStore';
-import { useBypassAvailability } from './switchPermissionMode';
-import { sessionModeNote } from './permissionSwitch';
+import { useBypassAvailability } from './changeSessionSetting';
+import {
+  sessionModeNote,
+  sessionModelNote,
+  type SessionSettingChange,
+} from './sessionSettingChange';
 
 interface TaskSettingsModalProps {
   task: Task;
-  /** True when a Claude PTY is currently attached to the task — drives the
-   *  "applies on next start" hint under the model picker. */
-  hasActiveSession: boolean;
+  /** The model the session's status line reports, if it has. */
+  liveModel: string | null;
   onClose: () => void;
   onRename: (id: string, name: string) => void;
-  /** Confirms and restarts a session itself (switchPermissionMode). */
-  onPermissionModeChange: (id: string, mode: PermissionMode) => void;
-  onModelChange: (id: string, model: TaskModel) => void;
-  /** `restart` is true when the task has a session to restart (running or a
-   *  parked job): its spawn args are fixed at dispatch, so the change needs a new one. */
-  onDashAccessChange: (id: string, enabled: boolean, restart: boolean) => void;
+  /** Confirms and restarts a session itself (changeSessionSetting). */
+  onSessionSettingChange: (change: SessionSettingChange) => void;
 }
-
-const NEXT_START = 'Applies when the session next starts.';
 
 export function TaskSettingsModal({
   task,
-  hasActiveSession,
+  liveModel,
   onClose,
   onRename,
-  onPermissionModeChange,
-  onModelChange,
-  onDashAccessChange,
+  onSessionSettingChange,
 }: TaskSettingsModalProps) {
   const [name, setName] = useState(task.name);
   const nameId = useId();
   const branch = useTaskBranch(task);
   const controlSupported = useControlInfo()?.supported ?? false;
-  // A live session, or a parked job: either needs a restart, which rewrites its
-  // settings file, for a Dash access change. 'stopped' with no job has nothing to restart.
-  const activityState = useRuntime((s) => s.taskActivity[task.id]?.state);
   const sessionMode = useRuntime((s) => s.taskActivity[task.id]?.permissionMode);
-  const bypass = useBypassAvailability(task.id);
-  const hasSession = (!!activityState && activityState !== 'stopped') || !!task.jobId;
-  // The value waiting on the restart confirmation, if any.
-  const [pendingDashAccess, setPendingDashAccess] = useState<boolean | null>(null);
-
-  function handleDashAccessToggle(enabled: boolean) {
-    if (hasSession) setPendingDashAccess(enabled);
-    else onDashAccessChange(task.id, enabled, false);
-  }
+  const bypass = useBypassAvailability(task.path);
 
   function handleSaveName() {
     const trimmed = name.trim();
@@ -88,39 +71,26 @@ export function TaskSettingsModal({
           <PermissionModePicker
             layout="row"
             value={task.permissionMode}
-            onChange={(mode) => onPermissionModeChange(task.id, mode)}
+            onChange={(to) => onSessionSettingChange({ setting: 'permissionMode', to })}
             helperText={sessionModeNote(task.permissionMode, sessionMode)}
             bypass={bypass}
           />
           <ModelPicker
             layout="row"
             value={task.model}
-            onChange={(model) => onModelChange(task.id, model)}
-            helperText={hasActiveSession ? NEXT_START : undefined}
+            onChange={(to) => onSessionSettingChange({ setting: 'model', to })}
+            helperText={sessionModelNote(task.model, liveModel)}
           />
           {controlSupported && (
             <SwitchField
               label="Dash access"
               hint="The agent can use Dash: its ports and services, tasks of its own, and PR review drafts. Adds a dash skill to the checkout (.claude/skills/dash, kept out of git) that explains dashctl."
-              helperText={hasSession ? 'Changing it restarts the session.' : undefined}
               checked={task.dashAccess}
-              onCheckedChange={handleDashAccessToggle}
+              onCheckedChange={(to) => onSessionSettingChange({ setting: 'dashAccess', to })}
             />
           )}
         </FormSection>
       </DialogBody>
-
-      {pendingDashAccess !== null && (
-        <ConfirmModal
-          message="Changing Dash access restarts this task's session."
-          confirmLabel="Restart session"
-          onConfirm={() => {
-            onDashAccessChange(task.id, pendingDashAccess, true);
-            setPendingDashAccess(null);
-          }}
-          onCancel={() => setPendingDashAccess(null)}
-        />
-      )}
     </Dialog>
   );
 }
