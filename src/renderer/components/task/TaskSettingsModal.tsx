@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import type { PermissionMode, TaskModel, Task } from '../../../shared/types';
 import { Dialog, DialogBody, DialogHeader } from '../ui/Dialog';
-import { Field } from '../ui/Field';
+import { FormSection, SettingRow } from '../ui/Field';
 import { Input } from '../ui/Input';
 import { PermissionModePicker } from './PermissionModePicker';
 import { ModelPicker } from './ModelPicker';
@@ -37,6 +37,7 @@ export function TaskSettingsModal({
   onDashAccessChange,
 }: TaskSettingsModalProps) {
   const [name, setName] = useState(task.name);
+  const nameId = useId();
   const branch = useTaskBranch(task);
   const controlSupported = useControlInfo()?.supported ?? false;
   // A live session, or a parked job: either needs a restart, which rewrites its
@@ -62,39 +63,45 @@ export function TaskSettingsModal({
     <Dialog size="md" onClose={onClose}>
       <DialogHeader title="Task settings" description={branch} />
       <DialogBody>
-        <Field label="Name">
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onBlur={handleSaveName}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleSaveName();
-            }}
+        <FormSection>
+          <SettingRow
+            label="Name"
+            htmlFor={nameId}
+            control={
+              <Input
+                id={nameId}
+                className="w-48"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onBlur={handleSaveName}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveName();
+                }}
+              />
+            }
           />
-        </Field>
-
-        <div className="grid grid-cols-2 gap-3">
           <PermissionModePicker
+            layout="row"
             value={task.permissionMode}
             onChange={(mode) => onPermissionModeChange(task.id, mode)}
             helperText={hasActiveSession ? NEXT_START : undefined}
           />
           <ModelPicker
+            layout="row"
             value={task.model}
             onChange={(model) => onModelChange(task.id, model)}
             helperText={hasActiveSession ? NEXT_START : undefined}
           />
-        </div>
-
-        {controlSupported && (
-          <SwitchField
-            label="Dash access"
-            hint="The agent can use Dash: its ports and services, tasks of its own, and PR review drafts. Adds a dash skill to the checkout (.claude/skills/dash, kept out of git) that explains dashctl."
-            helperText={hasSession ? 'Changing it restarts the session.' : undefined}
-            checked={task.dashAccess}
-            onCheckedChange={handleDashAccessToggle}
-          />
-        )}
+          {controlSupported && (
+            <SwitchField
+              label="Dash access"
+              hint="The agent can use Dash: its ports and services, tasks of its own, and PR review drafts. Adds a dash skill to the checkout (.claude/skills/dash, kept out of git) that explains dashctl."
+              helperText={hasSession ? 'Changing it restarts the session.' : undefined}
+              checked={task.dashAccess}
+              onCheckedChange={handleDashAccessToggle}
+            />
+          )}
+        </FormSection>
       </DialogBody>
 
       {pendingDashAccess !== null && (

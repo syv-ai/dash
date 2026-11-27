@@ -1,7 +1,7 @@
 import React from 'react';
 import { Shield, FilePen, Zap, Flame } from 'lucide-react';
 import { isPermissionMode, type PermissionMode } from '../../../shared/types';
-import { Field } from '../ui/Field';
+import { Field, SettingRow } from '../ui/Field';
 import { Select, type SelectOption } from '../ui/Select';
 
 const OPTIONS: SelectOption<PermissionMode>[] = [
@@ -29,36 +29,40 @@ function ModeIcon({ mode }: { mode: PermissionMode }) {
 export function PermissionModePicker({
   value,
   onChange,
-  /** Optional extra line shown below the description (e.g. "Applies on next start"). */
+  /** A short line kept in view (e.g. "Applies on next start"). */
   helperText,
+  layout = 'field',
 }: {
   value: PermissionMode;
   onChange: (mode: PermissionMode) => void;
   helperText?: string;
+  /** `field`: label above (a form); `row`: one settings row, select at the end. */
+  layout?: 'field' | 'row';
 }) {
-  return (
-    <Field
+  const select = (
+    <Select<PermissionMode>
+      aria-label="Permission mode"
+      value={value}
+      onValueChange={onChange}
+      options={OPTIONS}
+      renderOption={(opt) => (
+        <span className="inline-flex items-center gap-2 align-middle">
+          <ModeIcon mode={opt.value} />
+          <span>{opt.label}</span>
+        </span>
+      )}
+    />
+  );
+  return layout === 'row' ? (
+    <SettingRow
       label="Permission mode"
-      as="div"
-      hint={
-        <>
-          {DESCRIPTIONS[value]}
-          {helperText && <span className="block">{helperText}</span>}
-        </>
-      }
-    >
-      <Select<PermissionMode>
-        aria-label="Permission mode"
-        value={value}
-        onValueChange={onChange}
-        options={OPTIONS}
-        renderOption={(opt) => (
-          <span className="inline-flex items-center gap-2 align-middle">
-            <ModeIcon mode={opt.value} />
-            <span>{opt.label}</span>
-          </span>
-        )}
-      />
+      hint={DESCRIPTIONS[value]}
+      note={helperText}
+      control={<div className="w-48">{select}</div>}
+    />
+  ) : (
+    <Field label="Permission mode" as="div" hint={DESCRIPTIONS[value]} note={helperText}>
+      {select}
     </Field>
   );
 }
