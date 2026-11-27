@@ -673,6 +673,7 @@ export function RightInspector({
     git: ws.git,
     paths: ws.data.repoPaths,
     dirs: ws.data.repoDirs,
+    ignored: ws.data.repoIgnored,
     changedFiles: ws.data.changedFiles,
     loading: ws.data.repoPathsLoading || ws.data.changedFilesLoading,
     badges: ws.badgeCounts,

@@ -428,8 +428,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     cwd: string;
     source: { kind: 'working' } | { kind: 'commit'; hash: string };
   }) => ipcRenderer.invoke('editor:listRepoFiles', args),
-  editorListIgnoredFiles: (args: { cwd: string }) =>
-    ipcRenderer.invoke('editor:listIgnoredFiles', args),
   editorListDir: (args: { cwd: string; dirPath: string }) =>
     ipcRenderer.invoke('editor:listDir', args),
   editorWatchTree: (args: { cwd: string }) => ipcRenderer.invoke('editor:watchTree', args),

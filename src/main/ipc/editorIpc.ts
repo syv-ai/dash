@@ -279,6 +279,16 @@ export async function listWorkingRepoFiles(cwd: string): Promise<RepoListing> {
   return { files: Array.from(files).sort(), dirs: loose.dirs.sort() };
 }
 
+/** The working tree's files and, beside them, its gitignored ones, read in
+ *  parallel. */
+async function listWorkingTree(cwd: string): Promise<RepoListing> {
+  const [listing, ignored] = await Promise.all([
+    listWorkingRepoFiles(cwd),
+    listIgnoredRepoFiles(cwd),
+  ]);
+  return { ...listing, ignored };
+}
+
 /**
  * Gitignored paths in the working tree. `--directory` collapses a fully-ignored
  * directory (e.g. `node_modules/`, `dist/`) to one entry instead of listing every
@@ -814,8 +824,9 @@ export function registerEditorIpc(): void {
 
   // ── editor:listRepoFiles ──────────────────────────────────────
   // Every file in the repo for the given source (used to render a full repo
-  // tree with diff indicators overlaid). Working: tracked + untracked
-  // (excluding gitignored). Commit: every file at that revision.
+  // tree with diff indicators overlaid). Working: tracked + untracked, with
+  // the gitignored ones beside them (read together, so the tree shows them
+  // at once). Commit: every file at that revision.
   ipcMain.handle(
     'editor:listRepoFiles',
     async (
@@ -830,24 +841,9 @@ export function registerEditorIpc(): void {
         );
         const listing =
           args.source.kind === 'working'
-            ? await listWorkingRepoFiles(args.cwd)
+            ? await listWorkingTree(args.cwd)
             : await listCommitRepoFiles(args.cwd, args.source.hash);
         return { success: true, data: listing };
-      } catch (err) {
-        return errorResponse(err);
-      }
-    },
-  );
-
-  // ── editor:listIgnoredFiles ───────────────────────────────────
-  // Gitignored paths in the working tree, fully-ignored directories collapsed
-  // to a single entry (listed lazily through editor:listDir).
-  ipcMain.handle(
-    'editor:listIgnoredFiles',
-    async (_event, args: { cwd: string }): Promise<IpcResponse<RepoListing>> => {
-      try {
-        parseArgs('editor:listIgnoredFiles', z.looseObject({ cwd: z.string() }), args);
-        return { success: true, data: await listIgnoredRepoFiles(args.cwd) };
       } catch (err) {
         return errorResponse(err);
       }

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { IconButton } from '../ui/IconButton';
 import { LineStats } from '../ui/LineStats';
@@ -39,6 +39,9 @@ interface RepoTreeProps {
   /** Directories the listing names as one entry (symlinked ones): shown as
    *  folders, listed when opened. */
   repoDirs?: readonly string[];
+  /** The working tree's gitignored files and folders: listed quietly with
+   *  all files. */
+  repoIgnored?: RepoListing;
   /** The paths that have a diff in this view, with status and line stats. */
   changedFiles: readonly FileChange[];
   /** List only the changed files (and their folders), not the whole repo. */
@@ -81,6 +84,7 @@ export function RepoTree({
   view,
   allPaths,
   repoDirs = NO_DIRS,
+  repoIgnored = NO_LISTING,
   changedFiles,
   changedOnly: changedOnlyProp,
   filesLoading,
@@ -102,25 +106,12 @@ export function RepoTree({
   // local-only config or scratch file can be reached. Ignored files are a
   // working-tree concept (a commit's tree can't contain them); git collapses
   // fully ignored folders to one entry (quiet, read when opened), which keeps
-  // `node_modules/` from flooding the tree.
+  // `node_modules/` from flooding the tree. They come with the repo's paths,
+  // so they show (quiet) in the same frame as the rest.
   const showIgnored = git && !changedOnly && view.kind === 'working';
-  // The disk changed under the tree: its ignored files and open lazy folders
-  // read again.
+  const ignored = showIgnored ? repoIgnored : NO_LISTING;
+  // The disk changed under the tree: its open lazy folders read again.
   const treeVersion = useTreeVersion(cwd, !changedOnly && view.kind === 'working');
-  const [ignored, setIgnored] = useState<RepoListing>(NO_LISTING);
-  useEffect(() => {
-    if (!showIgnored) {
-      setIgnored(NO_LISTING);
-      return;
-    }
-    let cancelled = false;
-    void window.electronAPI.editorListIgnoredFiles({ cwd }).then((resp) => {
-      if (!cancelled) setIgnored(resp.success && resp.data ? resp.data : NO_LISTING);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [showIgnored, cwd, treeVersion]);
 
   const tree = useMemo(
     () =>

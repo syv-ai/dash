@@ -16,6 +16,9 @@ export interface EditorViewData {
   /** Directories git lists as one entry (symlinked ones): the tree lists
    *  them lazily. */
   repoDirs: string[];
+  /** The working tree's gitignored files and folders, read with its paths
+   *  (none for a commit's tree). */
+  repoIgnored: RepoListing;
   /** The changed files and repo paths answer the current view. */
   settled: boolean;
   commits: CommitSummary[];
@@ -99,6 +102,7 @@ export function useEditorViewData(
       repoPaths: repoListing.data.files,
       repoPathsLoading: repoListing.loading,
       repoDirs: repoListing.data.dirs,
+      repoIgnored: repoListing.data.ignored ?? NO_LISTING,
       settled,
       commits: commits.data,
       commitsLoading: commits.loading,

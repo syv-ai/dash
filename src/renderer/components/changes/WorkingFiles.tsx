@@ -27,7 +27,7 @@ import {
 } from './changeSections';
 import type { CommitRun } from './useCommitRun';
 import type { CommitRunState } from './commitRunReducer';
-import type { FileChange } from '../../../shared/types';
+import type { FileChange, RepoListing } from '../../../shared/types';
 import { useGit } from '../../stores/gitStore';
 
 /** The repo at the editor's view, for all files. */
@@ -36,6 +36,8 @@ export interface RepoView {
   git: boolean;
   paths: readonly string[];
   dirs: readonly string[];
+  /** Its gitignored files and folders (the working tree's). */
+  ignored: RepoListing;
   /** The view's changes (the working tree's, or a commit's). */
   changedFiles: readonly FileChange[];
   loading: boolean;
@@ -280,6 +282,7 @@ function AllFiles({
         view={view}
         allPaths={repo.paths}
         repoDirs={repo.dirs}
+        repoIgnored={repo.ignored}
         changedFiles={working ? merged : repo.changedFiles}
         changedOnly={false}
         filesLoading={repo.loading}

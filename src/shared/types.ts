@@ -923,6 +923,9 @@ export type WorkingRef = 'HEAD' | 'index';
 export interface RepoListing {
   files: string[];
   dirs: string[];
+  /** The working tree's: its gitignored files and folders, read with it so a
+   *  tree shows them in the same frame as the rest. */
+  ignored?: RepoListing;
 }
 
 /** One entry of a directory listed for the tree; `dir` follows symlinks. */
