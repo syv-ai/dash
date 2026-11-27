@@ -21,13 +21,15 @@ import * as React from 'react';
  * Travel back the other way is never held: it steps back at the threshold.
  *
  * A gesture has one owner, settled by its first moving event and kept until
- * it goes quiet: a vertical start is a scroll (it never switches, however it
- * drifts); a sideways start over something that can still scroll that way
- * (a wide file, a table) is that scroller's, to its edge and no further (the
- * momentum hitting the edge doesn't switch); any other sideways start is the
- * tabs'. So a fresh sideways gesture over a scroller already at its edge
- * switches, as a browser's history swipe does. Pure; the hook feeds it the
- * surface's wheel events.
+ * it goes quiet or a new swipe starts in it (told by the shape above), which
+ * is settled afresh the same way: a vertical start is a scroll (it never
+ * switches, however it drifts); a sideways start over something that can
+ * still scroll that way (a wide file, a table) is that scroller's, to its
+ * edge and no further (the momentum hitting the edge doesn't switch); any
+ * other sideways start is the tabs'. So a fresh sideways gesture over a
+ * scroller already at its edge switches, as a browser's history swipe does,
+ * and one over a scroller with room scrolls it, even straight after a swipe
+ * that switched. Pure; the hook feeds it the surface's wheel events.
  */
 
 /** The sideways travel (px) a swipe needs before it steps. */
@@ -89,7 +91,8 @@ export interface WheelInput {
   /** Its time, ms. */
   t: number;
   /** Whether a scroller under the pointer, inside the surface, can still
-   *  move along `dx`. Asked only of a gesture's first sideways event. */
+   *  move along `dx`. Asked only of the first sideways event of a gesture,
+   *  or of a new swipe within one. */
   nested?: () => boolean;
 }
 
@@ -130,9 +133,8 @@ export function wheelTabStep(
   if (dx === 0 && dy === 0) {
     return { state: { ...was, at: t }, step: 0, take: was.owner === 'tabs' };
   }
-  const owner: WheelOwner =
-    was.owner ?? (!isSideways(dx, dy) ? 'vertical' : nested?.() ? 'scroller' : 'tabs');
-  if (owner !== 'tabs') return { state: { ...WHEEL_IDLE, owner, at: t }, step: 0, take: false };
+  const owner = was.owner ?? ownerOf(dx, dy, nested);
+  if (owner !== 'tabs') return handOver(owner, t);
   // Not sideways: it adds no travel.
   if (!isSideways(dx, dy))
     return { state: { ...was, owner, travel: 0, at: t }, step: 0, take: true };
@@ -145,6 +147,9 @@ export function wheelTabStep(
     // The tail of the swipe that stepped: held.
     if (!next.fresh)
       return { state: { ...was, owner, coast, travel: 0, at: t }, step: 0, take: true };
+    // A new swipe: settled afresh, as a gesture's first event is.
+    const fresh = ownerOf(dx, dy, nested);
+    if (fresh !== 'tabs') return handOver(fresh, t);
     stepped = 0;
   }
   // A turn of direction starts the travel over.
@@ -160,6 +165,17 @@ export function wheelTabStep(
     take: true,
   };
 }
+
+/** Whose a gesture (or a new swipe within one) is, by its first event. */
+const ownerOf = (dx: number, dy: number, nested: WheelInput['nested']): WheelOwner =>
+  !isSideways(dx, dy) ? 'vertical' : nested?.() ? 'scroller' : 'tabs';
+
+/** Leaves the gesture to `owner`, which isn't the tabs: nothing is taken. */
+const handOver = (owner: WheelOwner, t: number) => ({
+  state: { ...WHEEL_IDLE, owner, at: t },
+  step: 0 as const,
+  take: false,
+});
 
 /** Whether a wheel event is sideways-dominant (one the strip may take). */
 export const isSideways = (dx: number, dy: number) => Math.abs(dx) > Math.abs(dy);

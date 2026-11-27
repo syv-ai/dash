@@ -154,6 +154,29 @@ describe('wheelTabStep on a trackpad trace', () => {
     expect(run([...first, ...swipe(after(first), -1)]).steps).toEqual([1, -1]);
   });
 
+  it('leaves a swipe that starts during the tail to a nested scroller that can move that way', () => {
+    // The tabs owned the first swipe (nothing under it could scroll); the
+    // next one starts over a wide file before the momentum ends.
+    const first = cut(swipe(0), 300);
+    const nested = () => true;
+    const second = swipe(after(first)).map((e) => ({ ...e, nested }));
+    const { steps, taken } = run([...first, ...second]);
+    expect(steps).toEqual([1]);
+    // Taken until the new swipe is told from the tail, then the scroller's.
+    const handed = taken.lastIndexOf(true);
+    expect(handed).toBeLessThan(first.length + FINGERS.length);
+    expect(taken.slice(handed + 1).length).toBeGreaterThan(0);
+  });
+
+  it('asks the nested scroller again when a new swipe starts during the tail', () => {
+    let asked = 0;
+    const nested = () => (asked++, false);
+    const first = cut(swipe(0), 300).map((e) => ({ ...e, nested }));
+    const second = swipe(after(first)).map((e) => ({ ...e, nested }));
+    expect(run([...first, ...second]).steps).toEqual([1, 1]);
+    expect(asked).toBe(2);
+  });
+
   it("doesn't step twice for fingers still speeding up after the step", () => {
     const fast = [2, 4, 8, 16, 32, 64, 100, 60, 30].map((dx, i) => ({ dx, dy: 0, t: i * 12 }));
     expect(run(fast).steps).toEqual([1]);
