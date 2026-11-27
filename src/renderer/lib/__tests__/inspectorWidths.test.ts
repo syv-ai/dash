@@ -101,6 +101,12 @@ describe('stored widths', () => {
   });
 });
 
+/** The list column's panel, open at `pct` (or folded to its rail). */
+const panelAt = (pct: number, collapsed = false) => ({
+  isCollapsed: () => collapsed,
+  getSize: () => ({ asPercentage: pct }),
+});
+
 describe('list column widths', () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -129,7 +135,7 @@ describe('list column widths', () => {
       getItem: (k: string) => store.get(k) ?? null,
       setItem: (k: string, v: string) => store.set(k, v),
     });
-    saveListWidth('review', 50);
+    saveListWidth('review', panelAt(50));
     saveInspectorWidth('narrow', 27);
     expect(JSON.parse(store.get('dash:inspector-widths')!)).toEqual({
       narrow: 27,
@@ -138,6 +144,18 @@ describe('list column widths', () => {
     });
     expect(loadListWidth('review')).toBe(50);
     expect(loadListWidth('normal')).toBe(30);
+  });
+
+  it('never stores the rail of a folded column as its width', () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => store.set(k, v),
+    });
+    saveListWidth('normal', panelAt(6.048, true));
+    expect(store.has('dash:inspector-widths')).toBe(false);
+    saveListWidth('normal', panelAt(33));
+    expect(loadListWidth('normal')).toBe(33);
   });
 });
 

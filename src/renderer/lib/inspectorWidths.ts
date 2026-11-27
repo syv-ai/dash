@@ -93,7 +93,17 @@ export function loadListWidth(mode: ListMode): number {
   return listWidthFrom(mode, readStored(), legacy);
 }
 
-export function saveListWidth(mode: ListMode, pct: number): void {
+/** The list column's panel as the store reads it (`PanelImperativeHandle`). */
+export interface ListPanel {
+  isCollapsed(): boolean;
+  getSize(): { asPercentage: number };
+}
+
+/** Remember the mode's list column width: the panel's, while it is open. A
+ *  folded column is at its rail, which is never a width to come back to. */
+export function saveListWidth(mode: ListMode, panel: ListPanel): void {
+  if (panel.isCollapsed()) return;
+  const pct = panel.getSize().asPercentage;
   if (!valid(pct)) return;
   writeStored(mode === 'review' ? { reviewList: pct } : { list: pct });
 }

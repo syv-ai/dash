@@ -826,10 +826,10 @@ export function RightInspector({
             orientation="horizontal"
             defaultLayout={split ? { list: listWidth, main: 100 - listWidth } : undefined}
             onLayoutChanged={(layout) => {
-              const list = layout.list;
-              if (!listDragged.current || list === undefined) return;
+              const panel = listPanelRef.current;
+              if (!listDragged.current || layout.list === undefined || !panel) return;
               listDragged.current = false;
-              saveListWidth(listMode, list);
+              saveListWidth(listMode, panel);
             }}
           >
             {/* Mounted only while split, ahead of "main", which keeps its place
