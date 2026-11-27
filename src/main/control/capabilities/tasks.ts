@@ -16,6 +16,7 @@ import type {
 } from '../../../shared/types';
 import { TASK_EFFORTS, type TaskEffort } from '../../../shared/effort';
 import { launchOptionsProblem } from '../../../shared/launchOptions';
+import { flagNoteText, validateExtraArgs } from '../../../shared/extraArgs';
 import { normalizeAddDirs } from '../../../shared/addDirs';
 import type { AgentDefinition } from '../../../shared/slashCommands';
 import { githubSlug } from '../../../shared/urls';
@@ -29,6 +30,7 @@ import {
   taskModelSchema,
 } from '../../ipc/schemas';
 import { ControlError, defineCapability, type Registry } from '../registry';
+import type { Caller } from '../callers';
 import { defaultBaseRef } from './projects';
 import {
   InboxWriteError,
@@ -201,10 +203,25 @@ const launchInputs = {
     ),
 };
 
-/** 400 with the reason when the launch options can't be saved. */
-function assertLaunchOptions(opts: { extraArgs?: string | null; addDirs?: string[] }): void {
+/**
+ * 400 with the reason when the launch options can't be saved. From a task
+ * caller, 403 for a risky flag too: like bypassPermissions (withoutBypass),
+ * one agent must not loosen another's checks; a person can, in Task settings.
+ */
+function assertLaunchOptions(
+  caller: Caller,
+  opts: { extraArgs?: string | null; addDirs?: string[] },
+): void {
   const problem = launchOptionsProblem(opts);
   if (problem) throw new ControlError(400, problem);
+  if (caller.kind !== 'task') return;
+  const risky = validateExtraArgs(opts.extraArgs).risky;
+  if (risky.length > 0) {
+    throw new ControlError(
+      403,
+      `a task can't give another task ${risky.map((r) => r.flag).join(', ')}: ${risky.map(flagNoteText).join(' ')} A person can set it in Task settings.`,
+    );
+  }
 }
 
 /** The one refusal for acting on an archived task (wake, open, restart, services). */
@@ -439,7 +456,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         if (!project) throw new ControlError(404, 'project not found');
         const defaults = deps.taskDefaults(project.path);
         const kind = input.kind ?? (project.isGitRepo ? 'new-branch' : 'in-place');
-        assertLaunchOptions({ extraArgs: input.extraArgs, addDirs: input.addDir });
+        assertLaunchOptions(ctx.caller, { extraArgs: input.extraArgs, addDirs: input.addDir });
         if (input.agent) {
           const known = (await deps.listAgents(project.path)).map((a) => a.name);
           if (!known.includes(input.agent)) {
@@ -996,7 +1013,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
       readOnly: false,
       target: { taskId: 'taskId' },
       allowSelf: false,
-      handler: async (_ctx, input) => {
+      handler: async (ctx, input) => {
         const task = taskOrThrow(input.taskId);
         assertNotArchived(task);
         const patch: Partial<TaskLaunchOptions> = {};
@@ -1004,7 +1021,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           patch.effort = input.effort === 'default' ? null : input.effort;
         if (input.addDir !== undefined) patch.addDirs = normalizeAddDirs(input.addDir);
         if (input.extraArgs !== undefined) patch.extraArgs = input.extraArgs.trim() || null;
-        assertLaunchOptions({ extraArgs: patch.extraArgs, addDirs: patch.addDirs });
+        assertLaunchOptions(ctx.caller, { extraArgs: patch.extraArgs, addDirs: patch.addDirs });
         if (Object.keys(patch).length === 0) {
           throw new ControlError(
             400,
@@ -1013,9 +1030,11 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         }
         deps.setLaunchOptions(task.id, patch);
         // Like Task settings: a session (live or parked) holds the old flags.
-        const restarted = task.jobId !== null;
-        if (restarted) await deps.restartSession(task.id);
-        return { task: view(taskOrThrow(task.id)), restarted };
+        const started = task.jobId !== null ? await deps.restartSession(task.id) : null;
+        return {
+          task: view(taskOrThrow(task.id)),
+          restarted: !!started && 'jobId' in started,
+        };
       },
     }),
   );

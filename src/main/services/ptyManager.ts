@@ -141,6 +141,10 @@ export class UntrustedWorkspaceError extends Error {
   }
 }
 
+/** Tasks whose next dispatch starts a new conversation: restarted with no
+ *  transcript to resume (restartTaskSession). Cleared by that dispatch. */
+const freshStarts = new Set<string>();
+
 /** Trust root per task whose last dispatch was refused as untrusted. */
 const untrustedRoots = new Map<string, string>();
 
@@ -351,7 +355,10 @@ async function ensureTaskSession(opts: {
       await supervisorService.remove(opts.jobId).catch(() => {});
     }
   }
-  if (!resumeSessionId) {
+  // After a restart that found no transcript to resume, start fresh: the
+  // newest transcript in the folder is another conversation (another task's,
+  // or the person's own in the main checkout).
+  if (!resumeSessionId && !freshStarts.has(opts.id)) {
     resumeSessionId = findLatestSessionId(opts.cwd, opts.previousPath);
   }
   const prompt = consumeInitialPrompt(opts.id);
@@ -414,6 +421,7 @@ async function ensureTaskSession(opts: {
   // The supervisor accepted the folder, so it is trusted now (trusted outside
   // Dash, or after the trust prompt).
   untrustedRoots.delete(opts.id);
+  freshStarts.delete(opts.id);
   DatabaseService.setTaskSession(opts.id, { jobId, sessionId: sessionId ?? resumeSessionId });
   // The first prompt starts a turn, but no hook has spoken yet: without this
   // the entry reads idle until the first one lands (tasks.wait would return at
@@ -860,6 +868,7 @@ export async function restartTaskSession(
   // fails the job ("source session … not found"): start it fresh instead.
   if (sessionId && !fs.existsSync(sessionTranscriptPath({ ...task, jobId: null, sessionId })!)) {
     sessionId = null;
+    freshStarts.add(taskId);
   }
   await supervisorService.stop(task.jobId).catch(() => {});
   await supervisorService.remove(task.jobId).catch(() => {});
@@ -1347,6 +1356,7 @@ export function __testReset(): void {
   }
   ptys.clear();
   untrustedRoots.clear();
+  freshStarts.clear();
   pendingInitialPrompts.clear();
   sessionStarts.clear();
   lastIsDark = true;

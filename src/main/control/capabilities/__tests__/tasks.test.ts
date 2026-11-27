@@ -944,6 +944,46 @@ describe('tasks.configure', () => {
     expect(result).toMatchObject({ restarted: false });
   });
 
+  it('refuses a task giving another risky flags, which a person may give it', async () => {
+    tasks.find((t) => t.id === 'child')!.jobId = 'job-c';
+    expect(
+      await refusalOf(
+        registry.call(asTask('me'), 'tasks.configure', {
+          taskId: 'child',
+          extraArgs: "--allowedTools 'Bash'",
+        }),
+      ),
+    ).toMatchObject({
+      status: 403,
+      message: expect.stringMatching(/^a task can't give another task --allowedTools/),
+    });
+    expect(
+      (
+        await refusalOf(
+          registry.call(asTask('me'), 'tasks.create', {
+            projectId: 'pA',
+            name: 'x',
+            extraArgs: '--mcp-config m.json',
+          }),
+        )
+      ).status,
+    ).toBe(403);
+    await registry.call(asTask('me'), 'tasks.configure', {
+      taskId: 'child',
+      extraArgs: '--chrome',
+    });
+    await registry.call(orch, 'tasks.configure', { taskId: 'child', extraArgs: '--tools Read' });
+    expect(deps.setLaunchOptions).toHaveBeenCalledTimes(2);
+  });
+
+  it('says it did not restart when the folder now needs trust', async () => {
+    tasks.find((t) => t.id === 'child')!.jobId = 'job-c';
+    deps.restartSession.mockResolvedValueOnce({ needsTrust: '/lib' });
+    expect(
+      await registry.call(orch, 'tasks.configure', { taskId: 'child', addDir: ['/lib'] }),
+    ).toMatchObject({ restarted: false });
+  });
+
   it('refuses blocked flags, an empty change, and a task configuring itself', async () => {
     expect(
       await refusalOf(

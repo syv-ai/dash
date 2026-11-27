@@ -52,9 +52,10 @@ vi.mock('../../control/taskAccess', () => ({
 vi.mock('../taskSettings', () => ({
   writeTaskSettings: (id: string) => `/u/task-settings/${id}.json`,
 }));
+const latestSession = vi.hoisted(() => ({ value: null as string | null }));
 vi.mock('../claudeCli', () => ({
   findClaudePath: async () => '/usr/local/bin/claude',
-  findLatestSessionId: () => null,
+  findLatestSessionId: () => latestSession.value,
   requireSupportedClaude: async () => {},
 }));
 const defaultEffort = vi.hoisted(() => ({ value: null as string | null }));
@@ -215,6 +216,17 @@ describe('stopping or restarting the session under an open pane', () => {
     expect(sup.stop).toHaveBeenCalledWith('job-1');
     expect(sup.dispatch).toHaveBeenCalledTimes(1);
     expect(ptySpawn.mock.calls.at(-1)![1]).toEqual(['attach', 'job-new']);
+  });
+
+  it('starts fresh after a restart with no transcript, never another conversation in the folder', async () => {
+    latestSession.value = 'someone-elses';
+    await startDirectPty({ id: 't1', cols: 80, rows: 24, sender: fakeOwner() as never });
+    // s1 never took a turn: no transcript under the test's paths.
+    await restartAndStartTaskSession('t1');
+    expect(sup.dispatch).toHaveBeenLastCalledWith(
+      expect.objectContaining({ resumeSessionId: null }),
+    );
+    latestSession.value = null;
   });
 
   it('a pane re-attaching over its own client gets no exit', async () => {
