@@ -7,6 +7,7 @@ import { useRuntime } from '../../stores/runtimeStore';
 import { useSettings } from '../../stores/settingsStore';
 import { usePreferredIde } from '../../hooks/usePreferredIde';
 import { formatBinding } from '../../keybindings';
+import { Badge } from '../ui/Badge';
 import { IconButton } from '../ui/IconButton';
 import { IdeIcon } from '../ui/IdeIcon';
 import { PrBadge } from '../ui/PrBadge';
@@ -117,16 +118,20 @@ export function TaskHeader({
     linked: task.linkedItems && task.linkedItems.length > 0 && (
       <LinkedItemLinks items={task.linkedItems} gitRemote={project.gitRemote ?? null} />
     ),
+    // The model and the token count share one label look: the token
+    // badge's, at md for 8px sides (D276).
     model: modelName && (
       <Tooltip content="Model">
-        <span className="whitespace-nowrap">{modelName}</span>
+        <Badge size="md" weight="normal">
+          {modelName}
+        </Badge>
       </Tooltip>
     ),
     tokens: showTokens && (
       <TokenBadge
         totalTokens={task.totalTokens}
         totalCostUsd={task.totalCostUsd}
-        size="sm"
+        size="md"
         precise
       />
     ),

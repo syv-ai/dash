@@ -9,8 +9,9 @@ import {
   labelShows,
 } from '../headerFit';
 
-// tokens, model, linked, branch, pr (the branch with its chevron)
-const widths = [40, 90, 36, 136, 28];
+// tokens, model, linked, branch, pr (the branch with its chevron): measured
+// widths, the token count and model as md badges ("2.21B · $1235", "Opus").
+const widths = [96, 43, 36, 183, 30];
 const need = (from: number, name = NAME_MIN_PX) =>
   name + widths.slice(from).reduce((sum, w) => sum + (w > 0 ? w + gap : 0), 0) + comfort;
 
@@ -36,10 +37,10 @@ describe('hiddenLabelCount', () => {
   });
 
   it('charges no gap for a label that is not there', () => {
-    const absent = [40, 90, 0, 136, 28];
-    const room = NAME_MIN_PX + 40 + 90 + 136 + 28 + 4 * gap + comfort;
+    const absent = [96, 43, 0, 183, 30];
+    const room = NAME_MIN_PX + 96 + 43 + 183 + 30 + 4 * gap + comfort;
     expect(hiddenLabelCount(room, 300, absent)).toBe(0);
-    expect(hiddenLabelCount(room, 300, [40, 90, 1, 136, 28])).toBe(1);
+    expect(hiddenLabelCount(room, 300, [96, 43, 1, 183, 30])).toBe(1);
   });
 });
 

@@ -32,7 +32,7 @@ export function TokenBadge({
         rows: [{ label: 'Cost', value: formatCost(totalCostUsd) }],
       }}
     >
-      <Badge size={size === 'sm' ? 'sm' : 'md'} className="font-normal">
+      <Badge size={size} weight="normal">
         <span className={cn(precise && 'tabular-nums')}>
           {precise ? formatTokensPrecise(totalTokens) : formatTokens(totalTokens)}
         </span>

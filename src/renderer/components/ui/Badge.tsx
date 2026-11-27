@@ -13,7 +13,7 @@ import { prStatusTint } from './prStatusColors';
  * `CountBadge`, `TokenBadge`, `MainRepoBadge` and `PrBadge` build on it.
  */
 export const badgeVariants = cva(
-  'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm font-medium tabular-nums [&_svg]:shrink-0',
+  'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm tabular-nums [&_svg]:shrink-0',
   {
     variants: {
       tone: {
@@ -35,13 +35,16 @@ export const badgeVariants = cva(
         // A bare mark beside a name (MainRepoBadge): the box hugs an 11px glyph.
         'icon-sm': 'size-2.75 justify-center',
       },
+      // `normal` for a label that reads as a value, not a mark: the token
+      // count and the task header's model (D276).
+      weight: { medium: 'font-medium', normal: 'font-normal' },
     },
-    defaultVariants: { tone: 'neutral', size: 'md' },
+    defaultVariants: { tone: 'neutral', size: 'md', weight: 'medium' },
   },
 );
 
 export type BadgeProps = React.ComponentProps<'span'> & VariantProps<typeof badgeVariants>;
 
-export function Badge({ className, tone, size, ...props }: BadgeProps) {
-  return <span className={cn(badgeVariants({ tone, size }), className)} {...props} />;
+export function Badge({ className, tone, size, weight, ...props }: BadgeProps) {
+  return <span className={cn(badgeVariants({ tone, size, weight }), className)} {...props} />;
 }
