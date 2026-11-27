@@ -137,13 +137,16 @@ describe('extraArgFlagNames', () => {
 });
 
 describe('extraArgsMessages', () => {
-  it('says why a line cannot be read, else blocked then risky, one line each', () => {
+  it('says why a line cannot be read, else blocked (fail) then risky (warn), one line each', () => {
     expect(extraArgsMessages(validateExtraArgs('oops'))).toEqual([
-      'Start with a flag: "oops" would be sent to Claude as the prompt.',
+      { text: 'Start with a flag: "oops" would be sent to Claude as the prompt.', tone: 'fail' },
     ]);
     expect(extraArgsMessages(validateExtraArgs('--tools Read --model x'))).toEqual([
-      "--model is set by the task's Model picker; use that instead.",
-      '--tools limits the built-in tools; an empty list also stops dashctl.',
+      { text: "--model is set by the task's Model picker; use that instead.", tone: 'fail' },
+      {
+        text: '--tools limits the built-in tools; an empty list also stops dashctl.',
+        tone: 'warn',
+      },
     ]);
     expect(extraArgsMessages(validateExtraArgs('--chrome'))).toEqual([]);
   });

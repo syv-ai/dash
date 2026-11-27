@@ -2,7 +2,7 @@ import React from 'react';
 import { Plus, X } from 'lucide-react';
 import { addDirProblem, normalizeAddDirs, sameAddDirs } from '../../../shared/addDirs';
 import { Button } from '../ui/Button';
-import { Field } from '../ui/Field';
+import { Field, NoteLine } from '../ui/Field';
 import { IconButton } from '../ui/IconButton';
 import { PathInput } from '../ui/PathInput';
 
@@ -37,7 +37,15 @@ export function AddDirsField({
       as="div"
       label="Folders"
       hint={hint}
-      note={problems.length > 0 ? problems.map((p) => <div key={p}>{p}</div>) : undefined}
+      note={
+        problems.length > 0
+          ? problems.map((p) => (
+              <NoteLine key={p} tone="fail">
+                {p}
+              </NoteLine>
+            ))
+          : undefined
+      }
     >
       {value.map((folder, i) => (
         <div key={i} className="flex min-w-0 items-center gap-1">

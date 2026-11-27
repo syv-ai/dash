@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { extraArgsMessages, validateExtraArgs } from '../../../shared/extraArgs';
-import { Field } from '../ui/Field';
+import { Field, NoteLine } from '../ui/Field';
 import { Input } from '../ui/Input';
 
 const HINT =
@@ -9,7 +9,7 @@ const HINT =
 /**
  * A task's extra `claude` arguments: one line in the code font, checked as
  * it's typed (validateExtraArgs) with what's blocked or risky in the open
- * under it, as the field's notes. A labelled field rather than a settings
+ * under it, as the field's notes (blocked in `fail`, risky in `warn`). A labelled field rather than a settings
  * row: a command line wants the column's width. `onCommit` (Task settings) fires on Enter or leaving the field,
  * only for a line that can be passed.
  */
@@ -35,7 +35,15 @@ export function ExtraArgsField({
     <Field
       label={label}
       hint={hint}
-      note={messages.length > 0 ? messages.map((m) => <div key={m}>{m}</div>) : undefined}
+      note={
+        messages.length > 0
+          ? messages.map((m) => (
+              <NoteLine key={m.text} tone={m.tone}>
+                {m.text}
+              </NoteLine>
+            ))
+          : undefined
+      }
     >
       <Input
         mono

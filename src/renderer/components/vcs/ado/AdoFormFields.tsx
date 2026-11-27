@@ -1,7 +1,7 @@
 import React from 'react';
 import { Check, AlertCircle } from 'lucide-react';
 import type { useAdoConnection, AdoTestOutcome } from './useAdoConnection';
-import { Field } from '../../ui/Field';
+import { Field, NoteLine } from '../../ui/Field';
 import { Input } from '../../ui/Input';
 import { Notice } from '../../ui/Notice';
 
@@ -20,9 +20,7 @@ export function AdoFormFields({ state, autoFocusPat }: AdoFormFieldsProps) {
       <Field
         label="Organization URL"
         note={
-          orgUrl && !isUrlValid ? (
-            <span className="text-state-fail">Starts with https://</span>
-          ) : undefined
+          orgUrl && !isUrlValid ? <NoteLine tone="fail">Starts with https://</NoteLine> : undefined
         }
       >
         <Input

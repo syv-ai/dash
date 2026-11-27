@@ -181,11 +181,20 @@ export function flagNoteText(note: FlagNote): string {
   return `${note.flag} ${note.reason}`;
 }
 
+/** One line a check says: `fail` stops the line being passed, `warn` lets it through. */
+export interface ExtraArgsMessage {
+  text: string;
+  tone: 'fail' | 'warn';
+}
+
 /** What a check says to the person, one line each: why it can't be read,
  *  else the blocked flags then the risky ones. Empty when all is fine. */
-export function extraArgsMessages(check: ExtraArgsCheck): string[] {
-  if (check.error) return [check.error];
-  return [...check.blocked, ...check.risky].map(flagNoteText);
+export function extraArgsMessages(check: ExtraArgsCheck): ExtraArgsMessage[] {
+  if (check.error) return [{ text: check.error, tone: 'fail' }];
+  return [
+    ...check.blocked.map((n) => ({ text: flagNoteText(n), tone: 'fail' as const })),
+    ...check.risky.map((n) => ({ text: flagNoteText(n), tone: 'warn' as const })),
+  ];
 }
 
 /**

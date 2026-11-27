@@ -53,9 +53,28 @@ function Note({ children }: { children: React.ReactNode }) {
   return <div className="type-caption wrap-anywhere">{children}</div>;
 }
 
+/** `fail`: an error that stops the form (a blocked flag); `warn`: a caution
+ *  that lets it through (a risky flag). Neutral notes need no line. */
+export type NoteTone = 'fail' | 'warn';
+
+const NOTE_TONES: Record<NoteTone, string> = {
+  fail: 'text-state-fail',
+  warn: 'text-warn',
+};
+
+/**
+ * One toned line inside a `note`, so a note can hold an error and a caution
+ * side by side: `note={<NoteLine tone="fail">…</NoteLine>}`. The note keeps
+ * its caption size; only the ink changes.
+ */
+export function NoteLine({ tone, children }: { tone: NoteTone; children: React.ReactNode }) {
+  return <div className={NOTE_TONES[tone]}>{children}</div>;
+}
+
 /**
  * A labelled input: `type-label` above (with its ⓘ), the control, and a
- * visible `note` under it only when it must be seen (a validation error).
+ * visible `note` under it only when it must be seen (a validation error, in
+ * a `NoteLine`).
  * A `label` element wraps it, so clicking the label focuses the control;
  * pass `as="div"` when the row holds more than one control.
  */
