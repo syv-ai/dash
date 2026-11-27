@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildDispatchArgs,
+  ExtraArgsError,
   buildSessionSettings,
   parseDispatchOutput,
   isDispatchFailure,
@@ -88,6 +89,50 @@ describe('buildDispatchArgs', () => {
     expect(auto[auto.indexOf('--permission-mode') + 1]).toBe('auto');
     const bypass = buildDispatchArgs({ name: 't', permissionMode: 'bypassPermissions' });
     expect(bypass).not.toContain('--permission-mode');
+  });
+
+  it("puts the person's extra arguments after Dash's flags and before the prompt", () => {
+    expect(
+      buildDispatchArgs({
+        name: 't',
+        model: 'opus',
+        settingsPath: '/s.json',
+        resumeSessionId: 's',
+        extraArgs: `--chrome --add-dir /a '/b c'`,
+        prompt: 'go',
+      }),
+    ).toEqual([
+      '--bg',
+      '--name',
+      't',
+      '--permission-mode',
+      'default',
+      '--model',
+      'opus',
+      '--settings',
+      '/s.json',
+      '--resume',
+      's',
+      '--chrome',
+      '--add-dir',
+      '/a',
+      '/b c',
+      '--',
+      'go',
+    ]);
+    expect(buildDispatchArgs({ name: 't', extraArgs: '  ' })).toEqual(
+      buildDispatchArgs({ name: 't' }),
+    );
+  });
+
+  it('refuses extra arguments that name a flag Dash owns, so Dash always wins', () => {
+    expect(() => buildDispatchArgs({ name: 't', extraArgs: '--settings /mine.json' })).toThrow(
+      ExtraArgsError,
+    );
+    expect(() => buildDispatchArgs({ name: 't', extraArgs: '-n other' })).toThrow(
+      /-n is set by Dash/,
+    );
+    expect(() => buildDispatchArgs({ name: 't', extraArgs: 'hello' })).toThrow(/Start with a flag/);
   });
 
   it('ends the options with -- so a prompt starting with "-" stays the prompt', () => {

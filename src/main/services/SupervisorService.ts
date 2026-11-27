@@ -4,7 +4,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { EventEmitter } from 'events';
 import { app, powerMonitor, type WebContents } from 'electron';
-import type { PermissionMode, SupervisorSession, TaskModel } from '@shared/types';
+import type { SupervisorSession } from '@shared/types';
 import { findClaudePath } from './claudeCli';
 import { claudeConfigDir } from '../utils/claudePaths';
 import { activityMonitor } from './ActivityMonitor';
@@ -12,6 +12,7 @@ import { DatabaseService } from './DatabaseService';
 import {
   activityFromSupervisor,
   buildDispatchArgs,
+  type DispatchArgsOptions,
   isDispatchFailure,
   parseAgentsJson,
   parseDispatchOutput,
@@ -30,15 +31,9 @@ const WATCH_DEBOUNCE_MS = 1_000;
 const DISPATCH_TIMEOUT_MS = 60_000;
 const LIST_TIMEOUT_MS = 15_000;
 
-export interface DispatchOptions {
+/** A dispatch: where and with what env, plus everything its argv is built from. */
+export interface DispatchOptions extends DispatchArgsOptions {
   cwd: string;
-  name: string;
-  permissionMode?: PermissionMode;
-  model?: TaskModel;
-  prompt?: string;
-  resumeSessionId?: string | null;
-  /** The task's settings file (taskSettings.ts) → `--settings`. */
-  settingsPath?: string;
   env: Record<string, string>;
 }
 
@@ -115,14 +110,7 @@ class SupervisorServiceImpl extends EventEmitter {
    * id and, when the listing already shows the row, the session UUID.
    */
   async dispatch(opts: DispatchOptions): Promise<{ jobId: string; sessionId: string | null }> {
-    const args = buildDispatchArgs({
-      name: opts.name,
-      permissionMode: opts.permissionMode,
-      model: opts.model,
-      settingsPath: opts.settingsPath,
-      resumeSessionId: opts.resumeSessionId,
-      prompt: opts.prompt,
-    });
+    const args = buildDispatchArgs(opts);
     let output: string;
     try {
       const { stdout, stderr } = await this.run(args, {

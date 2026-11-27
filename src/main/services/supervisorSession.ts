@@ -8,6 +8,7 @@ import type {
   SupervisorStatus,
   TaskModel,
 } from '@shared/types';
+import { flagNoteText, validateExtraArgs } from '@shared/extraArgs';
 
 /**
  * Pure helpers behind SupervisorService: the `claude --bg` argument policy,
@@ -29,8 +30,20 @@ export interface DispatchArgsOptions {
   settingsPath?: string;
   /** Claude session UUID to continue (migrated or re-dispatched task). */
   resumeSessionId?: string | null;
+  /** The person's own flags, as typed (`validateExtraArgs`). Placed after
+   *  Dash's; a flag Dash owns refuses the dispatch (ExtraArgsError). */
+  extraArgs?: string | null;
   /** Optional first prompt, always the last positional, after `--`. */
   prompt?: string;
+}
+
+/** A task's extra arguments can't be passed: they don't parse, or name a flag
+ *  Dash sets itself. The message says which and why. */
+export class ExtraArgsError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ExtraArgsError';
+  }
 }
 
 /** What a task's `--settings` file holds. */
@@ -65,11 +78,23 @@ export function buildSessionSettings(opts: {
   return settings;
 }
 
+/**
+ * The one place a dispatch's argv is assembled: Dash's flags, then the
+ * person's extra arguments, then the prompt. Dash's flags always win: the
+ * extras are checked here against the flags Dash owns, and one of those
+ * throws ExtraArgsError instead of reaching the CLI.
+ */
 export function buildDispatchArgs(opts: DispatchArgsOptions): string[] {
   // Rule: no variadic flag (`--allowedTools`, …) may come directly before the
   // prompt, or the CLI reads the prompt as one more value and the job starts
   // with none. The prompt itself follows `--`, so one starting with "-" (a
-  // markdown bullet) is not parsed as an option.
+  // markdown bullet) is not parsed as an option, and a variadic extra
+  // (`--add-dir a b`) ends there too.
+  const extra = validateExtraArgs(opts.extraArgs);
+  if (!extra.ok) {
+    const why = extra.error ?? extra.blocked.map(flagNoteText).join(' ');
+    throw new ExtraArgsError(`Extra arguments: ${why} Change them in Task settings.`);
+  }
   const args: string[] = ['--bg', '--name', opts.name];
   // Always explicit: without a flag the user's own `defaultMode` applies,
   // which can be bypassPermissions behind a task Dash shows as Default.
@@ -88,6 +113,7 @@ export function buildDispatchArgs(opts: DispatchArgsOptions): string[] {
   if (opts.resumeSessionId) {
     args.push('--resume', opts.resumeSessionId);
   }
+  args.push(...extra.args);
   if (opts.prompt) {
     args.push('--', opts.prompt);
   }
