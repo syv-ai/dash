@@ -522,7 +522,11 @@
   display: none;
 }
 
-/* Slim hover-only scrollbar: the thumb only shows while hovering the area. */
+/* Slim hover-only scrollbar: the thumb only shows while hovering the area.
+   Its gutter is always reserved, so content overflowing never narrows it. */
+.scrollbar-thin-hover {
+  scrollbar-gutter: stable;
+}
 .scrollbar-thin-hover::-webkit-scrollbar {
   width: 3px;
   height: 3px;

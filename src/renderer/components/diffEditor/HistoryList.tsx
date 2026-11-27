@@ -97,7 +97,7 @@ export function HistoryList({
   return (
     <div
       ref={listRef}
-      className="scrollbar-gutter-stable scrollbar-thin-hover @container flex h-full min-h-0 flex-col gap-px overflow-y-auto pb-2"
+      className="scrollbar-thin-hover @container flex h-full min-h-0 flex-col gap-px overflow-y-auto pb-2"
     >
       {pr && <PrRow pr={pr} statsWidth={statsWidth} />}
       {loading && commits.length === 0 && <EmptyState title="Loading…" />}

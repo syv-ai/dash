@@ -312,7 +312,7 @@ export function VirtualList({
       {...props}
       ref={scrollRef}
       className={cn(
-        'scrollbar-gutter-stable scrollbar-thin-hover overflow-y-auto px-1.5 pb-2',
+        'scrollbar-thin-hover overflow-y-auto px-1.5 pb-2',
         gapAbove && 'pt-2',
         className,
       )}

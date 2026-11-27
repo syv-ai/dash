@@ -134,7 +134,7 @@ function Review({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="scrollbar-gutter-stable scrollbar-thin-hover flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div className="scrollbar-thin-hover flex min-h-0 flex-1 flex-col overflow-y-auto">
         <ReviewHeader review={review} remote={remote} error={error} onShowCommits={onShowCommits} />
         {notice && (
           <Notice icon={<GitCompareArrows size={14} strokeWidth={1.8} />} className="mx-2.5 my-1">
