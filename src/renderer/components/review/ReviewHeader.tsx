@@ -41,7 +41,7 @@ export function ReviewHeader({
 }) {
   const StateIcon = prStateIcon(review.state);
   return (
-    <section className="grid gap-3 px-2.5 pt-6 pb-5">
+    <section className="grid gap-3 px-2.5 pt-6 pb-3">
       <div className="flex items-start gap-1.5">
         <span
           className={cn('flex h-5 shrink-0 items-center', prStatusText(review.state))}
