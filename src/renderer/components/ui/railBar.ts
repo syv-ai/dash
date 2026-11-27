@@ -4,6 +4,9 @@
  * never draws smaller than a bar you can spot, however long the document.
  */
 
+/** The rail's width: two 6px lanes. A surface that carries the rail sizes its
+ *  scrollbar to this, so the rail and the scrollbar are one column. */
+export const RAIL_WIDTH_PX = 12;
 /** A bar's least drawn height: taller than any lane is wide, so the least
  *  mark still reads as a bar, not a dot. */
 export const RAIL_BAR_MIN_PX = 8;

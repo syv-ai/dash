@@ -1047,6 +1047,18 @@
   pointer-events: none;
 }
 
+/* The review rail (`ReviewRail`, z-10) shares the modified editor's vertical
+ * scrollbar column. Monaco stacks the whole scrollbar at z-11, track and
+ * slider alike, which would bury the rail's bars under the track. Unstack the
+ * track so the bars sit over it (empty rail still clicks through to the
+ * track) and lift the slider alone over the bars, so it drags anywhere. */
+.monaco-editor.modified-in-monaco-diff-editor .editor-scrollable > .scrollbar.vertical {
+  z-index: auto;
+}
+.monaco-editor.modified-in-monaco-diff-editor .editor-scrollable > .scrollbar.vertical > .slider {
+  z-index: 11;
+}
+
 /* Make the diff scroll-viewport indicator more opaque (Monaco's scrollbar-slider
  * default is very faint) so it stays clearly legible against the blame band that
  * now shares this overview strip. */

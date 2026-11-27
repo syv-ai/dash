@@ -2,7 +2,7 @@ import type * as React from 'react';
 import { cva } from 'class-variance-authority';
 import { cn } from '../../lib/cn';
 import { focusRing } from './styles';
-import { RAIL_HIT_MIN_PX, railBar } from './railBar';
+import { RAIL_HIT_MIN_PX, RAIL_WIDTH_PX, railBar } from './railBar';
 import { Tooltip, type TooltipContent } from './Tooltip';
 
 /** How a mark is drawn: a bar in strong or faint ink, a solid bar in full
@@ -99,27 +99,25 @@ function Bar({
 }
 
 /**
- * A slim, transparent rail of clickable bars over a scrolling surface's right
- * edge, beside its scrollbar: where things are in the whole document, minimap
- * style, without a background slab. Two lanes: `spans` (a diff's changes) down
- * the left, `marks` (threads, comments, notes) down the right, so neither
- * hides the other. Each bar spans its stretch, never under `RAIL_BAR_MIN_PX`
- * tall. Only the bars take the pointer; the surface under the rail stays
- * clickable.
+ * A slim, transparent rail of clickable bars in a scrolling surface's
+ * scrollbar column (`RAIL_WIDTH_PX` wide; size the scrollbar to match): where
+ * things are in the whole document, minimap style, without a background slab.
+ * Two lanes: `spans` (a diff's changes) down the left, `marks` (threads,
+ * comments, notes) down the right, so neither hides the other. Each bar spans
+ * its stretch, never under `RAIL_BAR_MIN_PX` tall. Only the bars take the
+ * pointer; the track under the rail keeps its clicks, and a slider stacked
+ * above it (`z-11`) drags over the bars.
  */
 export function ScrollRail({
   marks,
   spans = [],
   height,
-  right,
   'aria-label': ariaLabel,
 }: {
   marks: readonly ScrollRailMark[];
   spans?: readonly ScrollRailSpan[];
   /** The rail's height in px (the surface's viewport). */
   height: number;
-  /** Its distance from the surface's right edge (the scrollbar's width). */
-  right: number;
   'aria-label': string;
 }) {
   if ((marks.length === 0 && spans.length === 0) || height <= RAIL_HIT_MIN_PX) return null;
@@ -127,8 +125,8 @@ export function ScrollRail({
     <div
       role="group"
       aria-label={ariaLabel}
-      className="pointer-events-none absolute top-0 z-10 w-3"
-      style={{ right, height }}
+      className="pointer-events-none absolute top-0 right-0 z-10"
+      style={{ width: RAIL_WIDTH_PX, height }}
     >
       {spans.map((s) => (
         <Bar

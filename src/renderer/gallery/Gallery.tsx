@@ -406,7 +406,6 @@ function Rails() {
         <ScrollRail
           aria-label="Review marks"
           height={160}
-          right={8}
           marks={RAIL_TICKS.map(([tick, at, size, label]) => ({
             key: label,
             tick,

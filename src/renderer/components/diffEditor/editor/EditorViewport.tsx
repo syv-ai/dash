@@ -3,6 +3,7 @@ import type { editor as monacoEditor } from 'monaco-editor';
 import { Loader2 } from 'lucide-react';
 import type { LoadState } from './useFileLoad';
 import { DiffEditorHost } from './DiffEditorHost';
+import { RAIL_WIDTH_PX } from '../../ui/railBar';
 
 interface Props {
   displayed: LoadState;
@@ -90,11 +91,13 @@ export function EditorViewport({
       overviewRulerLanes: 0,
       hideCursorInOverviewRuler: true,
       // Slim scrollbars, only when the content overflows, faint until hovered
-      // (their colours are the theme's).
+      // (their colours are the theme's). Monaco reserves the vertical one's
+      // width whether it shows or not, so the code never shifts; that column
+      // is the review rail's too, the slider drawn over its bars.
       scrollbar: {
         vertical: 'auto',
         horizontal: 'auto',
-        verticalScrollbarSize: 8,
+        verticalScrollbarSize: RAIL_WIDTH_PX,
         horizontalScrollbarSize: 8,
         useShadows: false,
       },

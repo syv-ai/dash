@@ -48,16 +48,16 @@ function changeLabel(c: RailChange): string {
 
 interface Layout {
   height: number;
-  scrollbar: number;
   contentHeight: number;
 }
 
 /**
  * Where the open file's changes, PR threads, comment drafts and notes are, on
- * a rail at the modified editor's right edge, beside its scrollbar (D80): the
- * diff's changes as bars down one lane, the rest as bars down the other. Monaco's diff editor
- * forces the minimap off, so this stands in for minimap marks. A click
- * centres the line; hovering previews it.
+ * a rail in the modified editor's scrollbar column, under its slider (D80):
+ * the diff's changes as bars down one lane, the rest as bars down the other.
+ * Monaco's diff editor forces the minimap off, so this stands in for minimap
+ * marks. A click centres the line; hovering previews it. The column's width
+ * and stacking are `EditorViewport`'s and `index.css`'s.
  */
 export function ReviewRail({
   diffEditor,
@@ -85,7 +85,6 @@ export function ReviewRail({
       const info = modifiedEditor.getLayoutInfo();
       setLayout({
         height: info.height,
-        scrollbar: info.verticalScrollbarWidth,
         contentHeight: modifiedEditor.getScrollHeight(),
       });
     };
@@ -160,7 +159,6 @@ export function ReviewRail({
       marks={marks}
       spans={spans}
       height={layout.height}
-      right={layout.scrollbar}
     />
   );
 }
