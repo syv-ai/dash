@@ -11,7 +11,7 @@ import { IconButton } from '../ui/IconButton';
 import { ListRow } from '../ui/ListRow';
 import { groupByPath, lineLabel, trayNotes } from './outline';
 import { rowAction, rowKeys } from './rowAction';
-import { useSectionOpen } from './useSectionOpen';
+import { useSectionOpen } from '../../lib/useSectionOpen';
 
 /**
  * The task's notes to the agent from every view, by file: To send, each sent

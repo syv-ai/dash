@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/cn';
+import { DisclosureChevron } from './DisclosureChevron';
 import { focusRing } from './styles';
 
 interface ExpandableProps {
@@ -12,9 +12,11 @@ interface ExpandableProps {
   children: React.ReactNode;
 }
 
-/** A light disclosure for optional fields (a context prompt, worktree
- *  scripts): a chevron and a field label (`type-label`, as `Field`'s) that
- *  fold the children away. Height animates via `.collapse-grid`. */
+/** A light disclosure for optional fields in a form (a context prompt,
+ *  worktree scripts): the shared `DisclosureChevron` and a field label
+ *  (`type-label`, as `Field`'s) that fold the children away with the drawer
+ *  motion (`.collapse-grid`). Forms only; a section inside a view is a
+ *  collapsible `DetailSection` (D273). */
 export function Expandable({ label, defaultOpen = false, hint, children }: ExpandableProps) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -25,11 +27,7 @@ export function Expandable({ label, defaultOpen = false, hint, children }: Expan
         onClick={() => setOpen((o) => !o)}
         className={cn('-ml-0.5 flex items-center gap-1 rounded-sm', focusRing)}
       >
-        <ChevronRight
-          size={14}
-          strokeWidth={1.8}
-          className={cn('text-icon transition-transform duration-200', open && 'rotate-90')}
-        />
+        <DisclosureChevron open={open} />
         <span className="type-label">{label}</span>
         {hint && <span className="type-caption">{hint}</span>}
       </button>

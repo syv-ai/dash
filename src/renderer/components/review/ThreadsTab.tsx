@@ -24,7 +24,7 @@ import { Markdown } from '../ui/Markdown';
 import { TextLink } from '../ui/TextLink';
 import { Composer } from './DraftActions';
 import { threadGroups, draftPlace, threadRange, type ThreadItem } from './outline';
-import { useSectionOpen } from './useSectionOpen';
+import { useSectionOpen } from '../../lib/useSectionOpen';
 
 type Navigate = (scope: string, path: string, commentId: string) => void;
 

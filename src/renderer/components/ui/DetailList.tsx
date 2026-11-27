@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { Check, ChevronRight, Copy } from 'lucide-react';
+import { Check, Copy } from 'lucide-react';
+import { DisclosureChevron } from './DisclosureChevron';
 import { IconButton } from './IconButton';
 import { cn } from '../../lib/cn';
 import { focusRing } from './styles';
@@ -8,9 +9,11 @@ import { focusRing } from './styles';
  * A titled block of a details view: a `type-heading` (with an optional action
  * at its end; the action wraps under a long title, which never truncates),
  * then its rows. Sections stack with their own spacing.
- * `collapsible` makes it a band instead: the heading on a faint fill (`hover`,
- * an overlay that reads on any surface; no rules), a disclosure that folds the
- * rows away. Banded sections stack 4px apart, so two folded bands never fuse.
+ * `collapsible` makes it a band instead: the app's one drawer inside a view
+ * (D273), the heading on a faint fill (`hover`, an overlay that reads on any
+ * surface; no rules), a disclosure that folds the rows away (`.collapse-grid`,
+ * `DisclosureChevron`). Keep its open state with `useSectionOpen`. Banded
+ * sections stack 4px apart, so two folded bands never fuse.
  * A `summary` follows the title quietly ("Checks · 1 passing").
  * Rows sit in one `minmax(0, 1fr)` column (`grid-cols-1`), never an `auto`
  * one, so a truncating row ellipsizes at the pane's edge instead of widening it.
@@ -74,11 +77,7 @@ export function DetailSection({
               focusRing,
             )}
           >
-            <ChevronRight
-              size={14}
-              strokeWidth={1.8}
-              className={cn('shrink-0 text-icon transition-transform', open && 'rotate-90')}
-            />
+            <DisclosureChevron open={open} />
             <span>
               {title}
               <Summary text={summary} />

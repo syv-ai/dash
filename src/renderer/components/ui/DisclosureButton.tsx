@@ -1,11 +1,12 @@
 import * as React from 'react';
-import { ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/cn';
+import { DisclosureChevron } from './DisclosureChevron';
 import { focusRing } from './styles';
 
 /**
- * The header row that folds a card or section open and shut: a chevron
- * (turned down when open) before any content, a hover tint, `aria-expanded`.
+ * The header row that folds a card open and shut (a thread card; a section
+ * inside a view is a collapsible `DetailSection`): the shared
+ * `DisclosureChevron` before any content, a hover tint, `aria-expanded`.
  * It grows to fill its row; actions beside it sit outside it. Content is
  * top-aligned, the chevron centred on a 28px first line (`h-7`): give the
  * content's first line that height to line up with it.
@@ -33,11 +34,7 @@ export function DisclosureButton({
       {...props}
     >
       <span className="flex h-7 shrink-0 items-center">
-        <ChevronRight
-          size={14}
-          strokeWidth={1.8}
-          className={cn('text-icon transition-transform duration-150', open && 'rotate-90')}
-        />
+        <DisclosureChevron open={open} />
       </span>
       {children}
     </button>

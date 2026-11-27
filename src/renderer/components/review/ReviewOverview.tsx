@@ -18,7 +18,7 @@ import {
 } from './labels';
 import { ChecksRollupIcon } from './ChecksRollupIcon';
 import { checksRollup, checksSummary } from './outline';
-import { useSectionOpen } from './useSectionOpen';
+import { useSectionOpen } from '../../lib/useSectionOpen';
 
 /** A person, linked to their page on the forge when it has one. */
 function Person({ name, url }: { name: string; url: string | null }) {

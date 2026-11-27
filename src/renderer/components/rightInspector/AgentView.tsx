@@ -53,7 +53,7 @@ import { Notice } from '../ui/Notice';
 import { Tooltip } from '../ui/Tooltip';
 import { ViewPanel, ViewTabs, type ViewTabsOption } from '../ui/ViewTabs';
 import { formatRelativeTime } from '../../../shared/relativeTime';
-import { useSectionOpen } from '../review/useSectionOpen';
+import { useSectionOpen } from '../../lib/useSectionOpen';
 import { instructionFiles, memoryGroups, type AgentPane } from './agentTab';
 
 /**

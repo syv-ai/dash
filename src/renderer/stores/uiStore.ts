@@ -56,9 +56,9 @@ export interface UiState {
   /** Review mode's Files lists every file at the PR's head, not only the
    *  changed ones. Session-only, the same for every task. */
   reviewAllFiles: boolean;
-  /** Review mode's collapsible sections, open or not, by id
-   *  (`useSectionOpen`); a section not in it keeps its default. Session-only. */
-  reviewSections: Readonly<Record<string, boolean>>;
+  /** Drawers (collapsible sections) open or not, by id (`useSectionOpen`);
+   *  one not in it keeps its default. Session-only. */
+  sectionsOpen: Readonly<Record<string, boolean>>;
 }
 
 /** The Threads tab's switch: every exchange with the author, and the notes
@@ -87,7 +87,7 @@ export interface UiActions {
   setDismissedUpdateVersion: (v: string | null) => void;
   setReviewThreadsPane: (v: ReviewThreadsPane) => void;
   setReviewAllFiles: (v: boolean) => void;
-  setReviewSectionOpen: (id: string, open: boolean) => void;
+  setSectionOpen: (id: string, open: boolean) => void;
   // Data-mutating UI flows (own their modal state; delegate domain ops to projectsStore)
   finishProjectCreation: (projectId: string) => Promise<void>;
   confirmDeleteProject: (options: DeleteProjectOptions) => Promise<void>;
@@ -117,7 +117,7 @@ const initialState: UiState = {
   dismissedUpdateVersion: null,
   reviewThreadsPane: 'threads',
   reviewAllFiles: false,
-  reviewSections: {},
+  sectionsOpen: {},
 };
 
 export const useUi = create<UiStore>((set, get) => ({
@@ -150,8 +150,7 @@ export const useUi = create<UiStore>((set, get) => ({
   setDismissedUpdateVersion: (v) => set({ dismissedUpdateVersion: v }),
   setReviewThreadsPane: (v) => set({ reviewThreadsPane: v }),
   setReviewAllFiles: (v) => set({ reviewAllFiles: v }),
-  setReviewSectionOpen: (id, open) =>
-    set((s) => ({ reviewSections: { ...s.reviewSections, [id]: open } })),
+  setSectionOpen: (id, open) => set((s) => ({ sectionsOpen: { ...s.sectionsOpen, [id]: open } })),
 
   finishProjectCreation: async (projectId) => {
     set({ showAddProjectModal: false });

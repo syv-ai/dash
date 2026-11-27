@@ -7,13 +7,13 @@ import { useRuntime } from '../../stores/runtimeStore';
 import { selectTaskById, useProjects } from '../../stores/projectsStore';
 import { useSettings } from '../../stores/settingsStore';
 import { DetailItem, DetailList, DetailSection } from '../ui/DetailList';
-import { Expandable } from '../ui/Expandable';
 import { Markdown } from '../ui/Markdown';
 import { PrRow } from '../ui/PrBadge';
 import { TextLink } from '../ui/TextLink';
 import { SyncStatus, type SyncLinks } from '../changes/SyncStatus';
 import { CommitHash, CommitHoverCard } from '../commits/CommitHoverCard';
 import { useCommitLinks } from '../commits/useCommitLinks';
+import { useSectionOpen } from '../../lib/useSectionOpen';
 import { taskDetailSections, type DetailRow } from './taskDetailRows';
 
 interface TaskDetailsProps {
@@ -211,15 +211,22 @@ export function TaskDetails({
         </DetailSection>
       )}
 
-      {task.contextPrompt?.trim() && (
-        <DetailSection title="Prompt">
-          <Expandable label="Context prompt">
-            <div className="text-sm text-ink-2">
-              <Markdown text={task.contextPrompt} />
-            </div>
-          </Expandable>
-        </DetailSection>
-      )}
+      {task.contextPrompt?.trim() && <ContextPrompt text={task.contextPrompt} />}
+    </div>
+  );
+}
+
+/** The task's context prompt, a drawer folded until opened (kept for the
+ *  session, like every drawer). */
+function ContextPrompt({ text }: { text: string }) {
+  const section = useSectionOpen('details.contextPrompt', false);
+  return (
+    <div className="pt-4">
+      <DetailSection title="Context prompt" collapsible {...section}>
+        <div className="text-sm text-ink-2">
+          <Markdown text={text} />
+        </div>
+      </DetailSection>
     </div>
   );
 }
