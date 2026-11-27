@@ -259,6 +259,33 @@ export function parseAgentsJson(stdout: string): SupervisorSession[] {
   return rows;
 }
 
+/**
+ * Every field of a listing row. A Record over the keys, so a field added to
+ * SupervisorSession fails to compile here until sameSessions compares it.
+ */
+const ROW_FIELDS: Record<keyof SupervisorSession, true> = {
+  id: true,
+  sessionId: true,
+  name: true,
+  cwd: true,
+  kind: true,
+  startedAt: true,
+  state: true,
+  status: true,
+  waitingFor: true,
+  pid: true,
+  detail: true,
+};
+const ROW_KEYS = Object.keys(ROW_FIELDS) as (keyof SupervisorSession)[];
+
+/** Whether two listings hold the same rows in the same order. */
+export function sameSessions(
+  a: readonly SupervisorSession[],
+  b: readonly SupervisorSession[],
+): boolean {
+  return a.length === b.length && a.every((row, i) => ROW_KEYS.every((k) => row[k] === b[i]![k]));
+}
+
 // ── Activity mapping (design doc §6.6) ─────────────────────
 
 export interface SupervisorActivity {

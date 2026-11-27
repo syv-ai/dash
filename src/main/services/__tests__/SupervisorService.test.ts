@@ -148,3 +148,25 @@ describe('SupervisorService verbs', () => {
     await expect(supervisorService.remove('a1')).resolves.toBeUndefined();
   });
 });
+
+describe('SupervisorService.refresh', () => {
+  it('tells listeners only when the rows changed', async () => {
+    const heard: unknown[] = [];
+    const onSessions = (rows: unknown) => heard.push(rows);
+    supervisorService.on('sessions', onSessions);
+    try {
+      const a = [{ id: 'r1', sessionId: 'r1-s', cwd: '/wt', kind: 'background', state: 'working' }];
+      const b = [{ ...a[0], state: 'done' }];
+      responses = [listing(a), listing(a), listing(b)];
+      await supervisorService.refresh('test');
+      await supervisorService.refresh('test');
+      await supervisorService.refresh('test');
+      expect(heard.map((rows) => (rows as { state: string }[])[0]!.state)).toEqual([
+        'working',
+        'done',
+      ]);
+    } finally {
+      supervisorService.removeListener('sessions', onSessions);
+    }
+  });
+});

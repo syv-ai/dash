@@ -16,6 +16,7 @@ import {
   isDispatchFailure,
   parseAgentsJson,
   parseDispatchOutput,
+  sameSessions,
 } from './supervisorSession';
 import { checkAgentsJson, checkDispatchOutput, exitCodeDrift } from '../claudeContract/cliSchemas';
 import { claudeVersionFor } from '../claudeContract/claudeVersions';
@@ -64,7 +65,8 @@ function jobsDir(): string {
  * signals them. `startPolling()` runs the reconcile loop that keeps ActivityMonitor
  * and the renderer's session list in step with the supervisor.
  *
- * Events: `sessions` (SupervisorSession[]) after every successful listing.
+ * Events: `sessions` (SupervisorSession[]) when a listing's rows differ from
+ * the last one's (and after the first).
  */
 class SupervisorServiceImpl extends EventEmitter {
   private sender: WebContents | null = null;
@@ -75,6 +77,7 @@ class SupervisorServiceImpl extends EventEmitter {
   private focused = true;
   private running = false;
   private lastRows: SupervisorSession[] = [];
+  private listed = false;
 
   // ── CLI calls ─────────────────────────────────────────────
 
@@ -314,17 +317,23 @@ class SupervisorServiceImpl extends EventEmitter {
 
   /**
    * Re-read the full listing and reconcile. Concurrent callers share one
-   * in-flight listing; the timer is re-armed after every run.
+   * in-flight listing; the timer is re-armed after every run. Listeners and
+   * the renderer hear of it only when the rows changed; ActivityMonitor hears
+   * every listing, since whether it trusts one depends on how fresh its hooks are.
    */
   refresh(reason: string): Promise<SupervisorSession[]> {
     if (this.inflight) return this.inflight;
     this.inflight = (async () => {
       try {
         const rows = await this.list({ all: true });
+        const changed = !this.listed || !sameSessions(this.lastRows, rows);
+        this.listed = true;
         this.lastRows = rows;
         this.reconcile(rows);
-        this.emit('sessions', rows);
-        if (this.sender && !this.sender.isDestroyed()) this.sender.send('session:list', rows);
+        if (changed) {
+          this.emit('sessions', rows);
+          if (this.sender && !this.sender.isDestroyed()) this.sender.send('session:list', rows);
+        }
         return rows;
       } catch (err) {
         console.warn(`[Supervisor] refresh (${reason}) failed:`, err);

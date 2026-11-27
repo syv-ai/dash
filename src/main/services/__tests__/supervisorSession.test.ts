@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { SupervisorSession } from '@shared/types';
 import {
   buildDispatchArgs,
   ExtraArgsError,
@@ -10,6 +11,7 @@ import {
   parseAgentsJson,
   activityFromSupervisor,
   isUnderDir,
+  sameSessions,
   SESSION_REMOVED_DETAIL,
   SESSION_SLEEPING_DETAIL,
 } from '../supervisorSession';
@@ -251,6 +253,39 @@ describe('parseAgentsJson', () => {
     expect(rows[0]!.status).toBeUndefined();
     expect(parseAgentsJson('not json')).toEqual([]);
     expect(parseAgentsJson('{}')).toEqual([]);
+  });
+});
+
+describe('sameSessions', () => {
+  const row = (over: Partial<SupervisorSession> = {}): SupervisorSession => ({
+    id: 'a1',
+    sessionId: 'a1-uuid',
+    cwd: '/wt',
+    kind: 'background',
+    startedAt: 1,
+    state: 'working',
+    pid: 42,
+    ...over,
+  });
+
+  it('holds for equal rows in separate objects', () => {
+    expect(sameSessions([row(), row({ id: 'b2' })], [row(), row({ id: 'b2' })])).toBe(true);
+  });
+
+  it.each<[string, Partial<SupervisorSession>]>([
+    ['state', { state: 'done' }],
+    ['detail', { detail: 'reading files' }],
+    ['waitingFor', { waitingFor: 'permission' }],
+    ['pid', { pid: 43 }],
+    ['pid gone', { pid: undefined }],
+  ])('breaks on a changed %s', (_field, over) => {
+    expect(sameSessions([row()], [row(over)])).toBe(false);
+  });
+
+  it('breaks on a row added, removed or moved', () => {
+    expect(sameSessions([row()], [row(), row({ id: 'b2' })])).toBe(false);
+    expect(sameSessions([row(), row({ id: 'b2' })], [row()])).toBe(false);
+    expect(sameSessions([row(), row({ id: 'b2' })], [row({ id: 'b2' }), row()])).toBe(false);
   });
 });
 
