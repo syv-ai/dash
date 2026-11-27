@@ -555,6 +555,7 @@ function TaskModalBody({
             <div className="grid gap-1">
               <PermissionModePicker
                 layout="row"
+                width="sm"
                 value={permissionMode}
                 onChange={(v) => {
                   setPermissionMode(v);
@@ -563,6 +564,7 @@ function TaskModalBody({
               />
               <ModelPicker
                 layout="row"
+                width="sm"
                 value={model}
                 onChange={(v) => {
                   setModel(v);

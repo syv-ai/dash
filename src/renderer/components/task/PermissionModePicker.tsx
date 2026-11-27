@@ -32,12 +32,16 @@ export function PermissionModePicker({
   /** A short line kept in view (e.g. "Applies on next start"). */
   helperText,
   layout = 'field',
+  width = 'md',
 }: {
   value: PermissionMode;
   onChange: (mode: PermissionMode) => void;
   helperText?: string;
   /** `field`: label above (a form); `row`: one settings row, select at the end. */
   layout?: 'field' | 'row';
+  /** `row` only, the select's width: `md` lines up with the settings dialogs'
+   *  fields; `sm` leaves the name room in a narrow column. */
+  width?: 'sm' | 'md';
 }) {
   const select = (
     <Select<PermissionMode>
@@ -58,7 +62,7 @@ export function PermissionModePicker({
       label="Permission mode"
       hint={DESCRIPTIONS[value]}
       note={helperText}
-      control={<div className="w-56">{select}</div>}
+      control={<div className={width === 'sm' ? 'w-48' : 'w-56'}>{select}</div>}
     />
   ) : (
     <Field label="Permission mode" as="div" hint={DESCRIPTIONS[value]} note={helperText}>
