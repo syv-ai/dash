@@ -1171,7 +1171,25 @@ type KillableProc = {
   };
 };
 
-function gracefulKillProc(proc: KillableProc, timeoutMs = GRACEFUL_KILL_TIMEOUT_MS): Promise<void> {
+/**
+ * The signal to send a node-pty process, or none. node-pty on Windows throws
+ * "Signals not supported on windows." for any signal (synchronously when the
+ * terminal is ready, uncaught in a deferred call otherwise) and closes the
+ * ConPTY on a bare `kill()`, which ends the process tree; there is no
+ * graceful step to escalate from.
+ */
+export function ptySignal(
+  signal: 'SIGTERM' | 'SIGKILL',
+  platform: NodeJS.Platform = process.platform,
+): string | undefined {
+  return platform === 'win32' ? undefined : signal;
+}
+
+export function gracefulKillProc(
+  proc: KillableProc,
+  timeoutMs = GRACEFUL_KILL_TIMEOUT_MS,
+  platform: NodeJS.Platform = process.platform,
+): Promise<void> {
   return new Promise<void>((resolve) => {
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -1193,15 +1211,19 @@ function gracefulKillProc(proc: KillableProc, timeoutMs = GRACEFUL_KILL_TIMEOUT_
       // proc doesn't expose onExit (already disposed) — rely on the timer/catch.
     }
     timer = setTimeout(() => {
-      try {
-        proc.kill('SIGKILL');
-      } catch {
-        // already dead
+      // Windows: the bare kill() below was already final (ptySignal), so the
+      // timer only stops waiting on an exit event that may never come.
+      if (platform !== 'win32') {
+        try {
+          proc.kill(ptySignal('SIGKILL', platform));
+        } catch {
+          // already dead
+        }
       }
       finish();
     }, timeoutMs);
     try {
-      proc.kill('SIGTERM');
+      proc.kill(ptySignal('SIGTERM', platform));
     } catch {
       // already dead — nothing to wait for
       finish();
