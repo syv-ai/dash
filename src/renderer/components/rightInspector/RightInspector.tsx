@@ -422,7 +422,8 @@ export function RightInspector({
     selectSegment('history');
     if (expanded) useEditorTabs.getState().setTreeCollapsed(false);
   };
-  // History's rows open what they pick in the editor.
+  // Expanding on History opens the editor on the commit it picks. A row's
+  // own click only picks it (unfolding its files): a file opens the editor.
   const pickView = (next: typeof view) => {
     selectView(next);
     openEditor();
@@ -635,7 +636,7 @@ export function RightInspector({
       commits={commits}
       loading={review.commits ? review.commits.loading : ws.data.commitsLoading}
       view={view}
-      onSelectView={pickView}
+      onSelectView={selectView}
       commentCountByScope={ws.commentCountByScope}
       pr={review.historyPr}
       commitFiles={view.kind === 'commit' ? ws.data.changedFiles : []}

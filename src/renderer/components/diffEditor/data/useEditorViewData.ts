@@ -25,7 +25,8 @@ export interface EditorViewData {
   commitsLoading: boolean;
 }
 
-/** Which reads run: the editor's files, and the commit list (History). */
+/** Which reads run: the editor's files, and History's (the commit list and
+ *  the picked commit's files, listed under it with the editor closed too). */
 export interface ViewDataEnabled {
   files: boolean;
   commits: boolean;
@@ -47,6 +48,9 @@ export function useEditorViewData(
   enabled: ViewDataEnabled = { files: true, commits: true },
 ): EditorViewData {
   const frozen = frozenCommit(view);
+  // A frozen view's changed files serve the editor and History alike; its
+  // whole tree (the repo listing) only the editor.
+  const listsCommitFiles = frozen !== null && (enabled.files || enabled.commits);
   const isCommit = frozen !== null && enabled.files;
   const commitHash = frozen?.hash ?? '';
   const commitBase = frozen?.base;
@@ -56,9 +60,9 @@ export function useEditorViewData(
       window.electronAPI
         .editorListFilesInCommit({ cwd, hash: commitHash, base: commitBase })
         .then((r) => (r.success && r.data ? r.data : NO_FILES)),
-    [cwd, commitHash, commitBase, isCommit],
+    [cwd, commitHash, commitBase, listsCommitFiles],
     NO_FILES,
-    isCommit,
+    listsCommitFiles,
   );
 
   const repoSource = isCommit
@@ -86,14 +90,14 @@ export function useEditorViewData(
     git && enabled.commits,
   );
 
-  // A frozen view's files load with the editor; until then, none.
-  const changedFiles = isCommit
+  // A frozen view's files load with the editor or History; until then, none.
+  const changedFiles = listsCommitFiles
     ? commitFiles.data
     : view.kind === 'working'
       ? workingFiles
       : NO_FILES;
-  const changedFilesLoading = isCommit && commitFiles.loading;
-  const settled = (!isCommit || commitFiles.settled) && repoListing.settled;
+  const changedFilesLoading = listsCommitFiles && commitFiles.loading;
+  const settled = (!listsCommitFiles || commitFiles.settled) && repoListing.settled;
 
   return useMemo(
     () => ({
