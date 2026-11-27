@@ -21,6 +21,7 @@ import { clackBlock, clackExitBlock } from './clackLines';
 import { isPromptOnlySnapshot } from './snapshotFilter';
 import type { TerminalActivity } from './resizeVeil';
 import { FitScheduler } from './FitScheduler';
+import { domCellAdvance, nextDomCellWidth, PROBE_GLYPHS } from './domCellAdvance';
 import { WebglLifecycle } from './WebglLifecycle';
 import { repaintOnCanvasResize } from './webglCanvasRepaint';
 import { MouseModeTracker } from './mouseModeFilter';
@@ -1001,29 +1002,43 @@ export class TerminalSessionManager {
   }
 
   /**
-   * Read the DOM renderer's actual per-column advance from a rendered row and
-   * cache it in `domCellWidth`. xterm's reported `css.cell.width` under-counts
-   * the real glyph advance, so rows render wider than the grid xterm sizes and
-   * the last glyph spills past the right padding. When the measured advance
-   * changes the answer, re-fit once so the corrected column count takes effect;
-   * a stable measurement (within 0.05px) is a no-op, so this converges. No-op
-   * for WebGL terminals, whose grid is pixel-snapped to the cell.
+   * Read the DOM renderer's actual per-column advance and cache it in
+   * `domCellWidth`. xterm's reported `css.cell.width` under-counts the real
+   * glyph advance, so rows render wider than the grid xterm sizes and the last
+   * glyph spills past the right padding. The advance comes from a probe run of
+   * glyphs inside `.xterm-rows` (`domCellAdvance`), never from a row's width
+   * over the column count, which a read before xterm re-renders a resize
+   * turns into a self-confirming wrong advance. When the measure changes the
+   * answer, re-fit once; a stable one is a no-op, so this converges. No-op for
+   * WebGL terminals, whose grid is pixel-snapped to the cell.
    */
   private measureDomCellWidth(): void {
     if (!this.shellOnly) return;
     const el = this.terminal.element;
     requestAnimationFrame(() => {
-      const row = el?.querySelector('.xterm-rows > div') as HTMLElement | null;
-      const renderedCols = this.terminal.cols;
-      if (!row || renderedCols <= 0) return;
-      const advance = row.scrollWidth / renderedCols;
-      // Ignore bogus reads during layout transitions (collapsed/empty rows).
-      if (!Number.isFinite(advance) || advance <= 0) return;
-      const prev = this.domCellWidth;
-      if (prev !== undefined && Math.abs(prev - advance) < 0.05) return;
-      this.domCellWidth = advance;
+      const rows = el?.querySelector('.xterm-rows');
+      const cell = this.cellWidth();
+      if (!rows || !cell) return;
+      const probe = document.createElement('span');
+      probe.textContent = 'W'.repeat(PROBE_GLYPHS);
+      probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre';
+      rows.appendChild(probe);
+      const read = domCellAdvance(probe.getBoundingClientRect().width, PROBE_GLYPHS, cell);
+      probe.remove();
+      const next = nextDomCellWidth(this.domCellWidth, read);
+      if (next === undefined) return;
+      this.domCellWidth = next;
       this.fit();
     });
+  }
+
+  /** The cell width xterm reports (CSS px), or undefined before it has laid out. */
+  private cellWidth(): number | undefined {
+    return (
+      this.terminal as unknown as {
+        _core?: { _renderService?: { dimensions?: { css?: { cell?: { width: number } } } } };
+      }
+    )._core?._renderService?.dimensions?.css?.cell?.width;
   }
 
   getSearchAddon(): SearchAddon {
