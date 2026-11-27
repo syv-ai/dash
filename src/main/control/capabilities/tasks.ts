@@ -1157,7 +1157,8 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
       handler: async (ctx, input) => {
         const task = taskOrThrow(input.taskId);
         assertNotArchived(task);
-        if (ctx.caller.kind === 'task' && ctx.caller.taskId === task.id && !input.whenIdle) {
+        const self = ctx.caller.kind === 'task' && ctx.caller.taskId === task.id;
+        if (self && !input.whenIdle) {
           throw new ControlError(
             403,
             'a task can restart itself only with --when-idle: a restart now would cut the call making it',
@@ -1170,7 +1171,9 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         }
         queuedRestarts.get(task.id)?.();
         queuedRestarts.delete(task.id);
-        if (!midTurn(view(task).state)) {
+        // Yourself: always queued, since your own call is a turn even before
+        // a hook has said so.
+        if (!self && !midTurn(view(task).state)) {
           await deps.restartSession(task.id, opts);
           return { queued: false, task: view(taskOrThrow(task.id)) };
         }
@@ -1179,9 +1182,16 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           unsubscribe();
           if (queuedRestarts.get(task.id) === cancel) queuedRestarts.delete(task.id);
         };
+        // The turn to wait out: the one running now, or (yourself, before a
+        // hook has marked it) the next one seen.
+        let seenTurn = midTurn(view(task).state);
         const unsubscribe = deps.onActivityChange(() => {
           const now = deps.getTask(task.id);
-          if (now && midTurn(view(now).state)) return;
+          if (now && midTurn(view(now).state)) {
+            seenTurn = true;
+            return;
+          }
+          if (now && !seenTurn && !now.archivedAt) return;
           cancel();
           // Gone or archived meanwhile: nothing to restart.
           if (!now || now.archivedAt) return;

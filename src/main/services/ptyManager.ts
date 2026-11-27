@@ -908,6 +908,8 @@ export async function restartTaskSession(
     sessionId = null;
     freshStarts.add(taskId);
   }
+  // A new conversation: the old one's context and cost no longer apply.
+  if (opts.fresh) contextUsageService.unregister(taskId);
   await supervisorService.stop(task.jobId).catch(() => {});
   await supervisorService.remove(task.jobId).catch(() => {});
   DatabaseService.setTaskSession(taskId, { jobId: null, sessionId });

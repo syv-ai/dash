@@ -708,6 +708,20 @@ describe('tasks.restart', () => {
     expect(deps.restartSession).toHaveBeenCalledWith('me', { fresh: true, prompt: 'go' });
   });
 
+  it('queues a self-restart even when no hook has marked the task working yet', async () => {
+    activity = { me: { state: 'idle' } };
+    expect(
+      await registry.call(asTask('me'), 'tasks.restart', { taskId: 'me', whenIdle: true }),
+    ).toMatchObject({ queued: true });
+    expect(deps.restartSession).not.toHaveBeenCalled();
+    // Another task's change, before this turn has been seen, isn't its end.
+    emitActivity({ me: { state: 'idle' }, child: { state: 'busy' } });
+    expect(deps.restartSession).not.toHaveBeenCalled();
+    emitActivity({ me: { state: 'busy' } });
+    emitActivity({ me: { state: 'idle' } });
+    expect(deps.restartSession).toHaveBeenCalledTimes(1);
+  });
+
   it('drops a queued restart when the task is archived first', async () => {
     activity = { child: { state: 'busy' } };
     await registry.call(orch, 'tasks.restart', { taskId: 'child', whenIdle: true });
