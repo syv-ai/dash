@@ -25,6 +25,7 @@ import { domCellAdvance, nextDomCellWidth, PROBE_GLYPHS } from './domCellAdvance
 import { WebglLifecycle } from './WebglLifecycle';
 import { repaintOnCanvasResize } from './webglCanvasRepaint';
 import { MouseModeTracker } from './mouseModeFilter';
+import { HiddenOutput } from './hiddenOutput';
 import { macShellKeySequence } from './shellKeys';
 import { TUI_COLS, TUI_ROWS } from '../../shared/tuiProtocol';
 
@@ -97,6 +98,8 @@ export class TerminalSessionManager {
   // Swallows Claude Code's redundant mouse-mode re-assertions, which would
   // otherwise make xterm drop the selection on every TUI growth.
   private mouseModes = new MouseModeTracker();
+  // A hidden kept task terminal's output, held unparsed until it is shown.
+  private readonly hiddenOutput = new HiddenOutput();
   private lastPtyCols = 0;
   private lastPtyRows = 0;
   private lastMemoryCheckAt = 0;
@@ -381,6 +384,32 @@ export class TerminalSessionManager {
   private resetTerminal(): void {
     this.terminal.reset();
     this.mouseModes.clear();
+    this.hiddenOutput.clear();
+  }
+
+  /**
+   * A kept task terminal that is hidden holds its output unparsed (see
+   * hiddenOutput). Nothing reads its screen meanwhile: the status orb runs on
+   * hooks in main, and search, selection and the veil only act while shown.
+   * Its mouse-mode tracker and any reply xterm owes the program catch up when
+   * the output is written, in the same order.
+   */
+  private get holdsOutput(): boolean {
+    return this.isTaskPane && !this.isShown;
+  }
+
+  /** Shown again: write the held output, or, if there was too much, reset
+   *  and let the attach below start a fresh client, which repaints the
+   *  whole screen (as a reconnect does). */
+  private writeHeldOutput(): void {
+    const held = this.hiddenOutput.take();
+    if (held.stale) {
+      this.ptyStarted = false;
+      this.resetTerminal();
+      return;
+    }
+    for (const chunk of held.chunks) this.terminal.write(chunk);
+    if (held.chunks.length > 0) this.onActivity?.('output');
   }
 
   private createGpu(): WebglLifecycle<WebglAddon> | null {
@@ -431,6 +460,8 @@ export class TerminalSessionManager {
     const gen = ++this.attachGeneration;
     if (this.disposed) return;
     this.currentContainer = container;
+    // In the same task as the switch to shown, so later output lands after it.
+    this.writeHeldOutput();
     this.onShown?.();
     this.terminal.options.scrollback = this.scrollbackCap;
 
@@ -1388,6 +1419,11 @@ export class TerminalSessionManager {
       if (this._isRestarting && !firedDataReady) {
         firedDataReady = true;
         setTimeout(() => this.fireReady(), 800);
+      }
+
+      if (this.holdsOutput) {
+        this.hiddenOutput.push(data);
+        return;
       }
 
       // Real shell output has arrived — wipe the `folder $` ghost (screen +
