@@ -86,7 +86,7 @@ export function CommentsTab({
           collapsible
           {...unresolved}
         >
-          <Items items={groups.unresolved} context={context} onNavigate={onNavigate} />
+          <CommentItems items={groups.unresolved} context={context} onNavigate={onNavigate} />
         </DetailSection>
       )}
       {groups.resolved.length > 0 && (
@@ -96,7 +96,7 @@ export function CommentsTab({
           collapsible
           {...resolved}
         >
-          <Items items={groups.resolved} context={context} onNavigate={onNavigate} />
+          <CommentItems items={groups.resolved} context={context} onNavigate={onNavigate} />
         </DetailSection>
       )}
     </div>
@@ -108,7 +108,9 @@ function Cards({ children }: { children: ReactNode }) {
   return <div className="grid gap-2.5 px-2.5 pt-1 pb-3">{children}</div>;
 }
 
-function Items({
+/** A list of the tab's rows (threads with their draft replies, draft line
+ *  comments) as its cards; Finish review lists what posts with it too. */
+export function CommentItems({
   items,
   context,
   onNavigate,

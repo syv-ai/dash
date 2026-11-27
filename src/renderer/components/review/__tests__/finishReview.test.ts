@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { DiffComment } from '../../../../shared/types';
+import type { DiffComment, PrReviewThread } from '../../../../shared/types';
 import {
   canPost,
   finishOffered,
   offeredVerdict,
   postLabel,
+  postingItems,
   unsentNoteCount,
 } from '../finishReview';
 
@@ -79,5 +80,32 @@ describe('finishOffered', () => {
     expect(finishOffered({ own: true, comments: [reply], summary: ' ' })).toBe(false);
     expect(finishOffered({ own: true, comments: [reply, line], summary: '' })).toBe(true);
     expect(finishOffered({ own: true, comments: [], summary: 'LGTM' })).toBe(true);
+  });
+
+  it('lists what posts: threads with a draft reply and draft line comments, open first', () => {
+    const thread = (id: string, over: Partial<PrReviewThread> = {}): PrReviewThread => ({
+      id,
+      path: 'a.ts',
+      line: 3,
+      startLine: null,
+      side: 'RIGHT',
+      isOutdated: false,
+      resolved: false,
+      comments: [],
+      ...over,
+    });
+    const items = postingItems(
+      [thread('quiet'), thread('open', { line: 9 }), thread('done', { resolved: true })],
+      [
+        draft('r1', { kind: 'comment', replyTo: 'done' }),
+        draft('r2', { kind: 'comment', replyTo: 'open' }),
+        draft('line', { kind: 'comment', startLine: 5, endLine: 5 }),
+      ],
+    );
+    expect(items.map((i) => (i.kind === 'thread' ? i.thread.id : `draft:${i.draft.id}`))).toEqual([
+      'draft:line',
+      'open',
+      'done',
+    ]);
   });
 });

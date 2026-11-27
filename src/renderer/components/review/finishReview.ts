@@ -1,6 +1,7 @@
 import { isPrComment } from '../../../shared/diffComments';
-import type { DiffComment, PrProvider, PrVerdict } from '../../../shared/types';
+import type { DiffComment, PrProvider, PrReviewThread, PrVerdict } from '../../../shared/types';
 import { plural, providerName } from './labels';
+import { commentGroups, type CommentItem } from './outline';
 
 /** The Finish-review sheet's rules: what a verdict is called, whether there
  *  is anything to post, and what the post button says. */
@@ -68,3 +69,14 @@ export const unsentNoteCount = (
   Object.values(byFile)
     .flat()
     .filter((c) => c.viewScope === scope && !isPrComment(c) && !c.sent).length;
+
+/** What posts, as the Comments tab lists it (`commentGroups`): each thread
+ *  the person drafted a reply in and each draft line comment, open threads
+ *  first, by file and line. Threads without a draft are left out. */
+export function postingItems(
+  threads: readonly PrReviewThread[],
+  drafts: readonly DiffComment[],
+): CommentItem[] {
+  const { unresolved, resolved } = commentGroups(threads, drafts);
+  return [...unresolved, ...resolved].filter((i) => i.kind === 'draft' || i.replies.length > 0);
+}

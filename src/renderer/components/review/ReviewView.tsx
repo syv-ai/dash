@@ -208,6 +208,7 @@ function Review({
           taskId={task.id}
           comments={comments}
           noteCount={unsentNoteCount(byFile, scope)}
+          onNavigate={onNavigate}
           onClose={() => setFinishing(false)}
         />
       )}

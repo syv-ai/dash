@@ -1,20 +1,22 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
-import { Bot, Check, Copy, Loader2, MessageSquare } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { Bot, Check, Copy, Loader2 } from 'lucide-react';
 import { toast } from '../ui/toast';
 import type { DiffComment, PrReview, PrVerdict, PrWriteError } from '../../../shared/types';
+import { prScope } from '../../../shared/prScope';
 import { usePrReviews } from '../../stores/prReviewStore';
 import { useTaskReview } from '../diffEditor/prReview/useTaskReview';
-import { Badge } from '../ui/Badge';
+import { usePrThreadContext } from '../diffEditor/prReview/usePrThreadContext';
 import { Button } from '../ui/Button';
+import { DetailItem, DetailList } from '../ui/DetailList';
+import { Dialog, DialogFooter, DialogHeader } from '../ui/Dialog';
+import { Field } from '../ui/Field';
 import { IconButton } from '../ui/IconButton';
-import { Markdown } from '../ui/Markdown';
-import { Modal, useModalClose } from '../ui/Modal';
+import { useModalClose } from '../ui/Modal';
 import { Select } from '../ui/Select';
 import { Textarea } from '../ui/Textarea';
-import { DraftActions, DraftEditor } from './DraftActions';
-import { canPost, offeredVerdict, postLabel, VERDICT_LABELS } from './finishReview';
+import { CommentItems } from './CommentsTab';
+import { canPost, offeredVerdict, postingItems, postLabel, VERDICT_LABELS } from './finishReview';
 import { plural, providerName } from './labels';
-import { groupByPath, lineLabel } from './outline';
 
 interface Props {
   review: PrReview;
@@ -25,26 +27,26 @@ interface Props {
   comments: DiffComment[];
   /** The task's notes on this PR not yet sent: they stay local. */
   noteCount: number;
+  /** Show a draft where it was written (closes the sheet). */
+  onNavigate: (scope: string, path: string, commentId: string) => void;
   onClose: () => void;
 }
 
 /**
- * Finish review: the one place a review posts. The verdict, the summary (the
- * review's PR-level comment, a stored draft the agent may have written), and
- * every comment and reply by file — editable, deletable, demotable — then a
- * button that says what posts where. Nothing posts from the keyboard.
+ * Finish review: the one place a review posts. Two columns: on the left what
+ * the review is (the PR, what posts where), the verdict and the summary (the
+ * review's PR-level comment, a stored draft the agent may have written); on
+ * the right every comment and reply that posts, as the Comments tab draws
+ * them (threads fold), scrolling on its own. Then a button that says what
+ * posts where. Nothing posts from the keyboard.
  */
 export function FinishReviewSheet(props: Props) {
   // Read when a close is asked for, which can come before a re-render.
   const posting = useRef(false);
   return (
-    <Modal
-      onClose={props.onClose}
-      canClose={() => !posting.current}
-      size="flex max-h-[88vh] w-[720px] max-w-[94vw] flex-col"
-    >
+    <Dialog size="nav" onClose={props.onClose} canClose={() => !posting.current}>
       <Sheet {...props} posting={posting} />
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -55,6 +57,7 @@ function Sheet({
   taskId,
   comments,
   noteCount,
+  onNavigate,
   posting,
 }: Props & { posting: RefObject<boolean> }) {
   const close = useModalClose();
@@ -65,6 +68,16 @@ function Sheet({
   const body = summary?.body ?? '';
   const [error, setError] = useState<{ error: PrWriteError; posted: number } | null>(null);
   const toPost = { comments: comments.length, summary: body, verdict };
+  const forge = providerName(review.provider);
+  const replies = comments.filter((c) => c.replyTo).length;
+  const items = useMemo(() => postingItems(review.threads, comments), [review, comments]);
+  const context = usePrThreadContext({
+    review,
+    projectId,
+    cwd,
+    taskId,
+    draftScope: prScope(review.provider, review.number),
+  });
 
   async function post() {
     posting.current = true;
@@ -83,97 +96,102 @@ function Sheet({
 
   return (
     <>
-      <header className="grid gap-0.5 px-5 pt-5 pb-3">
-        <h2 className="type-title truncate">Finish review of PR #{review.number}</h2>
-        <p className="type-caption truncate" title={review.title}>
-          {review.title}
-        </p>
-      </header>
-      <div className="scrollbar-thin-hover grid min-h-0 flex-1 content-start gap-5 overflow-y-auto px-5 pb-4">
-        {review.verdicts.length > 1 && (
-          <label className="grid gap-1.5">
-            <span className="type-label">Verdict</span>
-            <Select
-              value={verdict}
-              onValueChange={setPicked}
-              options={review.verdicts.map((v) => ({ value: v, label: VERDICT_LABELS[v] }))}
-            />
-          </label>
-        )}
-        <label className="grid gap-1.5">
-          <span className="flex items-center gap-2">
-            <span className="type-label flex-1">Summary</span>
-            {summary?.author === 'agent' && (
-              <span className="type-caption inline-flex items-center gap-1">
-                <Bot size={14} strokeWidth={1.8} className="text-icon" />
-                Drafted by the agent
+      <DialogHeader
+        title={`Finish review of PR #${review.number}`}
+        description={<span title={review.title}>{review.title}</span>}
+        closeDisabled={busy}
+      />
+      <div className="flex min-h-0 flex-1">
+        <div className="scrollbar-thin-hover grid w-90 shrink-0 content-start gap-5 overflow-y-auto px-5 pt-1 pb-5">
+          <DetailList>
+            <DetailItem label="Posts to">{forge}</DetailItem>
+            <DetailItem label="Author">{review.author}</DetailItem>
+            <DetailItem label="Into" title={`${review.headRef} → ${review.baseRef}`}>
+              {review.baseRef}
+            </DetailItem>
+            <DetailItem label="Comments">
+              <span className="tabular-nums">
+                {[
+                  comments.length > replies && plural(comments.length - replies, 'comment'),
+                  replies > 0 && (replies === 1 ? '1 reply' : `${replies} replies`),
+                ]
+                  .filter(Boolean)
+                  .join(', ') || 'None'}
               </span>
+            </DetailItem>
+            {noteCount > 0 && (
+              <DetailItem label="Notes">
+                <span className="tabular-nums">{noteCount} stay local</span>
+              </DetailItem>
             )}
-          </span>
-          <Textarea
-            value={body}
-            onChange={(e) => setSummary(e.target.value)}
-            // Keys stay in the field: no app shortcut fires, nothing posts.
-            onKeyDown={(e) => e.stopPropagation()}
-            placeholder="A comment on the whole PR (optional)"
-            autoGrow={{ minRows: 6, maxRows: 24 }}
-          />
-        </label>
-        <section className="grid gap-2">
-          <h3 className="type-heading">
+          </DetailList>
+          {review.verdicts.length > 1 && (
+            <Field label="Verdict">
+              <Select
+                value={verdict}
+                onValueChange={setPicked}
+                options={review.verdicts.map((v) => ({ value: v, label: VERDICT_LABELS[v] }))}
+              />
+            </Field>
+          )}
+          <Field
+            label="Summary"
+            hint={{
+              title: 'Summary',
+              body: `A comment on the whole PR, posted with the review on ${forge}.`,
+            }}
+            trailing={
+              summary?.author === 'agent' && (
+                <span className="inline-flex items-center gap-1">
+                  <Bot size={14} strokeWidth={1.8} className="text-icon" />
+                  Drafted by the agent
+                </span>
+              )
+            }
+          >
+            <Textarea
+              value={body}
+              onChange={(e) => setSummary(e.target.value)}
+              // Keys stay in the field: no app shortcut fires, nothing posts.
+              onKeyDown={(e) => e.stopPropagation()}
+              placeholder="A comment on the whole PR (optional)"
+              autoGrow={{ minRows: 6, maxRows: 24 }}
+            />
+          </Field>
+        </div>
+        <section
+          aria-label="Comments that post"
+          className="flex min-w-0 flex-1 flex-col rounded-l-xl bg-dialog-well"
+        >
+          <h3 className="type-heading shrink-0 px-5 pt-4 pb-2">
             {comments.length > 0 ? plural(comments.length, 'comment') : 'No comments'}
           </h3>
-          {groupByPath(comments).map(([path, list]) => (
-            <div key={path} className="grid gap-1.5">
-              <h4 className="type-subheading truncate" title={path}>
-                {path}
-              </h4>
-              {list.map((c) => (
-                <DraftCard key={c.id} comment={c} />
-              ))}
-            </div>
-          ))}
-          {noteCount > 0 && (
-            <p className="type-caption">
-              {noteCount} {noteCount === 1 ? 'note stays' : 'notes stay'} local.
-            </p>
-          )}
+          <div className="scrollbar-thin-hover min-h-0 flex-1 overflow-y-auto px-2.5">
+            {context && items.length > 0 ? (
+              <CommentItems
+                items={items}
+                context={context}
+                onNavigate={(scope, path, id) => {
+                  onNavigate(scope, path, id);
+                  close();
+                }}
+              />
+            ) : (
+              <p className="type-caption px-2.5">Only the verdict and summary post.</p>
+            )}
+          </div>
         </section>
       </div>
-      <footer className="grid gap-2 border-t border-line px-5 py-3">
-        {error && <WriteError {...error} provider={review.provider} />}
-        <div className="flex items-center justify-end gap-2">
-          <Button variant="ghost" disabled={busy} onClick={close}>
-            Cancel
-          </Button>
-          <Button disabled={busy || !canPost(toPost)} onClick={() => void post()}>
-            {busy && <Loader2 size={14} strokeWidth={1.8} className="animate-spin" />}
-            {postLabel(review.provider, toPost)}
-          </Button>
-        </div>
-      </footer>
+      <DialogFooter status={error && <WriteError {...error} provider={review.provider} />}>
+        <Button variant="ghost" disabled={busy} onClick={close}>
+          Cancel
+        </Button>
+        <Button disabled={busy || !canPost(toPost)} onClick={() => void post()}>
+          {busy && <Loader2 size={14} strokeWidth={1.8} className="animate-spin" />}
+          {postLabel(review.provider, toPost)}
+        </Button>
+      </DialogFooter>
     </>
-  );
-}
-
-/** One comment or reply as it will post: where, who drafted it, its text. */
-function DraftCard({ comment: c }: { comment: DiffComment }) {
-  const [editing, setEditing] = useState(false);
-  if (editing) return <DraftEditor comment={c} onDone={() => setEditing(false)} />;
-  return (
-    <div className="grid gap-1 rounded-lg border border-line px-3 py-2">
-      <div className="flex items-center gap-1.5">
-        <MessageSquare size={14} strokeWidth={1.8} className="text-icon" />
-        <span className="type-caption min-w-0 flex-1 truncate tabular-nums">
-          {c.replyTo ? `Reply · ${lineLabel(c)}` : lineLabel(c)}
-        </span>
-        {c.author === 'agent' && <Badge size="sm">Agent</Badge>}
-        <DraftActions comment={c} onEdit={() => setEditing(true)} />
-      </div>
-      <div className="type-body">
-        <Markdown text={c.text} />
-      </div>
-    </div>
   );
 }
 
