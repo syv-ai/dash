@@ -53,11 +53,13 @@ export function useTreePanel(collapsedSize: number) {
   });
   const heldTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(heldTimer.current), []);
-  const cross = (folded: boolean) => {
+  // `dragged`: into the rail, its content already faded out by the panel
+  // (`ResizablePanel dragOpen`), so its rail comes at once.
+  const cross = (folded: boolean, dragged = false) => {
     setFolded(folded);
     const was = extent.current.folded;
     extent.current.folded = folded;
-    if (was === null || panelEaseMs() === 0) return;
+    if (was === null || dragged || panelEaseMs() === 0) return;
     const { openPx, groupPx } = extent.current;
     // Where it is heading, from the layout (the DOM is still easing).
     const pct = panelRef.current?.getSize().asPercentage ?? 0;
@@ -90,8 +92,8 @@ export function useTreePanel(collapsedSize: number) {
     dragOpen: true,
     ...(startCollapsed ? { defaultSize: collapsedSize } : {}),
     onResize,
-    onCollapse: () => {
-      cross(true);
+    onCollapse: ({ dragged }: { dragged: boolean }) => {
+      cross(true, dragged);
       set(true);
     },
     onExpand: () => {

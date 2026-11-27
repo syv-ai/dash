@@ -18,6 +18,7 @@ import {
   type PanelSize,
   type SeparatorProps,
 } from 'react-resizable-panels';
+import { flushSync } from 'react-dom';
 import { cn } from '../../lib/cn';
 import { MOTION_MS, reducedMotion } from '../../lib/motion';
 import { heldAcrossRail, RAIL_DRAG_SLOP_PX, railDragEnd, type Held } from '../../lib/railCrossing';
@@ -134,8 +135,10 @@ function easeGroup(group: HTMLElement | null, ms: number): () => void {
 interface ResizablePanelProps extends PanelProps {
   /** Ease size changes (collapse, expand, imperative resize) while true. */
   animate?: boolean;
-  /** Called when the panel becomes collapsed, including on mount. */
-  onCollapse?: () => void;
+  /** Called when the panel becomes collapsed, including on mount;
+   *  `dragged`: by a drag into its rail (`dragOpen`), its content already
+   *  faded out while the pointer was down. */
+  onCollapse?: (how: { dragged: boolean }) => void;
   /** Called when the panel stops being collapsed, including on mount;
    *  `dragged`: by a drag out of its rail (`dragOpen`), at the width the
    *  drag left it, which is the user's. */
@@ -147,7 +150,10 @@ interface ResizablePanelProps extends PanelProps {
    * instead, its rail held as it was (`useRailDrag`), and on release it
    * settles (`railDragEnd`): back to the rail if it barely moved, else open
    * at least `minSize`, easing there with its neighbours, its content held
-   * at that width and fading in. It only counts as expanded then.
+   * at that width and fading in. It only counts as expanded then. Dragged
+   * into its rail (the library's drag), its content holds its last open
+   * width, clipped, and fades out once the panel snaps to the rail; it only
+   * counts as collapsed once released there, its rail fading in.
    */
   dragOpen?: boolean;
 }
@@ -175,6 +181,11 @@ export function ResizablePanel({
   // it has moved past the slop, as a constraint changing re-registers the
   // panel, which forgets the width `expand()` restores.
   const [relaxed, setRelaxed] = useState(false);
+  // Down on its handle while open (the library's drag): crossings wait for
+  // the release. `openPx`: its width as last open, which a drag into the
+  // rail holds its content at.
+  const closing = useRef(false);
+  const openPx = useRef(0);
 
   const setHandle = useCallback(
     (h: PanelImperativeHandle | null) => {
@@ -197,15 +208,24 @@ export function ResizablePanel({
     onResize?.(size, id, prev);
     if (!handle.current || dragging.current) return;
     const collapsed = handle.current.isCollapsed();
+    if (!collapsed) openPx.current = size.inPixels;
+    if (closing.current) {
+      // Snapped to the rail mid-drag, or back out of it: the content held
+      // at its open width (fading out) or let go, before this frame paints
+      // (a resize observer runs between layout and paint).
+      const held: Held | null = collapsed ? { width: openPx.current, fade: 'out' } : null;
+      flushSync(() => setRailDrag({ rail: null, held }));
+      return;
+    }
     if (collapsed === wasCollapsed.current) return;
     wasCollapsed.current = collapsed;
-    if (collapsed) onCollapse?.();
+    if (collapsed) onCollapse?.({ dragged: false });
     else onExpand?.({ dragged: false });
   };
 
   // The latest props for the drag's listeners, which outlive a render.
-  const latest = useRef({ minSize, collapsedSize, onExpand });
-  latest.current = { minSize, collapsedSize, onExpand };
+  const latest = useRef({ minSize, collapsedSize, onExpand, onCollapse });
+  latest.current = { minSize, collapsedSize, onExpand, onCollapse };
 
   useEffect(() => {
     if (!dragOpen) return;
@@ -265,7 +285,7 @@ export function ResizablePanel({
     const press = (e: PointerEvent) => {
       const el = element.current;
       const h = handle.current;
-      if (e.button > 0 || !el || !h?.isCollapsed()) return;
+      if (e.button > 0 || !el || !h) return;
       const separator = e.target instanceof Element ? e.target.closest('[data-separator]') : null;
       if (!separator || separator.getAttribute('aria-disabled') === 'true') return;
       // The rail keeps the panel's outer edge, away from the handle.
@@ -276,6 +296,7 @@ export function ResizablePanel({
             ? 'end'
             : null;
       if (!align) return;
+      if (!h.isCollapsed()) return watchClose();
       e.preventDefault();
       e.stopPropagation();
       clear();
@@ -319,6 +340,32 @@ export function ResizablePanel({
       window.addEventListener('pointerup', release);
       window.addEventListener('pointercancel', release);
       cleanups.push(end);
+    };
+    // The library's drag of the open panel: its crossing waits for the
+    // release (`handleResize` holds the content meanwhile).
+    const watchClose = () => {
+      clear();
+      closing.current = true;
+      const done = () => {
+        window.removeEventListener('pointerup', done);
+        window.removeEventListener('pointercancel', done);
+        if (!closing.current) return;
+        closing.current = false;
+        const collapsed = handle.current?.isCollapsed() ?? false;
+        setRailDrag({ rail: null, held: null });
+        if (collapsed === wasCollapsed.current) return;
+        wasCollapsed.current = collapsed;
+        if (collapsed) latest.current.onCollapse?.({ dragged: true });
+        else latest.current.onExpand?.({ dragged: false });
+      };
+      // Bubbling, after the library's own (capture) has ended its drag.
+      window.addEventListener('pointerup', done);
+      window.addEventListener('pointercancel', done);
+      cleanups.push(() => {
+        window.removeEventListener('pointerup', done);
+        window.removeEventListener('pointercancel', done);
+        closing.current = false;
+      });
     };
     // Capture on the window: ahead of the library's own, on the document.
     window.addEventListener('pointerdown', press, true);
