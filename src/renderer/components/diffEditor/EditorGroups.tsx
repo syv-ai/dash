@@ -2,6 +2,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useRef,
   useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
@@ -11,6 +12,7 @@ import type { ITheme as XtermTheme } from '@xterm/xterm';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/Resizable';
 import { EmptyState } from '../ui/EmptyState';
 import { folderSheet } from '../ui/FolderTab';
+import { useSlideIn, type SlideReady } from '../ui/tabMotion';
 import { cn } from '../../lib/cn';
 import { selectLayout, useEditorTabs, type TextRange } from '../../stores/editorTabsStore';
 import { useEditors } from '../../stores/editorsStore';
@@ -240,32 +242,34 @@ export function EditorGroups({ ws, terminalTheme, isDark, actions }: Props) {
                     trailing={isLast ? editorActions : null}
                   />
                   <div className={cn('flex min-h-0 flex-1 flex-col', folderSheet)}>
-                    {filePath ? (
-                      <EditorPane
-                        paneId={`pane:${tabsKey}:${i}`}
-                        group={index}
-                        reviewNav={ws.view.kind === 'pr' && !plain ? reviewNav : undefined}
-                        cwd={cwd}
-                        git={ws.git && !plain}
-                        filePath={filePath}
-                        view={plain ? PLAIN_VIEW : ws.view}
-                        activeTaskId={plain ? null : ws.activeTaskId}
-                        terminalTheme={terminalTheme}
-                        isDark={isDark}
-                        revealCommentId={ws.revealCommentId}
-                        onNavigateToComment={ws.navigateToComment}
-                        onClearReveal={ws.clearRevealComment}
-                        projectId={plain ? null : ws.projectId}
-                        revealRange={groupReveal}
-                        onRevealed={clearReveal}
-                        onIsDirectory={(path) => showFolder(index, path)}
-                      />
-                    ) : (
-                      <EmptyState
-                        icon={<FileText size={14} strokeWidth={1.8} />}
-                        title="Open a file from the tree"
-                      />
-                    )}
+                    <GroupPane active={group.active} tabs={group.tabs}>
+                      {filePath ? (
+                        <EditorPane
+                          paneId={`pane:${tabsKey}:${i}`}
+                          group={index}
+                          reviewNav={ws.view.kind === 'pr' && !plain ? reviewNav : undefined}
+                          cwd={cwd}
+                          git={ws.git && !plain}
+                          filePath={filePath}
+                          view={plain ? PLAIN_VIEW : ws.view}
+                          activeTaskId={plain ? null : ws.activeTaskId}
+                          terminalTheme={terminalTheme}
+                          isDark={isDark}
+                          revealCommentId={ws.revealCommentId}
+                          onNavigateToComment={ws.navigateToComment}
+                          onClearReveal={ws.clearRevealComment}
+                          projectId={plain ? null : ws.projectId}
+                          revealRange={groupReveal}
+                          onRevealed={clearReveal}
+                          onIsDirectory={(path) => showFolder(index, path)}
+                        />
+                      ) : (
+                        <EmptyState
+                          icon={<FileText size={14} strokeWidth={1.8} />}
+                          title="Open a file from the tree"
+                        />
+                      )}
+                    </GroupPane>
                   </div>
                 </div>
               </ResizablePanel>
@@ -273,6 +277,50 @@ export function EditorGroups({ ws, terminalTheme, isDark, actions }: Props) {
           );
         })}
       </ResizablePanelGroup>
+    </div>
+  );
+}
+
+/** The longest a pane's slide waits for the new file to show. */
+const FILE_SHOWN_CAP_MS = 400;
+
+/** The pane's slide starts with the editor's file fade (`EditorViewport`
+ *  starts it once the new file has loaded, so the old file never moves);
+ *  if the fade doesn't come, there is no slide. */
+const whenFileShows: SlideReady = (el, go) => {
+  const onRun = (e: TransitionEvent) => {
+    if (e.propertyName !== 'opacity') return;
+    stop();
+    go();
+  };
+  const timer = window.setTimeout(() => stop(), FILE_SHOWN_CAP_MS);
+  const stop = () => {
+    window.clearTimeout(timer);
+    el.removeEventListener('transitionrun', onRun);
+  };
+  el.addEventListener('transitionrun', onRun);
+  return stop;
+};
+
+/**
+ * A group's pane in its sheet: switching to another of its tabs slides it in
+ * a short way from the side of travel (`useSlideIn`), with the new file's
+ * fade. Only its place moves; the one Monaco widget stays mounted.
+ */
+function GroupPane({
+  active,
+  tabs,
+  children,
+}: {
+  active: string | null;
+  tabs: string[];
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useSlideIn(ref, active, tabs, { fade: false, ready: whenFileShows });
+  return (
+    <div ref={ref} className="flex min-h-0 flex-1 flex-col">
+      {children}
     </div>
   );
 }

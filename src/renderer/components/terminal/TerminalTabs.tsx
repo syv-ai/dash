@@ -3,7 +3,8 @@ import { Terminal, ChevronDown, ChevronUp, ChevronsRight, Plus, Check } from 'lu
 import { sessionRegistry } from '../../terminal/SessionRegistry';
 import { Tooltip } from '../ui/Tooltip';
 import { IconButton } from '../ui/IconButton';
-import { PillTab } from '../ui/PillTab';
+import { PillTab, PillTabIndicator } from '../ui/PillTab';
+import { useSlideIn } from '../ui/tabMotion';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -71,6 +72,12 @@ function computeTabLayout(
   };
 }
 
+/** A tab's tint: TUI tabs are Dash speaking (primary), a service keeps the
+ *  port-terminal wash, a shell is plain. */
+function toneOf(kind: Tab['kind'] | undefined): 'primary' | 'service' | 'plain' {
+  return kind === 'tui' ? 'primary' : kind === 'service' ? 'service' : 'plain';
+}
+
 interface TerminalTabsProps {
   taskId: string;
   cwd: string;
@@ -99,6 +106,7 @@ export function TerminalTabs({
   onTuiActiveChange,
 }: TerminalTabsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const paneRef = useRef<HTMLDivElement>(null);
   const shellId = `shell:${taskId}`;
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -403,8 +411,9 @@ export function TerminalTabs({
         key={tab.id}
         data-tab-id={tab.id}
         className="drawer-tab-in"
-        tone={tab.kind === 'tui' ? 'primary' : tab.kind === 'service' ? 'service' : 'plain'}
+        tone={toneOf(tab.kind)}
         active={isActive}
+        indicated
         onSelect={() => handleSelectTab(tab.id)}
         onClose={closeable ? () => handleCloseTab(tab.id) : undefined}
         closeLabel={`Close terminal ${tab.label}`}
@@ -436,6 +445,14 @@ export function TerminalTabs({
     tabWidthsRef.current,
   );
 
+  // The tabs in the strip's order (shells and services, then TUIs): a switch
+  // slides the active tab's tint along them and the terminal in from the side
+  // of travel (only its place moves: the session stays attached, and a
+  // translate changes neither its size nor its device-pixel box).
+  const order = [...stripTabs, ...tabs.filter((t) => t.kind === 'tui')].map((t) => t.id);
+  const activeTone = toneOf(tabs.find((t) => t.id === activeTabId)?.kind);
+  useSlideIn(paneRef, activeTabId, order);
+
   return (
     <div className="h-full flex flex-col">
       {collapsed ? (
@@ -461,6 +478,8 @@ export function TerminalTabs({
         </button>
       ) : (
         <div className="relative flex items-center gap-0.5 h-9 shrink-0 pl-1.5">
+          {/* The active tab's tint, sliding from tab to tab. */}
+          <PillTabIndicator active={activeTabId} tone={activeTone} />
           {/* Hidden measuring row — lays out every shell/service tab off-screen
               so the overflow split below uses real measured widths even for tabs
               currently collapsed into the dropdown. */}
@@ -547,7 +566,7 @@ export function TerminalTabs({
       {/* Terminal container always in DOM to avoid re-attach on expand.
           TUI tabs render on a fixed-size xterm canvas — center it so the
           pinned 80-col frame reads as a dialog, not mispadded output. */}
-      <div className="relative min-h-0 flex-1">
+      <div ref={paneRef} className="relative min-h-0 flex-1">
         <div
           ref={containerRef}
           className={`terminal-container terminal-drawer h-full ${

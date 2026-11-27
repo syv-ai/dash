@@ -1,6 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { Pin, X } from 'lucide-react';
-import { FolderTab, folderStripSlot } from '../ui/FolderTab';
+import { FolderTab, FolderTabIndicator, folderStripSlot } from '../ui/FolderTab';
 import { cn } from '../../lib/cn';
 import {
   ContextMenu,
@@ -40,7 +40,8 @@ function basename(path: string): string {
 /** A group's open files as folder tabs over its sheet (the active one opens
  *  into it), with a dirty dot on unsaved ones and the preview tab in italics;
  *  right-click for keep/close commands. The strip overlaps the sheet by 1px so the
- *  active tab covers the sheet's top edge where they join. */
+ *  active tab covers the sheet's top edge where they join. The open folder's
+ *  shape slides from tab to tab (`TabIndicator`). */
 export function EditorTabStrip({
   cwd,
   tabs,
@@ -75,10 +76,12 @@ export function EditorTabStrip({
         role="tablist"
         aria-label="Open files"
         className={cn(
-          'scrollbar-none mr-2 flex h-full min-w-0 flex-1 items-end gap-0.5 overflow-x-auto',
+          // Positioned: the open folder's shape scrolls with the tabs.
+          'scrollbar-none relative mr-2 flex h-full min-w-0 flex-1 items-end gap-0.5 overflow-x-auto',
           leading ? 'ml-1' : 'ml-3',
         )}
       >
+        <FolderTabIndicator active={active} />
         {tabs.map((path) => {
           // A file shows its name (its path on hover).
           const title = path;
@@ -92,6 +95,7 @@ export function EditorTabStrip({
                 <FolderTab
                   title={isPreview ? `${title} (preview)` : title}
                   active={isActive}
+                  indicated
                   muted={!focused}
                   onSelect={() => onSelect(path)}
                   onDoubleClick={() => onPin(path)}
