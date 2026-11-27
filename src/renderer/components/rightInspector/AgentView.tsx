@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import {
   AtSign,
   Brain,
@@ -145,7 +153,7 @@ export function AgentView({
         {pane === 'scratchpad' ? (
           <>
             <PaneScope
-              text={`Temporary files from ${task.name}'s session, deleted with the task`}
+              text={`Deleted with the task · ${task.name}'s session`}
               tooltip={`Claude Code's scratch folder for ${task.name}'s session. It stays while the task sleeps and goes with the session: when the task is deleted or its session restarted.`}
             />
             <ScratchpadPane
@@ -201,15 +209,40 @@ function agentPaneTabs(memoryCount: number | undefined): ViewTabsOption<AgentPan
   );
 }
 
-/** A pane's first line: whose it is (the session's, the project's), in full
- *  in the tooltip when it doesn't fit. Inset 22px, its text in line with the
- *  pill tabs' and the rows' labels. */
+/** A pane's first line: whose it is (the session's, the project's), and the
+ *  tooltip saying more. When the line doesn't fit, the tooltip leads with it
+ *  in full and the line takes focus, so the cut-off text can be read from the
+ *  keyboard too. Inset 22px, its text in line with the pill tabs' and the
+ *  rows' labels. */
 function PaneScope({ text, tooltip }: { text: string; tooltip: string }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const cut = useTruncated(ref, text);
   return (
-    <Tooltip content={tooltip}>
-      <p className="type-caption shrink-0 truncate px-5.5 pt-2">{text}</p>
+    <Tooltip content={cut ? { title: text, body: tooltip } : tooltip}>
+      <p
+        ref={ref}
+        tabIndex={cut ? 0 : undefined}
+        className="type-caption shrink-0 truncate px-5.5 pt-2"
+      >
+        {text}
+      </p>
     </Tooltip>
   );
+}
+
+/** Whether `ref`'s `text` overflows its box (truncated), kept up as the box
+ *  resizes and the text changes. */
+function useTruncated(ref: RefObject<HTMLElement | null>, text: string): boolean {
+  const [cut, setCut] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setCut(el.scrollWidth > el.clientWidth);
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref, text]);
+  return cut;
 }
 
 /** Surface a failed action instead of dropping it. */
