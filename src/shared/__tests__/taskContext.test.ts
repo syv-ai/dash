@@ -30,3 +30,18 @@ describe('relinkTaskContext', () => {
     expect(next.split('Issue 1').length - 1).toBe(1);
   });
 });
+
+describe('formatTaskContextPrompt', () => {
+  it('gives the items and no ask of its own: the person writes that', () => {
+    const block = formatTaskContextPrompt([
+      { ...issue(1), body: 'Login fails on Safari.' } as LinkedItem,
+    ]);
+    expect(block).toBe(
+      "I'm working on the following GitHub issue(s):\n\n## Issue #1: Issue 1\nLogin fails on Safari.",
+    );
+  });
+
+  it('puts the context prompt first, so a slash command in it leads the message', () => {
+    expect(buildTaskContext('/review ', [issue(1)])).toMatch(/^\/review\n\n/);
+  });
+});

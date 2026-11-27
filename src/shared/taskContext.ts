@@ -71,8 +71,9 @@ function formatAdoWorkItem(wi: LinkedAdoWorkItem): string {
 }
 
 /**
- * Build a task context prompt from linked items.
- * Returns null if there are no items to format.
+ * The context block for a task's linked items: each item's content, framed but
+ * with no ask (the person writes that in the context prompt). Null when there
+ * are no items to format.
  */
 export function formatTaskContextPrompt(linkedItems: LinkedItem[]): string | null {
   const ghItems = linkedItems.filter((i): i is LinkedGithubIssue => i.provider === 'github');
@@ -94,7 +95,7 @@ export function formatTaskContextPrompt(linkedItems: LinkedItem[]): string | nul
 
   if (blocks.length === 0) return null;
 
-  return `${blocks.join('\n\n')}\n\nPlease help me implement a solution for this.`;
+  return blocks.join('\n\n');
 }
 
 /**
