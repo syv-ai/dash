@@ -7,6 +7,7 @@ import { CommentIcon } from '../CommentIcon';
 import { DraftBubble } from '../DraftBubble';
 import type { ComposerKind } from '../CommentInputBar';
 import { useViewzones, VIEWZONE_TOP_PAD_PX, type ViewzoneGroup } from './useViewzones';
+import { leadingIndentPx } from './indentOffset';
 import { BUBBLE_FADE } from '../BubbleShell';
 
 interface Props {
@@ -177,19 +178,20 @@ export function CommentOverlay({
   // Tail tip should land at the first non-whitespace character of the
   // anchor line below — i.e. where the line's content actually starts
   // visually, not at indented whitespace. Computed per-anchor since
-  // indentation differs per line. Falls back to contentLeft when the line
-  // is entirely whitespace or getOffsetForColumn fails.
+  // indentation differs per line, from the text (leadingIndentPx): Monaco's
+  // getOffsetForColumn renders the editor mid-render, and its size events
+  // then set another component's state (ReviewRail's) during this render.
+  // Falls back to contentLeft when the line is entirely whitespace.
   const model = modifiedEditor.getModel();
+  const spaceWidth = modifiedEditor.getOption(monaco.editor.EditorOption.fontInfo).spaceWidth;
   const tailLeftForAnchor = (anchorLine: number): number => {
     let tipX = contentLeft;
-    if (model) {
-      const col = model.getLineFirstNonWhitespaceColumn(anchorLine);
-      if (col > 0) {
-        // getOffsetForColumn is measured from the start of the line's text,
-        // not the editor's left edge, so it sits past the gutter.
-        const offset = modifiedEditor.getOffsetForColumn(anchorLine, col);
-        if (offset > 0) tipX = contentLeft + offset;
-      }
+    if (model && anchorLine >= 1 && anchorLine <= model.getLineCount()) {
+      tipX += leadingIndentPx(
+        model.getLineContent(anchorLine),
+        model.getOptions().tabSize,
+        spaceWidth,
+      );
     }
     // Triangle is 14px wide; the tip is at its center, so subtract 7 from
     // the desired tip x to get the triangle's `left` within the bubble.
