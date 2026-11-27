@@ -2,7 +2,7 @@ import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { EventEmitter } from 'events';
-import { app, powerMonitor, type WebContents } from 'electron';
+import { app, BrowserWindow, powerMonitor, type WebContents } from 'electron';
 import type { SupervisorSession } from '@shared/types';
 import { findClaudePath } from './claudeCli';
 import { claudeConfigDir } from '../utils/claudePaths';
@@ -27,6 +27,12 @@ const execFileAsync = promisify(execFile);
 /** Poll cadence for `claude agents --json --all` (design doc §6.6). */
 export const POLL_FOCUSED_MS = 15_000;
 export const POLL_BLURRED_MS = 60_000;
+/**
+ * With no window on screen. The jobs watcher still hears every background
+ * session's change, so the poll is only a safety net; showing the window
+ * focuses it, which lists at once.
+ */
+export const POLL_HIDDEN_MS = 5 * 60_000;
 /** How long a jobs-folder change waits, so a burst of them costs one listing. */
 const WATCH_COALESCE_MS = 1_000;
 const DISPATCH_TIMEOUT_MS = 60_000;
@@ -309,10 +315,13 @@ class SupervisorServiceImpl extends EventEmitter {
   private schedule(): void {
     if (!this.running) return;
     if (this.timer) clearTimeout(this.timer);
-    this.timer = setTimeout(
-      () => void this.refresh('timer'),
-      this.focused ? POLL_FOCUSED_MS : POLL_BLURRED_MS,
-    );
+    this.timer = setTimeout(() => void this.refresh('timer'), this.pollInterval());
+  }
+
+  private pollInterval(): number {
+    if (this.focused) return POLL_FOCUSED_MS;
+    const onScreen = BrowserWindow.getAllWindows().some((w) => w.isVisible() && !w.isMinimized());
+    return onScreen ? POLL_BLURRED_MS : POLL_HIDDEN_MS;
   }
 
   /**
@@ -357,6 +366,7 @@ class SupervisorServiceImpl extends EventEmitter {
       return;
     }
     const byId = new Map(rows.filter((r) => r.id).map((r) => [r.id!, r] as const));
+    // How long a hook outranks the listing: the on-screen cadences, even while hidden.
     const pollMs = this.focused ? POLL_FOCUSED_MS : POLL_BLURRED_MS;
     for (const task of tasks) {
       if (task.shelved) {
