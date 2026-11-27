@@ -15,7 +15,7 @@ import { useEditorTabs } from '../../stores/editorTabsStore';
  *  `collapsedSize` (px; the host's rail), easing when the toggle drives it,
  *  and kept in step with the remembered flag. `held`: its content's hold
  *  while it crosses to or from the rail, toggled or dragged (`ui/HeldFrame`),
- *  at its open width. */
+ *  at its open width; `railed`: it shows its rail. */
 export function useTreePanel(collapsedSize: number) {
   const collapsed = useEditorTabs((s) => s.treeCollapsed);
   const panelRef = useRef<PanelImperativeHandle | null>(null);
@@ -40,6 +40,11 @@ export function useTreePanel(collapsedSize: number) {
   // them; `folded` as of the last crossing (null before the first, the
   // mount's own, which holds nothing).
   const [held, setHeld] = useState<Held | null>(null);
+  // Folded as the panel is, not as the flag asks: the flag leads the panel by
+  // a frame or two (the toggle, the rail's click), and content unhidden on
+  // the flag showed squeezed into the rail's width before its hold landed.
+  // This turns over with the hold, in one render.
+  const [folded, setFolded] = useState(collapsed);
   const extent = useRef<{ openPx: number; groupPx: number; folded: boolean | null }>({
     openPx: 0,
     groupPx: 0,
@@ -48,6 +53,7 @@ export function useTreePanel(collapsedSize: number) {
   const heldTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(heldTimer.current), []);
   const cross = (folded: boolean) => {
+    setFolded(folded);
     const was = extent.current.folded;
     extent.current.folded = folded;
     if (was === null || panelEaseMs() === 0) return;
@@ -73,6 +79,8 @@ export function useTreePanel(collapsedSize: number) {
   const set = (next: boolean) => useEditorTabs.getState().setTreeCollapsed(next);
   return {
     held,
+    // Its rail shows once it has folded and until it unfolds.
+    railed: folded && !held,
     panelRef,
     animate,
     collapsible: true,

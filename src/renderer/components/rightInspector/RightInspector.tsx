@@ -284,9 +284,7 @@ export function RightInspector({
   });
   const { view, selectView } = ws;
   // Expanded, the list column folds to the rail, never to nothing (T12).
-  const { held: treeHeld, ...treePanel } = useTreePanel(TASK_RAIL_PX);
-  // Its rail shows once it has folded and until it unfolds (`treeHeld`).
-  const treeRailed = useEditorTabs((s) => s.treeCollapsed) && !treeHeld;
+  const { held: treeHeld, railed: treeRailed, ...treePanel } = useTreePanel(TASK_RAIL_PX);
   const openEditor = () => {
     if (!expanded) onOpenEditor();
   };
