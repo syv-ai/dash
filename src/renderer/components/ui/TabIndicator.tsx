@@ -6,7 +6,7 @@ import { TAB_SLIDE_MS } from './tabMotion';
 /** The selected tab among a strip's: a shown one, not a measuring copy. */
 const SELECTED = '[role="tab"][aria-selected="true"]:not([aria-hidden] *)';
 
-interface Box {
+export interface Box {
   x: number;
   y: number;
   w: number;
@@ -16,16 +16,38 @@ interface Box {
 const same = (a: Box | null, b: Box | null) =>
   !!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 
-/** Where `tab` sits in `host`'s padding box, scrolled content included. */
-function boxIn(host: HTMLElement, tab: HTMLElement): Box {
-  const h = host.getBoundingClientRect();
-  const t = tab.getBoundingClientRect();
-  return {
-    x: t.left - h.left - host.clientLeft + host.scrollLeft,
-    y: t.top - h.top - host.clientTop + host.scrollTop,
-    w: t.width,
-    h: t.height,
-  };
+/** The layout fields `boxIn` reads: an `HTMLElement`'s, so a test can fake one. */
+export interface LaidOut {
+  offsetLeft: number;
+  offsetTop: number;
+  offsetWidth: number;
+  offsetHeight: number;
+  offsetParent: unknown;
+  clientLeft: number;
+  clientTop: number;
+  scrollLeft: number;
+  scrollTop: number;
+}
+
+/**
+ * Where `tab` lays out in `host`'s padding box, scrolled content included:
+ * its offsets summed up the offset-parent chain to `host`. Layout, not
+ * `getBoundingClientRect`, so no transform counts: not a tab's own entrance
+ * (`drawer-tab-in` rises 4px), and not one it is caught in mid-way, either
+ * of which the surface would keep once it ended (a transform fires no
+ * `ResizeObserver`). Whole pixels, as the offsets come.
+ */
+export function boxIn(host: LaidOut, tab: LaidOut): Box {
+  let x = tab.offsetLeft;
+  let y = tab.offsetTop;
+  let parent = tab.offsetParent as LaidOut | null;
+  // A positioned box between them: its own place, its border, less its scroll.
+  while (parent && parent !== host) {
+    x += parent.offsetLeft + parent.clientLeft - parent.scrollLeft;
+    y += parent.offsetTop + parent.clientTop - parent.scrollTop;
+    parent = parent.offsetParent as LaidOut | null;
+  }
+  return { x, y, w: tab.offsetWidth, h: tab.offsetHeight };
 }
 
 const at = (b: Box) => ({ translate: `${b.x}px ${b.y}px`, width: `${b.w}px`, height: `${b.h}px` });
