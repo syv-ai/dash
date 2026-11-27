@@ -2,7 +2,6 @@ import React, { useState, useCallback, useEffect } from 'react';
 import {
   GitBranch,
   GitPullRequestArrow,
-  ChevronDown,
   Loader2,
   AlertCircle,
   ArrowUp,
@@ -13,7 +12,13 @@ import type { BranchInfo, PullRequest, PullRequestState } from '../../../shared/
 import { Popover, PopoverTrigger, PopoverContent } from '../ui/Popover';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandItem } from '../ui/Command';
 import { Segmented } from '../ui/Segmented';
-import { prStatusPill, prStatusText } from '../ui/prStatusColors';
+import { cn } from '../../lib/cn';
+import { Badge } from '../ui/Badge';
+import { Notice } from '../ui/Notice';
+import { PrNumberBadge } from '../ui/PrBadge';
+import { prStatusText } from '../ui/prStatusColors';
+import { SelectTrigger } from '../ui/Select';
+import { TextLink } from '../ui/TextLink';
 
 type PickerTab = 'branch' | 'pr';
 
@@ -135,17 +140,14 @@ export function BranchPrPicker({
   // the prior behavior — a worktree can't be created without a branch.
   if (branchError) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
-        <AlertCircle size={13} strokeWidth={2} />
-        <span className="flex-1 truncate">{branchError}</span>
-        <button
-          type="button"
-          onClick={onRetry}
-          className="text-xs font-medium underline underline-offset-2 hover:no-underline shrink-0"
-        >
-          Retry
-        </button>
-      </div>
+      <Notice icon={<AlertCircle size={14} strokeWidth={1.8} />}>
+        <span className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 truncate">{branchError}</span>
+          <TextLink look="quiet" onClick={onRetry}>
+            Retry
+          </TextLink>
+        </span>
+      </Notice>
     );
   }
 
@@ -154,49 +156,27 @@ export function BranchPrPicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          disabled={branchLoading}
-          className="w-full flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-left transition-all duration-150 data-[state=open]:ring-2 data-[state=open]:ring-ring/30 data-[state=open]:border-ring/50 disabled:opacity-50"
-        >
+        <SelectTrigger disabled={branchLoading}>
           {branchLoading ? (
-            <Loader2 size={12} className="animate-spin text-icon shrink-0" />
+            <Loader2 size={14} strokeWidth={1.8} className="animate-spin text-icon" />
           ) : (
-            <GitBranch size={12} className="text-icon shrink-0" strokeWidth={1.8} />
+            <GitBranch size={14} strokeWidth={1.8} className="text-icon" />
           )}
           {selectedBranch ? (
-            <span className="flex-1 truncate text-base text-foreground">{selectedBranch.name}</span>
+            <span className="min-w-0 flex-1 truncate text-left">{selectedBranch.name}</span>
           ) : (
-            <span className="flex-1 truncate text-base text-muted-fade-40">
+            <span className="min-w-0 flex-1 truncate text-left text-ink-3">
               {branchLoading ? 'Fetching branches…' : 'Select a branch or PR…'}
             </span>
           )}
-          {markInUse && !badgePr && selectedBranch?.checkedOut && (
-            <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 shrink-0">
-              in use
-            </span>
-          )}
-          {badgePr && (
-            <span
-              className={`text-xs font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${prStatusPill(badgePr.state)}`}
-            >
-              PR #{badgePr.number}
-            </span>
-          )}
+          {markInUse && !badgePr && selectedBranch?.checkedOut && <InUseBadge />}
+          {badgePr && <PrNumberBadge number={badgePr.number} state={badgePr.state} />}
           {selectedBranch?.shortHash && (
-            <span className="text-xs text-muted-fade-40 shrink-0">{selectedBranch.shortHash}</span>
+            <span className="type-caption tabular-nums">{selectedBranch.shortHash}</span>
           )}
-          <ChevronDown
-            size={13}
-            className="text-icon shrink-0 transition-transform duration-150 data-[state=open]:rotate-180"
-          />
-        </button>
+        </SelectTrigger>
       </PopoverTrigger>
-      <PopoverContent
-        className="p-0"
-        sideOffset={5}
-        style={{ width: 'var(--radix-popover-trigger-width)' }}
-      >
+      <PopoverContent className="w-(--radix-popover-trigger-width)" sideOffset={4}>
         {showPrs && (
           <div className="p-1.5 pb-0">
             <Segmented<PickerTab>
@@ -207,13 +187,13 @@ export function BranchPrPicker({
                 {
                   value: 'branch',
                   label: 'Branches',
-                  icon: <GitBranch size={12} strokeWidth={1.8} />,
+                  icon: <GitBranch size={14} strokeWidth={1.8} />,
                   count: branches.length,
                 },
                 {
                   value: 'pr',
                   label: 'Pull requests',
-                  icon: <GitPullRequestArrow size={12} strokeWidth={1.8} />,
+                  icon: <GitPullRequestArrow size={14} strokeWidth={1.8} />,
                   count: prs?.length,
                 },
               ]}
@@ -232,26 +212,22 @@ export function BranchPrPicker({
                 <CommandEmpty>No branches.</CommandEmpty>
                 {branches.map((b) => (
                   <CommandItem key={b.ref} value={b.name} onSelect={() => chooseBranch(b)}>
-                    <GitBranch size={11} className="text-icon shrink-0" strokeWidth={1.8} />
-                    <span className="flex-1 truncate text-fg-fade-80">{b.name}</span>
-                    {markInUse && b.checkedOut && (
-                      <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 shrink-0">
-                        in use
-                      </span>
-                    )}
+                    <GitBranch size={14} strokeWidth={1.8} className="shrink-0 text-icon" />
+                    <span className="min-w-0 flex-1 truncate">{b.name}</span>
+                    {markInUse && b.checkedOut && <InUseBadge />}
                     {showUpstream && b.upstream && b.upstream.ahead > 0 && (
-                      <span className="flex items-center gap-0.5 text-xs text-loc-add tabular-nums shrink-0">
-                        <ArrowUp size={9} strokeWidth={2.5} />
+                      <span className="type-caption flex shrink-0 items-center tabular-nums">
+                        <ArrowUp size={14} strokeWidth={1.8} className="text-icon" />
                         {b.upstream.ahead}
                       </span>
                     )}
                     {showUpstream && b.upstream && b.upstream.behind > 0 && (
-                      <span className="flex items-center gap-0.5 text-xs text-loc-del tabular-nums shrink-0">
-                        <ArrowDown size={9} strokeWidth={2.5} />
+                      <span className="type-caption flex shrink-0 items-center tabular-nums">
+                        <ArrowDown size={14} strokeWidth={1.8} className="text-icon" />
                         {b.upstream.behind}
                       </span>
                     )}
-                    <span className="text-xs text-muted-fade-40 shrink-0">{b.shortHash}</span>
+                    <span className="type-caption shrink-0 tabular-nums">{b.shortHash}</span>
                   </CommandItem>
                 ))}
               </>
@@ -260,25 +236,24 @@ export function BranchPrPicker({
             {tab === 'pr' && (
               <>
                 {prLoading && (
-                  <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-fade-50">
-                    <Loader2 size={12} className="animate-spin" />
+                  <div className="type-caption flex items-center justify-center gap-2 py-4">
+                    <Loader2 size={14} strokeWidth={1.8} className="animate-spin text-icon" />
                     Loading pull requests…
                   </div>
                 )}
                 {prError && !prLoading && (
-                  <div className="flex items-center gap-2 px-2 py-3 text-sm text-destructive">
-                    <AlertCircle size={13} strokeWidth={2} />
-                    <span className="flex-1">{prError}</span>
-                    <button
-                      type="button"
+                  <div className="type-caption flex items-center gap-2 px-2.5 py-3">
+                    <AlertCircle size={14} strokeWidth={1.8} className="shrink-0 text-state-fail" />
+                    <span className="min-w-0 flex-1 text-state-fail">{prError}</span>
+                    <TextLink
+                      look="quiet"
                       onClick={() => {
                         setPrs(null);
                         void fetchPrs();
                       }}
-                      className="text-xs font-medium underline underline-offset-2 hover:no-underline shrink-0"
                     >
                       Retry
-                    </button>
+                    </TextLink>
                   </div>
                 )}
                 {!prLoading && !prError && (
@@ -292,24 +267,32 @@ export function BranchPrPicker({
                         onSelect={() => void choosePr(pr)}
                       >
                         <GitPullRequestArrow
-                          size={11}
-                          className={`${prStatusText(pr.state)} shrink-0`}
+                          size={14}
                           strokeWidth={1.8}
+                          className={cn('shrink-0', prStatusText(pr.state))}
                         />
-                        <span className="flex-1 truncate text-fg-fade-80">{pr.title}</span>
-                        <span className="flex items-center gap-1 text-xs text-muted-fade-40 shrink-0 min-w-0 max-w-[160px]">
+                        <span className="min-w-0 flex-1 truncate">{pr.title}</span>
+                        <span className="type-caption flex max-w-40 min-w-0 shrink-0 items-center gap-1">
                           <span className="truncate">{pr.headRefName}</span>
                           {pr.baseRefName && (
                             <>
-                              <ArrowRight size={9} strokeWidth={2} className="text-icon shrink-0" />
+                              <ArrowRight
+                                size={14}
+                                strokeWidth={1.8}
+                                className="shrink-0 text-icon"
+                              />
                               <span className="truncate">{pr.baseRefName}</span>
                             </>
                           )}
                         </span>
                         {preparingId === pr.number ? (
-                          <Loader2 size={11} className="animate-spin text-icon shrink-0" />
+                          <Loader2
+                            size={14}
+                            strokeWidth={1.8}
+                            className="shrink-0 animate-spin text-icon"
+                          />
                         ) : (
-                          <span className="text-xs text-muted-fade-40 shrink-0">#{pr.number}</span>
+                          <span className="type-caption shrink-0 tabular-nums">#{pr.number}</span>
                         )}
                       </CommandItem>
                     ))}
@@ -321,5 +304,15 @@ export function BranchPrPicker({
         </Command>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** A branch already checked out elsewhere: a neutral tag (colour is for agent
+ *  state; picking it is allowed, the task then shares that checkout). */
+function InUseBadge() {
+  return (
+    <Badge size="sm" title="Checked out in another worktree">
+      In use
+    </Badge>
   );
 }

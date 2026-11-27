@@ -2,13 +2,20 @@ import { Wrench } from 'lucide-react';
 import { Tooltip } from './Tooltip';
 import { IconButton } from './IconButton';
 import { Popover, PopoverContent, PopoverTrigger } from './Popover';
-import { ciLabel, ciPulse, ciText, prStateIcon, prStatusText } from './prStatusColors';
+import {
+  ciLabel,
+  ciPulse,
+  ciText,
+  prStateIcon,
+  prStatusText,
+  prStatusTint,
+} from './prStatusColors';
 import { badgeVariants } from './Badge';
 import { buttonVariants } from './Button';
 import { menuItem, menuLabel } from './styles';
 import { cn } from '../../lib/cn';
 import { fixCi } from '../../utils/fixCi';
-import type { PullRequestInfo } from '../../../shared/types';
+import type { PullRequestInfo, PullRequestState } from '../../../shared/types';
 
 interface PrBadgeProps {
   /** The PRs standing for the branch now, newest first (see relevantPrs). */
@@ -201,6 +208,15 @@ export function PrBadge({ prs, allPrs, size = 'md', variant = 'pill', taskId }: 
         <PrList prs={list} taskId={taskId} />
       </Popover>
       {isCurrent && <FixCiButton pr={pr} taskId={taskId} />}
+    </span>
+  );
+}
+
+/** A PR's number on its state's tint, not clickable (inside a picker's field). */
+export function PrNumberBadge({ number, state }: { number: number; state: PullRequestState }) {
+  return (
+    <span className={cn(badgeVariants({ tone: 'neutral', size: 'sm' }), prStatusTint(state))}>
+      PR #{number}
     </span>
   );
 }

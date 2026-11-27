@@ -52,24 +52,11 @@ export function Select<T extends string>({
   return (
     <DropdownMenuPrimitive.Root>
       <DropdownMenuPrimitive.Trigger asChild>
-        <button
-          type="button"
-          aria-label={ariaLabel}
-          className={cn(
-            'group/select flex h-7.5 w-full items-center justify-between gap-2 rounded-md bg-hover px-2.5 text-sm text-ink transition-colors hover:bg-select data-[state=open]:bg-select',
-            focusRing,
-            className,
-          )}
-        >
+        <SelectTrigger aria-label={ariaLabel} className={className}>
           <span className="truncate text-left">
             {selected ? render(selected) : (placeholder ?? ' ')}
           </span>
-          <ChevronDown
-            size={14}
-            strokeWidth={1.8}
-            className="shrink-0 text-icon transition-transform duration-150 group-data-[state=open]/select:rotate-180"
-          />
-        </button>
+        </SelectTrigger>
       </DropdownMenuPrimitive.Trigger>
       <DropdownMenuPrimitive.Portal>
         <DropdownMenuPrimitive.Content
@@ -101,5 +88,31 @@ export function Select<T extends string>({
         </DropdownMenuPrimitive.Content>
       </DropdownMenuPrimitive.Portal>
     </DropdownMenuPrimitive.Root>
+  );
+}
+
+/**
+ * The select's field: an Input-like hover-tint fill, the value, and a chevron
+ * that turns while open. On its own it is the trigger of a richer picker (a
+ * searchable branch list in a Popover); pass it as the Radix trigger's child.
+ */
+export function SelectTrigger({ className, children, ...props }: React.ComponentProps<'button'>) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        'group/select flex h-7.5 w-full items-center justify-between gap-2 rounded-md bg-hover px-2.5 text-sm text-ink transition-colors hover:bg-select disabled:pointer-events-none disabled:opacity-40 aria-expanded:bg-select',
+        focusRing,
+        className,
+      )}
+      {...props}
+    >
+      {children}
+      <ChevronDown
+        size={14}
+        strokeWidth={1.8}
+        className="shrink-0 text-icon transition-transform duration-150 group-aria-expanded/select:rotate-180"
+      />
+    </button>
   );
 }
