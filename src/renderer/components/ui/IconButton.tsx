@@ -2,6 +2,7 @@ import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { getBindingKeys, type KeyBinding } from '../../keybindings';
 import { buttonVariants } from './Button';
+import { pressedTint } from './styles';
 import { Tooltip } from './Tooltip';
 
 interface IconButtonProps extends Omit<React.ComponentProps<'button'>, 'title'> {
@@ -39,8 +40,6 @@ const variantStyles = {
 /** Rest state with the hover feedback removed, for `disabled`. */
 const DISABLED = 'opacity-40 hover:bg-transparent hover:text-icon';
 
-const PRESSED = 'bg-select text-ink hover:bg-select';
-
 /**
  * Icon-only button: `Button size="icon"` plus a required tooltip label, which
  * is also its aria-label. Spreads extra props and its ref onto the `<button>`,
@@ -76,7 +75,7 @@ export function IconButton({
         className={cn(
           buttonVariants({ variant: 'ghost', size: size === 'sm' ? 'icon-sm' : 'icon' }),
           variantStyles[variant],
-          pressed && PRESSED,
+          pressed && pressedTint,
           disabled && DISABLED,
           className,
         )}

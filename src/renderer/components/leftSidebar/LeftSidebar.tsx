@@ -4,12 +4,12 @@ import type { ContextUsage, Project, Task } from '../../../shared/types';
 import { ClaudeUpdateButton } from '../claudeUpdate/ClaudeUpdateButton';
 import { IconButton } from '../ui/IconButton';
 import { ViewPanel, ViewTabs } from '../ui/ViewTabs';
-import { StatusDot } from '../ui/StatusDot';
 import { ProjectsSection } from './ProjectsSection';
+import { SessionRail } from './SessionRail';
 import { TaskStateList } from './TaskStateList';
 import { UpdateBanner } from './UpdateBanner';
 import { useTaskStateList } from './useTaskStateList';
-import { STATE_LABELS, liveRows } from './taskStates';
+import { liveRows } from './taskStates';
 import { useSettings } from '../../stores/settingsStore';
 import { useUi } from '../../stores/uiStore';
 
@@ -61,7 +61,7 @@ const isMac = window.electronAPI.getPlatform() === 'darwin';
  * projects and live sessions) with, in the Projects view, create a project
  * (a task is made under its project) and find at the row's end, over the
  * project tree or the state-ordered task list, and settings (with the Claude Code update icon) at the foot.
- * Collapsed, it is a rail of state dots for the tasks with a live session.
+ * Collapsed, it is a rail of the tasks with a live session (`SessionRail`).
  */
 export function LeftSidebar(props: LeftSidebarProps) {
   const { projects, activeProjectId, tasksByProject, activeTaskId, collapsed } = props;
@@ -88,19 +88,12 @@ export function LeftSidebar(props: LeftSidebarProps) {
     return (
       <div className="flex h-full flex-col items-center bg-ground pb-3">
         <div className={isMac ? 'titlebar-drag h-11 w-full shrink-0' : 'h-2 w-full shrink-0'} />
-        <div className="scrollbar-none flex min-h-0 w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto">
-          {liveRows(rows).map(({ task, state }) => (
-            <IconButton
-              key={task.id}
-              size="sm"
-              title={`${task.name} · ${STATE_LABELS[state]}`}
-              pressed={task.id === activeTaskId}
-              onClick={() => props.onSelectTask(task.projectId, task.id)}
-            >
-              <StatusDot state={state} />
-            </IconButton>
-          ))}
-        </div>
+        <SessionRail
+          rows={liveRows(rows)}
+          activeTaskId={activeTaskId}
+          contextUsage={props.contextUsage}
+          onSelectTask={props.onSelectTask}
+        />
         <ClaudeUpdateButton />
         {settingsButton}
       </div>

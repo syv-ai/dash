@@ -7,6 +7,10 @@
 export const focusRing =
   'outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus';
 
+/** A toggle that is on, or the current item in a rail: the select tint and
+ *  ink, held on hover (`IconButton`'s and `RailItem`'s `pressed`). */
+export const pressedTint = 'bg-select text-ink hover:bg-select';
+
 /** Meta text inside a `ListRow` that recedes while the row is at rest and
  *  comes back to its ink on hover, selection or keyboard focus (a task's
  *  project line). ink-3 is the faintest ink, so this quiets it further. */

@@ -25,7 +25,7 @@ import {
 } from './lib/inspectorWidths';
 import { headerModelName } from './lib/modelName';
 import { RightInspector } from './components/rightInspector/RightInspector';
-import { TASK_RAIL_PX } from './components/rightInspector/rail';
+import { RAIL_PX } from './components/ui/Rail';
 import { usePlannedMotion } from './lib/usePlannedMotion';
 import type { PanelExtent } from './lib/railCrossing';
 import { HeldFrame } from './components/ui/HeldFrame';
@@ -96,8 +96,6 @@ const INSPECTOR_MAX_PCT = 85;
 /** The centre (the agent's terminal) at its narrowest, in px: its header's
  *  name, branch and actions still fit, and the TUI reflows to it. */
 const MAIN_MIN_PX = 280;
-/** The left sidebar collapsed (%): its rail. */
-const SIDEBAR_COLLAPSED_PCT = 3;
 /** The shell's two resize handles and rounding, in px: what an expanding
  *  task sidebar leaves beside the centre's MAIN_MIN_PX. */
 const SHELL_SLACK_PX = 8;
@@ -1206,7 +1204,7 @@ export function App() {
     // expanding did.
     const collapseLeft = expanded && !left.isCollapsed();
     const restoreLeft = !expanded && leftFreedByExpandRef.current !== null && left.isCollapsed();
-    const freedPct = collapseLeft ? left.getSize().asPercentage - SIDEBAR_COLLAPSED_PCT : 0;
+    const freedPct = collapseLeft ? left.getSize().asPercentage - (RAIL_PX / groupPx) * 100 : 0;
     if (!collapsed) {
       // The expanded width is kept without the room the left sidebar lent it.
       saveInspectorWidth(
@@ -1220,9 +1218,7 @@ export function App() {
     if (width !== null && expanded) {
       // The narrow column's width, which the split's list keeps.
       const listPx = collapsed ? (widths.narrow / 100) * groupPx : panel.getSize().inPixels;
-      const leftAfterPx = collapseLeft
-        ? (SIDEBAR_COLLAPSED_PCT / 100) * groupPx
-        : left.getSize().inPixels;
+      const leftAfterPx = collapseLeft ? RAIL_PX : left.getSize().inPixels;
       const plan = planExpand({
         groupPx,
         listPx,
@@ -1504,11 +1500,11 @@ export function App() {
           id="sidebar"
           panelRef={sidebarPanelRef}
           animate={sidebarAnimating}
-          defaultSize={startedCollapsed.sidebar ? '3%' : '18%'}
+          defaultSize={startedCollapsed.sidebar ? RAIL_PX : '18%'}
           minSize={sidebarMinPx ?? LEFT_SIDEBAR_MIN_PX}
           maxSize="28%"
           collapsible
-          collapsedSize={`${SIDEBAR_COLLAPSED_PCT}%`}
+          collapsedSize={RAIL_PX}
           onCollapse={() => {
             setSidebarCollapsed(true);
             setTimeout(() => setSidebarAnimating(false), easeNow());
@@ -1633,12 +1629,12 @@ export function App() {
               id="changes"
               panelRef={changesPanelRef}
               animate={changesAnimating}
-              defaultSize={startedCollapsed.inspector ? TASK_RAIL_PX : '26%'}
+              defaultSize={startedCollapsed.inspector ? RAIL_PX : '26%'}
               // Never narrower than its view tabs' labels, once measured.
               minSize={inspectorMinPx ?? `${TUI_PANEL_MIN_PCT}%`}
               maxSize={`${INSPECTOR_MAX_PCT}%`}
               collapsible
-              collapsedSize={TASK_RAIL_PX}
+              collapsedSize={RAIL_PX}
               onCollapse={() => {
                 expandedAtCollapseRef.current = inspectorExpandedRef.current;
                 setChangesPanelCollapsed(true);

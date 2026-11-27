@@ -1,8 +1,14 @@
 import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { buttonVariants } from './Button';
-import { focusRing } from './styles';
+import { focusRing, pressedTint } from './styles';
 import { Tooltip, type TooltipContent } from './Tooltip';
+
+/** A rail's width (px), both sidebars': the app sidebar's collapsed panel,
+ *  the task sidebar's, and its list column folded (it folds to the rail,
+ *  never to nothing). As wide as its figures need ("100%", "Weekly", a
+ *  session's ring) whatever the window's. */
+export const RAIL_PX = 48;
 
 /**
  * A collapsed sidebar's rail: its items stacked from the top, centred, its
@@ -60,19 +66,26 @@ export function Rail({
  */
 export function RailItem({
   tooltip,
+  side = 'left',
   'aria-label': ariaLabel,
+  pressed,
   onClick,
   children,
 }: {
   tooltip: TooltipContent;
+  /** Where its tooltip opens: away from the window's edge the rail is on
+   *  (`left` for the task sidebar's, `right` for the app sidebar's). */
+  side?: 'left' | 'right';
   'aria-label'?: string;
+  /** The current item (the selected task): `pressedTint` and aria-pressed. */
+  pressed?: boolean;
   onClick?: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <Tooltip content={tooltip} side="left">
+    <Tooltip content={tooltip} side={side}>
       {onClick ? (
-        <RailItemButton aria-label={ariaLabel} onClick={onClick}>
+        <RailItemButton aria-label={ariaLabel} pressed={pressed} onClick={onClick}>
           {children}
         </RailItemButton>
       ) : (
@@ -91,11 +104,22 @@ const ITEM_LAYOUT = 'flex w-full flex-col items-center gap-0.5 py-1';
  * onto the `<button>`, so it can be the `asChild` target of a Radix trigger
  * (a popover the item opens), under the caller's own `Tooltip side="left"`.
  */
-export function RailItemButton({ className, ...props }: React.ComponentProps<'button'>) {
+export function RailItemButton({
+  pressed,
+  className,
+  ...props
+}: React.ComponentProps<'button'> & { pressed?: boolean }) {
   return (
     <button
       type="button"
-      className={cn(buttonVariants({ variant: 'ghost' }), 'h-auto px-0', ITEM_LAYOUT, className)}
+      aria-pressed={pressed}
+      className={cn(
+        buttonVariants({ variant: 'ghost' }),
+        'h-auto px-0',
+        ITEM_LAYOUT,
+        pressed && pressedTint,
+        className,
+      )}
       {...props}
     />
   );

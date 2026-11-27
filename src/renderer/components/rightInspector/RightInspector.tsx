@@ -19,7 +19,8 @@ import { ShellDrawerWrapper, expandShellDrawer } from '../terminal/ShellDrawerWr
 import { PortsDrawerWrapper } from './PortsDrawerWrapper';
 import { UsageSection } from './UsageSection';
 import { TaskRail } from './TaskRail';
-import { TASK_RAIL_PX, type RailShow } from './rail';
+import { RAIL_PX } from '../ui/Rail';
+import type { RailShow } from './rail';
 import { ViewRow, type ViewRowExtra } from './ViewRow';
 import { viewRowMinPx } from './viewRowFit';
 import { TaskDetails } from './TaskDetails';
@@ -284,7 +285,7 @@ export function RightInspector({
   });
   const { view, selectView } = ws;
   // Expanded, the list column folds to the rail, never to nothing (T12).
-  const { held: treeHeld, railed: treeRailed, ...treePanel } = useTreePanel(TASK_RAIL_PX);
+  const { held: treeHeld, railed: treeRailed, ...treePanel } = useTreePanel(RAIL_PX);
   const openEditor = () => {
     if (!expanded) onOpenEditor();
   };
