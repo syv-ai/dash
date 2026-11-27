@@ -2,10 +2,23 @@ import * as React from 'react';
 
 /*
  * A sideways scroll over a tabbed surface (its tab strip, or the view under
- * it) switches to the next or previous tab, one tab per gesture. A trackpad
- * fires a stream of small wheel events (and a momentum tail after the
- * fingers lift), so the core sums the sideways travel to a threshold, steps
- * once, and then holds (the latch) until the stream goes quiet.
+ * it) switches to the next or previous tab, one tab per swipe. A trackpad
+ * fires a stream of small wheel events, so the core sums the sideways travel
+ * to a threshold, steps once, and then holds further travel that way: the
+ * rest of the swipe and the momentum tail macOS sends after the fingers
+ * lift.
+ *
+ * The tail runs for a second or more at one event a frame, so a next swipe
+ * often starts before it ends, with no quiet gap between them (touching the
+ * pad cancels the tail and the new swipe's events follow at once). The DOM
+ * gives a wheel event no phase, so the core reads the swipe from the speed's
+ * shape: a tail's events only ever shrink and slow, so events speeding up
+ * again after it shrank (two in a row, to at least twice the size they began
+ * at) are a new swipe. Speed, not size alone: an event carrying several
+ * frames' travel (a busy main thread merges them) is bigger but no faster.
+ * Size, not speed alone: an event that comes late is slower but no smaller,
+ * so it fakes neither the shrinking nor, once it passes, the speeding up.
+ * Travel back the other way is never held: it steps back at the threshold.
  *
  * A gesture has one owner, settled by its first moving event and kept until
  * it goes quiet: a vertical start is a scroll (it never switches, however it
@@ -17,28 +30,57 @@ import * as React from 'react';
  * surface's wheel events.
  */
 
-/** The sideways travel (px) a gesture needs before it steps. */
+/** The sideways travel (px) a swipe needs before it steps. */
 export const WHEEL_STEP_PX = 40;
 /** The quiet (ms) that ends a gesture: a momentum tail's events come every
  *  frame or so, so a gap this long is the fingers having stopped. */
 export const WHEEL_GAP_MS = 160;
+/** The least time (ms) a speed is taken over: events can share a time. */
+const MIN_DT_MS = 4;
 
 /** Whose a gesture is: the tabs' (it may switch), a nested scroller's, or a
  *  vertical scroll's (neither switches). */
 export type WheelOwner = 'tabs' | 'scroller' | 'vertical';
 
+/** The shape of the travel since a step, along the stepped direction: how
+ *  a new swipe is told from the tail. Sizes are an event's |dx| in px. */
+export interface WheelCoast {
+  /** The last event's size, and its speed (px/ms). */
+  size: number;
+  speed: number;
+  /** The biggest since the step. */
+  peak: number;
+  /** Shrunk to half the peak or less since: a tail, so growth is a swipe. */
+  decayed: boolean;
+  /** Events in a row each faster than the one before. */
+  rises: number;
+  /** The size the current run of rises began from. */
+  from: number;
+}
+
 export interface WheelState {
-  /** The sideways travel summed since the gesture began (or last stepped). */
+  /** The sideways travel summed since the swipe began (or last stepped). */
   travel: number;
-  /** Stepped already in this gesture: hold until it goes quiet. */
-  latched: boolean;
+  /** The direction this gesture last stepped in, 0 before it has: further
+   *  travel that way is held (the rest of the swipe, its momentum). */
+  stepped: -1 | 0 | 1;
+  /** Since the step; meaningful only while `stepped` is set. */
+  coast: WheelCoast;
   /** When the last wheel event came; -Infinity before any. */
   at: number;
   /** The gesture's owner; null until its first moving event. */
   owner: WheelOwner | null;
 }
 
-export const WHEEL_IDLE: WheelState = { travel: 0, latched: false, at: -Infinity, owner: null };
+const STILL: WheelCoast = { size: 0, speed: 0, peak: 0, decayed: false, rises: 0, from: 0 };
+
+export const WHEEL_IDLE: WheelState = {
+  travel: 0,
+  stepped: 0,
+  coast: STILL,
+  at: -Infinity,
+  owner: null,
+};
 
 /** One wheel event, deltas in px. */
 export interface WheelInput {
@@ -50,6 +92,30 @@ export interface WheelInput {
    *  move along `dx`. Asked only of a gesture's first sideways event. */
   nested?: () => boolean;
 }
+
+/** The coast after an event `size` px big `dt` ms after the last, and
+ *  whether that event starts a new swipe (it sped up and grew again after
+ *  the tail had shrunk). */
+function coastOn(c: WheelCoast, size: number, dt: number): { coast: WheelCoast; fresh: boolean } {
+  const speed = size / dt;
+  const rising = speed > c.speed;
+  const rises = rising ? c.rises + 1 : 0;
+  const from = rising && c.rises === 0 ? c.size : c.from;
+  const fresh = c.decayed && rises >= 2 && size >= 2 * from;
+  const peak = Math.max(c.peak, size);
+  return {
+    coast: { size, speed, peak, decayed: c.decayed || size <= peak / 2, rises, from },
+    fresh,
+  };
+}
+
+/** The coast a step starts from: its own event. */
+const settle = (size: number, dt: number): WheelCoast => ({
+  ...STILL,
+  size,
+  speed: size / dt,
+  peak: size,
+});
 
 /** The next state; the step it makes (+1 the next tab, -1 the previous, 0
  *  none; positive `dx`, scrolling right, is the next tab); and whether the
@@ -67,20 +133,30 @@ export function wheelTabStep(
   const owner: WheelOwner =
     was.owner ?? (!isSideways(dx, dy) ? 'vertical' : nested?.() ? 'scroller' : 'tabs');
   if (owner !== 'tabs') return { state: { ...WHEEL_IDLE, owner, at: t }, step: 0, take: false };
-  const hold = { owner, latched: was.latched, at: t };
-  // Not sideways (it adds no travel), or stepped already.
-  if (!isSideways(dx, dy) || was.latched) {
-    return { state: { ...hold, travel: 0 }, step: 0, take: true };
+  // Not sideways: it adds no travel.
+  if (!isSideways(dx, dy))
+    return { state: { ...was, owner, travel: 0, at: t }, step: 0, take: true };
+  // The time since the last event, bounded: the first has none.
+  const dt = Math.min(Math.max(t - was.at, MIN_DT_MS), WHEEL_GAP_MS);
+  let { stepped, coast } = was;
+  if (stepped === Math.sign(dx)) {
+    const next = coastOn(coast, Math.abs(dx), dt);
+    coast = next.coast;
+    // The tail of the swipe that stepped: held.
+    if (!next.fresh)
+      return { state: { ...was, owner, coast, travel: 0, at: t }, step: 0, take: true };
+    stepped = 0;
   }
   // A turn of direction starts the travel over.
   const before = Math.sign(was.travel) !== Math.sign(dx) ? 0 : was.travel;
   const travel = before + dx;
   if (Math.abs(travel) < WHEEL_STEP_PX) {
-    return { state: { ...hold, travel }, step: 0, take: true };
+    return { state: { owner, stepped, coast, travel, at: t }, step: 0, take: true };
   }
+  const step = travel > 0 ? 1 : -1;
   return {
-    state: { owner, travel: 0, latched: true, at: t },
-    step: travel > 0 ? 1 : -1,
+    state: { owner, stepped: step, coast: settle(Math.abs(dx), dt), travel: 0, at: t },
+    step,
     take: true,
   };
 }

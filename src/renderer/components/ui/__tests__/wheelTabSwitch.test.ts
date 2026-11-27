@@ -102,6 +102,116 @@ describe('wheelTabStep', () => {
   });
 });
 
+/*
+ * A modelled macOS trackpad swipe, since a real one can't be captured here
+ * (no trackpad on the test machine): the fingers' phase ramps up and eases
+ * off over ~8 events, then AppKit's momentum tail decays exponentially
+ * (x0.95 per 16ms frame) for about a second, with no gap anywhere near
+ * WHEEL_GAP_MS. Touching the pad again cancels the tail and the next swipe's
+ * events follow at once.
+ */
+const FINGERS = [2, 5, 9, 14, 18, 20, 18, 15];
+function swipe(t0: number, sign = 1, tailMs = 1200): WheelInput[] {
+  const out: WheelInput[] = FINGERS.map((d, i) => ({ dx: sign * d, dy: 0, t: t0 + i * 12 }));
+  const lift = out.at(-1)!.t;
+  for (let d = FINGERS.at(-1)! * 0.95, t = lift + 16; t - lift < tailMs; d *= 0.95, t += 16) {
+    out.push({ dx: (sign * Math.round(d * 10)) / 10, dy: 0, t });
+  }
+  return out;
+}
+/** A swipe whose momentum is cut `ms` into its tail by the next swipe. */
+const cut = (events: WheelInput[], ms: number) => {
+  const end = events[FINGERS.length - 1]!.t + ms;
+  return events.filter((e) => e.t <= end);
+};
+
+describe('wheelTabStep on a trackpad trace', () => {
+  it('steps once for one swipe, its whole momentum tail included', () => {
+    expect(run(swipe(0)).steps).toEqual([1]);
+  });
+
+  it('steps again for a swipe that starts while the last one still coasts', () => {
+    for (const ms of [150, 400, 800]) {
+      const first = cut(swipe(0), ms);
+      const second = swipe(after(first));
+      expect(run([...first, ...second]).steps, `cut ${ms}ms in`).toEqual([1, 1]);
+    }
+  });
+
+  it('steps for each of several swipes in a row, never quiet in between', () => {
+    let t = 0;
+    const events: WheelInput[] = [];
+    for (let i = 0; i < 4; i++) {
+      const s = cut(swipe(t), 300);
+      events.push(...s);
+      t = after(s);
+    }
+    expect(run(events).steps).toEqual([1, 1, 1, 1]);
+  });
+
+  it('steps back for a swipe the other way during the tail', () => {
+    const first = cut(swipe(0), 300);
+    expect(run([...first, ...swipe(after(first), -1)]).steps).toEqual([1, -1]);
+  });
+
+  it("doesn't step twice for fingers still speeding up after the step", () => {
+    const fast = [2, 4, 8, 16, 32, 64, 100, 60, 30].map((dx, i) => ({ dx, dy: 0, t: i * 12 }));
+    expect(run(fast).steps).toEqual([1]);
+  });
+
+  it("doesn't take coalesced momentum events for a new swipe", () => {
+    // A busy main thread (the switched-to view rendering) merges a few
+    // frames of the tail into one event: their deltas summed, the last one's
+    // time. Bigger deltas, but no faster.
+    const tail = swipe(0);
+    const merge = (from: number, n: number) => ({
+      dx: tail.slice(from, from + n).reduce((sum, e) => sum + e.dx, 0),
+      dy: 0,
+      t: tail[from + n - 1]!.t,
+    });
+    const events = [...tail.slice(0, 20), tail[20]!, merge(21, 2), merge(23, 3), ...tail.slice(26)];
+    expect(events[22]!.dx).toBeGreaterThan(events[21]!.dx);
+    expect(events[21]!.dx).toBeGreaterThan(events[20]!.dx);
+    expect(run(events).steps).toEqual([1]);
+  });
+
+  it("doesn't take a late frame and its jitter for a new swipe", () => {
+    // A replay in the dev instance that stepped twice: one event 65ms late
+    // just after the step (the switched-to view rendering), the next ones
+    // a little uneven. Gaps in ms before each event, as captured.
+    const gaps = [0, 14.7, 13.6, 14.4, 13.8, 80.8, 16.4, 13, 13.5, 17.7, 46.2, 18.6];
+    let t = 0;
+    const events = swipe(0).map((e, i) => ({ ...e, t: (t += gaps[i] ?? 16.7) }));
+    expect(run(events).steps).toEqual([1]);
+  });
+
+  it("doesn't take one fat event in the tail for a new swipe", () => {
+    const events = swipe(0).map((e, i) => (i === 30 ? { ...e, dx: e.dx * 3 } : e));
+    expect(run(events).steps).toEqual([1]);
+  });
+
+  it("doesn't take a tail's uneven sizes for a new swipe", () => {
+    // Rounding and the pad's noise: a few percent either way, rising twice
+    // in a row now and then.
+    const wobble = [1, 1.05, 1.1, 0.95, 1, 1.06, 1.12, 0.97];
+    const events = swipe(0).map((e, i) =>
+      i < FINGERS.length ? e : { ...e, dx: e.dx * wobble[i % 8]! },
+    );
+    expect(run(events).steps).toEqual([1]);
+  });
+
+  it("doesn't take a lifting finger's backward tick for a swipe back", () => {
+    const first = swipe(0);
+    const lift = FINGERS.length;
+    const events = [
+      ...first.slice(0, lift),
+      { dx: -1, dy: 0, t: first[lift - 1]!.t + 4 },
+      ...first.slice(lift),
+    ];
+    expect(run(events).steps).toEqual([1]);
+  });
+});
+
 describe('stepTab', () => {
   const order = ['a', 'b', 'c'];
   it('picks the neighbour', () => {
