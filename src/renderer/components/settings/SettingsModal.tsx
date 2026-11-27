@@ -12,7 +12,6 @@ import {
   Keyboard,
   Moon,
   Palette,
-  Puzzle,
   RefreshCw,
   Shield,
   Sparkles,
@@ -44,7 +43,6 @@ import { SwatchOption } from '../ui/Swatch';
 import { SwitchField } from '../ui/SwitchField';
 import { TextLink } from '../ui/TextLink';
 import { Textarea } from '../ui/Textarea';
-import { AddOnsTab } from './AddOnsTab';
 import { ClaudeTab, cliVersion } from './ClaudeTab';
 import { KeybindingsTab } from './KeybindingsTab';
 import { UsageTab } from './UsageTab';
@@ -62,7 +60,6 @@ type SettingsTab =
   | 'claude-code'
   | 'keybindings'
   | 'usage'
-  | 'add-ons'
   | 'updates'
   | 'privacy'
   | 'about';
@@ -97,7 +94,6 @@ const SECTIONS: Record<SettingsTab, { label: string; description: string; icon: 
       description: 'Tokens, rate limits and alerts.',
       icon: icon(Activity),
     },
-    'add-ons': { label: 'Add-ons', description: 'Optional integrations.', icon: icon(Puzzle) },
     updates: { label: 'Updates', description: 'Keeping Dash up to date.', icon: icon(Download) },
     privacy: {
       label: 'Privacy',
@@ -111,7 +107,7 @@ const NAV_GROUPS: Array<{ label: string; ids: SettingsTab[] }> = [
   { label: 'Interface', ids: ['appearance', 'notifications'] },
   { label: 'Editor', ids: ['ide'] },
   { label: 'Workflow', ids: ['attribution', 'claude-code', 'keybindings', 'usage'] },
-  { label: 'System', ids: ['add-ons', 'updates', 'privacy', 'about'] },
+  { label: 'System', ids: ['updates', 'privacy', 'about'] },
 ];
 
 const isTab = (v: string | undefined): v is SettingsTab => !!v && v in SECTIONS;
@@ -175,7 +171,6 @@ export function SettingsModal({
         {tab === 'claude-code' && <ClaudeTab claudeInfo={claudeInfo} />}
         {tab === 'keybindings' && <KeybindingsTab />}
         {tab === 'usage' && <UsageTab latestRateLimits={latestRateLimits} />}
-        {tab === 'add-ons' && <AddOnsTab />}
         {tab === 'updates' && <UpdatesTab appVersion={appVersion} />}
         {tab === 'privacy' && <PrivacyTab />}
         {tab === 'about' && (
