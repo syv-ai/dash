@@ -70,7 +70,7 @@ export function TaskSettingsModal({
             control={
               <Input
                 id={nameId}
-                className="w-48"
+                className="w-56"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onBlur={handleSaveName}

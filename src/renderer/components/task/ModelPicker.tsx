@@ -54,7 +54,7 @@ export function ModelPicker({
       label="Model"
       hint={DESCRIPTIONS[value]}
       note={helperText}
-      control={<div className="w-48">{select}</div>}
+      control={<div className="w-56">{select}</div>}
     />
   ) : (
     <Field label="Model" as="div" hint={DESCRIPTIONS[value]} note={helperText}>
