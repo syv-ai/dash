@@ -163,28 +163,35 @@ class ClaudeUpdateServiceImpl {
   }
 
   /**
-   * The version a session's process runs: its executable's path when that
-   * names one (native installs; a process never changes its executable, so
-   * it is cached per pid), else the job's `state.json` `cliVersion`.
+   * The version a session's process runs, cached per job and pid: a process
+   * never changes its version. Uncached while unknown, so a fresh job whose
+   * `state.json` has no `cliVersion` yet is read again next time.
    */
   private async readVersion(jobId: string, pid: number): Promise<string | null> {
     const key = `${jobId}:${pid}`;
     const cached = this.versionCache.get(key);
     if (cached) return cached;
-    const executable = await processExecutable(pid);
-    const fromPath = executable ? versionFromExecutablePath(executable) : null;
-    if (fromPath) {
-      this.versionCache.set(key, fromPath);
-      return fromPath;
-    }
-    try {
-      const file = path.join(claudeConfigDir(), 'jobs', jobId, 'state.json');
-      const text = await fs.promises.readFile(file, 'utf8');
-      reportJobStateDrift(text);
-      return parseSessionCliVersion(text);
-    } catch {
-      return null;
-    }
+    const version = await readSessionVersion(jobId, pid);
+    if (version) this.versionCache.set(key, version);
+    return version;
+  }
+}
+
+/**
+ * The executable's `versions/<v>` path when it names one (native installs),
+ * else the job's `state.json` `cliVersion`.
+ */
+async function readSessionVersion(jobId: string, pid: number): Promise<string | null> {
+  const executable = await processExecutable(pid);
+  const fromPath = executable ? versionFromExecutablePath(executable) : null;
+  if (fromPath) return fromPath;
+  try {
+    const file = path.join(claudeConfigDir(), 'jobs', jobId, 'state.json');
+    const text = await fs.promises.readFile(file, 'utf8');
+    reportJobStateDrift(text);
+    return parseSessionCliVersion(text);
+  } catch {
+    return null;
   }
 }
 
