@@ -53,6 +53,15 @@ export function TaskSettingsModal({
   useEffect(() => setExtraArgs(task.extraArgs ?? ''), [task.extraArgs]);
   useEffect(() => setAddDirs(task.addDirs), [task.addDirs]);
   useEffect(() => setEnv(task.env), [task.env]);
+  // Saved on its own (no restart), so the switch follows the save, not the
+  // task it was opened with.
+  const [isProtected, setIsProtected] = useState(task.protected);
+  useEffect(() => setIsProtected(task.protected), [task.protected]);
+  async function handleProtected(to: boolean) {
+    setIsProtected(to);
+    const saved = await useProjects.getState().setProtected(task, to);
+    setIsProtected(saved ? saved.protected : !to);
+  }
 
   function handleSaveName() {
     const trimmed = name.trim();
@@ -110,8 +119,8 @@ export function TaskSettingsModal({
           <SwitchField
             label="Protected"
             hint={PROTECTED_HINT}
-            checked={task.protected}
-            onCheckedChange={(to) => void useProjects.getState().setProtected(task, to)}
+            checked={isProtected}
+            onCheckedChange={(to) => void handleProtected(to)}
           />
           <SwitchField
             label="Deny instead of prompting"
