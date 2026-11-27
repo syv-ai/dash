@@ -145,6 +145,17 @@
      and rail as it opens or closes); a theme animation, so `motion-safe:`
      applies (`fadeIn` below). */
   --animate-fade-in: fadeIn var(--motion-calm) var(--ease-settle);
+  /* `animate-skeleton`: a placeholder's slow pulse while its content loads
+     (`ui/Skeleton`). Four `slow` beats per breath on `ease-calm`, so it
+     reads as waiting, not alarm; reduced motion zeroes the token and it
+     holds still. Endless only because a skeleton unmounts once its content
+     arrives or its wait gives up. */
+  --animate-skeleton: skeleton calc(var(--motion-slow) * 4) var(--ease-calm) infinite;
+  @keyframes skeleton {
+    50% {
+      opacity: 0.5;
+    }
+  }
   @keyframes breathe {
     50% {
       opacity: 0.35;

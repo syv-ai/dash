@@ -54,6 +54,7 @@ import { ListRow } from '../components/ui/ListRow';
 import { MainRepoBadge } from '../components/ui/MainRepoBadge';
 import { Meter } from '../components/ui/Meter';
 import { ProgressRing } from '../components/ui/ProgressRing';
+import { Skeleton } from '../components/ui/Skeleton';
 import { ScrollRail, type RailSpanTone, type RailTick } from '../components/ui/ScrollRail';
 import { usageColor } from '../lib/usageColor';
 import { PanelHeader } from '../components/ui/PanelHeader';
@@ -137,6 +138,7 @@ export function Gallery() {
           <Badges />
           <Meters />
           <Rings />
+          <Skeletons />
           <Rails />
           <Rows />
           <PillTabs />
@@ -561,6 +563,26 @@ function Rings() {
             <span className="text-xs font-semibold tabular-nums">{v}</span>
           </ProgressRing>
         ))}
+      </div>
+    </Section>
+  );
+}
+
+/** Placeholders the size of what is loading: a usage ring's column (ring,
+ *  label, reset time) and a list row's two lines. */
+function Skeletons() {
+  return (
+    <Section title="Skeleton">
+      <div className="flex items-start gap-6">
+        <div className="flex flex-col items-center gap-2">
+          <Skeleton shape="circle" className="size-16" />
+          <Skeleton className="h-4 w-10" />
+          <Skeleton className="h-4 w-14" />
+        </div>
+        <div className="flex flex-1 flex-col gap-2 pt-1">
+          <Skeleton className="h-4 w-2/3" />
+          <Skeleton className="h-4 w-1/2" />
+        </div>
       </div>
     </Section>
   );
