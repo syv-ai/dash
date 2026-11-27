@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Globe } from 'lucide-react';
-import type { Task, ActivityInfo, ContextUsage } from '../../../shared/types';
+import type { Task, ActivityInfo } from '../../../shared/types';
 import { SleepTaskButton } from '../task/TaskActions';
 import { TaskContextMenu } from '../task/TaskContextMenu';
 import { TreeRow, type TreeRowContext } from '../ui/Tree';
@@ -25,8 +25,6 @@ interface TaskCardProps {
   state: AgentState;
   /** The second line (the Tasks view's project and why); none in Projects. */
   description?: ReactNode;
-  /** The session's context, read as the percent at the row's end. */
-  usage?: ContextUsage;
   /** Pixels per tree level (a project's tasks sit `TASK_INDENT_PX` in). */
   indentStep?: number;
   /** Drag to reorder (the Projects view). */
@@ -70,7 +68,6 @@ export function TaskCard({
   ctx,
   state,
   description,
-  usage,
   indentStep,
   drag,
   spacedEnd = false,
@@ -81,7 +78,9 @@ export function TaskCard({
   onArchive,
   onDelete,
 }: TaskCardProps) {
+  // Its own entries, not the maps: one task's hook or status line re-renders its row only.
   const activityInfo = useRuntime((s) => s.taskActivity[task.id]);
+  const usage = useRuntime((s) => s.contextUsage[task.id]);
   const hasRemoteControl = useRuntime((s) => !!s.remoteControlStates[task.id]);
   const prs = useGit((s) => s.prByTask[task.id]);
   const allPrs = useGit((s) => s.branchPrsByTask[task.id]);

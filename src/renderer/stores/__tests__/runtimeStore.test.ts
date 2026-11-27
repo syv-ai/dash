@@ -153,6 +153,61 @@ describe('runtimeStore.init — activity', () => {
   });
 });
 
+describe('runtimeStore.init — structural sharing', () => {
+  let api: ReturnType<typeof makeElectronApiMock>;
+  let activityCb: ((data: Record<string, unknown>) => void) | null;
+  let statusCb: ((data: Record<string, unknown>) => void) | null;
+  beforeEach(() => {
+    activityCb = null;
+    statusCb = null;
+    api = makeElectronApiMock();
+    api.onPtyActivity = vi.fn((cb: (d: Record<string, unknown>) => void) => {
+      activityCb = cb;
+      return vi.fn();
+    });
+    api.onPtyStatusLine = vi.fn((cb: (d: Record<string, unknown>) => void) => {
+      statusCb = cb;
+      return vi.fn();
+    });
+    installWindow(api);
+  });
+  afterEach(() => resetWindow());
+
+  it("keeps an unchanged task's activity entry, and the map when nothing changed", async () => {
+    const { useRuntime } = await freshStores();
+    const cleanup = useRuntime.getState().init();
+    activityCb!({ a: { state: 'busy', tool: { name: 'Read' } }, b: { state: 'idle' } });
+    const first = useRuntime.getState().taskActivity;
+    activityCb!({ a: { state: 'busy', tool: { name: 'Edit' } }, b: { state: 'idle' } });
+    const second = useRuntime.getState().taskActivity;
+    expect(second.b).toBe(first.b);
+    expect(second.a).not.toBe(first.a);
+    activityCb!({ a: { state: 'busy', tool: { name: 'Edit' } }, b: { state: 'idle' } });
+    expect(useRuntime.getState().taskActivity).toBe(second);
+    cleanup();
+  });
+
+  it("derives each task's context and keeps it while only the cost moves", async () => {
+    const { useRuntime } = await freshStores();
+    const cleanup = useRuntime.getState().init();
+    const line = (cost: number) => ({
+      contextUsage: { used: 10, total: 100, percentage: 10 },
+      cost: { totalCostUsd: cost },
+      model: 'Opus',
+      updatedAt: cost,
+    });
+    statusCb!({ a: line(1) });
+    const first = useRuntime.getState();
+    expect(first.contextUsage.a).toEqual({ used: 10, total: 100, percentage: 10 });
+    statusCb!({ a: line(2) });
+    const second = useRuntime.getState();
+    expect(second.statusLine).not.toBe(first.statusLine);
+    expect(second.contextUsage).toBe(first.contextUsage);
+    expect(second.rateLimits).toBeUndefined();
+    cleanup();
+  });
+});
+
 describe('runtimeStore.init — supervisor sessions', () => {
   let api: ReturnType<typeof makeElectronApiMock>;
   let listCb: ((rows: unknown) => void) | null;

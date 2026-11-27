@@ -1,5 +1,5 @@
-import type { ContextUsage } from '../../../shared/types';
 import { usageColor } from '../../lib/usageColor';
+import { useRuntime } from '../../stores/runtimeStore';
 import { useSettings } from '../../stores/settingsStore';
 import { levelCells } from '../rightInspector/UsageSection';
 import { ProgressRing } from '../ui/ProgressRing';
@@ -28,16 +28,15 @@ const RING_STROKE_PX = 2;
 export function SessionRail({
   rows,
   activeTaskId,
-  contextUsage,
   onSelectTask,
 }: {
   /** The live sessions, top to bottom. */
   rows: TaskStateRow[];
   activeTaskId: string | null;
-  contextUsage?: Record<string, ContextUsage>;
   onSelectTask: (projectId: string, taskId: string) => void;
 }) {
   const showSession = useSettings((s) => s.showUsageInline);
+  const contextUsage = useRuntime((s) => s.contextUsage);
   const initials = railInitials(rows.map((r) => r.task));
   return (
     // The thin scrollbar's 3px gutter is always kept on the right; the same
@@ -45,7 +44,7 @@ export function SessionRail({
     <div className="scrollbar-thin-hover flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-y-auto pr-0.5 pl-1.25">
       {rows.map(({ task, state, reason, projectName }) => {
         const [cell] = levelCells({
-          contextUsage: contextUsage?.[task.id],
+          contextUsage: contextUsage[task.id],
           showSession,
           showLimits: false,
           now: 0,

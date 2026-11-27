@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from 'react';
 import { FolderPlus } from 'lucide-react';
-import type { ContextUsage, Project, Task } from '../../../shared/types';
+import type { Project, Task } from '../../../shared/types';
 import { Tree, TreeRow, ownNode, type TreeRowContext } from '../ui/Tree';
 import type { AgentState } from '../ui/StatusDot';
 import { EmptyState } from '../ui/EmptyState';
@@ -29,8 +29,6 @@ interface TaskStateListProps extends TaskRowActions {
   rows: Rows;
   projects: Project[];
   activeTaskId: string | null;
-  /** Each live task's session context (the right sidebar's Session level). */
-  contextUsage?: Record<string, ContextUsage>;
   onOpenFolder: () => void;
 }
 
@@ -45,7 +43,6 @@ export function TaskStateList({
   rows: list,
   projects,
   activeTaskId,
-  contextUsage,
   onOpenFolder,
   ...actions
 }: TaskStateListProps) {
@@ -98,7 +95,6 @@ export function TaskStateList({
           <TaskStateRowItem
             row={r.row}
             ctx={ctx}
-            usage={contextUsage?.[r.row.task.id]}
             projectPath={projectPath(r.row.task)}
             {...actions}
           />
@@ -118,7 +114,6 @@ function estimate(r: TaskTreeRow): number {
 function TaskStateRowItem({
   row,
   ctx,
-  usage,
   projectPath,
   onSelectTask,
   onCloseTask,
@@ -128,7 +123,6 @@ function TaskStateRowItem({
 }: TaskRowActions & {
   row: TaskStateRow;
   ctx: TreeRowContext;
-  usage: ContextUsage | undefined;
   projectPath?: string;
 }) {
   const { task, state, reason, projectName } = row;
@@ -137,7 +131,6 @@ function TaskStateRowItem({
       task={task}
       ctx={ctx}
       state={state}
-      usage={usage}
       // Flush at every depth: a sleeping task lines up with the live ones
       // (the tree still nests it under "Sleeping tasks" for keys and AT).
       indentStep={0}

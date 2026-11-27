@@ -16,7 +16,7 @@ import {
 } from '../ui/ContextMenu';
 import type { MenuParts } from '../task/TaskMenuItems';
 import { ProjectMenuItems } from './ProjectMenuItems';
-import type { ContextUsage, Project, Task } from '../../../shared/types';
+import type { Project, Task } from '../../../shared/types';
 import { useDragReorder } from '../../hooks/useDragReorder';
 import { IconButton } from '../ui/IconButton';
 import { HoverSwapSlot } from '../ui/HoverSwapSlot';
@@ -39,7 +39,8 @@ import { ForeignSessionsSection } from './ForeignSessionsSection';
 import { foreignSessionsFor, taskOwnership } from './foreignSessions';
 import { projectTreeRows, type ProjectTreeRow } from './projectTree';
 import { getProjectActivity, projectActivityDot } from './projectActivity';
-import { agentState } from './taskStates';
+import { agentState, listedActivity } from './taskStates';
+import { useShallow } from 'zustand/react/shallow';
 import { newMemoriesLabel } from '../memory/memoryView';
 import { showProjectMemory } from '../memory/showMemory';
 import { openInIde } from '../../lib/openInIde';
@@ -60,8 +61,6 @@ interface ProjectsSectionProps {
   tasksByProject: Record<string, Task[]>;
   activeTaskId: string | null;
   unseenTaskIds?: Set<string>;
-  /** Each live task's session context (the right sidebar's Session level). */
-  contextUsage?: Record<string, ContextUsage>;
   onSelectProject: (id: string) => void;
   onOpenFolder: () => void;
   onDeleteProject: (id: string) => void;
@@ -87,7 +86,6 @@ export function ProjectsSection({
   tasksByProject,
   activeTaskId,
   unseenTaskIds,
-  contextUsage,
   onSelectProject,
   onOpenFolder,
   onDeleteProject,
@@ -106,7 +104,8 @@ export function ProjectsSection({
 }: ProjectsSectionProps) {
   const showProjectTokens = useSettings((s) => s.showProjectTokens);
   const projectTokenStats = useRuntime((s) => s.projectTokenStats);
-  const taskActivity = useRuntime((s) => s.taskActivity);
+  // States only: a tool call re-renders the one row (`TaskCard`), not the tree.
+  const taskActivity = useRuntime(useShallow((s) => listedActivity(s.taskActivity)));
   const newMemoryCounts = useRuntime((s) => s.newMemoryCounts);
   const supervisorSessions = useRuntime((s) => s.supervisorSessions);
   // Derive from the stable map reference (see the useShallow caveat in CLAUDE.md).
@@ -423,7 +422,6 @@ export function ProjectsSection({
             task={task}
             ctx={ctx}
             state={agentState(taskActivity[task.id], !!unseenTaskIds?.has(task.id))}
-            usage={contextUsage?.[task.id]}
             indentStep={TASK_INDENT_PX}
             drag={{
               isDragging: draggingTaskId === task.id,

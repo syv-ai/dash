@@ -51,7 +51,6 @@ import { Toaster } from './components/ui/Toaster';
 import { ToastSources } from './components/notifications/ToastSources';
 import { toast } from './components/ui/toast';
 import { getBillionToastContent } from './utils/billionToast';
-import { useStatusLine } from './hooks/useStatusLine';
 import { useThresholdAlerts } from './hooks/useThresholdAlerts';
 import { useSystemHealth } from './hooks/useSystemHealth';
 import { useAutoSleep } from './hooks/useAutoSleep';
@@ -72,7 +71,7 @@ import { mayCloseEditor } from './components/diffEditor/closeGuard';
 import { ConfirmHost } from './components/ui/ConfirmHost';
 import { changeSessionSetting } from './components/task/changeSessionSetting';
 import { ClaudeUpdateHost } from './components/claudeUpdate/ClaudeUpdateHost';
-import { useRuntime } from './stores/runtimeStore';
+import { liveSessionIds, useRuntime } from './stores/runtimeStore';
 import { useAppBootstrap } from './hooks/useAppBootstrap';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { useShallow } from 'zustand/react/shallow';
@@ -306,14 +305,25 @@ export function App() {
     window.electronAPI.setClaudeEnvVars?.({ ...customClaudeEnvVars });
   }, [customClaudeEnvVars]);
 
-  // Activity + remote-control state (runtimeStore; both fed by its init() subscriptions).
-  const taskActivity = useRuntime((s) => s.taskActivity);
+  // Activity, status line and remote-control state (runtimeStore; fed by its
+  // init() subscriptions). App reads only the slices it renders: the whole
+  // activity or status-line map would re-render the app on every hook.
+  const liveTaskIds = useRuntime(useShallow((s) => liveSessionIds(s.taskActivity)));
   const remoteControlStates = useRuntime((s) => s.remoteControlStates);
   const remoteControlModalPtyId = useUi((s) => s.remoteControlModalPtyId);
   const setRemoteControlModalPtyId = useUi((s) => s.setRemoteControlModalPtyId);
 
-  // Status line data (context + cost + rate limits) — derived contextUsage & latestRateLimits
-  const { statusLineData, contextUsage, latestRateLimits, paces } = useStatusLine();
+  const latestRateLimits = useRuntime((s) => s.rateLimits);
+  const paces = useRuntime((s) => s.paces);
+  const activeLiveModel = useRuntime((s) =>
+    activeTaskId ? s.statusLine[activeTaskId]?.model : undefined,
+  );
+  const activeContextUsage = useRuntime((s) =>
+    activeTaskId ? s.contextUsage[activeTaskId] : undefined,
+  );
+  const settingsTargetLiveModel = useRuntime((s) =>
+    taskSettingsTarget ? s.statusLine[taskSettingsTarget.id]?.model : undefined,
+  );
 
   // Usage thresholds for popup notifications
   const usageThresholds = useSettings((s) => s.usageThresholds);
@@ -537,16 +547,11 @@ export function App() {
   // Rotation: all tasks with a live session, minus exclusions. A sleeping
   // (`stopped`) session has no orb and isn't active, so it stays out.
   const rotationTasks = React.useMemo(() => {
+    const live = new Set(liveTaskIds);
     const tasks: Task[] = [];
     for (const projectTasks of Object.values(tasksByProject)) {
       for (const task of projectTasks) {
-        const activity = taskActivity[task.id];
-        if (
-          !task.archivedAt &&
-          activity !== undefined &&
-          activity.state !== 'stopped' &&
-          !rotationExclusions.has(task.id)
-        ) {
+        if (!task.archivedAt && live.has(task.id) && !rotationExclusions.has(task.id)) {
           tasks.push(task);
         }
       }
@@ -557,7 +562,7 @@ export function App() {
       tasks.sort((a, b) => (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity));
     }
     return tasks;
-  }, [tasksByProject, taskActivity, rotationExclusions, rotationOrder]);
+  }, [tasksByProject, liveTaskIds, rotationExclusions, rotationOrder]);
 
   // Load projects on mount
   useEffect(() => {
@@ -611,7 +616,7 @@ export function App() {
   }, [tasksByProject]);
 
   // Threshold alerts — fires toast notifications when usage exceeds thresholds
-  useThresholdAlerts(statusLineData, latestRateLimits, usageThresholds, taskNames);
+  useThresholdAlerts(usageThresholds, taskNames);
   useSystemHealth();
   useAutoSleep();
 
@@ -1567,7 +1572,6 @@ export function App() {
                 onReorderTasksCommit={(projectId, reordered) => {
                   void handleReorderTasksCommit(projectId, reordered);
                 }}
-                contextUsage={contextUsage}
                 onMinWidth={setSidebarMinPx}
               />
             </ErrorBoundary>
@@ -1592,11 +1596,7 @@ export function App() {
               onToggleInspector={toggleInspector}
               onSelectTask={setActiveTaskId}
               onEnableRemoteControl={() => activeTask && setRemoteControlModalPtyId(activeTask.id)}
-              modelName={
-                activeTask
-                  ? headerModelName(statusLineData[activeTask.id]?.model, activeTask.model)
-                  : null
-              }
+              modelName={activeTask ? headerModelName(activeLiveModel, activeTask.model) : null}
               onOpenIde={() => {
                 if (activeTask) void openInIde(activeTask.path);
               }}
@@ -1680,13 +1680,10 @@ export function App() {
                 <ErrorBoundary key={activeTask.id} area="The task sidebar">
                   <RightInspector
                     task={activeTask}
-                    modelName={headerModelName(
-                      statusLineData[activeTask.id]?.model,
-                      activeTask.model,
-                    )}
+                    modelName={headerModelName(activeLiveModel, activeTask.model)}
                     rateLimits={latestRateLimits}
                     paces={paces}
-                    contextUsage={contextUsage[activeTask.id]}
+                    contextUsage={activeContextUsage}
                     diff={inlineEditor?.target ?? null}
                     expanded={expanded || expandedShown}
                     motion={sidebarMotion}
@@ -1777,10 +1774,7 @@ export function App() {
       {taskSettingsTarget && (
         <TaskSettingsModal
           task={taskSettingsTarget}
-          liveModel={headerModelName(
-            statusLineData[taskSettingsTarget.id]?.model,
-            taskSettingsTarget.model,
-          )}
+          liveModel={headerModelName(settingsTargetLiveModel, taskSettingsTarget.model)}
           onClose={() => setTaskSettingsTarget(null)}
           onRename={(id, newName) => {
             if (!taskSettingsTarget || taskSettingsTarget.id !== id) return;

@@ -61,6 +61,8 @@ export function makeElectronApiMock(overrides: Record<string, unknown> = {}) {
     adoGetPrsForCheckout: vi.fn(() => ok([])),
     onPtyActivity: vi.fn((_cb: (d: Record<string, unknown>) => void) => () => {}),
     ptyGetAllActivity: vi.fn(() => ok({})),
+    onPtyStatusLine: vi.fn((_cb: (d: Record<string, unknown>) => void) => () => {}),
+    ptyGetAllStatusLine: vi.fn(() => ok({})),
     onRemoteControlStateChanged: vi.fn((_cb: (u: unknown) => void) => () => {}),
     ptyRemoteControlGetAllStates: vi.fn(() => ok({})),
     onTokenStatsUpdated: vi.fn((_cb: (u: unknown) => void) => () => {}),

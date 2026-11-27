@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Plus, Search, Settings } from 'lucide-react';
-import type { ContextUsage, Project, Task } from '../../../shared/types';
+import type { Project, Task } from '../../../shared/types';
 import { ClaudeUpdateButton } from '../claudeUpdate/ClaudeUpdateButton';
 import { SystemHealthButton } from '../systemHealth/SystemHealthButton';
 import { IconButton } from '../ui/IconButton';
@@ -37,8 +37,6 @@ interface LeftSidebarProps {
   onReorderProjects?: (reordered: Project[]) => void;
   onReorderTasks?: (projectId: string, reordered: Task[]) => void;
   onReorderTasksCommit?: (projectId: string, reordered: Task[]) => void;
-  /** Each live task's session context, from the statusLine (`useStatusLine`). */
-  contextUsage?: Record<string, ContextUsage>;
   /** The sidebar's least width (px), once its tabs are measured: the view
    *  tabs' labels in full and create and find beside them. Narrower, the
    *  sidebar goes to its rail (T16). */
@@ -94,7 +92,6 @@ export function LeftSidebar(props: LeftSidebarProps) {
         <SessionRail
           rows={liveRows(rows)}
           activeTaskId={activeTaskId}
-          contextUsage={props.contextUsage}
           onSelectTask={props.onSelectTask}
         />
         <ClaudeUpdateButton />
@@ -170,7 +167,6 @@ export function LeftSidebar(props: LeftSidebarProps) {
             tasksByProject={tasksByProject}
             activeTaskId={activeTaskId}
             unseenTaskIds={props.unseenTaskIds}
-            contextUsage={props.contextUsage}
             onSelectProject={props.onSelectProject}
             onOpenFolder={props.onOpenFolder}
             onDeleteProject={props.onDeleteProject}
@@ -192,7 +188,6 @@ export function LeftSidebar(props: LeftSidebarProps) {
             rows={rows}
             projects={projects}
             activeTaskId={activeTaskId}
-            contextUsage={props.contextUsage}
             onOpenFolder={props.onOpenFolder}
             onSelectTask={props.onSelectTask}
             onCloseTask={props.onCloseTask}

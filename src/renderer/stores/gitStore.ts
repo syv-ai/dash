@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { GitStatus, PullRequestInfo, Project, Task } from '../../shared/types';
 import { fetchPrsFor, prDetectionTargets, prTargetFor, type BranchPrs } from './prDetectionTargets';
 import { useProjects, selectActiveTask } from './projectsStore';
+import { replaceEqualDeep } from '../lib/replaceEqualDeep';
 
 const GIT_POLL_INTERVAL = 5000;
 const PR_POLL_INTERVAL = 30_000;
@@ -275,10 +276,7 @@ export const useGit = create<GitStore>((set, get) => ({
     const defaultBranch = project?.baseRef || project?.gitBranch || 'main';
     if (!branch || !project || branch === defaultBranch) {
       if (task) {
-        set({
-          prByTask: { ...get().prByTask, [task.id]: [] },
-          branchPrsByTask: { ...get().branchPrsByTask, [task.id]: [] },
-        });
+        setTaskPrs({ [task.id]: { current: [], all: [] } });
       }
       return;
     }
@@ -290,15 +288,8 @@ export const useGit = create<GitStore>((set, get) => ({
     const fetchPrs = async () => {
       const found = await fetchPrsFor(target);
       if (cancelled || found === null) return;
-      set({
-        prs: found.current,
-        ...(task
-          ? {
-              prByTask: { ...get().prByTask, [task.id]: found.current },
-              branchPrsByTask: { ...get().branchPrsByTask, [task.id]: found.all },
-            }
-          : {}),
-      });
+      set((s) => ({ prs: replaceEqualDeep(s.prs, found.current) }));
+      if (task) setTaskPrs({ [task.id]: found });
     };
 
     const redetectSoon = () => {
@@ -331,19 +322,29 @@ export const useGit = create<GitStore>((set, get) => ({
     // A failed fetch (undefined / null) keeps what the task showed.
     const fetched = results.filter((r): r is readonly [string, BranchPrs] => r[1] !== null);
     const read = branches.filter((r): r is readonly [string, string | null] => r[1] !== undefined);
-    set({
-      prByTask: {
-        ...get().prByTask,
-        ...Object.fromEntries(fetched.map(([id, f]) => [id, f.current])),
-      },
-      branchPrsByTask: {
-        ...get().branchPrsByTask,
-        ...Object.fromEntries(fetched.map(([id, f]) => [id, f.all])),
-      },
-      branchByTask: { ...get().branchByTask, ...Object.fromEntries(read) },
-    });
+    setTaskPrs(Object.fromEntries(fetched));
+    set((s) => ({
+      branchByTask: replaceEqualDeep(s.branchByTask, {
+        ...s.branchByTask,
+        ...Object.fromEntries(read),
+      }),
+    }));
   },
 }));
+
+/** Write tasks' PRs, keeping each list that didn't change (`replaceEqualDeep`):
+ *  a poll that finds the same PRs re-renders no row. */
+function setTaskPrs(found: Record<string, BranchPrs>): void {
+  const pick = (key: keyof BranchPrs) =>
+    Object.fromEntries(Object.entries(found).map(([id, f]) => [id, f[key]]));
+  useGit.setState((s) => ({
+    prByTask: replaceEqualDeep(s.prByTask, { ...s.prByTask, ...pick('current') }),
+    branchPrsByTask: replaceEqualDeep(s.branchPrsByTask, {
+      ...s.branchPrsByTask,
+      ...pick('all'),
+    }),
+  }));
+}
 
 /** The branch `task` is on now, falling back to the one it was created on until it is read. */
 export function useTaskBranch(task: Pick<Task, 'id' | 'branch'>): string {

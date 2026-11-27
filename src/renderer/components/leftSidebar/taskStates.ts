@@ -1,5 +1,38 @@
-import type { ActivityError, ActivityInfo, Project, Task } from '../../../shared/types';
+import type {
+  ActivityError,
+  ActivityInfo,
+  ActivityState,
+  Project,
+  Task,
+} from '../../../shared/types';
 import type { AgentState } from '../ui/StatusDot';
+
+/** One shared entry per state, for the tasks whose list row shows no more than it. */
+const BARE: Record<ActivityState, ActivityInfo> = {
+  busy: { state: 'busy' },
+  idle: { state: 'idle' },
+  waiting: { state: 'waiting' },
+  error: { state: 'error' },
+  stopped: { state: 'stopped' },
+};
+
+/**
+ * What a task list shows of each task's activity: its state, and a waiting or
+ * failed task's whole entry (the row's reason). The rest (the tool at work,
+ * compacting, the mode) changes on nearly every hook and only the row's own
+ * tooltip reads it (`TaskCard` selects that itself), so every other task maps
+ * to one shared `{ state }`. Selected with `useShallow`, a list re-renders when
+ * a state changes, not on each tool call.
+ */
+export function listedActivity(
+  activity: Record<string, ActivityInfo>,
+): Record<string, ActivityInfo> {
+  const out: Record<string, ActivityInfo> = {};
+  for (const [id, info] of Object.entries(activity)) {
+    out[id] = info.state === 'waiting' || info.state === 'error' ? info : BARE[info.state];
+  }
+  return out;
+}
 
 /** One row of the state-ordered task list. */
 export interface TaskStateRow {

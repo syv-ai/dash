@@ -6,11 +6,17 @@ import type {
   ClaudeCliInfo,
   ClaudeUpdateMode,
   ClaudeUpdateState,
+  ContextUsage,
+  RateLimits,
   RemoteControlState,
+  StatusLineData,
   SupervisorSession,
   Task,
 } from '../../shared/types';
 import { playNotificationSound, playPeonSound } from '../sounds';
+import { limitPaces, recordLimits, type LimitHistories, type LimitPaces } from '../lib/pace';
+import { mergeRateLimits } from '../lib/rateLimits';
+import { replaceEqualDeep } from '../lib/replaceEqualDeep';
 import { emptyTracker, observeActivity } from './activityTransitions';
 import { useProjects } from './projectsStore';
 import { useSettings } from './settingsStore';
@@ -21,8 +27,24 @@ interface TokenStatsRollup {
   taskCount: number;
 }
 
+/*
+ * Every IPC push is a fresh copy of the whole map, so each set below goes
+ * through `replaceEqualDeep`: an entry that didn't change keeps its identity,
+ * and a component selecting one task's entry renders only when that task's
+ * changed. Select the narrowest slice (`s.taskActivity[id]`), not the map.
+ */
 export interface RuntimeState {
   taskActivity: Record<string, ActivityInfo>;
+  /** Each live session's last status line (context, cost, limits, model), by task id. */
+  statusLine: Record<string, StatusLineData>;
+  /** Each live session's context, from its status line, by task id. */
+  contextUsage: Record<string, ContextUsage>;
+  /** The account's limits, merged across the sessions' status lines (`mergeRateLimits`). */
+  rateLimits: RateLimits | undefined;
+  /** Recent readings of the limits, in memory, for their pace. */
+  limitHistories: LimitHistories;
+  /** Each limit's pace, from `limitHistories`. */
+  paces: LimitPaces;
   remoteControlStates: Record<string, RemoteControlState>;
   projectTokenStats: Record<string, TokenStatsRollup>;
   /** Memories written since each project's memory last showed (the Agent tab), by project id. */
@@ -70,8 +92,19 @@ export interface RuntimeActions {
 
 export type RuntimeStore = RuntimeState & RuntimeActions;
 
+/** The tasks with a live session: any activity but `stopped` (a sleeping
+ *  session has no orb). For a `useShallow` selector: the ids, not the map. */
+export function liveSessionIds(activity: Record<string, ActivityInfo>): string[] {
+  return Object.keys(activity).filter((id) => activity[id]!.state !== 'stopped');
+}
+
 export const useRuntime = create<RuntimeStore>((set, get) => ({
   taskActivity: {},
+  statusLine: {},
+  contextUsage: {},
+  rateLimits: undefined,
+  limitHistories: {},
+  paces: {},
   remoteControlStates: {},
   projectTokenStats: {},
   newMemoryCounts: {},
@@ -89,7 +122,8 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
 
   refreshSessions: async () => {
     const resp = await window.electronAPI.sessionList({ refresh: true });
-    if (resp.success && resp.data) set({ supervisorSessions: resp.data });
+    const rows = resp.success ? resp.data : undefined;
+    if (rows) set((s) => ({ supervisorSessions: replaceEqualDeep(s.supervisorSessions, rows) }));
   },
 
   stopSession: async (jobId) => {
@@ -192,24 +226,54 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
             useSettings.getState().setUnseenTaskIds((prev) => new Set([...prev, ...toMarkUnseen]));
           }
         }
-        set({ taskActivity: newActivity });
+        set((s) => ({ taskActivity: replaceEqualDeep(s.taskActivity, newActivity) }));
       });
       cleanups.push(unsub);
 
       void window.electronAPI.ptyGetAllActivity().then((resp) => {
         if (resp.success && resp.data) {
           observe(resp.data);
-          set({ taskActivity: resp.data });
+          const data = resp.data;
+          set((s) => ({ taskActivity: replaceEqualDeep(s.taskActivity, data) }));
         }
       });
     }
 
+    // ── Status line (context, cost, limits, model) ─────────
+    // Stale entries go with ContextUsageService.unregister() on PTY exit.
+    {
+      const receive = (data: Record<string, StatusLineData>) => {
+        const now = Date.now();
+        set((s) => {
+          const statusLine = replaceEqualDeep(s.statusLine, data);
+          const contextUsage = replaceEqualDeep(
+            s.contextUsage,
+            Object.fromEntries(Object.entries(statusLine).map(([id, sl]) => [id, sl.contextUsage])),
+          );
+          const rateLimits = replaceEqualDeep(s.rateLimits, mergeRateLimits(statusLine, now));
+          const limitHistories = rateLimits
+            ? recordLimits(s.limitHistories, rateLimits, now)
+            : s.limitHistories;
+          const paces = replaceEqualDeep(s.paces, limitPaces(limitHistories, rateLimits ?? {}));
+          return { statusLine, contextUsage, rateLimits, limitHistories, paces };
+        });
+      };
+      cleanups.push(window.electronAPI.onPtyStatusLine(receive));
+      window.electronAPI
+        .ptyGetAllStatusLine()
+        .then((resp) => {
+          if (resp.success && resp.data) receive(resp.data);
+        })
+        .catch((err) => console.warn('[statusLine] Initial fetch failed:', err));
+    }
+
     // ── Supervisor sessions ────────────────────────────────
     {
-      const unsub = window.electronAPI.onSessionList((rows) => set({ supervisorSessions: rows }));
-      cleanups.push(unsub);
+      const receive = (rows: SupervisorSession[]) =>
+        set((s) => ({ supervisorSessions: replaceEqualDeep(s.supervisorSessions, rows) }));
+      cleanups.push(window.electronAPI.onSessionList(receive));
       void window.electronAPI.sessionList().then((resp) => {
-        if (resp.success && resp.data) set({ supervisorSessions: resp.data });
+        if (resp.success && resp.data) receive(resp.data);
       });
     }
 
@@ -235,16 +299,30 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
     // ── Token stats: write per-task rollups back into projectsStore ─
     {
       const unsub = window.electronAPI.onTokenStatsUpdated((update) => {
+        // Only the task's own project gets a new array, and only on a change.
         useProjects.setState((s) => {
-          const next: Record<string, Task[]> = {};
           for (const [projectId, list] of Object.entries(s.tasksByProject)) {
-            next[projectId] = list.map((t) =>
-              t.id === update.taskId
-                ? { ...t, totalTokens: update.totalTokens, totalCostUsd: update.totalCostUsd }
-                : t,
-            );
+            const task = list.find((t) => t.id === update.taskId);
+            if (!task) continue;
+            if (
+              task.totalTokens === update.totalTokens &&
+              task.totalCostUsd === update.totalCostUsd
+            ) {
+              return {};
+            }
+            const nextTask = {
+              ...task,
+              totalTokens: update.totalTokens,
+              totalCostUsd: update.totalCostUsd,
+            };
+            return {
+              tasksByProject: {
+                ...s.tasksByProject,
+                [projectId]: list.map((t) => (t === task ? nextTask : t)),
+              },
+            };
           }
-          return { tasksByProject: next };
+          return {};
         });
         void get().refreshTokenRollups();
       });
