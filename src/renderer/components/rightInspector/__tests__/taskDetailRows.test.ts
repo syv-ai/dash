@@ -31,6 +31,7 @@ const TASK: Task = {
   dashAccess: false,
   extraArgs: null,
   addDirs: [],
+  effort: null,
   parentTaskId: null,
   favorite: false,
   sortOrder: 0,
@@ -75,7 +76,7 @@ describe('taskDetailSections', () => {
   it('shows only what is set: no parent, no activity, no session ids, no usage', () => {
     const s = taskDetailSections(input());
     expect(labels(s.task)).toEqual(['Name', 'Project', 'Kind', 'Worktree', 'Created']);
-    expect(labels(s.session)).toEqual(['Model', 'Permissions', 'State', 'Dash access']);
+    expect(labels(s.session)).toEqual(['Model', 'Effort', 'Permissions', 'State', 'Dash access']);
     expect(s.usage).toEqual([]);
   });
 
@@ -102,6 +103,7 @@ describe('taskDetailSections', () => {
     ]);
     expect(labels(s.session)).toEqual([
       'Model',
+      'Effort',
       'Permissions',
       'State',
       'Session',

@@ -19,6 +19,7 @@ import type {
 import { isPermissionMode } from '@shared/types';
 import { FolderOccupiedError } from './FolderOccupiedError';
 import { normalizeAddDirs } from '@shared/addDirs';
+import { isTaskEffort } from '@shared/effort';
 
 /** `add_dirs` as stored: a JSON array, null for none. */
 function addDirsJson(folders: readonly string[] | undefined): string | null {
@@ -266,6 +267,7 @@ export class DatabaseService {
           dashAccess: data.dashAccess ?? false,
           extraArgs: data.extraArgs ?? null,
           addDirs: addDirsJson(data.addDirs),
+          effort: data.effort ?? null,
           parentTaskId: data.parentTaskId ?? null,
           sortOrder: sortOrder ?? 0,
           createdAt: now,
@@ -339,6 +341,7 @@ export class DatabaseService {
     const set: Partial<typeof tasks.$inferInsert> = {};
     if (patch.extraArgs !== undefined) set.extraArgs = patch.extraArgs?.trim() || null;
     if (patch.addDirs !== undefined) set.addDirs = addDirsJson(patch.addDirs);
+    if (patch.effort !== undefined) set.effort = patch.effort;
     if (Object.keys(set).length === 0) return;
     const db = getDb();
     db.update(tasks)
@@ -723,6 +726,7 @@ export class DatabaseService {
       dashAccess: row.dashAccess ?? false,
       extraArgs: row.extraArgs ?? null,
       addDirs: parseAddDirs(row.addDirs),
+      effort: isTaskEffort(row.effort) ? row.effort : null,
       parentTaskId: row.parentTaskId ?? null,
       favorite: row.favorite ?? false,
       sortOrder: row.sortOrder,

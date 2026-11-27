@@ -39,7 +39,7 @@ export function ClaudeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) 
       <FormSection title="Sessions">
         <SettingRow
           label="Effort"
-          hint="How much Claude reasons. Auto lets the model decide; X-High and Max need a newer model (Opus 4.8 and up), others use their highest level."
+          hint="How much Claude reasons in a task that doesn't set its own (Task settings → Effort). Auto lets the model decide; X-High and Max need a newer model (Opus 4.8 and up), others use their highest level. A session gets it when it starts or restarts, not when a sleeping one wakes."
           control={
             <Segmented
               fullWidth={false}
@@ -60,7 +60,7 @@ export function ClaudeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) 
         />
         <SwitchField
           label="Ultracode"
-          hint="New sessions start with X-High reasoning and multi-agent orchestration. Uses more tokens and runs slower, and overrides Effort. Applies when a session next starts."
+          hint="Tasks that don't set their own effort start with X-High reasoning and multi-agent orchestration. Uses more tokens and runs slower, and overrides Effort. A session gets it when it starts or restarts."
           checked={ultracode}
           onCheckedChange={setUltracode}
         />

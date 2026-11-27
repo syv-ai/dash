@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
-import { createTaskInputSchema, deleteTaskOptionsSchema } from './schemas';
+import { createTaskInputSchema, deleteTaskOptionsSchema, taskEffortSchema } from './schemas';
 import { TaskService } from '../services/TaskService';
 import { DatabaseService } from '../services/DatabaseService';
 import { taskEvents } from '../services/taskEvents';
@@ -21,6 +21,7 @@ const launchOptionsInputSchema = z.looseObject({
   taskId: z.string(),
   extraArgs: z.string().nullable().optional(),
   addDirs: z.array(z.string()).optional(),
+  effort: taskEffortSchema.nullable().optional(),
 });
 
 /** Refuse extra arguments a dispatch would refuse, saying why. */

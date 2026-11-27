@@ -62,16 +62,17 @@ vi.mock('../claudeCli', () => ({
 }));
 
 const envCalls: Array<[boolean, string | undefined]> = [];
+const defaultEffort = vi.hoisted(() => ({ value: null as string | null }));
 vi.mock('../claudeEnv', () => ({
   buildClaudeEnv: (isDark: boolean, cwd?: string) => {
     envCalls.push([isDark, cwd]);
     return { DASH_TEST: '1' };
   },
   buildSessionEnv: (cwd: string) => ({ WEB_PORT: cwd === '/wt/fix-login' ? '3001' : '0' }),
-  isUltracode: () => false,
+  getDefaultEffort: () => defaultEffort.value,
   setClaudeEnvVars: () => {},
   setSyncShellEnv: () => {},
-  setUltracode: () => {},
+  setDefaultEffort: () => {},
 }));
 
 /** Writes of the task's `--settings` file, in order with the supervisor calls. */
@@ -126,6 +127,9 @@ function seed(over: Partial<Task> = {}): Task {
     previousPath: null,
     jobId: null,
     sessionId: 'sess-old',
+    extraArgs: null,
+    addDirs: [],
+    effort: null,
     ...over,
   } as Task;
   tasks.set(t.id, t);
@@ -141,6 +145,7 @@ beforeEach(() => {
   settingsWrites.length = 0;
   supported.reject = null;
   trust.trusted = false;
+  defaultEffort.value = null;
   vi.clearAllMocks();
   activityMonitor.unregister('t1');
 });
@@ -164,6 +169,19 @@ describe('startTaskSession', () => {
     expect(sessions).toEqual([['t1', { jobId: 'job-new', sessionId: 'sess-new' }]]);
     expect(activityMonitor.has('t1')).toBe(true);
     expect(ptySpawn).not.toHaveBeenCalled();
+  });
+
+  it("dispatches the task's own effort over Settings' default, and the default when it has none", async () => {
+    defaultEffort.value = 'high';
+    seed({ effort: 'ultracode', addDirs: ['/lib'], extraArgs: '--chrome' });
+    await startTaskSession('t1');
+    expect(sup.dispatch).toHaveBeenLastCalledWith(
+      expect.objectContaining({ effort: 'ultracode', addDirs: ['/lib'], extraArgs: '--chrome' }),
+    );
+    __testReset();
+    seed({ effort: null });
+    await startTaskSession('t1');
+    expect(sup.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ effort: 'high' }));
   });
 
   it('reuses a live job without dispatching', async () => {

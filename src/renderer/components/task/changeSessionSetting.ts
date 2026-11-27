@@ -49,6 +49,8 @@ function save(task: Task, change: SessionSettingChange): Promise<Task | null> {
       return store.setLaunchOptions(task, { extraArgs: change.to });
     case 'addDirs':
       return store.setLaunchOptions(task, { addDirs: change.to });
+    case 'effort':
+      return store.setLaunchOptions(task, { effort: change.to });
   }
 }
 

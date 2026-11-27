@@ -1,6 +1,7 @@
 import type { ActivityState, SessionPermissionMode, Task, TaskModel } from '../../../shared/types';
 import { formatTimeAgo } from '../../../shared/relativeTime';
 import { flagNoteText, validateExtraArgs } from '../../../shared/extraArgs';
+import { EFFORT_LABELS } from '../../../shared/effort';
 import { liveModelDiffers } from '../task/sessionSettingChange';
 import { tildePath } from '../../lib/displayPath';
 import { formatCost, formatTokensPrecise } from '../../utils/format';
@@ -176,6 +177,7 @@ export function taskDetailSections(input: TaskDetailsInput): TaskDetailSections 
           ? `Configured: ${MODEL_LABELS[task.model]}`
           : undefined,
       },
+      { label: 'Effort', value: task.effort ? EFFORT_LABELS[task.effort] : 'Default' },
       {
         label: 'Permissions',
         value: PERMISSION_LABELS[input.livePermissionMode ?? task.permissionMode],

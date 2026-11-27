@@ -9,6 +9,7 @@ import type {
   TaskModel,
 } from '@shared/types';
 import { flagNoteText, validateExtraArgs } from '@shared/extraArgs';
+import type { TaskEffort } from '@shared/effort';
 
 /**
  * Pure helpers behind SupervisorService: the `claude --bg` argument policy,
@@ -26,6 +27,8 @@ export interface DispatchArgsOptions {
   permissionMode?: PermissionMode;
   /** Model alias (opus|sonnet|haiku|fable). 'default'/undefined → no --model. */
   model?: TaskModel;
+  /** `--effort`; undefined → none (Claude Code decides). */
+  effort?: TaskEffort | null;
   /** Extra folders the session may read and edit → one `--add-dir` with all. */
   addDirs?: readonly string[];
   /** The task's settings file (buildSessionSettings) → `--settings`. */
@@ -50,7 +53,6 @@ export class ExtraArgsError extends Error {
 
 /** What a task's `--settings` file holds. */
 export interface SessionSettings {
-  ultracode?: true;
   permissions?: { allow: string[] };
   env?: Record<string, string>;
   hooks?: { SessionStart: { matcher: string; hooks: { type: 'command'; command: string }[] }[] };
@@ -63,7 +65,6 @@ export interface SessionSettings {
  * on every respawn. A file also keeps user env values out of `ps`.
  */
 export function buildSessionSettings(opts: {
-  ultracode?: boolean;
   /** `permissions.allow` rules (the read-only dashctl commands). */
   allowTools?: string[];
   env?: Record<string, string>;
@@ -71,7 +72,6 @@ export function buildSessionSettings(opts: {
   sessionStart?: { type: 'command'; command: string }[];
 }): SessionSettings {
   const settings: SessionSettings = {};
-  if (opts.ultracode) settings.ultracode = true;
   if (opts.allowTools?.length) settings.permissions = { allow: opts.allowTools };
   if (opts.env && Object.keys(opts.env).length > 0) settings.env = opts.env;
   if (opts.sessionStart?.length) {
@@ -107,6 +107,9 @@ export function buildDispatchArgs(opts: DispatchArgsOptions): string[] {
   }
   if (opts.model && opts.model !== 'default') {
     args.push('--model', opts.model);
+  }
+  if (opts.effort) {
+    args.push('--effort', opts.effort);
   }
   // Variadic: the flags after it (or the `--`) end its list.
   if (opts.addDirs && opts.addDirs.length > 0) {

@@ -1,6 +1,7 @@
 import * as os from 'os';
 import { stripHostTerminalEnv } from './hostTerminalEnv';
 import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
+import type { TaskEffort } from '@shared/effort';
 
 /**
  * Environment and launch options shared by every `claude` process Dash starts
@@ -16,11 +17,11 @@ let claudeEnvVars: Record<string, string> = {};
 // When true, inherit the full parent process.env as a base instead of the minimal set.
 let syncShellEnv = false;
 
-// When true, launch Claude sessions in ultracode (X-High reasoning + multi-agent
-// workflow orchestration) via the task's settings file (`"ultracode": true`). ultracode is
-// session-only and can't be set through CLAUDE_CODE_EFFORT_LEVEL or --effort, so
-// it's applied per-dispatch rather than through the effort env var.
-let ultracode = false;
+// Settings → Claude's Effort and Ultracode as one value: the `--effort` a task
+// that sets none starts with (null → no flag, Claude Code decides). A flag, not
+// CLAUDE_CODE_EFFORT_LEVEL: that env var outranks `--effort`, so a task's own
+// effort couldn't override it, and it doesn't take ultracode.
+let defaultEffort: TaskEffort | null = null;
 
 /**
  * Keys a user/ports override must never replace. The hook server port used to
@@ -48,12 +49,12 @@ export function setSyncShellEnv(enabled: boolean): void {
   syncShellEnv = enabled;
 }
 
-export function setUltracode(enabled: boolean): void {
-  ultracode = enabled;
+export function setDefaultEffort(effort: TaskEffort | null): void {
+  defaultEffort = effort;
 }
 
-export function isUltracode(): boolean {
-  return ultracode;
+export function getDefaultEffort(): TaskEffort | null {
+  return defaultEffort;
 }
 
 /**

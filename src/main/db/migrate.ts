@@ -458,6 +458,12 @@ export function runMigrations(): void {
   } catch {
     /* already exists */
   }
+  // A task's own effort (`--effort`), over Settings → Claude's default.
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN effort TEXT`);
+  } catch {
+    /* already exists */
+  }
 
   // The PR a task reviews, when the person picked one (else its own open PR is
   // the target): main and dashctl default to it.

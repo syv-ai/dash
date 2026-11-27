@@ -1,6 +1,8 @@
 import { ipcMain, dialog, app, shell, BrowserWindow, Notification, clipboard } from 'electron';
 import { z } from 'zod';
 import { parseArgs, parseArgsSafe, errorResponse, ipcError } from './validate';
+import { taskEffortSchema } from './schemas';
+import type { TaskEffort } from '@shared/effort';
 import { claudeUserSettingsFile } from '../utils/claudePaths';
 import { GitService } from '../services/GitService';
 import { execFile } from 'child_process';
@@ -442,15 +444,16 @@ export function registerAppIpc(): void {
     }
   });
 
-  ipcMain.on('app:setUltracode', (_event, enabled: boolean) => {
-    const v = parseArgsSafe('app:setUltracode', z.boolean(), enabled);
+  // Settings → Claude's Effort and Ultracode as one default (defaultEffortFrom).
+  ipcMain.on('app:setDefaultEffort', (_event, effort: TaskEffort | null) => {
+    const v = parseArgsSafe('app:setDefaultEffort', taskEffortSchema.nullable(), effort);
     if (v === undefined) return;
     void (async () => {
       try {
-        const { setUltracode } = await import('../services/ptyManager');
-        setUltracode(v);
+        const { setDefaultEffort } = await import('../services/ptyManager');
+        setDefaultEffort(v);
       } catch (err) {
-        console.error('[app:setUltracode] Failed:', err);
+        console.error('[app:setDefaultEffort] Failed:', err);
       }
     })();
   });

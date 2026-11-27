@@ -9,6 +9,7 @@ import { SwitchField } from '../ui/SwitchField';
 import { Expandable } from '../ui/Expandable';
 import { ExtraArgsField } from './ExtraArgsField';
 import { AddDirsField } from './AddDirsField';
+import { EffortPicker } from './EffortPicker';
 import { useControlInfo } from '../../hooks/useControlInfo';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useTaskBranch } from '../../stores/gitStore';
@@ -88,6 +89,10 @@ export function TaskSettingsModal({
             value={task.model}
             onChange={(to) => onSessionSettingChange({ setting: 'model', to })}
             helperText={sessionModelNote(task.model, liveModel)}
+          />
+          <EffortPicker
+            value={task.effort}
+            onChange={(to) => onSessionSettingChange({ setting: 'effort', to })}
           />
           {controlSupported && (
             <SwitchField

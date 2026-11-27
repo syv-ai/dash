@@ -1,3 +1,7 @@
+import type { TaskEffort } from './effort';
+
+export type { TaskEffort } from './effort';
+
 export interface Project {
   id: string;
   name: string;
@@ -133,6 +137,8 @@ export interface Task {
   extraArgs: string | null;
   /** Extra folders the session may read and edit (`--add-dir`), full paths. */
   addDirs: string[];
+  /** `--effort` for the session; null → Settings → Claude's default. */
+  effort: TaskEffort | null;
   /** The task that created this one through the control API; null when a
    *  person created it. Fixed at creation. */
   parentTaskId: string | null;
@@ -173,6 +179,8 @@ export type CreateTaskOptions = {
   /** `--add-dir` folders. undefined → the project's default from
    *  `.dash/config.local.json`. Resolved only in TaskService.create. */
   addDirs?: string[];
+  /** null/undefined → Settings → Claude's default at each start. */
+  effort?: TaskEffort | null;
 } & (
   | { kind: 'worktree-new-branch'; baseRef: string; pushRemote: boolean }
   | { kind: 'worktree-existing'; branch: string; updateFromRemote?: boolean }
@@ -194,7 +202,7 @@ export type SetTaskDashAccessInput = { taskId: string; enabled: boolean };
  * besides mode and model). Only the keys given change; a running session
  * picks them up when it restarts (changeSessionSetting does that).
  */
-export type TaskLaunchOptions = Pick<Task, 'extraArgs' | 'addDirs'>;
+export type TaskLaunchOptions = Pick<Task, 'extraArgs' | 'addDirs' | 'effort'>;
 export type SetTaskLaunchOptionsInput = { taskId: string } & Partial<TaskLaunchOptions>;
 
 /** `task:setFavorite`: pin a task to the top of the sidebar's task list, or unpin it. */

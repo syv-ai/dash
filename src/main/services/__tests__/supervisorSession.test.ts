@@ -15,16 +15,14 @@ import {
 } from '../supervisorSession';
 
 describe('buildSessionSettings', () => {
-  it('holds ultracode, the allow list and the env in one object', () => {
+  it('holds the allow list, the env and SessionStart in one object', () => {
     expect(
       buildSessionSettings({
-        ultracode: true,
         allowTools: ['Bash(dashctl tasks list:*)', 'Bash(dashctl tasks get:*)'],
         env: { WEB_PORT: '3001' },
         sessionStart: [{ type: 'command', command: 'echo hi' }],
       }),
     ).toEqual({
-      ultracode: true,
       permissions: { allow: ['Bash(dashctl tasks list:*)', 'Bash(dashctl tasks get:*)'] },
       env: { WEB_PORT: '3001' },
       hooks: {
@@ -34,9 +32,7 @@ describe('buildSessionSettings', () => {
   });
 
   it('leaves out what is empty', () => {
-    expect(
-      buildSessionSettings({ ultracode: false, allowTools: [], env: {}, sessionStart: [] }),
-    ).toEqual({});
+    expect(buildSessionSettings({ allowTools: [], env: {}, sessionStart: [] })).toEqual({});
   });
 });
 
@@ -124,6 +120,12 @@ describe('buildDispatchArgs', () => {
     expect(buildDispatchArgs({ name: 't', extraArgs: '  ' })).toEqual(
       buildDispatchArgs({ name: 't' }),
     );
+  });
+
+  it('passes the effort, ultracode included, and none for no effort', () => {
+    const args = buildDispatchArgs({ name: 't', model: 'opus', effort: 'ultracode' });
+    expect(args.slice(5)).toEqual(['--model', 'opus', '--effort', 'ultracode']);
+    expect(buildDispatchArgs({ name: 't', effort: null })).not.toContain('--effort');
   });
 
   it('passes the task folders as one --add-dir, ended by the next flag', () => {

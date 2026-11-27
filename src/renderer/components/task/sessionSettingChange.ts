@@ -6,6 +6,7 @@ import type {
   TaskModel,
 } from '../../../shared/types';
 import { normalizeAddDirs, sameAddDirs } from '../../../shared/addDirs';
+import { EFFORT_LABELS, type TaskEffort } from '../../../shared/effort';
 
 /**
  * What changing a task's session settings takes. Pure, so it is tested.
@@ -35,12 +36,14 @@ export type SessionSettingChange =
   /** The person's own flags, as typed; null for none. */
   | { setting: 'extraArgs'; to: string | null }
   /** Extra folders the session may read and edit (`--add-dir`). */
-  | { setting: 'addDirs'; to: string[] };
+  | { setting: 'addDirs'; to: string[] }
+  /** `--effort`; null → Settings → Claude's default. */
+  | { setting: 'effort'; to: TaskEffort | null };
 
 /** The task fields a session setting change reads. */
 export type SessionSettingsOf = Pick<
   Task,
-  'permissionMode' | 'model' | 'dashAccess' | 'extraArgs' | 'addDirs'
+  'permissionMode' | 'model' | 'dashAccess' | 'extraArgs' | 'addDirs' | 'effort'
 >;
 
 /** Whether the change leaves the setting as it is (extra arguments compare trimmed). */
@@ -112,6 +115,10 @@ function restartTitle(change: SessionSettingChange): string {
       return change.to?.trim()
         ? 'Restart with these extra arguments?'
         : 'Drop the extra arguments?';
+    case 'effort':
+      return change.to
+        ? `Switch this task to ${EFFORT_LABELS[change.to]} effort?`
+        : "Switch this task to Settings' effort?";
     case 'addDirs':
       return normalizeAddDirs(change.to).length > 0
         ? 'Restart with these folders?'

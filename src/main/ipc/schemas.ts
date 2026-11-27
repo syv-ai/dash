@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { PERMISSION_MODES } from '@shared/types';
+import { TASK_EFFORTS } from '@shared/effort';
 
 /**
  * Reusable zod schemas for domain objects crossing the IPC boundary.
@@ -14,6 +15,8 @@ import { PERMISSION_MODES } from '@shared/types';
 export const permissionModeSchema = z.enum(PERMISSION_MODES);
 
 export const taskModelSchema = z.enum(['default', 'opus', 'sonnet', 'haiku', 'fable']);
+
+export const taskEffortSchema = z.enum(TASK_EFFORTS);
 
 /** A single linked issue / work item. Kept permissive (passthrough) — the
  *  provider-specific fields are renderer-built and reflected back as-is. */
@@ -73,6 +76,7 @@ const createTaskCommon = {
   dashAccess: z.boolean().optional(),
   extraArgs: z.string().optional(),
   addDirs: z.array(z.string()).optional(),
+  effort: taskEffortSchema.nullable().optional(),
   parentTaskId: z.string().nullable().optional(),
 };
 

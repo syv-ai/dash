@@ -168,6 +168,7 @@ export class TaskService {
       dashAccess: input.dashAccess ?? projectDefaults?.dashAccess ?? false,
       extraArgs: extraArgs?.trim() || null,
       addDirs,
+      effort: input.effort ?? null,
       parentTaskId: input.parentTaskId ?? null,
     });
 

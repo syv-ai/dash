@@ -17,6 +17,7 @@ const TASK: SessionSettingsOf = {
   dashAccess: false,
   extraArgs: '--chrome',
   addDirs: ['/lib'],
+  effort: null,
 };
 
 const plan = (
@@ -31,6 +32,7 @@ describe('planSessionSettingChange', () => {
     expect(plan({ setting: 'model', to: 'haiku' }, true)).toEqual({ kind: 'none' });
     expect(plan({ setting: 'dashAccess', to: false }, true)).toEqual({ kind: 'none' });
     expect(plan({ setting: 'extraArgs', to: ' --chrome ' }, true)).toEqual({ kind: 'none' });
+    expect(plan({ setting: 'effort', to: null }, true)).toEqual({ kind: 'none' });
   });
 
   it('restarts for new folders, comparing the lists once normalized', () => {
@@ -104,6 +106,7 @@ describe('planSessionSettingChange', () => {
     [{ setting: 'model', to: 'sonnet' }, 'Switch this task to Sonnet?'],
     [{ setting: 'model', to: 'default' }, 'Switch this task to Default?'],
     [{ setting: 'dashAccess', to: true }, 'Turn on Dash access?'],
+    [{ setting: 'effort', to: 'ultracode' }, 'Switch this task to Ultracode effort?'],
   ])('restarts a session for %o, since the job keeps its old flags', (change, title) => {
     expect(plan(change, true)).toEqual({
       kind: 'apply',

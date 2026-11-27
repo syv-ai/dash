@@ -134,6 +134,7 @@ const ALLOWED_PROPERTIES = new Set([
   'model',
   'permission_mode',
   'extra_flags',
+  'effort',
   'provider',
   'verdict',
   'comment_count',

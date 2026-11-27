@@ -1,4 +1,4 @@
-import type { ControlInfo, IpcResponse } from '../../shared/types';
+import type { ControlInfo, IpcResponse, TaskEffort } from '../../shared/types';
 import type { ToastPayload } from '../../shared/toast';
 import type { ShowFileRequest } from '../../shared/showFile';
 
@@ -54,7 +54,8 @@ export interface SystemApi {
   setCommitAttribution: (value: string | undefined) => void;
   setClaudeEnvVars: (vars: Record<string, string>) => void;
   setSyncShellEnv: (enabled: boolean) => void;
-  setUltracode: (enabled: boolean) => void;
+  /** Settings → Claude's Effort and Ultracode as one default `--effort` (null: none). */
+  setDefaultEffort: (effort: TaskEffort | null) => void;
   /** `claude stop` every task session when Dash quits (default: sessions live on). */
   setStopSessionsOnQuit: (enabled: boolean) => void;
   /** Dash's theme, for sessions started with no pane (the control API). */

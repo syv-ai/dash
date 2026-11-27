@@ -55,6 +55,7 @@ import { useStatusLine } from './hooks/useStatusLine';
 import { useThresholdAlerts } from './hooks/useThresholdAlerts';
 import { useMemoryWarning } from './hooks/useMemoryWarning';
 import type { Task, WorktreeMigrationProject, WorktreeMigrationResult } from '../shared/types';
+import { defaultEffortFrom } from '../shared/effort';
 import type { CreateTaskOptions, TaskModalDefaults } from './components/task/TaskModal';
 import { matchesBinding } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
@@ -281,10 +282,11 @@ export function App() {
   useEffect(() => {
     window.electronAPI.setSyncShellEnv?.(syncShellEnv);
   }, [syncShellEnv]);
-  // Sync ultracode toggle to main process (applied as a spawn arg on new sessions)
+  // Sync the default effort to main: a task with none of its own starts with
+  // it (`--effort`, so a task's own can override it).
   useEffect(() => {
-    window.electronAPI.setUltracode?.(ultracode);
-  }, [ultracode]);
+    window.electronAPI.setDefaultEffort?.(defaultEffortFrom(effortLevel, ultracode));
+  }, [effortLevel, ultracode]);
   // Sync stop-sessions-on-quit to main process (read in the before-quit handler)
   useEffect(() => {
     window.electronAPI.setStopSessionsOnQuit?.(stopSessionsOnQuit);
@@ -300,10 +302,8 @@ export function App() {
   }, [orchestratorAccess]);
   // Sync Claude Code env vars to main process
   useEffect(() => {
-    const vars: Record<string, string> = { ...customClaudeEnvVars };
-    if (effortLevel !== 'auto') vars.CLAUDE_CODE_EFFORT_LEVEL = effortLevel;
-    window.electronAPI.setClaudeEnvVars?.(vars);
-  }, [effortLevel, customClaudeEnvVars]);
+    window.electronAPI.setClaudeEnvVars?.({ ...customClaudeEnvVars });
+  }, [customClaudeEnvVars]);
 
   // Activity + remote-control state (runtimeStore; both fed by its init() subscriptions).
   const taskActivity = useRuntime((s) => s.taskActivity);

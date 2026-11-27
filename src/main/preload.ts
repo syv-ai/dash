@@ -206,7 +206,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setClaudeEnvVars: (vars: Record<string, string>) =>
     ipcRenderer.send('app:setClaudeEnvVars', vars),
   setSyncShellEnv: (enabled: boolean) => ipcRenderer.send('app:setSyncShellEnv', enabled),
-  setUltracode: (enabled: boolean) => ipcRenderer.send('app:setUltracode', enabled),
+  setDefaultEffort: (effort: unknown) => ipcRenderer.send('app:setDefaultEffort', effort),
   setStopSessionsOnQuit: (enabled: boolean) =>
     ipcRenderer.send('app:setStopSessionsOnQuit', enabled),
   setIsDark: (isDark: boolean) => ipcRenderer.send('app:setIsDark', isDark),

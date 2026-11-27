@@ -122,6 +122,7 @@ function legacySetup(name = 'fix-login-a1b') {
       dashAccess: false,
       extraArgs: null,
       addDirs: [],
+      effort: null,
       parentTaskId: null,
       favorite: false,
       sortOrder: 0,

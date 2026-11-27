@@ -81,6 +81,8 @@ export const tasks = sqliteTable(
     extraArgs: text('extra_args'),
     // `--add-dir` folders, a JSON array of full paths; null when none.
     addDirs: text('add_dirs'),
+    // `--effort` for the session (TaskEffort); null → Settings → Claude's default.
+    effort: text('effort'),
     parentTaskId: text('parent_task_id'),
     // Pinned to the top of the sidebar's task list.
     favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false),

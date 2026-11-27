@@ -11,7 +11,7 @@ import { TerminalMirror } from './TerminalMirror';
 import { terminalSnapshotService } from './TerminalSnapshotService';
 import { ensureShellConfig, shellHistoryPath } from './ptyShellConfig';
 import { findClaudePath, findLatestSessionId, requireSupportedClaude } from './claudeCli';
-import { buildClaudeEnv, buildSessionEnv, isUltracode } from './claudeEnv';
+import { buildClaudeEnv, buildSessionEnv, getDefaultEffort } from './claudeEnv';
 import { supervisorService, DispatchError } from './SupervisorService';
 import {
   buildSessionSettings,
@@ -20,6 +20,7 @@ import {
   parseUntrustedRoot,
 } from './supervisorSession';
 import { extraArgFlagNames, validateExtraArgs } from '@shared/extraArgs';
+import type { TaskEffort } from '@shared/effort';
 import { isWorkspaceTrusted } from '../utils/claudePaths';
 import { DatabaseService } from './DatabaseService';
 import { dashSessionAccess } from '../control/taskAccess';
@@ -31,7 +32,7 @@ import type { PermissionMode, TaskModel } from '@shared/types';
 
 // Launch configuration setters live in claudeEnv (shared with the supervisor
 // dispatch); re-exported so the IPC layer keeps one import site.
-export { setClaudeEnvVars, setSyncShellEnv, setUltracode } from './claudeEnv';
+export { setClaudeEnvVars, setSyncShellEnv, setDefaultEffort } from './claudeEnv';
 
 export type PtyKind = 'agent' | 'shell' | 'tui' | 'service';
 
@@ -287,6 +288,8 @@ async function ensureTaskSession(opts: {
   /** The person's own flags, as typed (buildDispatchArgs checks them). */
   extraArgs: string | null;
   addDirs: string[];
+  /** The task's own; null → Settings → Claude's default at this start. */
+  effort: TaskEffort | null;
   env: Record<string, string>;
   wakeStopped?: boolean;
 }): Promise<string> {
@@ -298,7 +301,6 @@ async function ensureTaskSession(opts: {
     settingsPath = writeTaskSettings(
       opts.id,
       buildSessionSettings({
-        ultracode: isUltracode(),
         allowTools: dash?.allow,
         env: { ...buildSessionEnv(opts.cwd), ...dash?.env },
         sessionStart: dash?.sessionStart,
@@ -349,6 +351,7 @@ async function ensureTaskSession(opts: {
     resumeSessionId = findLatestSessionId(opts.cwd, opts.previousPath);
   }
   const prompt = consumeInitialPrompt(opts.id);
+  const effort = opts.effort ?? getDefaultEffort();
   let dispatched;
   try {
     dispatched = await supervisorService.dispatch({
@@ -361,6 +364,7 @@ async function ensureTaskSession(opts: {
       settingsPath,
       extraArgs: opts.extraArgs,
       addDirs: opts.addDirs,
+      effort,
       env: opts.env,
     });
   } catch (err) {
@@ -397,6 +401,7 @@ async function ensureTaskSession(opts: {
     resumed: Boolean(resumeSessionId),
     model: opts.model ?? 'default',
     permission_mode: opts.permissionMode ?? 'default',
+    effort: effort ?? 'default',
     // Flag names only, never their values (paths, prompts); '' for none.
     extra_flags: extraArgFlagNames(extra.args).join(','),
   });
@@ -573,6 +578,7 @@ async function startTaskSessionNow(
       dashAccess: task.dashAccess,
       extraArgs: task.extraArgs,
       addDirs: task.addDirs,
+      effort: task.effort,
       env,
       wakeStopped: opts.wakeStopped,
     });

@@ -56,13 +56,14 @@ vi.mock('../claudeCli', () => ({
   findLatestSessionId: () => null,
   requireSupportedClaude: async () => {},
 }));
+const defaultEffort = vi.hoisted(() => ({ value: null as string | null }));
 vi.mock('../claudeEnv', () => ({
   buildClaudeEnv: () => ({ DASH_TEST: '1' }),
   buildSessionEnv: () => ({}),
-  isUltracode: () => false,
+  getDefaultEffort: () => defaultEffort.value,
   setClaudeEnvVars: () => {},
   setSyncShellEnv: () => {},
-  setUltracode: () => {},
+  setDefaultEffort: () => {},
 }));
 
 type FakeProc = {
