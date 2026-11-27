@@ -458,7 +458,7 @@ export function ProjectsSection({
             ctx={ctx}
             indentStep={TASK_INDENT_PX}
             size="sm"
-            dimmed
+            faint
             onActivate={() => toggleArchived(row.project.id)}
           >
             {`Archived (${row.tasks.length})`}
