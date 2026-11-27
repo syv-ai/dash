@@ -7,6 +7,7 @@ import {
   newRows,
   revealWindow,
   sameKeys,
+  slideRoom,
   slides,
   type Slot,
 } from '../VirtualListMotion';
@@ -76,13 +77,55 @@ describe('slides', () => {
   it('slides rows that stayed and moved, from where they were', () => {
     const after = stack(['b', 'a', 'new']);
     expect(slides({ after, startBefore, maxDistance: 500 })).toEqual([
-      { key: 'b', from: 10, to: 0 },
-      { key: 'a', from: 0, to: 10 },
+      { key: 'b', from: 10, to: 0, at: 0 },
+      { key: 'a', from: 0, to: 10, at: 10 },
     ]);
   });
 
-  it('lets a move longer than maxDistance jump', () => {
-    expect(slides({ after: stack(['c']), startBefore, maxDistance: 500 })).toEqual([]);
+  it('slides a long move up only the room in view, coming in from below its place', () => {
+    // c rose 2000px: it slides the last 500 of them, ending at its place.
+    expect(slides({ after: stack(['c']), startBefore, maxDistance: 500 })).toEqual([
+      { key: 'c', from: 500, to: 0, at: 0 },
+    ]);
+  });
+
+  it('slides a long move down only the room in view, then sits at its place', () => {
+    const after: Slot[] = [{ key: 'a', start: 3000, size: 10 }];
+    expect(slides({ after, startBefore, maxDistance: 500 })).toEqual([
+      { key: 'a', from: 0, to: 500, at: 3000 },
+    ]);
+  });
+});
+
+describe('slideRoom', () => {
+  // A folder `f` at 10 closes over 100 rows; the view ends at 200.
+  const before = stack(['f', ...Array.from({ length: 100 }, (_, i) => `c${i}`), 'g']);
+  const gone = goneRows(before, (k) => k === 'f' || k === 'g');
+
+  it('is the room the run’s edge travels in view, so the rows below keep pace', () => {
+    expect(slideRoom(gone, 200, 999)).toBe(190);
+    // The row below then comes in from the view’s bottom, as the edge does.
+    expect(
+      slides({
+        after: stack(['f', 'g']),
+        startBefore: (k) => (k === 'g' ? 1010 : 0),
+        maxDistance: 190,
+      }),
+    ).toEqual([{ key: 'g', from: 200, to: 10, at: 10 }]);
+  });
+
+  it('is the whole run when it shows in full', () => {
+    expect(
+      slideRoom(
+        goneRows(stack(['f', 'a', 'b', 'g']), (k) => k === 'f' || k === 'g'),
+        200,
+        999,
+      ),
+    ).toBe(20);
+  });
+
+  it('falls back with no run (a reorder)', () => {
+    expect(slideRoom([], 200, 999)).toBe(999);
   });
 });
 

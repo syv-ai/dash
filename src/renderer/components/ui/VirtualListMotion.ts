@@ -4,7 +4,8 @@
  * row was and is, so nothing is measured. Pure; the list plays the plan on
  * the compositor (Web Animations on `transform`, `opacity`, `clip-path`).
  *
- *  - A row that stays slides from where it was to where it is (FLIP).
+ *  - A row that stays slides from where it was to where it is (FLIP), no
+ *    further than a run's edge travels in view, so it keeps pace with it.
  *  - A run of new rows uncovers top-down behind the rows below as they
  *    slide down to make room, so nothing overlaps: each row's reveal is
  *    the slice of the eased progress in which the moving edge crosses it.
@@ -84,8 +85,32 @@ export function hideWindow(s: RunSlot, viewBottom: number): Window {
   return [clamp01(1 - (t + s.size) / height), clamp01(1 - t / height)];
 }
 
-/** The rows that stay and moved: each slides `from` → `to`. A move longer
- *  than `maxDistance` jumps (a far scroll's worth would only blur past). */
+/** A staying row's slide: `from` → `to` on screen; it sits at `at` (its
+ *  place in the list) once the slide ends. */
+export interface SlideMove {
+  key: Key;
+  from: number;
+  to: number;
+  at: number;
+}
+
+/** The room a change's rows slide through: its first run's (`travel`), the
+ *  same the run's rows reveal or hide over, so the rows below move in step
+ *  with the run's edge; none: `fallback`. */
+export function slideRoom(runs: readonly RunSlot[], viewBottom: number, fallback: number): number {
+  const first = runs.reduce<RunSlot | undefined>(
+    (top, s) => (top === undefined || s.runTop < top.runTop ? s : top),
+    undefined,
+  );
+  return first ? travel(first, viewBottom).height : fallback;
+}
+
+/** The rows that stay and moved: each slides from where it was to where it
+ *  is. A move longer than `maxDistance` (the room in view) slides only that
+ *  far, the part that shows: up, it comes in from `maxDistance` below its
+ *  place; down, it goes `maxDistance` and then sits at its place, out of
+ *  view. So a run taller than the view folds or opens in step with the rows
+ *  below, none of them jumping over it. */
 export function slides({
   after,
   startBefore,
@@ -95,12 +120,17 @@ export function slides({
   /** Where a key sat before, rendered or not; undefined if it wasn't listed. */
   startBefore: (key: Key) => number | undefined;
   maxDistance: number;
-}): { key: Key; from: number; to: number }[] {
-  const out: { key: Key; from: number; to: number }[] = [];
+}): SlideMove[] {
+  const out: SlideMove[] = [];
   for (const s of after) {
-    const from = startBefore(s.key);
-    if (from === undefined || from === s.start || Math.abs(from - s.start) > maxDistance) continue;
-    out.push({ key: s.key, from, to: s.start });
+    const was = startBefore(s.key);
+    if (was === undefined || was === s.start) continue;
+    const d = Math.min(Math.abs(was - s.start), maxDistance);
+    out.push(
+      was > s.start
+        ? { key: s.key, from: s.start + d, to: s.start, at: s.start }
+        : { key: s.key, from: was, to: was + d, at: s.start },
+    );
   }
   return out;
 }

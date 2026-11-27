@@ -15,8 +15,10 @@ import {
   newRows,
   revealWindow,
   sameKeys,
+  slideRoom,
   slides,
   type RunSlot,
+  type SlideMove,
   type Slot,
 } from './VirtualListMotion';
 
@@ -156,7 +158,7 @@ function useListMotion(
       return el && new DOMMatrix(getComputedStyle(el).transform).m42;
     };
     const now = new Map(slots.map((s) => [s.key, s.start]));
-    const slidesNow: { key: React.Key; from: number; to: number; duration?: number }[] = [];
+    const slidesNow: (SlideMove & { duration?: number })[] = [];
     const stops: Animation[] = [];
     for (const [key, { anim, to }] of sliding.current) {
       const start = now.get(key);
@@ -168,19 +170,22 @@ function useListMotion(
         if (from === undefined) continue;
         stops.push(anim);
         const left = LIST_MOTION_MS - Number(anim.currentTime ?? 0);
-        slidesNow.push({ key, from, to: start, duration: Math.max(left, 60) });
+        slidesNow.push({ key, from, to: start, at: start, duration: Math.max(left, 60) });
       }
     }
     let enters: { el: HTMLElement; size: number; reveal: readonly [number, number] }[] = [];
     if (changed) {
       const before = new Map(was.keys.map((k, i) => [k, i]));
+      const entering = newRows(slots, (k) => before.has(k));
+      // The rows below a run move as far as its edge does (`slideRoom`), so
+      // a run taller than the view folds or opens in step with them.
       const moves = slides({
         after: slots,
         startBefore: (k) => {
           const i = before.get(k);
           return i === undefined ? undefined : was.layout[i]?.start;
         },
-        maxDistance: scroller.clientHeight * 1.5,
+        maxDistance: slideRoom([...entering, ...leaving], bottom, scroller.clientHeight),
       });
       for (const move of moves) {
         const running = sliding.current.get(move.key);
@@ -188,7 +193,7 @@ function useListMotion(
         if (running) stops.push(running.anim);
         slidesNow.push(from === undefined ? move : { ...move, from });
       }
-      enters = newRows(slots, (k) => before.has(k)).flatMap((s) => {
+      enters = entering.flatMap((s) => {
         const el = rows.get(s.key);
         return el ? [{ el, size: s.size, reveal: revealWindow(s, bottom) }] : [];
       });
@@ -197,14 +202,14 @@ function useListMotion(
     // Writes.
     const timing = (duration = LIST_MOTION_MS) => ({ duration, easing: easing() });
     for (const anim of stops) anim.cancel();
-    for (const { key, from, to, duration } of slidesNow) {
+    for (const { key, from, to, at, duration } of slidesNow) {
       const el = rows.get(key);
       if (!el) continue;
       const anim = el.animate(
         [{ transform: translate(from) }, { transform: translate(to) }],
         timing(duration),
       );
-      const entry = { anim, to };
+      const entry = { anim, to: at };
       sliding.current.set(key, entry);
       anim.onfinish = anim.oncancel = () => {
         if (sliding.current.get(key) === entry) sliding.current.delete(key);
