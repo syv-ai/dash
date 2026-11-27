@@ -33,7 +33,7 @@ import { z } from 'zod';
 import { URI } from 'vscode-uri';
 import { LSP_REQUEST_METHODS, type LspStatusEvent } from '@shared/lsp';
 import { parseArgs, parseArgsSafe, errorResponse, IpcError } from './validate';
-import { resolveInsideCwd } from './editorIpc';
+import { resolveInsideCwd } from '../services/editorPaths';
 import { DatabaseService } from '../services/DatabaseService';
 import { languageServers } from '../lsp/languageServers';
 

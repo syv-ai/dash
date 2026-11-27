@@ -8,7 +8,8 @@ import { loadWorkspaceConfig } from '../../services/WorkspaceConfigService';
 import { taskEvents } from '../../services/taskEvents';
 import { broadcastProjectsChanged } from '../../services/projectEvents';
 import { TelemetryService } from '../../services/TelemetryService';
-import { focusTaskInWindow } from '../../services/focusTask';
+import { focusTaskInWindow, presentInWindow } from '../../services/focusTask';
+import { outsideRoots } from '../../services/editorRoots';
 import {
   getUntrustedRoot,
   recheckWorkspaceTrust,
@@ -28,6 +29,7 @@ import type { ProjectCapabilityDeps } from './projects';
 import type { ServiceCapabilityDeps } from './services';
 import type { TaskCapabilityDeps } from './tasks';
 import type { ReviewCapabilityDeps } from './review';
+import type { PresentCapabilityDeps } from './present';
 import { taskReviews } from '../../services/prReview/taskReview';
 import { prContextFor, prProviderFor } from '../../services/prReview/resolve';
 import { appPrContextDeps, appDefaultReviewPr } from '../../services/prReview/appDeps';
@@ -168,5 +170,13 @@ export function reviewDeps(): ReviewCapabilityDeps {
       }
       return loadPrReview(adapter, ctx, pr.number);
     },
+  };
+}
+
+export function presentDeps(): PresentCapabilityDeps {
+  return {
+    getTask: (id) => DatabaseService.getTask(id),
+    outsideRoots,
+    present: (task, path) => presentInWindow({ taskId: task.id, path }),
   };
 }

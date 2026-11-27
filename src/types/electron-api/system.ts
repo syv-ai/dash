@@ -38,6 +38,8 @@ export interface SystemApi {
   onBeforeQuit: (callback: () => void) => () => void;
   /** `projectId` is absent only from an older sender; then only the task is selected. */
   onFocusTask: (callback: (target: { taskId: string; projectId?: string }) => void) => () => void;
+  /** `dashctl present`: show `path` (as the editor names it) in a task's editor. */
+  onPresentFile: (callback: (target: { taskId: string; path: string }) => void) => () => void;
   /** An agent outside Dash asks to control it (`open`), or the ask timed out (`!open`). */
   onOrchestratorAccessRequest: (
     callback: (request: { id: string; open: boolean }) => void,

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import path from 'path';
 import os from 'os';
 import { promises as fs, realpathSync } from 'fs';
-import { resolveInsideCwd } from '../editorIpc';
+import { resolveInsideCwd } from '../../services/editorPaths';
 
 function realpathOrSelf(p: string): string {
   try {

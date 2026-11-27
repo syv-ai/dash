@@ -39,7 +39,8 @@ import { usePaneModels } from './editor/usePaneModels';
 import { dirtyVersion, isDirty, subscribeDirty } from './models';
 import type { TextRange } from '../../stores/editorTabsStore';
 import { useEditorSave } from './editor/useEditorSave';
-import { isOutsideWorktree } from './editor/fileRef';
+import { absolutePath, isOutsideWorktree } from './editor/fileRef';
+import { useTreeVersion } from '../fileTree/useTreeVersion';
 import { useMonacoEditor } from './editor/useMonacoEditor';
 import { EditorHeader } from './editor/EditorHeader';
 import { EditorViewport } from './editor/EditorViewport';
@@ -88,6 +89,10 @@ interface EditorPaneProps {
   onRevealed: (nonce: number) => void;
   /** `filePath` turned out to be a folder (a tab from before it was one). */
   onIsDirectory: (path: string) => void;
+  /** Set while this is the workspace's presented tab (`dashctl present`):
+   *  read-only, rendered first, following the file on disk; each new value
+   *  (presented again) reloads it. */
+  presentNonce: number | null;
 }
 
 export function EditorPane({
@@ -108,6 +113,7 @@ export function EditorPane({
   revealRange,
   onRevealed,
   onIsDirectory,
+  presentNonce,
 }: EditorPaneProps) {
   // The store holds the active task's comments: they belong here only while
   // this is that task's folder (activeTaskId is null otherwise).
@@ -138,11 +144,25 @@ export function EditorPane({
   const kind = previewKind(filePath);
   const canPreview = kind !== null;
 
-  // Always start a newly-opened file in source view; clear any stale preview
-  // when switching to a non-previewable file.
+  // A file opens in source view, a presented one rendered (and again each
+  // time it is presented).
+  const presented = presentNonce !== null;
   useEffect(() => {
-    setPreviewing(false);
-  }, [filePath]);
+    setPreviewing(presentNonce !== null && kind !== null);
+  }, [filePath, kind, presentNonce]);
+  // Presented again: read it again. Presented, it follows the file as it
+  // changes on disk (the folder watch the file tree uses).
+  const lastPresent = useRef(presentNonce);
+  useEffect(() => {
+    const again = lastPresent.current !== null && presentNonce !== lastPresent.current;
+    if (presentNonce !== null && again) reload();
+    lastPresent.current = presentNonce;
+  }, [presentNonce, reload]);
+  const absFile = absolutePath(cwd, filePath);
+  const diskVersion = useTreeVersion(absFile.slice(0, absFile.lastIndexOf('/')), presented);
+  useEffect(() => {
+    if (diskVersion > 0) reload();
+  }, [diskVersion, reload]);
 
   const blameLabelRef = useRef<HTMLDivElement | null>(null);
   const selectionDecorations = useRef<monacoEditor.IEditorDecorationsCollection | null>(null);
@@ -232,7 +252,7 @@ export function EditorPane({
     monaco,
     !commentsDisabled,
   );
-  const editable = !isCommitView && working !== null;
+  const editable = !isCommitView && working !== null && !presented;
   // Shared with every other view of the file: one buffer, one dirty flag.
   useSyncExternalStore(subscribeDirty, dirtyVersion);
   const dirty = editable && isDirty(working.uri.toString());

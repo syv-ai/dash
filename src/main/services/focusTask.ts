@@ -16,3 +16,17 @@ export function focusTaskInWindow(target: { taskId: string; projectId: string })
   win.webContents.send('app:focusTask', target);
   return true;
 }
+
+/**
+ * Show a file in a task's editor (the control API's `present`): the renderer
+ * opens its presented tab on `app:presentFile`, at once when the task is the
+ * one open, else when the person next opens it. Dash doesn't take focus: the
+ * caller is the task's own agent, whose person is usually in Dash already.
+ * Returns false when Dash has no window open.
+ */
+export function presentInWindow(target: { taskId: string; path: string }): boolean {
+  const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
+  if (!win) return false;
+  win.webContents.send('app:presentFile', target);
+  return true;
+}

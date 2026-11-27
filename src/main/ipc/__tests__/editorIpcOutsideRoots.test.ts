@@ -19,7 +19,8 @@ vi.mock('../../services/ScratchpadService', () => ({
 }));
 
 import { ipcMain } from 'electron';
-import { registerEditorIpc, resolveEditorPath } from '../editorIpc';
+import { registerEditorIpc } from '../editorIpc';
+import { resolveEditorPath } from '../../services/editorPaths';
 import { resolveMemoryDir } from '../../services/MemoryService';
 
 // The editor's outside folders (A10) are a write boundary: the renderer names

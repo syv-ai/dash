@@ -10,6 +10,7 @@ import { mainCheckout, projectAtPath, resolveFrom } from './projectPaths';
  * commands are always the running Dash's, whatever version wrote the script.
  *
  *   dashctl <namespace> <verb> [args] [--flag value]
+ *   dashctl <command> [args] [--flag value]   (a capability with no namespace)
  *
  * 'tasks.create' is `dashctl tasks create`, 'review.drafts_create' is
  * `dashctl review drafts-create`. Every input is a flag (`--task-id` or
@@ -41,9 +42,11 @@ interface ObjectSchema {
 }
 
 const kebab = (s: string) => s.replace(/_/g, '-').replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+/** A capability's command words: 'tasks.create' → tasks create; one without
+ *  a namespace ('present') is a command of its own. */
 const words = (capability: string) => {
   const [ns, verb] = capability.split('.');
-  return [ns!, kebab(verb!)];
+  return verb === undefined ? [kebab(ns!)] : [ns!, kebab(verb)];
 };
 
 /** The command a capability is, after `dashctl`: 'review.drafts_create' → 'review drafts-create'. */
@@ -179,10 +182,10 @@ export function resolveArgv(
   if (argv.length === 1 && (argv[0] === 'help' || isHelp(argv[0]!))) {
     return { kind: 'help', text: usageText(commands) };
   }
-  const [ns, verb, ...rest] = argv;
+  const [ns, verb] = argv;
   const c = commands.find((x) => {
     const [n, v] = words(x.name);
-    return n === ns && v === kebab(verb ?? '');
+    return n === ns && (v === undefined || v === kebab(verb ?? ''));
   });
   if (!c) {
     const inNs = commands.filter((x) => words(x.name)[0] === ns);
@@ -190,6 +193,7 @@ export function resolveArgv(
     const what = verb ? `${ns} ${verb}` : ns;
     return { kind: 'usage', text: `dashctl: no command ${what}\n\n${known.join('\n')}` };
   }
+  const rest = argv.slice(words(c.name).length);
   try {
     const props = propsOf(c);
     const byFlag = new Map<string, string>();

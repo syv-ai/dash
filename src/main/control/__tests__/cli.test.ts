@@ -10,6 +10,7 @@ import { registerProjectCapabilities } from '../capabilities/projects';
 import { registerTaskCapabilities } from '../capabilities/tasks';
 import { registerServiceCapabilities } from '../capabilities/services';
 import { registerReviewCapabilities } from '../capabilities/review';
+import { registerPresentCapabilities } from '../capabilities/present';
 import { commandLine, findProject, resolveArgv, resultText, usageText } from '../cli';
 import { mainCheckout } from '../projectPaths';
 import { ControlServer } from '../server';
@@ -32,6 +33,7 @@ function catalog() {
   registerTaskCapabilities(r, none);
   registerServiceCapabilities(r, none);
   registerReviewCapabilities(r, none);
+  registerPresentCapabilities(r, none);
   return r.listFor(orch);
 }
 
@@ -71,6 +73,17 @@ describe('dashctl argv', () => {
       name: 'review.drafts_delete',
       input: { id: 'd1', taskId: 't1' },
     });
+  });
+
+  it('takes a command with no namespace, its path made absolute', () => {
+    expect(
+      resolveArgv(['present', 'docs/plan.md'], commands, null, projects, '/repos/dash'),
+    ).toEqual({ kind: 'call', name: 'present', input: { path: '/repos/dash/docs/plan.md' } });
+    expect(resolve(['help'])).toMatchObject({
+      text: expect.stringContaining('dashctl present <path>'),
+    });
+    expect(resolve(['present', '--help'])).toMatchObject({ kind: 'help' });
+    expect(resolve(['present'])).toMatchObject({ kind: 'usage' });
   });
 
   it('finds a project by id, name or path', () => {
@@ -235,7 +248,9 @@ describe('dashctl argv', () => {
   });
 
   it('names commands after their capability', () => {
-    expect(commands.map(commandLine).every((l) => /^dashctl [a-z]+ [a-z-]+/.test(l))).toBe(true);
+    expect(
+      commands.map(commandLine).every((l) => /^dashctl ([a-z]+ [a-z-]+|present)\b/.test(l)),
+    ).toBe(true);
     expect(usageText(commands)).not.toContain('_');
   });
 });

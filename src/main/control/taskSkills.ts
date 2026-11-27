@@ -34,7 +34,7 @@ export function dashSkill(dashctl: string | null): string {
     : '';
   return `---
 name: dash
-description: How to reach Dash from a Dash task with the dashctl command — tasks, services, and above all PR review (reading the PR and its threads, notes vs comments, line drafts, replies, the review summary). Use before running dashctl, and whenever asked to review a PR or leave review notes or comments in Dash.
+description: How to reach Dash from a Dash task with the dashctl command — tasks, services, presenting a file (a plan, a report) for the person to read, and above all PR review (reading the PR and its threads, notes vs comments, line drafts, replies, the review summary). Use before running dashctl, whenever asked to review a PR or leave review notes or comments in Dash, and when you have a plan or report for the person to read.
 ---
 
 ${MARKER}
@@ -56,6 +56,14 @@ Run \`dashctl help\` for every command, and \`dashctl <namespace> <verb> --help\
 dashctl tasks create "Fix the flaky test" --project <project> --prompt - <<'EOF'
 The login test fails one run in five on CI. Find out why and fix it.
 EOF
+\`\`\`
+
+## Showing the person a file
+
+\`dashctl present <path>\` opens a file in front of the person, in your task's editor: a read-only tab, Markdown and HTML rendered (they can toggle to the source), any other file as code. Use it to hand over something to read: a plan for review, a report, a summary of what you changed. Presenting again reuses the tab and reloads it, and the tab follows the file as you edit it, so present once and keep writing. The file must be in your checkout, your scratchpad or the project's memory folder; write anything else there first. The HTML is shown without scripts, network or images from outside the file, so inline what it needs (\`data:\` images, a \`<style>\` block).
+
+\`\`\`sh
+dashctl present docs/plan.md
 \`\`\`
 
 ## Reviewing a PR

@@ -10,6 +10,7 @@ import {
   openTab,
   parseLayout,
   pinTab,
+  presentTab,
   retainTabs,
   serializeLayout,
   tabsInScope,
@@ -309,5 +310,40 @@ describe('retainTabs', () => {
       ['a', false],
       ['b', true],
     ]);
+  });
+});
+
+describe('presentTab', () => {
+  it('opens a kept tab in the focused group', () => {
+    const l = presentTab(open('a.ts'), 'plan.md', null);
+    expect(l.groups[0]).toEqual({ tabs: ['a.ts', 'plan.md'], active: 'plan.md', preview: null });
+  });
+
+  it('takes the place of the tab presented before', () => {
+    const shown = presentTab(open('a.ts', 'b.ts'), 'plan.md', null);
+    const again = presentTab(activateTab(shown, 0, 'a.ts'), 'report.html', 'plan.md');
+    expect(again.groups[0]).toEqual({
+      tabs: ['a.ts', 'b.ts', 'report.html'],
+      active: 'report.html',
+      preview: null,
+    });
+  });
+
+  it('reuses the tab when the same file is presented again, in its own group', () => {
+    const split = openTab(presentTab(open('a.ts'), 'plan.md', null), 'b.ts', { toSide: true });
+    const again = presentTab(split, 'plan.md', 'plan.md');
+    expect(again.focused).toBe(0);
+    expect(again.groups[0]!.active).toBe('plan.md');
+    expect(again.groups[1]!.tabs).toEqual(['b.ts']);
+  });
+
+  it('keeps a file that was open as the preview tab', () => {
+    const l = presentTab(openTab(EMPTY_LAYOUT, 'plan.md', { preview: true }), 'plan.md', null);
+    expect(l.groups[0]!.preview).toBeNull();
+  });
+
+  it('drops the old tab where the new file is open already', () => {
+    const l = presentTab(open('plan.md', 'report.html'), 'report.html', 'plan.md');
+    expect(l.groups[0]).toEqual({ tabs: ['report.html'], active: 'report.html', preview: null });
   });
 });

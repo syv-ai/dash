@@ -13,7 +13,14 @@ import { registerProjectCapabilities } from './capabilities/projects';
 import { registerTaskCapabilities } from './capabilities/tasks';
 import { registerServiceCapabilities } from './capabilities/services';
 import { registerReviewCapabilities } from './capabilities/review';
-import { projectDeps, reviewDeps, serviceDeps, taskDeps } from './capabilities/appDeps';
+import { registerPresentCapabilities } from './capabilities/present';
+import {
+  presentDeps,
+  projectDeps,
+  reviewDeps,
+  serviceDeps,
+  taskDeps,
+} from './capabilities/appDeps';
 import type { ControlInfo } from '../../shared/types';
 
 /**
@@ -66,6 +73,7 @@ function registerCapabilities(): void {
   registerTaskCapabilities(registry, taskDeps());
   registerServiceCapabilities(registry, serviceDeps());
   registerReviewCapabilities(registry, reviewDeps());
+  registerPresentCapabilities(registry, presentDeps());
   setReadOnlyCapabilities(registry.readOnlyNames());
 }
 
