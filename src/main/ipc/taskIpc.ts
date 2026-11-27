@@ -6,6 +6,7 @@ import { TaskService } from '../services/TaskService';
 import { DatabaseService } from '../services/DatabaseService';
 import { taskEvents } from '../services/taskEvents';
 import { messageAddresses, sessionLastActiveMs } from '../services/claudeSessionRegistry';
+import { readBypassAvailability } from '../services/claudeBypassPolicy';
 import type {
   CreateTaskInput,
   DeleteTaskOptions,
@@ -72,6 +73,18 @@ export function registerTaskIpc(): void {
       DatabaseService.setTaskDashAccess(input.taskId, input.enabled);
       taskEvents.emitChanged(task.projectId);
       return { success: true, data: DatabaseService.getTask(input.taskId) };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  // Read per ask: a settings file can change while Dash runs.
+  ipcMain.handle('task:bypassAvailability', async (_event, taskId: string) => {
+    try {
+      parseArgs('task:bypassAvailability', z.string(), taskId);
+      const task = DatabaseService.getTask(taskId);
+      if (!task) throw new Error(`Task not found: ${taskId}`);
+      return { success: true, data: await readBypassAvailability(task.path) };
     } catch (error) {
       return errorResponse(error);
     }

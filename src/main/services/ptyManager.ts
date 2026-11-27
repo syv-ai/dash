@@ -781,8 +781,9 @@ export async function restartTaskSession(
   taskId: string,
   opts: { reattach?: boolean } = {},
 ): Promise<void> {
-  // The next session reports its own inbox at SessionStart.
+  // The next session reports its own inbox and mode at SessionStart.
   dropTaskInbox(taskId);
+  activityMonitor.clearPermissionMode(taskId);
   await killPtyInternal(taskId, { notifyOwner: true, reattach: opts.reattach });
   const task = DatabaseService.getTask(taskId);
   if (!task?.jobId) return;

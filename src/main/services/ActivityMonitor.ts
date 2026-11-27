@@ -1,6 +1,12 @@
 import { EventEmitter } from 'events';
 import type { WebContents } from 'electron';
-import type { ActivityState, ActivityInfo, ToolActivity, ActivityError } from '@shared/types';
+import type {
+  ActivityState,
+  ActivityInfo,
+  ToolActivity,
+  ActivityError,
+  SessionPermissionMode,
+} from '@shared/types';
 import type { SupervisorActivity } from './supervisorSession';
 
 interface PtyActivity {
@@ -39,6 +45,8 @@ interface PtyActivity {
    *  permission prompt fires none, so an idle the listing then reports is
    *  the user's deny: `interrupted` (H5). */
   waitUnheard: boolean;
+  /** The mode the session's hooks last reported, or null before the first. */
+  permissionMode: SessionPermissionMode | null;
 }
 
 /** How long a turn's end waits before the task shows idle. A finished
@@ -150,6 +158,7 @@ class ActivityMonitorImpl {
       settle: null,
       waitSince: 0,
       waitUnheard: false,
+      permissionMode: null,
     };
   }
 
@@ -503,6 +512,28 @@ class ActivityMonitorImpl {
     this.emitAll();
   }
 
+  /**
+   * The permission mode a hook payload reported. Every hook carries it, so
+   * the session's own mode (cycled with Shift+Tab, or fallen back from a
+   * refused bypass) reaches Dash on its next hook. Not a state change, so
+   * the safety valve's clock is left alone.
+   */
+  notePermissionMode(ptyId: string, mode: SessionPermissionMode): void {
+    const a = this.activities.get(ptyId);
+    if (!a || a.permissionMode === mode) return;
+    a.permissionMode = mode;
+    this.emitAll();
+  }
+
+  /** Forget the reported mode: the session is being replaced, and the next
+   *  one reports its own at SessionStart. */
+  clearPermissionMode(ptyId: string): void {
+    const a = this.activities.get(ptyId);
+    if (!a?.permissionMode) return;
+    a.permissionMode = null;
+    this.emitAll();
+  }
+
   setCompacting(ptyId: string, compacting: boolean): void {
     const a = this.activities.get(ptyId);
     if (!a) return;
@@ -536,6 +567,7 @@ class ActivityMonitorImpl {
       if (a.compacting) info.compacting = true;
       if (a.detail) info.detail = a.detail;
       if (a.interrupted && a.state === 'idle') info.interrupted = true;
+      if (a.permissionMode) info.permissionMode = a.permissionMode;
       result[id] = info;
     }
     return result;

@@ -63,4 +63,10 @@ describe('HookServer inbox reports', () => {
     await post('inbox', inboxHeaders, { transcript_path: '/etc/passwd.jsonl' });
     expect(getTaskInbox('t1', '/tmp/cc-socks/9.sock')?.transcriptPath).toBeNull();
   });
+
+  it("SessionStart records the session's permission mode", async () => {
+    const note = vi.spyOn(activityMonitor, 'notePermissionMode');
+    await post('inbox', {}, { permission_mode: 'bypassPermissions' });
+    expect(note).toHaveBeenCalledWith('t1', 'bypassPermissions');
+  });
 });

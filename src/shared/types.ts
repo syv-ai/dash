@@ -53,6 +53,39 @@ export function isPermissionMode(value: unknown): value is PermissionMode {
 }
 
 /**
+ * The mode a running session reports in its hook payloads (`permission_mode`,
+ * hooks reference "Common input fields"): Dash's modes plus the two a session
+ * can be in without Dash starting it there (`plan` via Shift+Tab, `dontAsk`).
+ * It can differ from the task's own mode: the user cycled it in the session,
+ * or a policy refused bypass and the session fell back.
+ */
+export const SESSION_PERMISSION_MODES = [
+  'default',
+  'plan',
+  'acceptEdits',
+  'auto',
+  'dontAsk',
+  'bypassPermissions',
+] as const;
+export type SessionPermissionMode = (typeof SESSION_PERMISSION_MODES)[number];
+
+export function isSessionPermissionMode(value: unknown): value is SessionPermissionMode {
+  return SESSION_PERMISSION_MODES.includes(value as SessionPermissionMode);
+}
+
+/**
+ * Whether a task can be switched to bypassPermissions, from Claude Code's
+ * settings files. `disabled`: `permissions.disableBypassPermissionsMode` is
+ * `"disable"` in some file (`managed` when an organization set it). `not-accepted`:
+ * nobody accepted Claude Code's bypass warning in user or managed settings
+ * (`skipDangerousModePermissionPrompt`), and `claude --bg` refuses bypass without it.
+ */
+export type BypassAvailability =
+  | { available: true }
+  | { available: false; reason: 'disabled'; managed: boolean }
+  | { available: false; reason: 'not-accepted' };
+
+/**
  * Which Claude model a task's `claude` session starts with. 'default' omits the
  * `--model` flag entirely so the user's own Claude Code config decides; the rest
  * map to the CLI's model aliases (`--model opus|sonnet|haiku|fable`).
@@ -408,6 +441,8 @@ export interface ActivityInfo {
   /** An `idle` the user brought about by interrupting the turn (Esc, Ctrl+C):
    *  seen by definition, so it isn't flagged unseen or chimed for. */
   interrupted?: true;
+  /** The mode the session last reported (the main agent's hooks), when it has. */
+  permissionMode?: SessionPermissionMode;
 }
 
 // ── Claude Code session supervisor ─────────────────────────────

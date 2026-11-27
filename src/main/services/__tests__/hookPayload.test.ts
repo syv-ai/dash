@@ -5,6 +5,7 @@ import {
   isSubagentHook,
   NOTIFICATION_WAIT_KINDS,
   runningSubagentIds,
+  sessionPermissionMode,
   stopFailureError,
   subagentId,
   statusLineTaskId,
@@ -182,5 +183,25 @@ describe('isSelfStartedPrompt', () => {
   it('is false for a prompt the user typed', () => {
     expect(isSelfStartedPrompt({ prompt: 'Run the tests' })).toBe(false);
     expect(isSelfStartedPrompt({})).toBe(false);
+  });
+});
+
+describe('sessionPermissionMode', () => {
+  it("reads the main agent's mode", () => {
+    expect(sessionPermissionMode({ permission_mode: 'bypassPermissions' })).toBe(
+      'bypassPermissions',
+    );
+    expect(sessionPermissionMode({ permission_mode: 'plan' })).toBe('plan');
+  });
+
+  it("skips a subagent's hook, which can carry a mode of its own", () => {
+    expect(sessionPermissionMode({ agent_id: 'a1', permission_mode: 'acceptEdits' })).toBe(
+      undefined,
+    );
+  });
+
+  it('skips a missing or unknown mode', () => {
+    expect(sessionPermissionMode({})).toBe(undefined);
+    expect(sessionPermissionMode({ permission_mode: 'yolo' })).toBe(undefined);
   });
 });

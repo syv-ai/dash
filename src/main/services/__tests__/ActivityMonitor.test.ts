@@ -267,6 +267,32 @@ describe('ActivityMonitor — getAll', () => {
   });
 });
 
+describe('ActivityMonitor — reported permission mode', () => {
+  it('reports the mode the hooks name, and only a change re-emits', () => {
+    activityMonitor.register('pty1', 1);
+    expect(activityMonitor.getAll()['pty1']!.permissionMode).toBeUndefined();
+    mockSender.send.mockClear();
+    activityMonitor.notePermissionMode('pty1', 'bypassPermissions');
+    expect(activityMonitor.getAll()['pty1']!.permissionMode).toBe('bypassPermissions');
+    activityMonitor.notePermissionMode('pty1', 'bypassPermissions');
+    expect(mockSender.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the mode through a turn and forgets it for a replaced session', () => {
+    activityMonitor.register('pty1', 1);
+    activityMonitor.notePermissionMode('pty1', 'plan');
+    activityMonitor.setBusy('pty1');
+    expect(activityMonitor.getAll()['pty1']!.permissionMode).toBe('plan');
+    activityMonitor.clearPermissionMode('pty1');
+    expect(activityMonitor.getAll()['pty1']!.permissionMode).toBeUndefined();
+  });
+
+  it('ignores a task it does not track', () => {
+    activityMonitor.notePermissionMode('nobody', 'auto');
+    expect(activityMonitor.getAll()['nobody']).toBeUndefined();
+  });
+});
+
 describe('ActivityMonitor — supervisor reconcile (applySupervisor)', () => {
   const POLL = 15_000;
 

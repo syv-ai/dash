@@ -13,6 +13,7 @@ import {
   isSubagentHook,
   NOTIFICATION_WAIT_KINDS,
   runningSubagentIds,
+  sessionPermissionMode,
   statusLineTaskId,
   stopFailureError,
   subagentId,
@@ -113,6 +114,15 @@ function observeContract(url: string | undefined, payload: Record<string, unknow
       console.warn('[HookServer] contract check failed:', err);
     }
   });
+}
+
+/** Every hook payload names the session's permission mode: keep the task's
+ *  current one (ActivityMonitor.notePermissionMode). */
+function notePermissionMode(url: string | undefined, payload: Record<string, unknown>): void {
+  const mode = sessionPermissionMode(payload);
+  if (!mode) return;
+  const ptyId = new URL(url ?? '', 'http://127.0.0.1').searchParams.get('ptyId');
+  if (ptyId) activityMonitor.notePermissionMode(ptyId, mode);
 }
 
 class HookServerImpl {
@@ -254,6 +264,7 @@ class HookServerImpl {
         return;
       }
       observeContract(req.url, parsed);
+      notePermissionMode(req.url, parsed);
       try {
         callback(parsed);
       } catch (err) {

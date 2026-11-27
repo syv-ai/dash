@@ -1,4 +1,9 @@
-import { STOP_FAILURE_ERRORS, type ActivityError } from '@shared/types';
+import {
+  isSessionPermissionMode,
+  STOP_FAILURE_ERRORS,
+  type ActivityError,
+  type SessionPermissionMode,
+} from '@shared/types';
 import type { NotificationType } from '../claudeContract/hookSchemas';
 
 /**
@@ -54,6 +59,19 @@ export const NOTIFICATION_WAIT_KINDS: Readonly<Partial<Record<NotificationType, 
  */
 export function isSubagentHook(payload: Record<string, unknown>): boolean {
   return typeof payload.agent_id === 'string' && payload.agent_id !== '';
+}
+
+/**
+ * The session's permission mode from a hook payload (`permission_mode`, a
+ * common input field), or undefined. A subagent's hooks are skipped: its
+ * frontmatter can give it a mode of its own, which isn't the session's.
+ */
+export function sessionPermissionMode(
+  payload: Record<string, unknown>,
+): SessionPermissionMode | undefined {
+  if (isSubagentHook(payload)) return undefined;
+  const mode = payload.permission_mode;
+  return isSessionPermissionMode(mode) ? mode : undefined;
 }
 
 /**

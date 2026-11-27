@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { STOP_FAILURE_ERRORS } from '@shared/types';
+import { SESSION_PERMISSION_MODES, STOP_FAILURE_ERRORS } from '@shared/types';
 import { checkShape } from './check';
 import type { DriftFinding, DriftSource } from './types';
 
@@ -34,15 +34,6 @@ export const NOTIFICATION_TYPES = [
   'plugin_notification',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
-
-export const PERMISSION_MODES = [
-  'default',
-  'plan',
-  'acceptEdits',
-  'auto',
-  'dontAsk',
-  'bypassPermissions',
-] as const;
 
 export const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 
@@ -83,7 +74,7 @@ const common = {
   hook_event_name: str,
   prompt_id: opt(str),
   scratchpad_dir: opt(str),
-  permission_mode: opt(z.enum(PERMISSION_MODES)),
+  permission_mode: opt(z.enum(SESSION_PERMISSION_MODES)),
   effort: opt(effort),
   agent_id: opt(str),
   agent_type: opt(str),
