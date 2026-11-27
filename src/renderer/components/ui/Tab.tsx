@@ -62,8 +62,8 @@ export const Tab = React.forwardRef<HTMLDivElement, TabProps>(function Tab(
             tab never resizes it or moves its neighbours (or the strip's
             indicator and fit, which measure the tabs). */}
         <span className="grid min-w-0 text-sm">
-          <span className={cn(stacked, active ? 'font-semibold' : 'font-medium')}>{children}</span>
-          <span aria-hidden className={cn(stacked, 'invisible font-semibold')}>
+          <span className={cn(stacked, active ? 'font-bold' : 'font-medium')}>{children}</span>
+          <span aria-hidden className={cn(stacked, 'invisible font-bold')}>
             {children}
           </span>
         </span>
