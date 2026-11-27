@@ -73,6 +73,27 @@ export function checkTranscriptUsage(usage: unknown, model: unknown): DriftFindi
   return findings;
 }
 
+/**
+ * `plugins/installed_plugins.json`, the fields the slash-command list reads:
+ * each plugin key's installs, with where it lives and for which project.
+ */
+const installedPluginsSchema = z.looseObject({
+  plugins: z.record(
+    z.string(),
+    z.array(
+      z.looseObject({
+        scope: z.string(),
+        installPath: z.string(),
+        projectPath: opt(z.string()),
+      }),
+    ),
+  ),
+});
+
+export function checkInstalledPlugins(raw: unknown): DriftFinding[] {
+  return checkShape(installedPluginsSchema, raw);
+}
+
 function prefix(base: string, findings: DriftFinding[]): DriftFinding[] {
   return findings.map((f) => ({ ...f, path: f.path === '$' ? base : `${base}.${f.path}` }));
 }

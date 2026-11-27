@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { checkShape } from '../check';
 import { statusLineSchema } from '../statusLineSchema';
 import { checkAgentsJson, checkVersionOutput, exitCodeDrift } from '../cliSchemas';
-import { checkJobState, checkSessionEntry, checkTranscriptUsage } from '../internalSchemas';
+import {
+  checkInstalledPlugins,
+  checkJobState,
+  checkSessionEntry,
+  checkTranscriptUsage,
+} from '../internalSchemas';
 import statusLineDocs from './fixtures/statusline-docs.json';
 import agents from './fixtures/agents-2.1.332.json';
 
@@ -104,6 +109,16 @@ describe('internal files (loose)', () => {
     ]);
     expect(checkTranscriptUsage({ input_tokens: '1', output_tokens: 1 }, undefined)).toEqual([
       { kind: 'wrong-type', path: 'message.usage.input_tokens' },
+    ]);
+  });
+});
+
+describe('installed_plugins.json', () => {
+  it('passes a current file and reports a changed install entry', () => {
+    const install = { scope: 'user', installPath: '/p/x/1.0.0', version: '1.0.0' };
+    expect(checkInstalledPlugins({ version: 2, plugins: { 'x@m': [install] } })).toEqual([]);
+    expect(checkInstalledPlugins({ version: 2, plugins: { 'x@m': [{ scope: 'user' }] } })).toEqual([
+      { kind: 'missing-field', path: 'plugins.x@m[].installPath' },
     ]);
   });
 });

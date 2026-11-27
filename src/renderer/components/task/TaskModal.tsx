@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowDown, FolderGit2, GitBranch, Loader2 } from 'lucide-react';
 import { SearchableMultiSelect } from '../ui/SearchableMultiSelect';
 import type {
@@ -20,6 +20,7 @@ import { Field, SettingRow } from '../ui/Field';
 import { Input } from '../ui/Input';
 import { useModalClose } from '../ui/Modal';
 import { Notice } from '../ui/Notice';
+import { SuggestionMenu } from '../ui/SuggestionMenu';
 import { Textarea } from '../ui/Textarea';
 import { PermissionModePicker, readInitialPermissionMode } from './PermissionModePicker';
 import { ModelPicker, readInitialModel, persistModelChoice } from './ModelPicker';
@@ -32,6 +33,7 @@ import { useControlInfo } from '../../hooks/useControlInfo';
 import { BranchPrPicker } from './BranchPrPicker';
 import { findBranchHolder, describeBranchHolder } from './branchHolder';
 import { useProjects } from '../../stores/projectsStore';
+import { useSlashCommands } from './useSlashCommands';
 
 // Lives in shared/types (main's TaskService takes it too); re-exported so
 // imports don't churn.
@@ -162,6 +164,13 @@ function TaskModalBody({
   );
   const [model, setModel] = useState<TaskModel>(() => readInitialModel());
   const [contextPrompt, setContextPrompt] = useState(taskDefaults?.contextPrompt ?? '');
+  const contextField = useRef<HTMLTextAreaElement>(null);
+  const slash = useSlashCommands({
+    field: contextField,
+    projectPath,
+    text: contextPrompt,
+    setText: setContextPrompt,
+  });
   const [dashAccess, setDashAccess] = useState(taskDefaults?.dashAccess ?? false);
   const controlSupported = useControlInfo()?.supported ?? false;
   const [pushRemote, setPushRemote] = useState(true);
@@ -574,14 +583,43 @@ function TaskModalBody({
           {/* ── Right: what the task starts with ── */}
           <div className="grid min-w-0 gap-5">
             <Expandable label="Context prompt" hint="optional" defaultOpen={!!contextPrompt.trim()}>
-              <Textarea
-                aria-label="Context prompt"
-                value={contextPrompt}
-                onChange={(e) => setContextPrompt(e.target.value)}
-                rows={8}
-                placeholder="Put before the task's context: conventions, links."
-                className="resize-none"
-              />
+              {/* The prompt opens the task's first message, so a leading
+                  /command runs: `/` there lists the project's skills and commands. */}
+              <SuggestionMenu
+                open={slash.open}
+                label="Skills and commands"
+                items={slash.matches.map((c) => ({
+                  value: c.name,
+                  label: (
+                    <>
+                      /{c.name}
+                      {c.description && <span className="text-ink-3"> {c.description}</span>}
+                    </>
+                  ),
+                }))}
+                active={slash.active}
+                onActiveChange={slash.setActive}
+                onPick={slash.pick}
+                onDismiss={slash.dismiss}
+              >
+                <Textarea
+                  ref={contextField}
+                  aria-label="Context prompt"
+                  value={contextPrompt}
+                  onChange={(e) => {
+                    setContextPrompt(e.target.value);
+                    slash.track();
+                  }}
+                  onSelect={slash.track}
+                  onKeyDown={(e) => {
+                    slash.onKeyDown(e);
+                  }}
+                  data-owns-escape={slash.open}
+                  rows={8}
+                  placeholder="Conventions, links, the ask. Start with / to run a skill or command."
+                  className="resize-none"
+                />
+              </SuggestionMenu>
             </Expandable>
 
             {offersPrs && (

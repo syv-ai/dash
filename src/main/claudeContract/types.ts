@@ -34,7 +34,8 @@ export type DriftSource =
   | 'transcript'
   | 'remote-control'
   | 'scratchpad'
-  | 'memory-file';
+  | 'memory-file'
+  | 'installed-plugins';
 
 /** One mismatch inside a payload: what kind, at which field. */
 export interface DriftFinding {

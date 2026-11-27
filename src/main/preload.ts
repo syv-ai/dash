@@ -326,6 +326,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('workspaceConfig:read', projectPath, opts),
   writeWorkspaceConfig: (args: { projectPath: string; config: unknown }) =>
     ipcRenderer.invoke('workspaceConfig:write', args),
+  slashCommandsList: (args: { projectPath: string }) =>
+    ipcRenderer.invoke('slashCommands:list', args),
 
   // Project sources (clone / empty / scaffold)
   projectClone: (args: { url: string; parentDir: string }) =>

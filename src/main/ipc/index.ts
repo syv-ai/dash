@@ -25,6 +25,7 @@ import { registerProjectSourceIpc } from './projectSourceIpc';
 import { registerMemoryIpc } from './memoryIpc';
 import { registerAgentIpc } from './agentIpc';
 import { registerLspIpc } from './lspIpc';
+import { registerSlashCommandIpc } from './slashCommandIpc';
 
 export function registerAllIpc(): void {
   // First, so every handler below reports its failures (docs/telemetry.md).
@@ -56,4 +57,5 @@ export function registerAllIpc(): void {
   registerMemoryIpc();
   registerAgentIpc();
   registerLspIpc();
+  registerSlashCommandIpc();
 }

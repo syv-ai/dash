@@ -18,6 +18,7 @@ import type { ClaudeUpdateApi } from './electron-api/claudeUpdate';
 import type { MemoryApi } from './electron-api/memory';
 import type { AgentApi } from './electron-api/agent';
 import type { LspApi } from './electron-api/lsp';
+import type { SlashCommandApi } from './electron-api/slashCommands';
 
 // Re-exported so existing `import type { TokenStatsUpdate } from '.../electron-api'`
 // call sites keep resolving after the split.
@@ -52,7 +53,8 @@ export interface ElectronAPI
     ClaudeUpdateApi,
     MemoryApi,
     AgentApi,
-    LspApi {}
+    LspApi,
+    SlashCommandApi {}
 
 declare global {
   interface Window {
