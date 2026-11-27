@@ -751,6 +751,7 @@ export function RightInspector({
       <ViewPanel
         value={segment}
         order={viewTabs.map((t) => t.value)}
+        onChange={(next) => next !== 'details' && onPickSegment(next, false)}
         className="flex min-h-0 flex-1 flex-col"
       >
         {content}

@@ -162,6 +162,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
       <ViewPanel
         value={view}
         order={viewOptions.map((o) => o.value)}
+        onChange={setView}
         className="flex min-h-0 flex-1 flex-col"
       >
         {projectsView ? (

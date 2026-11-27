@@ -136,7 +136,12 @@ export function AgentView({
         }
         end={end || undefined}
       />
-      <ViewPanel value={pane} order={AGENT_PANES} className="flex min-h-0 flex-1 flex-col">
+      <ViewPanel
+        value={pane}
+        order={AGENT_PANES}
+        onChange={onPane}
+        className="flex min-h-0 flex-1 flex-col"
+      >
         {pane === 'scratchpad' ? (
           <>
             <PaneScope

@@ -105,8 +105,8 @@ function countBadge<T>(opt: ViewTabsOption<T>, counted: boolean, variant: ViewTa
  *
  * The selected surface slides from tab to tab (`TabIndicator`), and the
  * view under it slides in from the side of travel when it's wrapped in a
- * `ViewPanel`. A sideways scroll over the tabs steps to the next or previous
- * view, one per gesture (`useWheelTabSwitch`).
+ * `ViewPanel`. A sideways scroll over the tabs (or the panel) steps to the
+ * next or previous view, one per gesture (`useWheelTabSwitch`).
  *
  * Its labels always read in full. It takes its full width (counts included)
  * when the row has room and shrinks first when it hasn't, dropping the
@@ -218,21 +218,30 @@ export function ViewTabs<T extends string>({
  * The view a `ViewTabs` shows: when `value` changes to another of `order`
  * (the tabs' values, in their order), it slides in a short way from the side
  * of travel and fades in (`useSlideIn`); its content stays mounted. A host
- * whose views sit in a clipping box (a sheet) clips the slide.
+ * whose views sit in a clipping box (a sheet) clips the slide. A sideways
+ * scroll over it steps to the next or previous view, as over the tabs
+ * (`useWheelTabSwitch`: content that can scroll that way keeps the gesture).
  */
 export function ViewPanel<T extends string>({
   value,
   order,
+  onChange,
   className,
   children,
 }: {
   value: T;
   order: readonly T[];
+  /** The tabs' `onChange`. */
+  onChange: (v: T) => void;
   className?: string;
   children: React.ReactNode;
 }) {
   const ref = React.useRef<HTMLDivElement>(null);
   useSlideIn(ref, value, order);
+  useWheelTabSwitch(ref, (step) => {
+    const next = stepTab(order, value, step);
+    if (next !== undefined) onChange(next);
+  });
   return (
     <div ref={ref} className={className}>
       {children}

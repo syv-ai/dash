@@ -13,6 +13,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/Resi
 import { EmptyState } from '../ui/EmptyState';
 import { folderSheet } from '../ui/FolderTab';
 import { useSlideIn, type SlideReady } from '../ui/tabMotion';
+import { stepTab, useWheelTabSwitch, type ScrollProbe } from '../ui/useWheelTabSwitch';
 import { cn } from '../../lib/cn';
 import { selectLayout, useEditorTabs, type TextRange } from '../../stores/editorTabsStore';
 import { useEditors } from '../../stores/editorsStore';
@@ -242,7 +243,11 @@ export function EditorGroups({ ws, terminalTheme, isDark, actions }: Props) {
                     trailing={isLast ? editorActions : null}
                   />
                   <div className={cn('flex min-h-0 flex-1 flex-col', folderSheet)}>
-                    <GroupPane active={group.active} tabs={group.tabs}>
+                    <GroupPane
+                      active={group.active}
+                      tabs={group.tabs}
+                      onSelect={(path) => ws.activateTab(index, path)}
+                    >
                       {filePath ? (
                         <EditorPane
                           paneId={`pane:${tabsKey}:${i}`}
@@ -303,21 +308,51 @@ const whenFileShows: SlideReady = (el, go) => {
 };
 
 /**
+ * Whether the Monaco editor `el` is (Monaco scrolls itself, not natively)
+ * can still scroll along `dx`, read off its horizontal scrollbar: the
+ * slider's place and size along the track (a slider the track's width is a
+ * file with nothing to scroll).
+ */
+const monacoScrollsAlong: ScrollProbe = (el, dx) => {
+  if (!el.classList.contains('monaco-editor')) return false;
+  const track = el.querySelector<HTMLElement>(
+    ':scope > .overflow-guard > .editor-scrollable > .scrollbar.horizontal',
+  );
+  const slider = track?.querySelector<HTMLElement>(':scope > .slider');
+  if (!track || !slider) return false;
+  const left = parseFloat(slider.style.left) || 0;
+  const width = parseFloat(slider.style.width) || 0;
+  return dx > 0 ? left + width < track.clientWidth - 0.5 : left > 0.5;
+};
+
+/**
  * A group's pane in its sheet: switching to another of its tabs slides it in
  * a short way from the side of travel (`useSlideIn`), with the new file's
- * fade. Only its place moves; the one Monaco widget stays mounted.
+ * fade. Only its place moves; the one Monaco widget stays mounted. A
+ * sideways scroll over it steps to the next or previous tab, unless the
+ * file under the pointer can scroll that way (`useWheelTabSwitch`).
  */
 function GroupPane({
   active,
   tabs,
+  onSelect,
   children,
 }: {
   active: string | null;
   tabs: string[];
+  onSelect: (path: string) => void;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useSlideIn(ref, active, tabs, { fade: false, ready: whenFileShows });
+  useWheelTabSwitch(
+    ref,
+    (step) => {
+      const next = active === null ? undefined : stepTab(tabs, active, step);
+      if (next !== undefined) onSelect(next);
+    },
+    monacoScrollsAlong,
+  );
   return (
     <div ref={ref} className="flex min-h-0 flex-1 flex-col">
       {children}

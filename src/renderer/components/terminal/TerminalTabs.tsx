@@ -451,14 +451,17 @@ export function TerminalTabs({
   // slides the active tab's tint along them and the terminal in from the side
   // of travel (only its place moves: the session stays attached, and a
   // translate changes neither its size nor its device-pixel box), and a
-  // sideways scroll over the strip steps along them.
+  // sideways scroll over the strip or the terminal steps along them.
   const order = [...stripTabs, ...tabs.filter((t) => t.kind === 'tui')].map((t) => t.id);
   const activeTone = toneOf(tabs.find((t) => t.id === activeTabId)?.kind);
   useSlideIn(paneRef, activeTabId, order);
-  useWheelTabSwitch(stripRef, (step) => {
+  // Over the strip or the terminal under it (xterm doesn't scroll sideways).
+  const stepTerminal = (step: -1 | 1) => {
     const next = activeTabId === null ? undefined : stepTab(order, activeTabId, step);
     if (next !== undefined) handleSelectTab(next);
-  });
+  };
+  useWheelTabSwitch(stripRef, stepTerminal);
+  useWheelTabSwitch(paneRef, stepTerminal);
 
   return (
     <div className="h-full flex flex-col">
