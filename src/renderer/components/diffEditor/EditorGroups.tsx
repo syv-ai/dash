@@ -12,7 +12,6 @@ import type { ITheme as XtermTheme } from '@xterm/xterm';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/Resizable';
 import { EmptyState } from '../ui/EmptyState';
 import { folderSheet } from '../ui/FolderTab';
-import { useSlideIn, type SlideReady } from '../ui/tabMotion';
 import { stepTab, useWheelTabSwitch, type ScrollProbe } from '../ui/useWheelTabSwitch';
 import { cn } from '../../lib/cn';
 import { selectLayout, useEditorTabs, type TextRange } from '../../stores/editorTabsStore';
@@ -286,27 +285,6 @@ export function EditorGroups({ ws, terminalTheme, isDark, actions }: Props) {
   );
 }
 
-/** The longest a pane's slide waits for the new file to show. */
-const FILE_SHOWN_CAP_MS = 400;
-
-/** The pane's slide starts with the editor's file fade (`EditorViewport`
- *  starts it once the new file has loaded, so the old file never moves);
- *  if the fade doesn't come, there is no slide. */
-const whenFileShows: SlideReady = (el, go) => {
-  const onRun = (e: TransitionEvent) => {
-    if (e.propertyName !== 'opacity') return;
-    stop();
-    go();
-  };
-  const timer = window.setTimeout(() => stop(), FILE_SHOWN_CAP_MS);
-  const stop = () => {
-    window.clearTimeout(timer);
-    el.removeEventListener('transitionrun', onRun);
-  };
-  el.addEventListener('transitionrun', onRun);
-  return stop;
-};
-
 /**
  * Whether the Monaco editor `el` is (Monaco scrolls itself, not natively)
  * can still scroll along `dx`, read off its horizontal scrollbar: the
@@ -326,11 +304,12 @@ const monacoScrollsAlong: ScrollProbe = (el, dx) => {
 };
 
 /**
- * A group's pane in its sheet: switching to another of its tabs slides it in
- * a short way from the side of travel (`useSlideIn`), with the new file's
- * fade. Only its place moves; the one Monaco widget stays mounted. A
- * sideways scroll over it steps to the next or previous tab, unless the
- * file under the pointer can scroll that way (`useWheelTabSwitch`).
+ * A group's pane in its sheet. Switching to another of its tabs never moves
+ * it: a page of code sliding sideways is dizzying (U6), so the new file only
+ * settles in place with its fade (`EditorViewport`), while the tab strip's
+ * indicator glides. The one Monaco widget stays mounted. A sideways scroll
+ * over it steps to the next or previous tab, unless the file under the
+ * pointer can scroll that way (`useWheelTabSwitch`).
  */
 function GroupPane({
   active,
@@ -344,7 +323,6 @@ function GroupPane({
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  useSlideIn(ref, active, tabs, { fade: false, ready: whenFileShows });
   useWheelTabSwitch(
     ref,
     (step) => {

@@ -4,6 +4,10 @@ import { Loader2 } from 'lucide-react';
 import type { LoadState } from './useFileLoad';
 import { DiffEditorHost } from './DiffEditorHost';
 import { RAIL_WIDTH_PX } from '../../ui/railBar';
+import { EASE, MOTION_MS, reducedMotion } from '../../../lib/motion';
+
+/** The opacity a newly shown file settles in from. */
+const FILE_SETTLE_FROM = 0.4;
 
 interface Props {
   displayed: LoadState;
@@ -23,8 +27,8 @@ interface Props {
   /** Caller passes a ref-callback so it can render comment widgets and the
    *  inline-input popover into the editor area. */
   areaRef: (el: HTMLDivElement | null) => void;
-  /** Bumped each time the user opens a new file — the Monaco wrapper plays
-   *  a brief opacity transition synced with the content swap. Monaco itself
+  /** Bumped each time the user opens a new file, once it has loaded: the
+   *  Monaco wrapper settles in place with the content swap. Monaco itself
    *  stays mounted to preserve the no-flash behavior. */
   fileFadeNonce: number;
   /** Extra children rendered inside the editor area (after Monaco). Used for
@@ -47,20 +51,18 @@ export function EditorViewport({
   fileFadeNonce,
   children,
 }: Props) {
-  // Imperatively kick off the fade so Monaco's DOM stays put. Resetting
-  // opacity → reflow → animating back to 1 ensures the transition fires
-  // even when the same nonce is set twice in quick succession.
+  // The new file settles in place (U6): its opacity eases up from
+  // FILE_SETTLE_FROM, never from clear (a blink) and never with a move (a
+  // page of code sliding is dizzying). On the wrapper, so Monaco's DOM stays.
   const monacoWrapRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    if (fileFadeNonce === 0) return;
     const el = monacoWrapRef.current;
-    if (!el) return;
-    el.style.transition = 'none';
-    el.style.opacity = '0';
-    // Force a layout read so the next style write is treated as a change.
-    void el.offsetHeight;
-    el.style.transition = 'opacity 200ms cubic-bezier(0.16, 1, 0.3, 1)';
-    el.style.opacity = '1';
+    if (fileFadeNonce === 0 || !el || reducedMotion()) return;
+    el.getAnimations().forEach((a) => a.cancel());
+    el.animate([{ opacity: FILE_SETTLE_FROM }, { opacity: 1 }], {
+      duration: MOTION_MS.calm,
+      easing: EASE.settle,
+    });
   }, [fileFadeNonce]);
 
   const options = useMemo<monacoEditor.IDiffEditorConstructionOptions>(

@@ -7,7 +7,10 @@ import { EASE, MOTION_MS, reducedMotion } from '../../lib/motion';
  * way from the side of travel while it fades in (`useSlideIn`): picking a
  * tab to the right brings the view in from the right, moving left. Both
  * calm (U6): the indicator `MOTION_MS.calm`, the view `MOTION_MS.slow`, so
- * it settles in after the indicator, on `EASE.settle`. Both run on
+ * it settles in after the indicator, on `EASE.settle`. The editor's code
+ * never slides (U6): a page of code moving sideways is dizzying, so its
+ * file settles in place (`EditorViewport`) while only the indicator glides.
+ * Both run on
  * the compositor (Web Animations on `translate`, `opacity`; the indicator's
  * `width`, on a small box) and skip under reduced motion.
  */
@@ -32,26 +35,17 @@ export function slideDirection<T>(order: readonly T[], from: T, to: T): -1 | 0 |
   return b > a ? 1 : -1;
 }
 
-/** What a slide waits for before it plays: it calls `go` once the incoming
- *  content shows, and returns a cancel. */
-export type SlideReady = (el: HTMLElement, go: () => void) => () => void;
-
 /**
  * Slides `ref`'s element in when `value` changes to another tab of `order`
  * (see `slideDirection`): from `PANE_SLIDE_PX` on the side of travel, and
  * from `PANE_FADE_FROM`, to where it lays out. It only moves the element;
  * whatever it holds stays mounted. Its first value, and a switch from or to
  * anything not in `order`, show at once.
- *
- * `fade: false` leaves its opacity alone, for content that fades itself in
- * once it has swapped; `ready` holds the slide until then, so it never moves
- * the outgoing content.
  */
 export function useSlideIn<T>(
   ref: React.RefObject<HTMLElement | null>,
   value: T,
   order: readonly T[],
-  { fade = true, ready }: { fade?: boolean; ready?: SlideReady } = {},
 ): void {
   const was = React.useRef(value);
   React.useLayoutEffect(() => {
@@ -60,18 +54,14 @@ export function useSlideIn<T>(
     const el = ref.current;
     const dir = slideDirection(order, from, value);
     if (!el || dir === 0 || reducedMotion()) return;
-    const go = () => {
-      el.getAnimations().forEach((a) => a.cancel());
-      el.animate(
-        [
-          { translate: `${dir * PANE_SLIDE_PX}px 0`, ...(fade && { opacity: PANE_FADE_FROM }) },
-          { translate: '0 0', ...(fade && { opacity: 1 }) },
-        ],
-        { duration: PANE_SLIDE_MS, easing: EASE.settle },
-      );
-    };
-    if (!ready) return go();
-    return ready(el, go);
+    el.getAnimations().forEach((a) => a.cancel());
+    el.animate(
+      [
+        { translate: `${dir * PANE_SLIDE_PX}px 0`, opacity: PANE_FADE_FROM },
+        { translate: '0 0', opacity: 1 },
+      ],
+      { duration: PANE_SLIDE_MS, easing: EASE.settle },
+    );
     // Only a change of tab moves it, not a change of the strip's tabs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
