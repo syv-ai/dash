@@ -21,6 +21,7 @@ describe('envKeyProblem', () => {
     ['DASH_TOKEN', /Dash's own/],
     ['ANTHROPIC_BASE_URL', /API access and sign-in/],
     ['CLAUDE_CODE_USE_BEDROCK', /overrides Claude Code/],
+    ['CLAUDE_ENV_FILE', /before every Bash command/],
     ['GH_TOKEN', /credential/],
     ['AWS_SECRET_ACCESS_KEY', /credential/],
     ['OPENAI_API_KEY', /credential/],
@@ -38,6 +39,10 @@ describe('envKeyProblem', () => {
     ['GIT_SSH_COMMAND', /git run/],
     ['GIT_CONFIG_GLOBAL', /git run/],
     ['EDITOR', /other tools run/],
+    ['GIT_SEQUENCE_EDITOR', /git run/],
+    ['GOFLAGS', /other tools run/],
+    ['HTTPS_PROXY', /network traffic/],
+    ['NODE_TLS_REJECT_UNAUTHORIZED', /network traffic/],
   ])('refuses %s to a task only', (key, why) => {
     expect(envKeyProblem(key, 'task')).toMatch(why);
     expect(envKeyProblem(key, 'person')).toBeNull();
