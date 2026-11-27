@@ -56,6 +56,7 @@ export function DraftEditor({
         initialText={c.text}
         mentions={mentions}
         submitLabel="Save"
+        cancelButton
         onSubmit={(text) => {
           useCommentsStore.getState().updateText(c.id, text);
           onDone();

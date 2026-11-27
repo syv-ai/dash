@@ -4,9 +4,8 @@ import type { DiffCommentKind } from '../../../../shared/types';
 import type { Shade } from './types';
 import { BubbleShell } from './BubbleShell';
 import { Markdown } from '../../ui/Markdown';
-import { Badge } from '../../ui/Badge';
 import { IconButton } from '../../ui/IconButton';
-import { DraftBadge } from '../prReview/PrComment';
+import { BubbleHeader } from './BubbleHeader';
 
 interface Props {
   shade: Shade;
@@ -49,22 +48,10 @@ interface Props {
   onDemote?(): void;
 }
 
-/** The kind's icon and name, the same in every list (D10). */
-function KindLabel({ kind }: { kind: DiffCommentKind }) {
-  return (
-    <span className="type-caption inline-flex items-center gap-1">
-      {kind === 'note' ? (
-        <Bot size={14} strokeWidth={1.8} className="text-icon" />
-      ) : (
-        <MessageSquare size={14} strokeWidth={1.8} className="text-icon" />
-      )}
-      {kind === 'note' ? 'Note to agent' : 'Comment'}
-    </span>
-  );
-}
-
-/** One persisted speech-bubble card: where it sits, what kind it is, its
- *  text, and hover actions (edit, promote/demote, reopen, delete). */
+/** One persisted speech-bubble card: its header (where it sits, what kind
+ *  it is, and on hover its actions: edit, promote/demote, reopen, delete,
+ *  right-aligned on that line), then its text. Editing keeps the header and
+ *  turns the text into the composer (`DraftBubble`). */
 export function CommentBubble({
   shade,
   meta,
@@ -106,7 +93,9 @@ export function CommentBubble({
     </IconButton>
   );
   return (
+    // The whole card, its padding too, shows the actions on hover.
     <div
+      className="group/bubble"
       style={{
         opacity,
         transition: 'opacity 240ms ease-out',
@@ -123,34 +112,34 @@ export function CommentBubble({
         onDoubleClick={onDoubleClick}
         rule={kind === 'note' ? 'dashed' : 'solid'}
       >
-        <div className="group/bubble">
-          <div className="absolute top-1 right-1 z-10 flex items-center opacity-0 transition-opacity group-hover/bubble:opacity-100 focus-within:opacity-100">
-            {action('Edit', <Pencil size={14} strokeWidth={1.8} />, onDoubleClick)}
-            {onPromote &&
-              action(
-                'Make it a comment for the author',
-                <MessageSquare size={14} strokeWidth={1.8} />,
-                onPromote,
-              )}
-            {onDemote &&
-              action('Make it a note to agent', <Bot size={14} strokeWidth={1.8} />, onDemote)}
-            {sent &&
-              action(
-                'Reopen — include in the next send',
-                <Undo2 size={14} strokeWidth={1.8} />,
-                onReopen,
-              )}
-            {action('Delete', <X size={14} strokeWidth={1.8} />, onDelete, true)}
-          </div>
-          <div className="mb-0.5 flex items-center gap-1.5">
-            <KindLabel kind={kind} />
-            <span className="type-caption tabular-nums">{meta}</span>
-            {/* A comment for the author is only here until the review posts. */}
-            {kind === 'comment' && <DraftBadge />}
-            {scopeLabel && <Badge size="sm">{scopeLabel}</Badge>}
-            {byAgent && <Badge size="sm">Agent</Badge>}
-            {sent && <Badge size="sm">Sent</Badge>}
-          </div>
+        <div className="flex flex-col gap-2">
+          <BubbleHeader
+            kind={kind}
+            meta={meta}
+            scopeLabel={scopeLabel}
+            byAgent={byAgent}
+            sent={sent}
+            actions={
+              <div className="flex items-center opacity-0 transition-opacity group-hover/bubble:opacity-100 focus-within:opacity-100">
+                {action('Edit', <Pencil size={14} strokeWidth={1.8} />, onDoubleClick)}
+                {onPromote &&
+                  action(
+                    'Make it a comment for the author',
+                    <MessageSquare size={14} strokeWidth={1.8} />,
+                    onPromote,
+                  )}
+                {onDemote &&
+                  action('Make it a note to agent', <Bot size={14} strokeWidth={1.8} />, onDemote)}
+                {sent &&
+                  action(
+                    'Reopen — include in the next send',
+                    <Undo2 size={14} strokeWidth={1.8} />,
+                    onReopen,
+                  )}
+                {action('Delete', <X size={14} strokeWidth={1.8} />, onDelete, true)}
+              </div>
+            }
+          />
           <Markdown text={text} />
         </div>
       </BubbleShell>

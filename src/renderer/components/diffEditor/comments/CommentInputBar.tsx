@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Bot, Loader2, MessageSquare, Send } from 'lucide-react';
 import type { DiffCommentKind } from '../../../../shared/types';
 import { Button } from '../../ui/Button';
@@ -27,6 +27,12 @@ interface Props {
   submitLabel?: string;
   /** Show the Note to agent | Comment for author switch (fresh drafts only). */
   kind?: ComposerKind;
+  /** The top line in place of the range and switch: an edited card's own
+   *  header, so editing keeps its layout. */
+  header?: ReactNode;
+  /** A Cancel button beside submit, for editing what exists (Esc cancels
+   *  either way). */
+  cancelButton?: boolean;
   /** Save a note and send it to the agent at once (button and ⌘⇧↵). */
   onSendNow?: (text: string) => void;
   /** People `@` completes from (a PR's participants); none, no completion. */
@@ -51,6 +57,8 @@ export function CommentInputBar({
   placeholder,
   submitLabel = 'Add',
   kind,
+  header,
+  cancelButton = false,
   onSendNow,
   mentions,
   busy = false,
@@ -71,34 +79,35 @@ export function CommentInputBar({
   const pickKind = kind?.onChange ?? null;
   return (
     <>
-      {(rangeLabel || kind) && (
-        <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1">
-          {kind && (
-            <Segmented
-              size="sm"
-              fullWidth={false}
-              aria-label="What this is"
-              value={kind.value}
-              onChange={(k) => pickKind?.(k)}
-              options={[
-                {
-                  value: 'note',
-                  label: 'Note to agent',
-                  icon: <Bot size={14} strokeWidth={1.8} />,
-                },
-                {
-                  value: 'comment',
-                  label: 'Comment for author',
-                  icon: <MessageSquare size={14} strokeWidth={1.8} />,
-                  disabled: !pickKind,
-                  title: pickKind ? undefined : 'Comments need a pull request',
-                },
-              ]}
-            />
-          )}
-          <span className="type-caption ml-auto truncate tabular-nums">{rangeLabel}</span>
-        </div>
-      )}
+      {header ??
+        ((rangeLabel || kind) && (
+          <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1">
+            {kind && (
+              <Segmented
+                size="sm"
+                fullWidth={false}
+                aria-label="What this is"
+                value={kind.value}
+                onChange={(k) => pickKind?.(k)}
+                options={[
+                  {
+                    value: 'note',
+                    label: 'Note to agent',
+                    icon: <Bot size={14} strokeWidth={1.8} />,
+                  },
+                  {
+                    value: 'comment',
+                    label: 'Comment for author',
+                    icon: <MessageSquare size={14} strokeWidth={1.8} />,
+                    disabled: !pickKind,
+                    title: pickKind ? undefined : 'Comments need a pull request',
+                  },
+                ]}
+              />
+            )}
+            <span className="type-caption ml-auto truncate tabular-nums">{rangeLabel}</span>
+          </div>
+        ))}
       <SuggestionMenu
         open={mention.open}
         label="People on this PR"
@@ -174,6 +183,11 @@ export function CommentInputBar({
           >
             <Send size={14} strokeWidth={1.8} />
             Send now
+          </Button>
+        )}
+        {cancelButton && (
+          <Button size="sm" variant="ghost" onClick={onCancel}>
+            Cancel
           </Button>
         )}
         <Button size="sm" onClick={submit} disabled={!trimmed || busy}>

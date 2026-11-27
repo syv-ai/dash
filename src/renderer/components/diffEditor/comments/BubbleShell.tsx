@@ -43,7 +43,7 @@ export function BubbleShell({
       onMouseLeave={onMouseLeave}
       onDoubleClick={onDoubleClick}
       className={cn(
-        'relative rounded-xl px-[16px] pt-[20px] pb-[20px] text-sm leading-normal tracking-[-0.005em]',
+        'relative rounded-xl px-4 py-6 text-base leading-relaxed tracking-[-0.005em]',
         rule && 'border-l-2 border-ink-3',
         rule === 'dashed' && 'border-dashed',
       )}

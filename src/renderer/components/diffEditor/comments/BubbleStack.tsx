@@ -36,6 +36,12 @@ function metaLabel(c: LiveComment): string {
   return c.startLine === c.endLine ? `L${c.startLine}` : `L${c.startLine}-${c.endLine}`;
 }
 
+/** A stacked card's place: 'L15', or 'L15 — 2 of 3' in a stack. */
+export function bubbleMeta(comments: readonly LiveComment[], i: number): string {
+  const c = comments[i]!;
+  return comments.length >= 2 ? `${metaLabel(c)} — ${i + 1} of ${comments.length}` : metaLabel(c);
+}
+
 /** A vertical stack of one or more speech bubbles. Only the bottom-most
  *  bubble carries a tail. Caller decides whether to render this — when
  *  the comment block is collapsed, simply don't mount this. */
@@ -53,7 +59,6 @@ export function BubbleStack({
   onPromote,
   onDemote,
 }: Props) {
-  const stacked = comments.length >= 2;
   return (
     <div className="flex flex-col gap-[4px] pointer-events-auto">
       {comments.map((c, i) => {
@@ -63,7 +68,7 @@ export function BubbleStack({
           <CommentBubble
             key={c.id}
             shade={shade}
-            meta={stacked ? `${metaLabel(c)} — ${i + 1} of ${comments.length}` : metaLabel(c)}
+            meta={bubbleMeta(comments, i)}
             text={c.text}
             sent={c.sent}
             byAgent={c.author === 'agent'}

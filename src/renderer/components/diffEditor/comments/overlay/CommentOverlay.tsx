@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import type { LineRange, LiveComment, Shade } from '../types';
 import { commentIdsAtLine } from '../rowShades';
-import { BubbleStack } from '../BubbleStack';
+import { BubbleStack, bubbleMeta } from '../BubbleStack';
 import { CommentIcon } from '../CommentIcon';
 import { DraftBubble } from '../DraftBubble';
 import type { ComposerKind } from '../CommentInputBar';
@@ -307,6 +307,13 @@ export function CommentOverlay({
                   initialText={pendingText}
                   tailLeftPx={tailLeftPx}
                   submitLabel={draftSubmitLabel}
+                  editing={{
+                    kind: editingComment.kind,
+                    meta: bubbleMeta(comments, comments.indexOf(editingComment)),
+                    scopeLabel,
+                    byAgent: editingComment.author === 'agent',
+                    sent: editingComment.sent,
+                  }}
                   onSubmit={onSubmitDraft}
                   onCancel={onCancelDraft}
                 />
