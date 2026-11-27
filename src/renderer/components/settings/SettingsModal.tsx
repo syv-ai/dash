@@ -4,6 +4,7 @@ import {
   Activity,
   AlertCircle,
   Bell,
+  ChartLine,
   Code2,
   Download,
   FolderOpen,
@@ -13,7 +14,6 @@ import {
   Moon,
   Palette,
   RefreshCw,
-  Shield,
   Sparkles,
   Sun,
 } from 'lucide-react';
@@ -53,6 +53,11 @@ const DASH_DEFAULT_ATTRIBUTION =
 
 const RELEASES_URL = 'https://github.com/syv-ai/dash/releases';
 
+/** PostHog's public, read-only share of the dashboard behind `docs/telemetry.md`. */
+const TELEMETRY_DASHBOARD_URL = 'https://eu.posthog.com/shared/P-4kS1b8eR5ntVTBWAOtgMb5aI7mxw';
+/** Every event and property Dash sends, and where it goes. */
+const TELEMETRY_DOC_URL = 'https://github.com/syv-ai/dash/blob/main/docs/telemetry.md';
+
 type SettingsTab =
   | 'appearance'
   | 'notifications'
@@ -62,7 +67,7 @@ type SettingsTab =
   | 'keybindings'
   | 'usage'
   | 'updates'
-  | 'privacy'
+  | 'telemetry'
   | 'about';
 
 const icon = (Icon: React.ComponentType<{ size: number; strokeWidth: number }>) => (
@@ -79,7 +84,7 @@ const SECTIONS: Record<SettingsTab, { label: string; icon: React.ReactNode }> = 
   keybindings: { label: 'Keybindings', icon: icon(Keyboard) },
   usage: { label: 'Usage', icon: icon(Activity) },
   updates: { label: 'Updates', icon: icon(Download) },
-  privacy: { label: 'Privacy', icon: icon(Shield) },
+  telemetry: { label: 'Telemetry', icon: icon(ChartLine) },
   about: { label: 'About', icon: icon(Info) },
 };
 
@@ -87,7 +92,7 @@ const NAV_GROUPS: Array<{ label: string; ids: SettingsTab[] }> = [
   { label: 'Interface', ids: ['appearance', 'notifications'] },
   { label: 'Editor', ids: ['ide'] },
   { label: 'Workflow', ids: ['attribution', 'claude-code', 'keybindings', 'usage'] },
-  { label: 'System', ids: ['updates', 'privacy', 'about'] },
+  { label: 'System', ids: ['updates', 'telemetry', 'about'] },
 ];
 
 const isTab = (v: string | undefined): v is SettingsTab => !!v && v in SECTIONS;
@@ -153,7 +158,7 @@ export function SettingsModal({
         {tab === 'keybindings' && <KeybindingsTab />}
         {tab === 'usage' && <UsageTab latestRateLimits={latestRateLimits} />}
         {tab === 'updates' && <UpdatesTab appVersion={appVersion} />}
-        {tab === 'privacy' && <PrivacyTab />}
+        {tab === 'telemetry' && <TelemetryTab />}
         {tab === 'about' && (
           <AboutTab
             appVersion={appVersion}
@@ -544,7 +549,7 @@ function UpdatesTab({ appVersion }: { appVersion: string }) {
   );
 }
 
-function PrivacyTab() {
+function TelemetryTab() {
   const [enabled, setEnabled] = useState(true);
   const [envDisabled, setEnvDisabled] = useState(false);
 
@@ -558,27 +563,40 @@ function PrivacyTab() {
   }, []);
 
   return (
-    <FormSection>
-      <SwitchField
-        label="Send anonymous usage data"
-        hint={{
-          title: 'Helps us see how Dash is used',
-          body: 'Sent: app start, close and daily use; counts of projects, tasks, sessions, turns (with rough durations), reviews and file opens; errors with paths removed; where Claude Code behaves differently than Dash expects; the Dash and Claude Code versions, platform and architecture.\n\nNever sent: code, file paths, prompts, IP addresses, device identifiers, or anything personal.',
-        }}
-        checked={enabled && !envDisabled}
-        disabled={envDisabled}
-        onCheckedChange={(next) => {
-          setEnabled(next);
-          void window.electronAPI.telemetrySetEnabled(next);
-        }}
-      >
-        {envDisabled && (
-          <Notice icon={<AlertCircle size={14} strokeWidth={1.8} />}>
-            Turned off by the <Code>TELEMETRY_ENABLED</Code> environment variable.
-          </Notice>
-        )}
-      </SwitchField>
-    </FormSection>
+    <>
+      <FormSection>
+        <SwitchField
+          label="Send anonymous usage data"
+          hint={{
+            title: 'Counts, never content',
+            body: 'How Dash is used and where it fails, as counts and rough durations. Never code, paths, prompts or anything personal.',
+          }}
+          checked={enabled && !envDisabled}
+          disabled={envDisabled}
+          onCheckedChange={(next) => {
+            setEnabled(next);
+            void window.electronAPI.telemetrySetEnabled(next);
+          }}
+        >
+          {envDisabled && (
+            <Notice icon={<AlertCircle size={14} strokeWidth={1.8} />}>
+              Turned off by the <Code>TELEMETRY_ENABLED</Code> environment variable.
+            </Notice>
+          )}
+        </SwitchField>
+      </FormSection>
+
+      <FormSection>
+        <SettingRow
+          label={<TextLink href={TELEMETRY_DASHBOARD_URL}>Public dashboard</TextLink>}
+          hint="What we see, live, read-only on PostHog."
+        />
+        <SettingRow
+          label={<TextLink href={TELEMETRY_DOC_URL}>What we collect</TextLink>}
+          hint="Every event and property Dash sends, and where it goes."
+        />
+      </FormSection>
+    </>
   );
 }
 
