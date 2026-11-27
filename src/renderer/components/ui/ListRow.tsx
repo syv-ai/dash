@@ -23,6 +23,11 @@ const listRowVariants = cva(
         true: 'text-ink-3 hover:text-ink data-[selected=true]:text-ink',
         false: '',
       },
+      // Quieter still: listed, but outside the work (a gitignored path).
+      faint: {
+        true: 'text-ink-4 hover:text-ink data-[selected=true]:text-ink',
+        false: '',
+      },
       // A changed file's name (G1); a dimmed row stays dimmed.
       changed: { true: '', false: '' },
       // The row being dragged to a new place: faded where it will land.
@@ -37,11 +42,12 @@ const listRowVariants = cva(
         false: '',
       },
     },
-    compoundVariants: [{ changed: true, dimmed: false, className: 'text-changed' }],
+    compoundVariants: [{ changed: true, dimmed: false, faint: false, className: 'text-changed' }],
     defaultVariants: {
       size: 'md',
       twoLine: false,
       dimmed: false,
+      faint: false,
       changed: false,
       dragging: false,
       pressable: false,
@@ -62,6 +68,9 @@ export type ListRowProps = Omit<React.ComponentProps<'button'>, 'children'> &
     badges?: React.ReactNode;
     /** Quiet row (ink-3) that reads normally on hover or when selected. */
     dimmed?: boolean;
+    /** Quieter than `dimmed` (ink-4), as readable on hover or selected: a
+     *  path listed but outside the work (gitignored). */
+    faint?: boolean;
     /** A changed file or folder: its label in the `changed` gold (G1). */
     changed?: boolean;
     /** Being dragged to reorder: faded. */
@@ -100,6 +109,7 @@ export function ListRow({
   selected = false,
   description,
   dimmed = false,
+  faint = false,
   changed = false,
   dragging = false,
   pressable = false,
@@ -133,7 +143,15 @@ export function ListRow({
       data-selected={selected}
       aria-current={selected ? 'true' : undefined}
       className={cn(
-        listRowVariants({ size, dimmed, changed, dragging, pressable, twoLine: !!description }),
+        listRowVariants({
+          size,
+          dimmed: dimmed && !faint,
+          faint,
+          changed,
+          dragging,
+          pressable,
+          twoLine: !!description,
+        }),
         className,
       )}
       // px-2.5 is 10px; a tree row adds its depth to the left of it.

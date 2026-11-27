@@ -164,9 +164,7 @@ export function FileTree({
             ctx={ctx}
             cwd={cwd}
             cols={cols}
-            quiet={
-              row.kind === 'file' ? row.file.ignored || !!quiet?.has(path) : row.folder.ignored
-            }
+            quiet={row.kind === 'file' && !!quiet?.has(path)}
             badges={row.kind === 'file' ? badges?.get(path) : undefined}
             actions={actions?.(row) ?? null}
             onSpace={spaceAction?.(row) ?? undefined}

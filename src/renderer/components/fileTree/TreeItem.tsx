@@ -64,7 +64,8 @@ export interface TreeItemProps {
   ctx: TreeRowContext;
   cwd: string;
   cols: TreeColumns;
-  /** Shown quietly: viewed, or ignored. */
+  /** Shown quietly: a PR's viewed file. (An ignored one, or a folder, is
+   *  fainter still, from its row.) */
   quiet: boolean;
   badges: FileBadges | undefined;
   /** Hover actions; null: the default (copy the relative path). */
@@ -104,6 +105,7 @@ export function TreeItem({
       ctx={ctx}
       size={FILE_ROW}
       dimmed={quiet}
+      faint={folder ? row.folder.ignored : row.file.ignored}
       changed={isChanged(row)}
       title={folder ? undefined : path}
       className="group/swap relative cursor-pointer"

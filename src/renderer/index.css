@@ -40,6 +40,9 @@
   --color-ink: hsl(var(--ink));
   --color-ink-2: hsl(var(--ink-2));
   --color-ink-3: hsl(var(--ink-3));
+  /* The faintest ink, a step under ink-3: what a list shows but the work
+     leaves out (a file tree's gitignored paths, U3). */
+  --color-ink-4: hsl(var(--ink-4));
   --color-icon: hsl(var(--icon));
   /* A link in running text (TextLink, Markdown): a soft blue, the one
      colour outside state (user-requested, D191). */
@@ -217,6 +220,8 @@
        (were 5.2 / 5.8, 4.3 / 4.8, 3.3 / 3.7). */
     --ink-2: 222 9% 36%;
     --ink-3: 222 6% 45%;
+    /* 3.9 / 3.2:1 on well / ground: quiet, still legible. */
+    --ink-4: 222 6% 52%;
     --icon: 222 8% 41%;
     /* The editor's line numbers: quieter than ink-3, 3.9:1 on the white
        editor (ink-3 5.0); the active line's number stays ink. */
@@ -343,6 +348,8 @@
        light, still under ink (16.2). */
     --ink-2: 220 5% 81%;
     --ink-3: 220 4% 69%;
+    /* 5.2 / 5.6 / 4.6:1 on well / ground / raised: quiet, still legible. */
+    --ink-4: 220 4% 54%;
     --icon: 220 4.5% 76%;
     /* The editor's line numbers: quieter than ink-3, 4.5:1 on the editor
        (#131415; ink-3 8.4); the active line's number stays ink. */
