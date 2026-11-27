@@ -235,9 +235,14 @@ describe('gitStore.watchActiveTask', () => {
       return vi.fn();
     });
     installWindow(api);
+    // A focused, visible window, so the poll runs (see focusedInterval).
+    const events = { addEventListener: vi.fn(), removeEventListener: vi.fn() };
+    Object.assign(window, events);
+    vi.stubGlobal('document', { hidden: false, hasFocus: () => true, ...events });
   });
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
     resetWindow();
   });
 

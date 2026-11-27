@@ -205,24 +205,87 @@ export function parsePorcelainV2Z(raw: string): FileChange[] {
         deletions: 0,
       });
     }
-    // '#' header lines (with --branch; see parseBranchOid) and '!' ignored
+    // '#' header lines (with --branch; see parseBranchHeaders) and '!' ignored
     // lines (never requested here) are dropped.
   }
   return files;
 }
 
+/** What `git status --porcelain=v2 --branch` says about HEAD, from its `# branch.*` headers. */
+export interface BranchHeaders {
+  /** HEAD's commit, detached included; null before the first commit. */
+  headSha: string | null;
+  /** The checked-out branch (unborn included); null on a detached HEAD. */
+  branch: string | null;
+  /** The upstream's short name (`origin/feat/x`), when one is configured. */
+  upstream: string | null;
+  /** Ahead/behind the upstream; null when none is configured or its ref is
+   *  gone (git prints no `branch.ab` then), which is when `@{upstream}` fails. */
+  aheadBehind: { ahead: number; behind: number } | null;
+}
+
 /**
- * HEAD's commit from `git status --porcelain=v2 --branch` output: its
- * `# branch.oid` header, detached HEAD included. Null before the first
- * commit (`(initial)`) or without the header.
+ * Parse the `# branch.*` headers of `git status --porcelain=v2 --branch -z`
+ * (with `--ahead-behind`, so `branch.ab` holds counts, never `+? -?`). They
+ * come first, so parsing stops at the first record that isn't a header.
  */
-export function parseBranchOid(raw: string): string | null {
+export function parseBranchHeaders(raw: string): BranchHeaders {
+  const headers: BranchHeaders = { headSha: null, branch: null, upstream: null, aheadBehind: null };
   for (const rec of raw.split('\0')) {
-    if (!rec.startsWith('# branch.oid ')) continue;
-    const oid = rec.slice('# branch.oid '.length).trim();
-    return oid && oid !== '(initial)' ? oid : null;
+    if (!rec.startsWith('# ')) {
+      if (rec) break;
+      continue;
+    }
+    const sp = rec.indexOf(' ', 2);
+    const key = rec.slice(2, sp === -1 ? undefined : sp);
+    const value = sp === -1 ? '' : rec.slice(sp + 1).trim();
+    if (key === 'branch.oid') headers.headSha = value && value !== '(initial)' ? value : null;
+    else if (key === 'branch.head') headers.branch = value && value !== '(detached)' ? value : null;
+    else if (key === 'branch.upstream') headers.upstream = value || null;
+    else if (key === 'branch.ab') {
+      const m = /^\+(\d+) -(\d+)$/.exec(value);
+      if (m) headers.aheadBehind = { ahead: Number(m[1]), behind: Number(m[2]) };
+    }
   }
-  return null;
+  return headers;
+}
+
+const UNTRACKED_ENRICHMENT_CAP = 500;
+const UNTRACKED_FILE_SIZE_CAP = 1024 * 1024;
+
+/** How many folders' status memos are kept (the polled task, and a few recent). */
+const MEMO_CAP = 16;
+/** Per folder: the last status's stat counts, and the key they were read under. */
+const statusMemo = new Map<string, { key: string; files: FileChange[] }>();
+/** Per folder: the branch's upstream, and the branch + upstream name it was read for. */
+const upstreamMemo = new Map<string, { key: string; upstream: GitUpstream | null }>();
+
+/** Set `key` as the newest entry, dropping the oldest past MEMO_CAP. */
+function remember<V>(memo: Map<string, V>, key: string, value: V): void {
+  memo.delete(key);
+  memo.set(key, value);
+  if (memo.size > MEMO_CAP) memo.delete(memo.keys().next().value!);
+}
+
+/**
+ * What the stat counts read from the worktree, per changed file: size and
+ * times of each file changed in the worktree (unstaged, conflicted, and
+ * untracked while they are few enough to be counted). Staged counts read only
+ * the index and HEAD, whose blobs the status records already name.
+ */
+async function worktreeStamps(cwd: string, files: FileChange[]): Promise<string[]> {
+  const untracked = files.filter((f) => f.status === 'untracked').length;
+  const read = files.filter(
+    (f) => !f.staged && (f.status !== 'untracked' || untracked <= UNTRACKED_ENRICHMENT_CAP),
+  );
+  return Promise.all(
+    read.map((f) =>
+      fsPromises.stat(join(cwd, f.path)).then(
+        (st) => `${st.size}:${st.mtimeMs}:${st.ctimeMs}`,
+        () => '-',
+      ),
+    ),
+  );
 }
 
 export class GitService {
@@ -379,14 +442,61 @@ export class GitService {
   }
 
   /**
-   * Get full git status for a working directory.
+   * Get full git status for a working directory, from one `git status`: its
+   * headers give the branch, HEAD and ahead/behind. The stat counts (two
+   * `git diff --numstat` runs and a read of each untracked file) are redone
+   * only when the status or a changed file on disk moved since the last call.
    */
   static async getStatus(cwd: string): Promise<GitStatus> {
-    const branch = await this.getBranch(cwd);
-    const { hasUpstream, ahead, behind } = await this.getAheadBehind(cwd);
-    const upstream = hasUpstream && branch ? await this.getUpstream(cwd, branch) : null;
-    const { headSha, files } = await this.getFileChanges(cwd);
-    return { branch, headSha, hasUpstream, upstream, ahead, behind, files };
+    let raw: string;
+    try {
+      raw = await git(cwd, [
+        'status',
+        '--porcelain=v2',
+        '--branch',
+        '--ahead-behind',
+        '-z',
+        '--untracked-files=all',
+      ]);
+    } catch {
+      // Not a git repo, or git failed: no changes, but the branch if it reads.
+      return {
+        branch: await this.getBranch(cwd),
+        headSha: null,
+        hasUpstream: false,
+        upstream: null,
+        ahead: 0,
+        behind: 0,
+        files: [],
+      };
+    }
+    const { headSha, branch, upstream: upstreamName, aheadBehind } = parseBranchHeaders(raw);
+    const upstream =
+      aheadBehind && branch ? await this.getUpstreamMemo(cwd, branch, upstreamName) : null;
+    const files = await this.getFileChanges(cwd, raw);
+    return {
+      branch,
+      headSha,
+      hasUpstream: aheadBehind !== null,
+      upstream,
+      ahead: aheadBehind?.ahead ?? 0,
+      behind: aheadBehind?.behind ?? 0,
+      files,
+    };
+  }
+
+  /** `getUpstream`, read again only when the branch or its upstream's name changes. */
+  private static async getUpstreamMemo(
+    cwd: string,
+    branch: string,
+    upstreamName: string | null,
+  ): Promise<GitUpstream | null> {
+    const key = `${branch}\0${upstreamName ?? ''}`;
+    const memo = upstreamMemo.get(cwd);
+    if (memo?.key === key) return memo.upstream;
+    const upstream = await this.getUpstream(cwd, branch);
+    remember(upstreamMemo, cwd, { key, upstream });
+    return upstream;
   }
 
   /**
@@ -483,26 +593,7 @@ export class GitService {
     }
   }
 
-  /**
-   * Get ahead/behind counts relative to upstream.
-   */
-  static async getAheadBehind(
-    cwd: string,
-  ): Promise<{ hasUpstream: boolean; ahead: number; behind: number }> {
-    try {
-      const out = await git(cwd, ['rev-list', '--left-right', '--count', '@{upstream}...HEAD']);
-      const parts = out.trim().split(/\s+/);
-      return {
-        hasUpstream: true,
-        behind: parseInt(parts[0] ?? '', 10) || 0,
-        ahead: parseInt(parts[1] ?? '', 10) || 0,
-      };
-    } catch {
-      return { hasUpstream: false, ahead: 0, behind: 0 };
-    }
-  }
-
-  /** The commits behind `getAheadBehind`'s counts: HEAD's unpushed ones and
+  /** The commits behind `getStatus`'s ahead/behind: HEAD's unpushed ones and
    *  the upstream's tip. Empty / null without an upstream. */
   static async getUpstreamCommits(cwd: string): Promise<UpstreamCommits> {
     try {
@@ -517,45 +608,30 @@ export class GitService {
   }
 
   /**
-   * HEAD's commit and the changed files with their status and stat counts,
-   * from one `git status`.
+   * The changed files in `git status` output `raw`, with their stat counts.
+   * The counts depend only on the status (its records carry the HEAD and index
+   * blob of each path) and on the content of the files changed in the
+   * worktree, so they are reused while both stand still.
    */
-  private static async getFileChanges(
-    cwd: string,
-  ): Promise<{ headSha: string | null; files: FileChange[] }> {
-    let headSha: string | null;
-    let files: FileChange[];
-
-    // Staged + unstaged changes via porcelain v2, NUL-delimited so paths with
-    // spaces/quotes/non-ASCII bytes survive intact (see parsePorcelainV2Z);
-    // `--branch` adds the header that names HEAD's commit.
-    try {
-      const out = await git(cwd, [
-        'status',
-        '--porcelain=v2',
-        '--branch',
-        '-z',
-        '--untracked-files=all',
-      ]);
-      headSha = parseBranchOid(out);
-      files = parsePorcelainV2Z(out);
-    } catch {
-      // Not a git repo or git error
-      return { headSha: null, files: [] };
-    }
-
+  private static async getFileChanges(cwd: string, raw: string): Promise<FileChange[]> {
     // Hide only the one Dash-managed file: .claude/settings.local.json holds the
     // activity-monitor hooks Dash writes per task (ephemeral hook-server port), so
     // it's machine state, not user content. Everything else under .claude/ — skills,
     // commands, settings.json, agents — is real content and belongs in the changes list.
-    const filtered = files.filter((f) => f.path !== '.claude/settings.local.json');
+    const files = parsePorcelainV2Z(raw).filter((f) => f.path !== '.claude/settings.local.json');
+
+    // Stamped before counting: a file that changes meanwhile misses next time.
+    const key = `${raw}\0${(await worktreeStamps(cwd, files)).join('\0')}`;
+    const memo = statusMemo.get(cwd);
+    if (memo?.key === key) return memo.files.map((f) => ({ ...f }));
 
     // Get numstat for addition/deletion counts
-    await this.enrichWithNumstat(cwd, filtered);
+    await this.enrichWithNumstat(cwd, files);
     // Count lines in untracked files (numstat doesn't cover them)
-    await this.enrichUntrackedLineCounts(cwd, filtered);
+    await this.enrichUntrackedLineCounts(cwd, files);
 
-    return { headSha, files: filtered };
+    remember(statusMemo, cwd, { key, files: files.map((f) => ({ ...f })) });
+    return files;
   }
 
   /**
@@ -565,8 +641,6 @@ export class GitService {
    * snappy on repos with huge unignored vendor dumps.
    */
   private static async enrichUntrackedLineCounts(cwd: string, files: FileChange[]): Promise<void> {
-    const UNTRACKED_ENRICHMENT_CAP = 500;
-    const UNTRACKED_FILE_SIZE_CAP = 1024 * 1024;
     const untracked = files.filter((f) => f.status === 'untracked');
     if (untracked.length === 0 || untracked.length > UNTRACKED_ENRICHMENT_CAP) return;
     await Promise.all(
@@ -594,21 +668,13 @@ export class GitService {
    * Enrich file changes with addition/deletion line counts.
    */
   private static async enrichWithNumstat(cwd: string, files: FileChange[]): Promise<void> {
-    // Staged numstat
-    try {
-      const stagedOut = await git(cwd, ['diff', '--cached', '--numstat']);
-      this.applyNumstat(stagedOut, files, true);
-    } catch {
-      /* empty */
-    }
-
-    // Unstaged numstat
-    try {
-      const unstagedOut = await git(cwd, ['diff', '--numstat']);
-      this.applyNumstat(unstagedOut, files, false);
-    } catch {
-      /* empty */
-    }
+    // Staged and unstaged numstat; both only read, so they run side by side.
+    const [stagedOut, unstagedOut] = await Promise.all([
+      git(cwd, ['diff', '--cached', '--numstat']).catch(() => ''),
+      git(cwd, ['diff', '--numstat']).catch(() => ''),
+    ]);
+    this.applyNumstat(stagedOut, files, true);
+    this.applyNumstat(unstagedOut, files, false);
   }
 
   private static applyNumstat(output: string, files: FileChange[], staged: boolean): void {

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { GitStatus, PullRequestInfo, Project, Task } from '../../shared/types';
 import { fetchPrsFor, prDetectionTargets, prTargetFor, type BranchPrs } from './prDetectionTargets';
 import { useProjects, selectActiveTask } from './projectsStore';
+import { focusedInterval } from '../lib/focusedInterval';
 import { replaceEqualDeep } from '../lib/replaceEqualDeep';
 
 const GIT_POLL_INTERVAL = 5000;
@@ -252,12 +253,15 @@ export const useGit = create<GitStore>((set, get) => ({
     const offTree = window.electronAPI.onEditorTreeChanged((e) => {
       if (e.cwd === cwd) void get().refreshGitStatus(cwd);
     });
-    const timer = setInterval(() => void get().refreshGitStatus(cwd), GIT_POLL_INTERVAL);
+    // The poll catches what no watcher sees (an edit to a file already
+    // changed); it rests while Dash is in the background and reads at once on
+    // coming back. Git's own events still refresh it meanwhile.
+    const stopPoll = focusedInterval(() => void get().refreshGitStatus(cwd), GIT_POLL_INTERVAL);
     watchTeardown = () => {
       offGit();
       offTree();
       void window.electronAPI.gitUnwatch(id);
-      clearInterval(timer);
+      stopPoll();
     };
   },
 

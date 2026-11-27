@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseBranchOid, parsePorcelainV2Z } from '../GitService';
+import { parseBranchHeaders, parsePorcelainV2Z } from '../GitService';
 import type { FileChange } from '../../../shared/types';
 
 /**
@@ -109,25 +109,64 @@ describe('parsePorcelainV2Z', () => {
   });
 });
 
-describe('parseBranchOid', () => {
+describe('parseBranchHeaders', () => {
   const sha = 'a'.repeat(40);
 
-  it("reads HEAD's commit from the --branch header", () => {
+  it('reads HEAD, the branch, its upstream and ahead/behind', () => {
     const out = blob(
       `# branch.oid ${sha}`,
-      '# branch.head main',
+      '# branch.head feat/x',
+      '# branch.upstream origin/feat/x',
+      '# branch.ab +2 -13',
       '1 .M N... 100644 100644 100644 aaa bbb a.ts',
     );
-    expect(parseBranchOid(out)).toBe(sha);
+    expect(parseBranchHeaders(out)).toEqual({
+      headSha: sha,
+      branch: 'feat/x',
+      upstream: 'origin/feat/x',
+      aheadBehind: { ahead: 2, behind: 13 },
+    });
   });
 
-  it('reads it on a detached HEAD', () => {
-    expect(parseBranchOid(blob(`# branch.oid ${sha}`, '# branch.head (detached)'))).toBe(sha);
+  it('has no ahead/behind without an upstream, or when its ref is gone', () => {
+    expect(parseBranchHeaders(blob(`# branch.oid ${sha}`, '# branch.head main'))).toEqual({
+      headSha: sha,
+      branch: 'main',
+      upstream: null,
+      aheadBehind: null,
+    });
+    const gone = blob(`# branch.oid ${sha}`, '# branch.head main', '# branch.upstream origin/x');
+    expect(parseBranchHeaders(gone)).toMatchObject({ upstream: 'origin/x', aheadBehind: null });
   });
 
-  it('is null before the first commit, or without the header', () => {
-    expect(parseBranchOid(blob('# branch.oid (initial)', '# branch.head main'))).toBeNull();
-    expect(parseBranchOid(blob('? a.ts'))).toBeNull();
+  it("reads HEAD's commit on a detached HEAD, with no branch", () => {
+    expect(parseBranchHeaders(blob(`# branch.oid ${sha}`, '# branch.head (detached)'))).toEqual({
+      headSha: sha,
+      branch: null,
+      upstream: null,
+      aheadBehind: null,
+    });
+  });
+
+  it('has no commit before the first one, but the unborn branch', () => {
+    expect(parseBranchHeaders(blob('# branch.oid (initial)', '# branch.head main'))).toMatchObject({
+      headSha: null,
+      branch: 'main',
+    });
+  });
+
+  it('is empty without the headers, and stops at the first record', () => {
+    const empty = { headSha: null, branch: null, upstream: null, aheadBehind: null };
+    expect(parseBranchHeaders('')).toEqual(empty);
+    expect(parseBranchHeaders(blob('? a.ts', '# branch.head main'))).toEqual(empty);
+  });
+
+  it('keeps a slashed branch and an untracked path that starts with # apart', () => {
+    const out = blob(`# branch.oid ${sha}`, '# branch.head a/b/c', '? # not a header');
+    expect(parseBranchHeaders(out).branch).toBe('a/b/c');
+    expect(parsePorcelainV2Z(out)).toEqual([
+      { path: '# not a header', status: 'untracked', staged: false, additions: 0, deletions: 0 },
+    ]);
   });
 
   it('leaves the header out of the files', () => {
