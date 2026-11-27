@@ -1,6 +1,7 @@
 import React from 'react';
 import { GitBranch, SquareTerminal, FolderGit2, Tag } from 'lucide-react';
 import { Tooltip } from '../ui/Tooltip';
+import { CommitAuthor, CommitHash } from '../commits/CommitHoverCard';
 import type { GraphCommit, CommitRef } from '../../../shared/types';
 import type { TaskBranchInfo } from './CommitGraphModal';
 import { getLaneColor } from './graphColors';
@@ -117,32 +118,6 @@ function formatRelativeDate(timestamp: number): string {
   return `${Math.floor(months / 12)}y ago`;
 }
 
-function GithubLink({
-  href,
-  className,
-  children,
-}: {
-  href: string;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Tooltip content={href}>
-      <a
-        href={href}
-        className={`${className} hover:underline`}
-        onClick={(e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          void window.electronAPI.openExternal(href);
-        }}
-      >
-        {children}
-      </a>
-    </Tooltip>
-  );
-}
-
 export function CommitRow({
   graphCommit,
   selected,
@@ -202,33 +177,15 @@ export function CommitRow({
         <span className="truncate text-sm text-foreground">{commit.subject}</span>
       </div>
 
-      {/* Author */}
-      {authorUrl ? (
-        <GithubLink
-          href={authorUrl}
-          className="text-xs text-muted-fade-70 shrink-0 truncate max-w-[120px]"
-        >
-          {commit.authorName}
-        </GithubLink>
-      ) : (
-        <span className="text-xs text-muted-fade-70 shrink-0 truncate max-w-[120px]">
-          {commit.authorName}
-        </span>
-      )}
-
-      {/* Hash */}
-      {commitUrl ? (
-        <GithubLink
-          href={commitUrl}
-          className="text-xs text-muted-foreground shrink-0 tabular-nums"
-        >
-          {commit.shortHash}
-        </GithubLink>
-      ) : (
-        <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
-          {commit.shortHash}
-        </span>
-      )}
+      {/* Author and hash: links to the forge where it knows them. */}
+      <CommitAuthor
+        name={commit.authorName}
+        url={authorUrl}
+        className="max-w-30 shrink-0 truncate text-xs text-ink-3"
+      />
+      <span className="text-xs text-ink-2 shrink-0">
+        <CommitHash hash={commit.shortHash} url={commitUrl} />
+      </span>
 
       {/* Relative date */}
       <span className="text-xs text-muted-fade-70 shrink-0 w-14 text-right tabular-nums">

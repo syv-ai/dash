@@ -182,11 +182,7 @@ function DraftThreadCard({
         mentions={mentions}
         place={
           <span className="min-w-0 truncate">
-            <TextLink
-              look="quiet"
-              title={c.filePath}
-              onClick={() => onNavigate(c.viewScope, c.filePath, c.id)}
-            >
+            <TextLink title={c.filePath} onClick={() => onNavigate(c.viewScope, c.filePath, c.id)}>
               {place.name}
             </TextLink>
           </span>

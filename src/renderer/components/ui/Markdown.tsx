@@ -2,6 +2,7 @@ import { memo, useMemo, type ReactNode } from 'react';
 import { marked, type Token, type Tokens } from 'marked';
 import { CheckboxMark } from './Checkbox';
 import { Code } from './Code';
+import { TextLink } from './TextLink';
 
 /**
  * Markdown (GitHub-flavoured) rendered as React elements from marked's tokens,
@@ -33,10 +34,6 @@ function decode(s: string): string {
 
 const stripTags = (html: string) =>
   decode(html.replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]*>/g, ''));
-
-function openLink(href: string) {
-  if (/^https?:\/\//i.test(href)) void window.electronAPI.openExternal(href);
-}
 
 function blocks(tokens: Token[]): ReactNode[] {
   return tokens.map((t, i) => block(t, i));
@@ -170,20 +167,13 @@ function inline(tokens: Token[]): ReactNode[] {
       case 'link':
       case 'image': {
         const l = t as Tokens.Link | Tokens.Image;
+        // Long URLs break anywhere rather than widen the text (D92).
         return (
-          <a
-            key={i}
-            href={l.href}
-            title={l.href}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              openLink(l.href);
-            }}
-            className="text-link underline-offset-2 hover:underline wrap-anywhere"
-          >
-            {t.type === 'image' ? l.text || l.href : inline(l.tokens)}
-          </a>
+          <span key={i} className="wrap-anywhere">
+            <TextLink href={l.href} title={l.href}>
+              {t.type === 'image' ? l.text || l.href : inline(l.tokens)}
+            </TextLink>
+          </span>
         );
       }
       case 'html':

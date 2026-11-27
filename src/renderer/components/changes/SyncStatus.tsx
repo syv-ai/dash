@@ -24,7 +24,7 @@ export const isOutOfSync = (status: Sync): boolean =>
  * behind", one per line (the arrows and counts in the lines-added/deleted
  * green and red), each a link to those commits; "Up to date with upstream",
  * or "No upstream" (Details' Upstream row). The lines start flush with each
- * other. The words stay ink, never the link blue; they underline on hover.
+ * other. Links in the one link look; the counts keep their green and red.
  */
 export function SyncStatus({ status, links }: { status: Sync; links: SyncLinks }) {
   if (!status.hasUpstream) return <span>No upstream</span>;
@@ -33,7 +33,7 @@ export function SyncStatus({ status, links }: { status: Sync; links: SyncLinks }
   return (
     <span className="inline-grid justify-items-start py-0.5 text-left tabular-nums">
       {ahead > 0 && (
-        <TextLink look="quiet" title="Show the unpushed commits" onClick={links.onShowUnpushed}>
+        <TextLink title="Show the unpushed commits" onClick={links.onShowUnpushed}>
           <span className="inline-flex items-center gap-1">
             <ArrowUp size={14} strokeWidth={1.8} className="text-loc-add" />
             <span className="text-loc-add">{ahead}</span> ahead
@@ -41,7 +41,7 @@ export function SyncStatus({ status, links }: { status: Sync; links: SyncLinks }
         </TextLink>
       )}
       {behind > 0 && (
-        <TextLink look="quiet" title="Show the upstream's commits" onClick={links.onShowUpstream}>
+        <TextLink title="Show the upstream's commits" onClick={links.onShowUpstream}>
           <span className="inline-flex items-center gap-1">
             <ArrowDown size={14} strokeWidth={1.8} className="text-loc-del" />
             <span className="text-loc-del">{behind}</span> behind
@@ -135,7 +135,7 @@ function SyncLine({
     const text = <SyncPart count={count} words={words[side]} side={side} density={density} />;
     if (!links) return text;
     return (
-      <TextLink look="muted" title={titled ? title : undefined} onClick={onClick}>
+      <TextLink title={titled ? title : undefined} onClick={onClick}>
         {text}
       </TextLink>
     );

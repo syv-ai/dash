@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { branchUrl, forgeBranchUrl, forgeCommitUrl, parseForgeRepo } from '../urls';
+import {
+  branchUrl,
+  forgeBranchUrl,
+  forgeCommitUrl,
+  githubProfileUrl,
+  parseForgeRepo,
+} from '../urls';
 
 describe('parseForgeRepo', () => {
   it.each([
@@ -72,5 +78,20 @@ describe('forgeCommitUrl', () => {
     expect(
       forgeCommitUrl({ kind: 'ado', webUrl: 'https://dev.azure.com/org/p/_git/r' }, 'abc'),
     ).toBe('https://dev.azure.com/org/p/_git/r/commit/abc');
+  });
+});
+
+describe('githubProfileUrl', () => {
+  it('links a login on a GitHub remote to its profile', () => {
+    expect(githubProfileUrl('git@github.com:syv-ai/dash.git', 'octo-cat')).toBe(
+      'https://github.com/octo-cat',
+    );
+  });
+
+  it('has none for another forge, no remote or no login', () => {
+    expect(githubProfileUrl('git@gitlab.com:group/proj.git', 'octo')).toBeNull();
+    expect(githubProfileUrl('https://dev.azure.com/org/proj/_git/repo', 'Jane Doe')).toBeNull();
+    expect(githubProfileUrl(null, 'octo')).toBeNull();
+    expect(githubProfileUrl('git@github.com:syv-ai/dash.git', '')).toBeNull();
   });
 });

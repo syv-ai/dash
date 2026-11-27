@@ -518,7 +518,7 @@ function UpdatesTab({ appVersion }: { appVersion: string }) {
           )}
           {status?.availableVersion && (
             <p className="type-caption">
-              <TextLink look="muted" href={`${RELEASES_URL}/tag/v${status.availableVersion}`}>
+              <TextLink href={`${RELEASES_URL}/tag/v${status.availableVersion}`}>
                 What&rsquo;s new in {status.availableVersion}
               </TextLink>
             </p>
@@ -617,22 +617,14 @@ function AboutTab({
           <span className="tabular-nums">{claudeVersion}</span>
         </DetailItem>
         <DetailItem label="Updates">
-          <TextLink look="quiet" onClick={onShowUpdates}>
-            {updateHeadline(updateStatus)}
-          </TextLink>
+          <TextLink onClick={onShowUpdates}>{updateHeadline(updateStatus)}</TextLink>
         </DetailItem>
       </DetailList>
 
       <p className="type-caption flex flex-wrap gap-x-3 gap-y-1">
-        <TextLink look="muted" href="https://syv.ai">
-          syv.ai
-        </TextLink>
-        <TextLink look="muted" href="https://github.com/syv-ai/dash">
-          Source on GitHub
-        </TextLink>
-        <TextLink look="muted" href={RELEASES_URL}>
-          Release notes
-        </TextLink>
+        <TextLink href="https://syv.ai">syv.ai</TextLink>
+        <TextLink href="https://github.com/syv-ai/dash">Source on GitHub</TextLink>
+        <TextLink href={RELEASES_URL}>Release notes</TextLink>
       </p>
     </>
   );

@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import { ExternalLink } from 'lucide-react';
 import type { PrCheck, PrIssue, PrReview, PrReviewer } from '../../../shared/types';
-import { branchUrl } from '../../../shared/urls';
+import { branchUrl, githubProfileUrl } from '../../../shared/urls';
 import { DetailSection } from '../ui/DetailList';
 import { LineStats } from '../ui/LineStats';
 import { ListRow } from '../ui/ListRow';
@@ -23,7 +23,7 @@ import { useSectionOpen } from './useSectionOpen';
 /** A person, linked to their page on the forge when it has one. */
 function Person({ name, url }: { name: string; url: string | null }) {
   return url ? (
-    <TextLink href={url} look="quiet" title={`${name}'s profile`}>
+    <TextLink href={url} title={`${name}'s profile`}>
       {name}
     </TextLink>
   ) : (
@@ -57,7 +57,7 @@ function Issues({ issues }: { issues: PrIssue[] }) {
       {issues.map((issue, i) => (
         <Fragment key={issue.number}>
           {i > 0 && ', '}
-          <TextLink href={issue.url} look="quiet" title={`Open #${issue.number} on the forge`}>
+          <TextLink href={issue.url} title={`Open #${issue.number} on the forge`}>
             <span className="tabular-nums">#{issue.number}</span>
             {issue.title && ` ${issue.title}`}
           </TextLink>
@@ -93,11 +93,7 @@ export function ReviewOverview({ review, remote }: { review: PrReview; remote: s
               <li>
                 <span className="tabular-nums">{review.behindBase}</span> behind{' '}
                 {baseHref ? (
-                  <TextLink
-                    href={baseHref}
-                    look="quiet"
-                    title={`Open ${review.baseRef} on the forge`}
-                  >
+                  <TextLink href={baseHref} title={`Open ${review.baseRef} on the forge`}>
                     <span className="wrap-anywhere">{review.baseRef}</span>
                   </TextLink>
                 ) : (
@@ -114,7 +110,17 @@ export function ReviewOverview({ review, remote }: { review: PrReview; remote: s
             </li>
             {threads && <li className="tabular-nums">{threads}</li>}
             <Reviewers reviewers={review.reviewers} />
-            {review.assignees.length > 0 && <li>Assigned to {review.assignees.join(', ')}</li>}
+            {review.assignees.length > 0 && (
+              <li>
+                Assigned to{' '}
+                {review.assignees.map((a, i) => (
+                  <Fragment key={a}>
+                    {i > 0 && ', '}
+                    <Person name={a} url={githubProfileUrl(remote, a)} />
+                  </Fragment>
+                ))}
+              </li>
+            )}
             <Issues issues={review.issues} />
           </ul>
         </div>

@@ -2,74 +2,73 @@ import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { focusRing } from './styles';
 
-const base = cn(
-  'cursor-pointer rounded-sm underline-offset-2 transition-colors hover:underline',
+/**
+ * The one link look (D191, D272): the `link` colour, no underline until
+ * hovered; it inherits size, weight and wrapping. Markdown's links take it
+ * too; there are no other looks.
+ */
+export const linkClass = cn(
+  'cursor-pointer rounded-sm text-link underline-offset-2 transition-colors hover:underline',
   focusRing,
 );
 
-const looks = {
-  /** In running text: the link colour, underlined only on hover. */
-  prose: 'text-link',
-  /** A value in a row, a name in a meta line: ink, underlined on hover. */
-  quiet: 'text-ink decoration-ink-3 hover:decoration-ink',
-  /** Secondary text that leads somewhere (an empty state's status): ink-2,
-   *  underlined on hover. */
-  muted: 'text-ink-2 decoration-ink-3 hover:text-ink hover:decoration-ink',
-} as const;
-
-export type TextLinkLook = keyof typeof looks;
+const isWebUrl = (href: string) => /^https?:\/\//i.test(href);
 
 /**
- * A link inside text. `href` opens in the browser; `onClick` acts in the app
- * (rendered as a button). In running text it takes the `link` colour (a soft
- * blue, D191) and no underline until hovered; `quiet` (a value in a row, a
- * name in a meta line, a title) stays ink and `muted` (secondary text) ink-2,
- * both underlining on hover. It inherits size and weight.
+ * A link inside text. `href` opens in the browser (http(s) only); `onClick`
+ * acts in the app. Both render an inline `<a>` (an action is a
+ * `role="button"` one, reached by Tab and fired by Enter or Space), never a
+ * `<button>`: a button is an atomic inline box, so a long link inside a
+ * truncating parent was cut off rather than ellipsized.
  */
 export function TextLink({
   href,
   onClick,
-  look = 'prose',
   title,
   children,
 }: {
   /** An http(s) URL, opened with the system browser. */
   href?: string;
   onClick?: () => void;
-  look?: TextLinkLook;
   /** Hover text. */
   title?: string;
   children: React.ReactNode;
 }) {
-  const classes = cn(base, looks[look]);
   if (href) {
     return (
       <a
         href={href}
         title={title}
-        className={classes}
+        className={linkClass}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
           onClick?.();
-          void window.electronAPI.openExternal(href);
+          if (isWebUrl(href)) void window.electronAPI.openExternal(href);
         }}
       >
         {children}
       </a>
     );
   }
+  const act = (e: React.SyntheticEvent) => {
+    e.stopPropagation();
+    onClick?.();
+  };
   return (
-    <button
-      type="button"
+    <a
+      role="button"
+      tabIndex={0}
       title={title}
-      className={cn(classes, 'text-left')}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick?.();
+      className={linkClass}
+      onClick={act}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        act(e);
       }}
     >
       {children}
-    </button>
+    </a>
   );
 }

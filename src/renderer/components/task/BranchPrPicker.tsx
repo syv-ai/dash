@@ -143,9 +143,7 @@ export function BranchPrPicker({
       <Notice icon={<AlertCircle size={14} strokeWidth={1.8} />}>
         <span className="flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate">{branchError}</span>
-          <TextLink look="quiet" onClick={onRetry}>
-            Retry
-          </TextLink>
+          <TextLink onClick={onRetry}>Retry</TextLink>
         </span>
       </Notice>
     );
@@ -246,7 +244,6 @@ export function BranchPrPicker({
                     <AlertCircle size={14} strokeWidth={1.8} className="shrink-0 text-state-fail" />
                     <span className="min-w-0 flex-1 text-state-fail">{prError}</span>
                     <TextLink
-                      look="quiet"
                       onClick={() => {
                         setPrs(null);
                         void fetchPrs();

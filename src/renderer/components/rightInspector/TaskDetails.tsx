@@ -159,7 +159,7 @@ export function TaskDetails({
         <DetailList>
           {branch && (
             <DetailItem label="Branch" copy={branch} title={branch}>
-              {branch}
+              <BranchLink branch={branch} status={gitStatus} remote={project?.gitRemote ?? null} />
             </DetailItem>
           )}
           {gitStatus && (
@@ -221,6 +221,27 @@ export function TaskDetails({
         </DetailSection>
       )}
     </div>
+  );
+}
+
+/** The branch, linked to its page on the forge once it is pushed to origin
+ *  (the project's remote is origin's). */
+function BranchLink({
+  branch,
+  status,
+  remote,
+}: {
+  branch: string;
+  status: GitStatus | null;
+  remote: string | null;
+}) {
+  const upstream = status?.hasUpstream ? status.upstream : null;
+  const repo = upstream?.remote === 'origin' ? parseForgeRepo(remote) : null;
+  if (!upstream || !repo) return <>{branch}</>;
+  return (
+    <TextLink href={forgeBranchUrl(repo, upstream.branch)} title={`Open ${branch} on the forge`}>
+      {branch}
+    </TextLink>
   );
 }
 
@@ -296,7 +317,7 @@ function LastCommit({
         )}
       />
       <span className="type-caption shrink-0 tabular-nums">
-        <CommitHash hash={commit.shortHash} url={links.commitUrl} look="prose" /> ·{' '}
+        <CommitHash hash={commit.shortHash} url={links.commitUrl} /> ·{' '}
         {formatRelativeTime(commit.authorDate, Date.now() / 1000)}
       </span>
     </span>

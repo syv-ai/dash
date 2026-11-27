@@ -15,9 +15,10 @@ import {
   ArchiveRestore,
 } from 'lucide-react';
 import type { Project, Task, ActivityInfo } from '../../../shared/types';
-import { linkedItemUrl } from '../../../shared/urls';
 import { IconButton } from '../ui/IconButton';
+import { TextLink } from '../ui/TextLink';
 import { Tooltip } from '../ui/Tooltip';
+import { LinkedItemLinks } from '../taskHeader/LinkedItemLinks';
 import { TaskActions } from '../task/TaskActions';
 import { TokenBadge } from '../ui/TokenBadge';
 import { PrBadge } from '../ui/PrBadge';
@@ -159,21 +160,14 @@ export function ProjectOverview({
                   </Tooltip>
                 )}
                 {project.gitRemote && (
-                  <Tooltip content={project.gitRemote!}>
-                    <a
-                      href={project.gitRemote}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        void window.electronAPI.openExternal(project.gitRemote!);
-                      }}
-                      className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
-                    >
-                      <Globe size={11} strokeWidth={1.8} />
-                      <span className="truncate max-w-[200px]">
+                  <span className="flex min-w-0 items-center gap-1">
+                    <Globe size={11} strokeWidth={1.8} />
+                    <span className="truncate max-w-50">
+                      <TextLink href={project.gitRemote} title={project.gitRemote}>
                         {remoteDisplayName(project.gitRemote)}
-                      </span>
-                    </a>
-                  </Tooltip>
+                      </TextLink>
+                    </span>
+                  </span>
                 )}
                 {project.baseRef && (
                   <span className="flex items-center gap-1">
@@ -330,48 +324,12 @@ export function ProjectOverview({
                               : 'Issues:';
                           return (
                             <div className="flex items-start gap-1.5 text-muted-foreground">
-                              <span className="shrink-0 text-muted-fade-70 mt-0.5">{label}</span>
-                              <div className="flex flex-wrap gap-1.5">
-                                {linkedItems.slice(0, 3).map((item) => {
-                                  const url = linkedItemUrl(item, project.gitRemote);
-                                  const badge = (
-                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-xs text-primary font-medium">
-                                      #{item.id}
-                                    </span>
-                                  );
-                                  const link = url ? (
-                                    <a
-                                      key={`${item.provider}-${item.id}`}
-                                      href={url}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        e.preventDefault();
-                                        void window.electronAPI.openExternal(url);
-                                      }}
-                                      className="hover:opacity-80 transition-opacity"
-                                    >
-                                      {badge}
-                                    </a>
-                                  ) : (
-                                    <span key={`${item.provider}-${item.id}`}>{badge}</span>
-                                  );
-                                  return item.title ? (
-                                    <Tooltip
-                                      content={item.title}
-                                      key={`${item.provider}-${item.id}`}
-                                    >
-                                      {link}
-                                    </Tooltip>
-                                  ) : (
-                                    link
-                                  );
-                                })}
-                                {linkedItems.length > 3 && (
-                                  <span className="text-xs text-muted-foreground self-center">
-                                    +{linkedItems.length - 3} more
-                                  </span>
-                                )}
-                              </div>
+                              <span className="shrink-0 text-muted-fade-70">{label}</span>
+                              <LinkedItemLinks
+                                items={linkedItems}
+                                gitRemote={project.gitRemote ?? null}
+                                max={3}
+                              />
                             </div>
                           );
                         })()}

@@ -11,6 +11,7 @@ import { IconButton } from '../ui/IconButton';
 import { IdeIcon } from '../ui/IdeIcon';
 import { PrBadge } from '../ui/PrBadge';
 import { TokenBadge } from '../ui/TokenBadge';
+import { TextLink } from '../ui/TextLink';
 import { Tooltip } from '../ui/Tooltip';
 import {
   DropdownMenu,
@@ -23,7 +24,7 @@ import {
 import { TaskMenuItems, onTaskMenuCloseAutoFocus } from '../task/TaskMenuItems';
 import { useFittedDensity } from '../ui/useFittedDensity';
 import { cn } from '../../lib/cn';
-import { LinkedItemBadges } from './LinkedItemBadges';
+import { LinkedItemLinks } from './LinkedItemLinks';
 import { HEADER_LABELS, type HeaderLabel, fitTaskHeader, labelShows } from './headerFit';
 
 interface TaskHeaderProps {
@@ -102,14 +103,9 @@ export function TaskHeader({
         >
           {/* Capped so a long branch doesn't crowd the row; the tooltip names it. */}
           {branchHref ? (
-            <a
-              href={branchHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="max-w-64 truncate transition-colors hover:text-ink"
-            >
-              {branch}
-            </a>
+            <span className="max-w-64 truncate">
+              <TextLink href={branchHref}>{branch}</TextLink>
+            </span>
           ) : (
             <span className="max-w-64 truncate">{branch}</span>
           )}
@@ -117,7 +113,7 @@ export function TaskHeader({
       </span>
     ),
     linked: task.linkedItems && task.linkedItems.length > 0 && (
-      <LinkedItemBadges items={task.linkedItems} gitRemote={project.gitRemote ?? null} />
+      <LinkedItemLinks items={task.linkedItems} gitRemote={project.gitRemote ?? null} />
     ),
     model: modelName && (
       <Tooltip content="Model">

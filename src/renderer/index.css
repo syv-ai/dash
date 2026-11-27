@@ -1151,19 +1151,11 @@
   font-size: var(--text-xs);
   color: hsl(var(--ink-2));
 }
+/* Holds the sha's TextLink (opens the commit in the graph); the link look is
+ * TextLink's own. */
 .blame-label-sha {
   font-family: 'SF Mono', ui-monospace, Menlo, monospace;
   font-size: var(--text-xs);
-  color: hsl(var(--ink));
-  /* Rendered as a <button> (opens the commit in the graph) — strip the native
-   * chrome and read as an inline link. */
-  padding: 0;
-  border: none;
-  background: none;
-  cursor: pointer;
-}
-.blame-label-sha:hover {
-  text-decoration: underline;
 }
 .blame-label-age {
   white-space: nowrap;

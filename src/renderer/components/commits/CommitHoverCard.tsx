@@ -3,7 +3,7 @@ import { formatRelativeTime } from '../../../shared/relativeTime';
 import type { CommitSummary } from '../diffEditor/types';
 import { HoverCard, type HoverCardTrigger } from '../ui/HoverCard';
 import { LineStats } from '../ui/LineStats';
-import { TextLink, type TextLinkLook } from '../ui/TextLink';
+import { TextLink } from '../ui/TextLink';
 import { useCommitLinks } from './useCommitLinks';
 
 /**
@@ -33,14 +33,9 @@ export function CommitHoverCard({
       onOpen={() => setPeeked(true)}
       footer={
         <div className="type-caption flex items-center gap-2">
-          <CommitHash hash={commit.shortHash} url={links.commitUrl} look="prose" />
+          <CommitHash hash={commit.shortHash} url={links.commitUrl} />
           <span>·</span>
-          <CommitAuthor
-            name={commit.authorName}
-            url={links.authorUrl}
-            look="prose"
-            className="truncate"
-          />
+          <CommitAuthor name={commit.authorName} url={links.authorUrl} className="truncate" />
           <span>·</span>
           <span className="tabular-nums">{when}</span>
           <span className="ml-auto">
@@ -55,21 +50,12 @@ export function CommitHoverCard({
   );
 }
 
-/** A commit's hash, a link to its forge page when it has one (`quiet` ink
- *  by default; the hover card's meta line takes the `link` colour). */
-export function CommitHash({
-  hash,
-  url,
-  look = 'quiet',
-}: {
-  hash: string;
-  url: string | null;
-  look?: TextLinkLook;
-}) {
+/** A commit's hash, a link to its forge page when it has one. */
+export function CommitHash({ hash, url }: { hash: string; url: string | null }) {
   return (
     <span className="tabular-nums">
       {url ? (
-        <TextLink look={look} href={url} title="Open the commit on the remote">
+        <TextLink href={url} title="Open the commit on the remote">
           {hash}
         </TextLink>
       ) : (
@@ -83,18 +69,16 @@ export function CommitHash({
 export function CommitAuthor({
   name,
   url,
-  look = 'quiet',
   className,
 }: {
   name: string;
   url: string | null;
-  look?: TextLinkLook;
   className?: string;
 }) {
   return (
     <span className={className}>
       {url ? (
-        <TextLink look={look} href={url} title="Open the author's profile">
+        <TextLink href={url} title="Open the author's profile">
           {name}
         </TextLink>
       ) : (

@@ -178,6 +178,14 @@ export function forgeCommitUrl(repo: ForgeRepo, sha: string): string {
   return repo.kind === 'gitlab' ? `${repo.webUrl}/-/commit/${sha}` : `${repo.webUrl}/commit/${sha}`;
 }
 
+/** A GitHub login's profile page, for a GitHub remote; null elsewhere (ADO
+ *  and GitLab name people by display name or need an API lookup). */
+export function githubProfileUrl(remote: string | null, login: string): string | null {
+  return parseForgeRepo(remote)?.kind === 'github' && login
+    ? `https://github.com/${encodeURIComponent(login)}`
+    : null;
+}
+
 /** Convert a git remote URL + branch name to a branch URL on the hosting provider */
 export function branchUrl(remote: string, branch: string): string | null {
   const repo = parseForgeRepo(remote);

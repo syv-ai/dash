@@ -50,6 +50,7 @@ import { markdownToDocument } from './editor/markdownPreview';
 import { LoadingPill } from './editor/LoadingPill';
 import { StaleBanner } from './editor/StaleBanner';
 import { SaveErrorBanner } from './editor/SaveErrorBanner';
+import { TextLink } from '../ui/TextLink';
 import '../../monaco-workers';
 
 const WORDWRAP_KEY = 'diffEditor.wordWrap';
@@ -579,16 +580,18 @@ export function EditorPane({
                       <span className="blame-label-meta">
                         {!rulerMark.label.uncommitted && (
                           <>
-                            <button
-                              type="button"
-                              className="blame-label-sha"
-                              title="Open this commit in the graph"
-                              onClick={() =>
-                                useGit.getState().openCommitGraphAtCommit(rulerMark.label.shortSha)
-                              }
-                            >
-                              {rulerMark.label.shortSha}
-                            </button>
+                            <span className="blame-label-sha">
+                              <TextLink
+                                title="Open this commit in the graph"
+                                onClick={() =>
+                                  useGit
+                                    .getState()
+                                    .openCommitGraphAtCommit(rulerMark.label.shortSha)
+                                }
+                              >
+                                {rulerMark.label.shortSha}
+                              </TextLink>
+                            </span>
                             {rulerMark.label.age && (
                               <span className="blame-label-age">{rulerMark.label.age} ago</span>
                             )}
