@@ -406,7 +406,8 @@ export function TerminalTabs({
     const closeable = tabs.length > 1;
     const showDot = isHotTui || (tab.kind !== 'tui' && livePtyIds.has(tab.id));
     // Hot wizard = red; live shell/service = green. A running service is a
-    // steady state (solid); shells and hot wizards pulse.
+    // steady state (solid); shells and hot wizards breathe a few times, then
+    // hold (D59).
     const dotColor = isHotTui ? 'bg-state-fail' : 'bg-state-done';
     return (
       <PillTab
@@ -423,7 +424,7 @@ export function TerminalTabs({
           showDot && (
             <span
               className={`size-1.5 rounded-full ${dotColor} ${
-                tab.kind === 'service' ? '' : 'status-pulse'
+                tab.kind === 'service' ? '' : 'motion-safe:animate-breathe-few'
               }`}
             />
           )
@@ -477,7 +478,7 @@ export function TerminalTabs({
           <Terminal size={14} strokeWidth={1.8} />
           <span className="font-medium">{label}</span>
           {hasUnseenTui ? (
-            <span className="w-1.5 h-1.5 rounded-full bg-state-fail status-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-state-fail motion-safe:animate-breathe-few" />
           ) : (
             hasLiveService && (
               // A running service is a steady state — solid green, no pulse.

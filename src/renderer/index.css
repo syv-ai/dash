@@ -689,17 +689,6 @@
     transform: scale(1);
   }
 }
-@keyframes pulse-glow {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.3;
-    transform: scale(0.85);
-  }
-}
 
 /* Height-animated disclosure — expands from 0 to auto without measuring.
    Use as `.collapse-grid[data-open] > <single child>`; the child is clipped
@@ -798,12 +787,6 @@
   animation: commitRowIn var(--motion-calm) var(--ease-settle) both;
 }
 
-/* ── Status Pulse ─────────────────────────────────────────── */
-
-.status-pulse {
-  animation: pulse-glow 2s ease-in-out infinite;
-}
-
 /* ── Drawer tabs ──────────────────────────────────────────── */
 
 @keyframes drawerTabIn {
@@ -844,28 +827,6 @@
 /* shim: delete in phase 4 */
 .sidebar-row-hover:hover {
   background: hsl(var(--hover));
-}
-
-/* A PR whose checks are running: its PrBadge icon pulses like the busy
-   session orb (same rhythm as pulse-glow, without the dot's halo). */
-.pr-ci-running {
-  animation: pr-ci-pulse 2s ease-in-out infinite;
-}
-@keyframes pr-ci-pulse {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.3;
-    transform: scale(0.85);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .pr-ci-running {
-    animation: none;
-  }
 }
 
 /* Status dots: flat agent-state colours. */

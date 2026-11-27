@@ -90,9 +90,10 @@ export function prStatusPill(state: PrState): string {
   return `${prStatusTint(state)} ${hover}`;
 }
 
-/** The pulse (index.css) for a PR icon while its checks run, else nothing. */
+/** A PR icon's breaths while its checks run, else nothing: a few, then it
+ *  holds in the running colour (D59). */
 export function ciPulse(ci: CiState): string {
-  return ci === 'pending' ? 'pr-ci-running' : '';
+  return ci === 'pending' ? 'motion-safe:animate-breathe-few' : '';
 }
 
 /** Checks' colour by their rolled-up state, as an open PR's icon shows them:

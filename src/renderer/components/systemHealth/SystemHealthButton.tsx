@@ -65,7 +65,7 @@ export function SystemHealthButton({
           <HeartPulse
             size={14}
             strokeWidth={1.8}
-            className={cn(level === 'critical' && 'motion-safe:animate-breathe')}
+            className={cn(level === 'critical' && 'motion-safe:animate-breathe-few')}
           />
         </IconButton>
       </PopoverTrigger>

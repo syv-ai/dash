@@ -17,8 +17,8 @@ describe('checkLook', () => {
     expect(checkLook('skipped').tone).toBe('text-icon');
   });
 
-  it('pulses only while running', () => {
-    expect(checkLook('pending').pulse).toBe('pr-ci-running');
+  it('breathes a few times only while running', () => {
+    expect(checkLook('pending').pulse).toBe('motion-safe:animate-breathe-few');
     for (const s of ['passing', 'failing', 'skipped'] as const) expect(checkLook(s).pulse).toBe('');
   });
 });

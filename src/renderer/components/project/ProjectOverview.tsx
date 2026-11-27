@@ -18,6 +18,7 @@ import type { Project, Task, ActivityInfo } from '../../../shared/types';
 import { IconButton } from '../ui/IconButton';
 import { TextLink } from '../ui/TextLink';
 import { Tooltip } from '../ui/Tooltip';
+import { StatusDot, type AgentState } from '../ui/StatusDot';
 import { LinkedItemLinks } from '../taskHeader/LinkedItemLinks';
 import { TaskActions } from '../task/TaskActions';
 import { TokenBadge } from '../ui/TokenBadge';
@@ -51,46 +52,41 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
+/** A task's agent state on the overview: the same StatusDot (and colours)
+ *  as the sidebar, with the reason in a tooltip. */
 function ActivityDot({ info }: { info?: ActivityInfo }) {
-  const state = info?.state;
-  if (state === 'error') {
-    const label =
-      info?.error?.type === 'rate_limit'
-        ? 'Rate limited'
-        : info?.error?.type === 'authentication_failed'
-          ? 'Auth error'
-          : 'Error';
-    return (
-      <Tooltip content={label}>
-        <div className="w-2 h-2 rounded-full bg-destructive" />
-      </Tooltip>
-    );
-  }
-  if (state === 'waiting') {
-    return (
-      <Tooltip content="Waiting for user">
-        <div className="w-2 h-2 rounded-full bg-orange-500" />
-      </Tooltip>
-    );
-  }
-  if (state === 'busy') {
-    const label = info?.compacting
-      ? 'Compacting context...'
-      : info?.tool?.label || 'Claude is working';
-    return (
-      <Tooltip content={label}>
-        <div className="w-2 h-2 rounded-full bg-amber-400 status-pulse" />
-      </Tooltip>
-    );
-  }
-  if (state === 'idle') {
-    return (
-      <Tooltip content="Idle">
-        <div className="w-2 h-2 rounded-full bg-emerald-400" />
-      </Tooltip>
-    );
-  }
-  return <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />;
+  const [state, label]: [AgentState, string] = (() => {
+    switch (info?.state) {
+      case 'error':
+        return [
+          'fail',
+          info.error?.type === 'rate_limit'
+            ? 'Rate limited'
+            : info.error?.type === 'authentication_failed'
+              ? 'Auth error'
+              : 'Error',
+        ];
+      case 'waiting':
+        return ['needs', 'Waiting for you'];
+      case 'busy':
+        return [
+          'work',
+          info.compacting ? 'Compacting context…' : info.tool?.label || 'Claude is working',
+        ];
+      case 'idle':
+        return ['idle', 'Idle'];
+      default:
+        return ['asleep', 'Asleep'];
+    }
+  })();
+  if (state === 'asleep') return <StatusDot state="asleep" />;
+  return (
+    <Tooltip content={label}>
+      <span className="inline-flex">
+        <StatusDot state={state} label={label} />
+      </span>
+    </Tooltip>
+  );
 }
 
 function remoteDisplayName(remote: string): string {
