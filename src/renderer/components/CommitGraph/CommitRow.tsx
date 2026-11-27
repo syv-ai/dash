@@ -138,7 +138,7 @@ export function CommitRow({
 
   return (
     <div
-      className={`flex items-center gap-2 px-3 cursor-pointer transition-colors duration-75 ${
+      className={`flex items-center gap-2 px-3 cursor-pointer transition-colors ${
         selected ? 'bg-primary/10' : 'hover:bg-accent/50'
       } ${rowIndex < 30 ? 'animate-commit-row' : ''}`}
       style={{ height: ROW_HEIGHT, animationDelay: staggerDelay }}

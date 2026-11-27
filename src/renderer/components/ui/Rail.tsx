@@ -35,10 +35,7 @@ export function Rail({
           type="button"
           aria-label={label}
           onClick={onClick}
-          className={cn(
-            'absolute inset-0 rounded-lg transition-colors duration-150 hover:bg-hover',
-            focusRing,
-          )}
+          className={cn('absolute inset-0 rounded-lg transition-colors hover:bg-hover', focusRing)}
         />
       </Tooltip>
       {/* Over the space, letting its clicks through but for the items'. */}

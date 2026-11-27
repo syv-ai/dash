@@ -4,7 +4,8 @@ import { extendTailwindMerge, validators } from 'tailwind-merge';
 /**
  * tailwind-merge taught Dash's theme (index.css `@theme`): the five text sizes
  * and five radii, so `text-sm` vs `text-ink-2` and `rounded-md` vs `rounded-xl`
- * resolve as size/colour and radius/radius; and `fade-N`, which sets opacity.
+ * resolve as size/colour and radius/radius; `fade-N`, which sets opacity; and
+ * the motion durations (`duration-quick|calm|slow`).
  */
 const twMerge = extendTailwindMerge({
   override: {
@@ -16,6 +17,7 @@ const twMerge = extendTailwindMerge({
   extend: {
     classGroups: {
       opacity: [{ fade: [validators.isNumber] }],
+      duration: [{ duration: ['quick', 'calm', 'slow'] }],
     },
   },
 });

@@ -4,6 +4,7 @@ import type { CommitDetail as CommitDetailType } from '../../../shared/types';
 import { LineStats } from '../ui/LineStats';
 import { CommitAuthor, CommitHash } from '../commits/CommitHoverCard';
 import { useCommitLinks } from '../commits/useCommitLinks';
+import { EASE, MOTION_MS } from '../../lib/motion';
 
 interface CommitDetailProps {
   detail: CommitDetailType | null;
@@ -48,7 +49,7 @@ export function CommitDetailPanel({
       style={{
         width: visible ? 340 : 0,
         opacity: visible ? 1 : 0,
-        transition: 'width 250ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms ease',
+        transition: `width ${MOTION_MS.slow}ms ${EASE.settle}, opacity ${MOTION_MS.calm}ms ${EASE.settle}`,
       }}
       onTransitionEnd={(e) => {
         if (e.propertyName === 'width' && !open) onClosed();

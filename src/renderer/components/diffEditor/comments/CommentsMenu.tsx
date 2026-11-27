@@ -25,7 +25,7 @@ export function CommentsMenu({ taskId, unsent, onNavigate }: Props) {
           <ChevronUp
             size={14}
             strokeWidth={1.8}
-            className="transition-transform duration-200 ease-out group-aria-expanded/trigger:rotate-180"
+            className="transition-transform duration-calm ease-settle group-aria-expanded/trigger:rotate-180"
           />
         </Button>
       </PopoverTrigger>

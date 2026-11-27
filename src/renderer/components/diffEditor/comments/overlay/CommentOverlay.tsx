@@ -7,6 +7,7 @@ import { CommentIcon } from '../CommentIcon';
 import { DraftBubble } from '../DraftBubble';
 import type { ComposerKind } from '../CommentInputBar';
 import { useViewzones, VIEWZONE_TOP_PAD_PX, type ViewzoneGroup } from './useViewzones';
+import { BUBBLE_FADE } from '../BubbleShell';
 
 interface Props {
   liveComments: LiveComment[];
@@ -273,7 +274,7 @@ export function CommentOverlay({
                 // at 0 and the CSS transition smooths the per-frame updates
                 // into a single coherent fade-in.
                 opacity: 0,
-                transition: 'opacity 240ms ease-out',
+                transition: BUBBLE_FADE,
               }}
             >
               <BubbleStack
@@ -353,7 +354,7 @@ export function CommentOverlay({
                   width: bubbleWidth,
                   pointerEvents: 'auto',
                   opacity: 0,
-                  transition: 'opacity 240ms ease-out',
+                  transition: BUBBLE_FADE,
                 }}
               >
                 <DraftBubble

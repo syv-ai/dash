@@ -5,7 +5,7 @@ import { focusRing } from './styles';
 
 const switchVariants = cva(
   cn(
-    'group/switch relative inline-flex shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-colors duration-200 bg-select aria-checked:bg-ink-3 disabled:cursor-not-allowed',
+    'group/switch relative inline-flex shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-colors duration-calm bg-select aria-checked:bg-ink-3 disabled:cursor-not-allowed',
     focusRing,
   ),
   {
@@ -20,7 +20,7 @@ const switchVariants = cva(
 );
 
 const thumbVariants = cva(
-  'pointer-events-none block rounded-full bg-ink-2 transition-[translate,background-color] duration-200 ease-out group-aria-checked/switch:bg-ground',
+  'pointer-events-none block rounded-full bg-ink-2 transition-[translate,background-color] duration-calm ease-settle group-aria-checked/switch:bg-ground',
   {
     variants: {
       size: {

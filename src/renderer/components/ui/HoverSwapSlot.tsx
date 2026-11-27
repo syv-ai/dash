@@ -71,7 +71,11 @@ export function HoverSwapSlot({
     <div className={cn('group/slot shrink-0', layers.slot)}>
       {rest && <div className={cn('items-center', cell, layers.rest[state])}>{rest}</div>}
       <div
-        className={cn('items-center gap-0.5 duration-200 ease-out', cell, layers.actions[state])}
+        className={cn(
+          'items-center gap-0.5 duration-calm ease-settle',
+          cell,
+          layers.actions[state],
+        )}
       >
         {actions}
       </div>

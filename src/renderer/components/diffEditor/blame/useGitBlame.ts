@@ -4,6 +4,7 @@ import type { BlameLine } from '@shared/types';
 import type { EditorView } from '../types';
 import { refForView } from './refForView';
 import { blameLabel, contiguousBlock, type BlameLabel } from './formatBlame';
+import { MOTION_MS } from '../../../lib/motion';
 
 interface Args {
   cwd: string;
@@ -19,8 +20,8 @@ interface Args {
 
 /** Rest-on-a-line delay before blame first appears (ms). */
 const HOVER_DELAY_MS = 350;
-/** Editor block fade-out duration; keep in sync with the CSS animation. */
-const BLOCK_FADE_MS = 340;
+/** Editor block fade-out duration: the CSS animation's (`--motion-calm`). */
+const BLOCK_FADE_MS = MOTION_MS.calm;
 /** Grace period after the mouse leaves the editor before blame hides — lets the
  *  pointer travel onto the (interactive) label without it vanishing first. */
 const LEAVE_GRACE_MS = 160;

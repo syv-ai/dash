@@ -13,7 +13,7 @@ import { Tooltip } from './Tooltip';
  */
 export const buttonVariants = cva(
   cn(
-    'inline-flex shrink-0 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-[background-color,color,opacity] duration-150 disabled:pointer-events-none disabled:opacity-40 [&_svg]:shrink-0',
+    'inline-flex shrink-0 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-[background-color,color,opacity] disabled:pointer-events-none disabled:opacity-40 [&_svg]:shrink-0',
     focusRing,
   ),
   {

@@ -11,12 +11,13 @@ import {
   type SeparatorProps,
 } from 'react-resizable-panels';
 import { cn } from '../../lib/cn';
+import { MOTION_MS, reducedMotion } from '../../lib/motion';
 
 export type { PanelImperativeHandle, PanelSize };
 
-/** How long an animated panel eases (see `[data-animating]` in index.css,
- *  which must match). */
-export const PANEL_EASE_MS = 280;
+/** How long an animated panel eases: `--motion-slow`, as `[data-animating]`
+ *  in index.css takes it. */
+export const PANEL_EASE_MS = MOTION_MS.slow;
 /** The task sidebar's planned motion (narrow ⇄ expanded, closing the editor,
  *  hide ⇄ show), slower and calmer: the panels take it while an ancestor sets
  *  `--panel-ease` to it (D258, D264). */
@@ -26,7 +27,7 @@ export const EXPAND_EASE_MS = 1000;
  *  prefers reduced motion (the CSS drops the transition then too). Clear an
  *  `animate` flag after this. */
 export function panelEaseMs(ms: number = PANEL_EASE_MS): number {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : ms;
+  return reducedMotion() ? 0 : ms;
 }
 
 /*

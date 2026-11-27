@@ -9,7 +9,7 @@ export function clampPercent(value: number): number {
   return Number.isNaN(value) ? 0 : Math.max(0, Math.min(100, value));
 }
 
-const fillVariants = cva('h-full rounded-full transition-[width] duration-500 ease-out', {
+const fillVariants = cva('h-full rounded-full transition-[width] duration-slow ease-settle', {
   variants: {
     tone: {
       neutral: 'bg-ink-3',

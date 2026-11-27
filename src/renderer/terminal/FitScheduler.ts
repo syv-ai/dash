@@ -1,8 +1,8 @@
 /**
  * Debounced fit scheduling for terminal containers that animate and collapse.
  *
- * The drawer collapse/expand animates over ~200ms, so resize events arrive in
- * bursts and the fit must wait out the transition. The trap: when the
+ * The drawer collapse/expand animates over a panel ease (PANEL_EASE_MS), so
+ * resize events arrive in bursts and the fit must wait out the transition. The trap: when the
  * container reaches a hidden height, any fit scheduled by an earlier
  * (still-visible) event must be CANCELLED — if it fires against a hidden
  * container, FitAddon clamps to its 1-row minimum and squashes the PTY,

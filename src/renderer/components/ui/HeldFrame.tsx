@@ -5,7 +5,7 @@ import type { Held } from '../../lib/railCrossing';
 /** The content's look as it crosses to or from the rail. */
 const FADE = {
   in: 'motion-safe:animate-fade-in',
-  out: 'opacity-0 transition-opacity duration-150 ease-out motion-reduce:transition-none',
+  out: 'opacity-0 transition-opacity duration-calm ease-settle motion-reduce:transition-none',
 } as const;
 
 /**

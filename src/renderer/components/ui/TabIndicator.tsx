@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { cn } from '../../lib/cn';
-import { TAB_SLIDE_MS, easeOut, reducedMotion } from './tabMotion';
+import { EASE, reducedMotion } from '../../lib/motion';
+import { TAB_SLIDE_MS } from './tabMotion';
 
 /** The selected tab among a strip's: a shown one, not a measuring copy. */
 const SELECTED = '[role="tab"][aria-selected="true"]:not([aria-hidden] *)';
@@ -45,7 +46,7 @@ function midway(el: HTMLElement) {
  * a strip that scrolls must be one, so the surface scrolls with its tabs).
  *
  * `active` names the selected tab: when it changes, the surface slides
- * (`TAB_SLIDE_MS`, ease-out); any other move (a resize, a tab's width) it
+ * (`TAB_SLIDE_MS`, `EASE.settle`); any other move (a resize, a tab's width) it
  * follows at once. `className` is the shape's look (`folderIndicator`,
  * `pillIndicator`, `pillTabIndicator`).
  */
@@ -74,7 +75,7 @@ export function TabIndicator({ active, className }: { active: unknown; className
     const running = el.getAnimations();
     const from = running.length > 0 ? midway(el) : at(was.box);
     running.forEach((a) => a.cancel());
-    el.animate([{ ...from, offset: 0 }], { duration: TAB_SLIDE_MS, easing: easeOut() });
+    el.animate([{ ...from, offset: 0 }], { duration: TAB_SLIDE_MS, easing: EASE.settle });
   }, []);
 
   // Every render: the strip's tabs may have moved or changed.

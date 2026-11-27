@@ -111,7 +111,7 @@ export function SelectTrigger({ className, children, ...props }: React.Component
       <ChevronDown
         size={14}
         strokeWidth={1.8}
-        className="shrink-0 text-icon transition-transform duration-150 group-aria-expanded/select:rotate-180"
+        className="shrink-0 text-icon transition-transform duration-calm group-aria-expanded/select:rotate-180"
       />
     </button>
   );

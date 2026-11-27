@@ -2,7 +2,7 @@ import type { MouseEvent, ReactNode } from 'react';
 import { Bot, MessageSquare, Pencil, Undo2, X } from 'lucide-react';
 import type { DiffCommentKind } from '../../../../shared/types';
 import type { Shade } from './types';
-import { BubbleShell } from './BubbleShell';
+import { BUBBLE_FADE, BubbleShell } from './BubbleShell';
 import { Markdown } from '../../ui/Markdown';
 import { IconButton } from '../../ui/IconButton';
 import { BubbleHeader } from './BubbleHeader';
@@ -98,7 +98,7 @@ export function CommentBubble({
       className="group/bubble"
       style={{
         opacity,
-        transition: 'opacity 240ms ease-out',
+        transition: BUBBLE_FADE,
         pointerEvents: isFadingOut ? 'none' : 'auto',
       }}
     >

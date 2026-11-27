@@ -11,7 +11,7 @@ export const focusRing =
  *  comes back to its ink on hover, selection or keyboard focus (a task's
  *  project line). ink-3 is the faintest ink, so this quiets it further. */
 export const quietAtRest =
-  'opacity-70 transition-opacity duration-150 group-hover/row:opacity-100 group-data-[selected=true]/row:opacity-100 group-focus-visible/row:opacity-100';
+  'opacity-70 transition-opacity group-hover/row:opacity-100 group-data-[selected=true]/row:opacity-100 group-focus-visible/row:opacity-100';
 
 /** A floating surface: menus, popovers, the command list, select content. */
 export const menuSurface =

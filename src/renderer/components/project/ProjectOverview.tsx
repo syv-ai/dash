@@ -277,7 +277,7 @@ export function ProjectOverview({
                         onSelectTask(task.id);
                       }
                     }}
-                    className="relative flex flex-col p-4 rounded-xl border border-border bg-[hsl(var(--surface-2))] hover:bg-[hsl(var(--surface-3))] hover:border-foreground/20 transition-all duration-150 text-left group overflow-hidden min-w-0 cursor-pointer"
+                    className="relative flex flex-col p-4 rounded-xl border border-border bg-[hsl(var(--surface-2))] hover:bg-[hsl(var(--surface-3))] hover:border-foreground/20 transition-all text-left group overflow-hidden min-w-0 cursor-pointer"
                   >
                     {/* Task name + status */}
                     <div className="flex items-start gap-2.5 mb-3 pr-6 min-w-0">

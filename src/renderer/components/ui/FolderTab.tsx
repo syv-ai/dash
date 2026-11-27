@@ -29,7 +29,7 @@ export const folderStripSlot = cn('flex shrink-0 items-center', folderStripBand)
 const folderTabVariants = cva(
   cn(
     'group/tab relative flex min-w-11 max-w-48 shrink-0 cursor-pointer items-center justify-center rounded-t-lg pr-4 pl-3 select-none',
-    'transition-[translate,background-color,color] duration-150',
+    'transition-[translate,background-color,color]',
     focusRing,
     // Inset, so the strip's scroll clip can't cut it.
     'focus-visible:-outline-offset-2',

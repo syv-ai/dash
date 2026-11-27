@@ -10,7 +10,7 @@ export const LIST_ROW_PX = { xs: 26, sm: 32, md: 36 } as const;
 
 const listRowVariants = cva(
   cn(
-    'group/row flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 text-left text-ink transition-colors duration-150 hover:bg-hover data-[selected=true]:bg-select [&_svg]:shrink-0',
+    'group/row flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 text-left text-ink transition-colors hover:bg-hover data-[selected=true]:bg-select [&_svg]:shrink-0',
     focusRing,
   ),
   {
@@ -33,12 +33,13 @@ const listRowVariants = cva(
       // The row being dragged to a new place: faded where it will land.
       dragging: { true: 'opacity-40', false: '' },
       // A physical press: the row shrinks a touch while held and springs
-      // back on release (100ms ease-out; `scale` takes no layout, so nothing
+      // back on release (`duration-quick`, a logged motion exception: direct
+      // manipulation answers at once; `scale` takes no layout, so nothing
       // beside it moves). Not while a control inside it is the one pressed,
       // and not at all under reduced motion. Tailwind v4's scale-* sets
       // `scale`, not `transform`, so that is the property listed.
       pressable: {
-        true: 'transition-[color,background-color,scale] duration-[150ms,150ms,100ms] ease-out motion-safe:active:not-has-[button:active]:scale-98',
+        true: 'transition-[color,background-color,scale] duration-quick motion-safe:active:not-has-[button:active]:scale-98',
         false: '',
       },
     },

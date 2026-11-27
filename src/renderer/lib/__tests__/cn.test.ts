@@ -14,6 +14,10 @@ describe('cn', () => {
     expect(cn('rounded-md', 'rounded-xl')).toBe('rounded-xl');
   });
 
+  it('lets a later motion duration win', () => {
+    expect(cn('duration-quick', 'duration-calm')).toBe('duration-calm');
+  });
+
   it('treats fade-N as opacity', () => {
     expect(cn('opacity-40', 'fade-70')).toBe('fade-70');
   });

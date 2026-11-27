@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import type { LineRange, LiveComment } from '../types';
+import { MOTION_MS } from '../../../../lib/motion';
+import { BUBBLE_FADE } from '../BubbleShell';
 
 // Vertical padding inside the viewzone — asymmetric so the bubble sits closer
 // to the code line above than to the anchor line below (the tail dangles into
@@ -181,7 +183,7 @@ export function useViewzones({
       if (!modifiedEditor) return;
       cancelAnimation(key);
       const start = performance.now();
-      const duration = 420;
+      const duration = MOTION_MS.slow;
       // ease-in-out cubic — symmetric, gentle at both ends. Pairs with the CSS
       // opacity transition on the bubble wrapper.
       const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -335,7 +337,7 @@ export function useViewzones({
             // we restore the transition — otherwise the browser collapses both
             // writes and animates anyway.
             void inner.offsetHeight;
-            inner.style.transition = prevTransition || 'opacity 240ms ease-out';
+            inner.style.transition = prevTransition || BUBBLE_FADE;
           }
         }
       }

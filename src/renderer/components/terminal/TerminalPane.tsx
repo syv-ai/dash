@@ -8,9 +8,10 @@ import type { PermissionMode } from '../../../shared/types';
 import { TerminalSearch } from './TerminalSearch';
 import { TerminalResizeVeil } from './TerminalResizeVeil';
 import { Button } from '../ui/Button';
+import { EASE, MOTION_MS } from '../../lib/motion';
 
 const OVERLAY_MIN_MS = 2000;
-const OVERLAY_FADE_MS = 300;
+const OVERLAY_FADE_MS = MOTION_MS.calm;
 
 interface TerminalPaneProps {
   id: string;
@@ -83,7 +84,7 @@ export function TerminalPane({ id, cwd, permissionMode, terminalBg }: TerminalPa
 
   return (
     <div
-      className={`w-full h-full relative transition-shadow duration-150 ${
+      className={`w-full h-full relative transition-shadow ${
         isDragOver ? 'ring-2 ring-inset ring-primary/30' : ''
       }`}
       onDragOver={(e) => {
@@ -112,7 +113,7 @@ export function TerminalPane({ id, cwd, permissionMode, terminalBg }: TerminalPa
           style={{
             background: terminalBg,
             opacity: overlayVisible ? 1 : 0,
-            transition: `opacity ${OVERLAY_FADE_MS}ms ease-out`,
+            transition: `opacity ${OVERLAY_FADE_MS}ms ${EASE.settle}`,
           }}
         >
           <svg

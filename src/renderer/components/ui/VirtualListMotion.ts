@@ -16,10 +16,11 @@
  *    ghosts over the rows that take their place.
  */
 import type { Key } from 'react';
+import { MOTION_MS } from '../../lib/motion';
 
-/** A list row's motion: short, for rows (the panels' 1s ease is too slow
- *  for a list), on the app's calm curve (`ease-calm`). T14. */
-export const LIST_MOTION_MS = 200;
+/** A list row's motion: calm (`MOTION_MS.calm`; the panels' 1s ease is too
+ *  slow for a list), on the app's travelling curve (`EASE.calm`). T14, U6. */
+export const LIST_MOTION_MS = MOTION_MS.calm;
 
 /** A rendered row: its key and where it sits (px from the list's top). */
 export interface Slot {

@@ -1,6 +1,11 @@
 import type { ReactNode } from 'react';
 import { cn } from '../../../lib/cn';
 import type { Shade } from './types';
+import { EASE, MOTION_MS } from '../../../lib/motion';
+
+/** A bubble's fade (in as it opens, out as it folds), inside the editor's
+ *  view zone that grows over `MOTION_MS.slow` (`useViewzones`). */
+export const BUBBLE_FADE = `opacity ${MOTION_MS.calm}ms ${EASE.settle}`;
 
 interface Props {
   shade: Shade;
@@ -52,7 +57,7 @@ export function BubbleShell({
         color: 'hsl(var(--foreground) / 0.92)',
         boxShadow:
           '0 6px 20px -8px hsl(0 0% 0% / 0.18), 0 1px 2px -1px hsl(0 0% 0% / 0.08), inset 0 1px 0 hsl(0 0% 100% / 0.06)',
-        transition: 'background 180ms ease',
+        transition: `background ${MOTION_MS.quick}ms ${EASE.settle}`,
       }}
     >
       {children}
@@ -69,7 +74,7 @@ export function BubbleShell({
             borderRight: '7px solid transparent',
             borderTop: `7px solid ${fill}`,
             filter: 'drop-shadow(0 3px 2px hsl(0 0% 0% / 0.12))',
-            transition: 'border-top-color 180ms ease',
+            transition: `border-top-color ${MOTION_MS.quick}ms ${EASE.settle}`,
           }}
         />
       )}

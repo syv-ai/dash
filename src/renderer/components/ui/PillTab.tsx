@@ -7,7 +7,7 @@ import { TabIndicator } from './TabIndicator';
 
 const pillTabVariants = cva(
   cn(
-    'group/tab relative flex h-6 min-w-11 shrink-0 cursor-pointer items-center justify-center rounded-md px-3 select-none transition-colors duration-150',
+    'group/tab relative flex h-6 min-w-11 shrink-0 cursor-pointer items-center justify-center rounded-md px-3 select-none transition-colors',
     focusRing,
   ),
   {
@@ -41,7 +41,7 @@ const pillTabVariants = cva(
 
 /** The active tab's tint as a sliding `TabIndicator`: the active tab's tone
  *  (it changes colour as it slides onto a tab of another tone). */
-const pillTabIndicator = cva('rounded-md transition-colors duration-200', {
+const pillTabIndicator = cva('rounded-md transition-colors', {
   variants: {
     tone: { plain: 'bg-select', primary: 'bg-primary/20', service: 'bg-terminal-service/25' },
     muted: { true: '', false: '' },

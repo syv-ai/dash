@@ -71,7 +71,7 @@ export function ProgressRing({
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={circumference * (1 - pct / 100)}
-            className="stroke-(--ring-color) transition-[stroke-dashoffset,stroke] duration-500 ease-out motion-reduce:transition-none"
+            className="stroke-(--ring-color) transition-[stroke-dashoffset,stroke] duration-slow ease-settle motion-reduce:transition-none"
           />
         )}
       </svg>

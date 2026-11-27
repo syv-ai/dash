@@ -6,6 +6,7 @@ import {
   type Virtualizer,
 } from '@tanstack/react-virtual';
 import { cn } from '../../lib/cn';
+import { EASE, reducedMotion } from '../../lib/motion';
 import {
   LIST_MOTION_MS,
   enterKeyframes,
@@ -52,17 +53,6 @@ export function measureShown<T extends Element>(
 /** Each item's wrapper: placed by the virtualizer through `transform`. */
 const ITEM = 'absolute top-0 left-0 w-full';
 const translate = (y: number) => `translateY(${y}px)`;
-
-/** The calm curve as Web Animations takes it: `ease-calm`'s value from
- *  `index.css` (a `var()` can't be an animation's easing). */
-let calmEasing: string | undefined;
-function easing(): string {
-  calmEasing ??=
-    getComputedStyle(document.documentElement).getPropertyValue('--ease-calm').trim() || 'ease';
-  return calmEasing;
-}
-
-const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** A removed row kept for its exit: its last render, at its old place. */
 interface Ghost extends RunSlot {
@@ -220,7 +210,7 @@ function useListMotion(
     }
 
     // Writes.
-    const timing = (duration = LIST_MOTION_MS) => ({ duration, easing: easing() });
+    const timing = (duration = LIST_MOTION_MS) => ({ duration, easing: EASE.calm });
     for (const anim of stops) anim.cancel();
     for (const { key, from, to, at, duration } of slidesNow) {
       const el = rows.get(key);

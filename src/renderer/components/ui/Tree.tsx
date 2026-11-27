@@ -4,7 +4,6 @@ import { ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { ListRow, type ListRowProps } from './ListRow';
 import { VirtualList, type VirtualListHandle } from './VirtualList';
-import { LIST_MOTION_MS } from './VirtualListMotion';
 import { tabStopKey, treeKey, type TreeNode } from './treeNav';
 
 const VARIANTS = {
@@ -219,8 +218,8 @@ export function TreeRow({
 }
 
 /** A branch's chevron: points right, turns down as the branch opens, in
- *  step with its rows (`LIST_MOTION_MS`, `ease-calm`). `TreeRow` draws it;
- *  a row with its own chevron button puts it inside. */
+ *  step with its rows (`duration-calm`, as `LIST_MOTION_MS`; `ease-calm`).
+ *  `TreeRow` draws it; a row with its own chevron button puts it inside. */
 export function BranchChevron({ open }: { open: boolean }) {
   return (
     <ChevronRight
@@ -228,10 +227,9 @@ export function BranchChevron({ open }: { open: boolean }) {
       strokeWidth={1.8}
       // Tailwind v4's rotate-* sets `rotate`, not `transform`.
       className={cn(
-        'transition-[rotate] ease-calm motion-reduce:transition-none',
+        'transition-[rotate] duration-calm ease-calm motion-reduce:transition-none',
         open && 'rotate-90',
       )}
-      style={{ transitionDuration: `${LIST_MOTION_MS}ms` }}
     />
   );
 }

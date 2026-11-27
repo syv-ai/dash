@@ -105,16 +105,25 @@
   --color-edge: hsl(var(--edge));
   --color-shade: hsl(var(--shade));
 
-  /* `ease-panel`: the panels' ease-out (cubic), for anything that moves with
-     a panel ease (PANEL_EASE_MS). */
-  --ease-panel: cubic-bezier(0.33, 1, 0.68, 1);
-  /* `ease-calm`: the task sidebar's planned motion (narrow ⇄ expanded,
-     closing the editor, hide ⇄ show; D258, D264), an
-     ease-in-out, so a long move neither lurches off nor brakes hard. */
+  /* ── Motion (U6): calm, longer than you'd expect, small distances, no
+     bounce. Two curves and three durations (`--motion-*`, below in
+     `:root`); `lib/motion.ts` mirrors them for script (`motion.test.ts`).
+     `ease-settle`: a gentle ease-out (cubic), for anything arriving,
+     folding or resizing (panels, drawers, dialogs, fades, tab indicators). */
+  --ease-settle: cubic-bezier(0.33, 1, 0.68, 1);
+  /* `ease-calm`: an ease-in-out, for a move that travels or leaves (rows
+     sliding, exits, the task sidebar's planned motion; D258, D264), so it
+     neither lurches off nor brakes hard. */
   --ease-calm: cubic-bezier(0.4, 0, 0.2, 1);
-  /* `ease-drawer`: a drawer's fold (`.collapse-grid`) and its chevron
-     (`ui/DisclosureChevron`), a short ease-out that settles. */
-  --ease-drawer: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Durations: `quick` only for direct manipulation (hover, colour, press),
+     `calm` for most movement, `slow` for panels and large reveals (see
+     `duration-quick|calm|slow` below). */
+  --motion-quick: 150ms;
+  --motion-calm: 320ms;
+  --motion-slow: 480ms;
+  /* Tailwind's bare `transition*` utilities: hover and colour, quick. */
+  --default-transition-duration: var(--motion-quick);
+  --default-transition-timing-function: var(--ease-settle);
 
   /* `shadow-raised`: the menu/dialog/tooltip elevation (hairline + drop). */
   --shadow-raised: var(--elevation);
@@ -125,7 +134,7 @@
   /* `animate-fade-in`: content arriving (dialogs, the left sidebar's content
      and rail as it opens or closes); a theme animation, so `motion-safe:`
      applies (`fadeIn` below). */
-  --animate-fade-in: fadeIn 200ms ease-out;
+  --animate-fade-in: fadeIn var(--motion-calm) var(--ease-settle);
   @keyframes breathe {
     50% {
       opacity: 0.35;
@@ -199,6 +208,34 @@
 }
 @utility type-caption {
   @apply text-xs font-normal text-ink-3;
+}
+
+/* ── Motion durations (U6): the only lengths a transition or animation
+   takes. `quick` only for direct manipulation (hover, colour, press);
+   `calm` for most movement (tab indicators, view switches, dialogs, menus,
+   tooltips, toasts, folds, list rows); `slow` for panels and large reveals.
+   Never an ad-hoc `duration-N` or `Nms`. `duration-quick|calm|slow`. The
+   values are `@theme`'s (`--motion-*`). Reduced motion: every token-timed
+   motion lands at once. Zero, not `none`, so an animation still ends (a
+   dialog closes on its `animationend`). */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    --motion-quick: 0s;
+    --motion-calm: 0s;
+    --motion-slow: 0s;
+  }
+}
+@utility duration-quick {
+  --tw-duration: var(--motion-quick);
+  transition-duration: var(--motion-quick);
+}
+@utility duration-calm {
+  --tw-duration: var(--motion-calm);
+  transition-duration: var(--motion-calm);
+}
+@utility duration-slow {
+  --tw-duration: var(--motion-slow);
+  transition-duration: var(--motion-slow);
 }
 
 @layer base {
@@ -544,7 +581,7 @@
 .scrollbar-thin-hover::-webkit-scrollbar-thumb {
   background: transparent;
   border-radius: 2px;
-  transition: background-color 150ms ease;
+  transition: background-color var(--motion-quick) var(--ease-settle);
 }
 .scrollbar-thin-hover:hover::-webkit-scrollbar-thumb {
   background: hsl(var(--muted-foreground) / 0.3);
@@ -557,18 +594,20 @@
 
 /* Shown, it covers the terminal at once (a short fade); lifted, its left edge
    sweeps across to the right, revealing the settled terminal, and only then
-   goes clear. When it shows and lifts is `terminal/resizeVeil.ts`'s. */
+   goes clear. When it shows and lifts is `terminal/resizeVeil.ts`'s.
+   Motion exception (U6): the cover is 80ms, under `--motion-quick`, since
+   it must land before the terminal's reflow shows. */
 .terminal-curtain {
   clip-path: inset(0 0 0 100%);
   opacity: 0;
   transition:
-    clip-path 240ms var(--ease-calm),
-    opacity 0s linear 240ms;
+    clip-path var(--motion-calm) var(--ease-calm),
+    opacity 0s linear var(--motion-calm);
 }
 .terminal-curtain[data-shown] {
   clip-path: inset(0);
   opacity: 1;
-  transition: opacity 80ms ease-out;
+  transition: opacity 80ms var(--ease-settle);
 }
 @media (prefers-reduced-motion: reduce) {
   .terminal-curtain,
@@ -580,14 +619,14 @@
 /* ── Resizable panels ─────────────────────────────────────── */
 
 /* `ResizablePanel animate`: ease collapse/expand and imperative resizes. The
-   library sizes the outer [data-panel] element via flex-grow. 280ms is
-   PANEL_EASE_MS in ui/Resizable; the curve is an ease-out (cubic). An
+   library sizes the outer [data-panel] element via flex-grow. A panel eases
+   `--motion-slow` (PANEL_EASE_MS in ui/Resizable) on `ease-settle`. An
    ancestor can set both (`--panel-ease`, `--panel-curve`): the task
    sidebar's planned motion does (EXPAND_EASE_MS, `ease-calm`). */
 [data-panel][data-animating='true'] {
   transition:
-    flex-grow var(--panel-ease, 280ms) var(--panel-curve, var(--ease-panel)),
-    flex-shrink var(--panel-ease, 280ms) var(--panel-curve, var(--ease-panel));
+    flex-grow var(--panel-ease, var(--motion-slow)) var(--panel-curve, var(--ease-settle)),
+    flex-shrink var(--panel-ease, var(--motion-slow)) var(--panel-curve, var(--ease-settle));
 }
 @media (prefers-reduced-motion: reduce) {
   [data-panel][data-animating='true'] {
@@ -620,20 +659,10 @@
     opacity: 1;
   }
 }
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
 @keyframes scaleIn {
   from {
     opacity: 0;
-    transform: scale(0.95);
+    transform: scale(0.98);
   }
   to {
     opacity: 1;
@@ -655,11 +684,11 @@
 /* Height-animated disclosure — expands from 0 to auto without measuring.
    Use as `.collapse-grid[data-open] > <single child>`; the child is clipped
    while collapsing. Every drawer folds with it (D273), its chevron in step
-   (`ui/DisclosureChevron`, 200ms `ease-drawer`). */
+   (`ui/DisclosureChevron`, `--motion-calm`, `ease-settle`). */
 .collapse-grid {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 200ms var(--ease-drawer);
+  transition: grid-template-rows var(--motion-calm) var(--ease-settle);
 }
 @media (prefers-reduced-motion: reduce) {
   .collapse-grid {
@@ -674,7 +703,8 @@
   min-height: 0;
 }
 
-/* Save-button success flash: brief pulse toward git-added green, soft glow. */
+/* Save-button success flash: brief pulse toward git-added green, soft glow.
+   A pulse, not a move: its length is its look (logged motion exception). */
 @keyframes save-flash {
   0% {
     background-color: hsl(var(--primary) / 0.7);
@@ -690,13 +720,10 @@
   }
 }
 .animate-save-flash {
-  animation: save-flash 700ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.animate-slide-up {
-  animation: slideUp 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: save-flash 700ms var(--ease-settle);
 }
 .animate-scale-in {
-  animation: scaleIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: scaleIn var(--motion-calm) var(--ease-settle);
 }
 @keyframes popoverIn {
   from {
@@ -709,20 +736,7 @@
   }
 }
 .animate-popover-in {
-  animation: popoverIn 160ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-@keyframes slideInRight {
-  from {
-    opacity: 0;
-    transform: translateX(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-.animate-slide-in-right {
-  animation: slideInRight 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: popoverIn var(--motion-calm) var(--ease-settle);
 }
 
 @keyframes fadeOut {
@@ -740,27 +754,14 @@
   }
   to {
     opacity: 0;
-    transform: scale(0.95);
-  }
-}
-@keyframes slideOutRight {
-  from {
-    opacity: 1;
-    transform: translateX(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateX(12px);
+    transform: scale(0.98);
   }
 }
 .animate-fade-out {
-  animation: fadeOut 150ms ease-in forwards;
+  animation: fadeOut var(--motion-calm) var(--ease-calm) forwards;
 }
 .animate-scale-out {
-  animation: scaleOut 150ms ease-in forwards;
-}
-.animate-slide-out-right {
-  animation: slideOutRight 150ms ease-in forwards;
+  animation: scaleOut var(--motion-calm) var(--ease-calm) forwards;
 }
 
 @keyframes commitRowIn {
@@ -774,7 +775,7 @@
   }
 }
 .animate-commit-row {
-  animation: commitRowIn 200ms ease-out both;
+  animation: commitRowIn var(--motion-calm) var(--ease-settle) both;
 }
 
 /* ── Status Pulse ─────────────────────────────────────────── */
@@ -796,7 +797,7 @@
   }
 }
 .drawer-tab-in {
-  animation: drawerTabIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: drawerTabIn var(--motion-calm) var(--ease-settle);
 }
 /* Side-car TUI tabs render on a fixed-size xterm canvas (see TUI_COLS /
    TUI_ROWS). Left-align it: the canvas can be wider than a narrow panel, and
@@ -864,22 +865,6 @@
   background: hsl(var(--destructive));
 }
 
-/* ── Status Bar Pulse (left-edge indicator) ──────────────── */
-
-@keyframes bar-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
-}
-
-.status-bar-pulse {
-  animation: bar-pulse 2s ease-in-out infinite;
-}
-
 /* ── Focus Ring ───────────────────────────────────────────── */
 
 .focus-ring:focus-visible {
@@ -934,7 +919,7 @@
   }
 }
 .animate-tooltip-in {
-  animation: tooltip-in 120ms ease-out;
+  animation: tooltip-in var(--motion-calm) var(--ease-settle);
   transform-origin: var(--radix-tooltip-content-transform-origin);
 }
 
@@ -1039,7 +1024,7 @@
   background-color: hsl(var(--primary) / 0.07);
 }
 .monaco-blame-block-out {
-  animation: blame-block-out 340ms ease forwards;
+  animation: blame-block-out var(--motion-calm) var(--ease-settle) forwards;
 }
 @keyframes blame-block-out {
   from {
@@ -1088,7 +1073,7 @@
   background-color: hsl(var(--muted-foreground) / 0.2);
   pointer-events: none;
   opacity: 0;
-  transition: opacity 340ms ease;
+  transition: opacity var(--motion-calm) var(--ease-settle);
 }
 .monaco-blame-ruler-band[data-visible='true'] {
   opacity: 1;
@@ -1097,9 +1082,9 @@
  * appear snaps to position instead of gliding in from the previous commit. */
 .monaco-blame-ruler-band[data-slide='true'] {
   transition:
-    opacity 340ms ease,
-    top 260ms cubic-bezier(0.4, 0, 0.2, 1),
-    height 260ms cubic-bezier(0.4, 0, 0.2, 1);
+    opacity var(--motion-calm) var(--ease-settle),
+    top var(--motion-calm) var(--ease-calm),
+    height var(--motion-calm) var(--ease-calm);
 }
 
 /* Commit card butted against the band's left edge (square inner corner, primary
@@ -1123,10 +1108,10 @@
   pointer-events: auto;
   opacity: 0;
   transition:
-    opacity 340ms ease,
-    background-color 140ms ease,
-    border-color 140ms ease,
-    box-shadow 140ms ease;
+    opacity var(--motion-calm) var(--ease-settle),
+    background-color var(--motion-quick) var(--ease-settle),
+    border-color var(--motion-quick) var(--ease-settle),
+    box-shadow var(--motion-quick) var(--ease-settle);
 }
 .monaco-blame-ruler-label[data-visible='true'] {
   opacity: 1;
@@ -1136,11 +1121,11 @@
  * a fresh appear (data-slide='false') snaps, then fades in. */
 .monaco-blame-ruler-label[data-slide='true'] {
   transition:
-    opacity 340ms ease,
-    top 260ms cubic-bezier(0.4, 0, 0.2, 1),
-    background-color 140ms ease,
-    border-color 140ms ease,
-    box-shadow 140ms ease;
+    opacity var(--motion-calm) var(--ease-settle),
+    top var(--motion-calm) var(--ease-calm),
+    background-color var(--motion-quick) var(--ease-settle),
+    border-color var(--motion-quick) var(--ease-settle),
+    box-shadow var(--motion-quick) var(--ease-settle);
 }
 /* Hover feedback — the card lifts slightly and firms up its surface/border. */
 .monaco-blame-ruler-label:hover {
@@ -1160,8 +1145,8 @@
   color: hsl(var(--ink-3));
   cursor: pointer;
   transition:
-    color 120ms ease,
-    background-color 120ms ease;
+    color var(--motion-quick) var(--ease-settle),
+    background-color var(--motion-quick) var(--ease-settle);
 }
 .blame-label-close:hover {
   color: hsl(var(--foreground));
@@ -1274,13 +1259,13 @@
     width: var(--width);
   }
 }
-/* Enter: 8px up and a fade over 200ms; exit: a fade over 150ms. Sonner drops
-   all of it under prefers-reduced-motion. */
+/* Enter: 8px up and a fade; exit: a fade; both `--motion-calm`. Sonner
+   drops all of it under prefers-reduced-motion. */
 [data-sonner-toaster] [data-sonner-toast] {
   transition:
-    transform 200ms var(--ease-calm),
-    opacity 200ms var(--ease-calm),
-    height 200ms var(--ease-calm);
+    transform var(--motion-calm) var(--ease-settle),
+    opacity var(--motion-calm) var(--ease-settle),
+    height var(--motion-calm) var(--ease-settle);
 }
 [data-sonner-toaster] [data-sonner-toast][data-y-position='bottom'][data-mounted='false'] {
   --y: translateY(8px);
@@ -1288,7 +1273,7 @@
 [data-sonner-toaster]
   [data-sonner-toast][data-removed='true'][data-front='true'][data-swipe-out='false'] {
   --y: translateY(0);
-  transition-duration: 150ms;
+  transition-timing-function: var(--ease-calm);
 }
 /* The toasts peeking behind the front one show only their surface. */
 [data-sonner-toaster] [data-sonner-toast][data-expanded='false'][data-front='false'] > * {
@@ -1309,5 +1294,5 @@
   }
 }
 .ports-drawer-enter {
-  animation: ports-drawer-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: ports-drawer-in var(--motion-slow) var(--ease-settle);
 }

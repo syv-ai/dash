@@ -13,7 +13,7 @@ import { useReselect } from './useReselect';
  */
 export const pillVariants = cva(
   cn(
-    'flex min-w-0 items-center justify-center rounded-md font-medium transition-colors duration-150 [&_svg]:shrink-0',
+    'flex min-w-0 items-center justify-center rounded-md font-medium transition-colors [&_svg]:shrink-0',
     focusRing,
   ),
   {

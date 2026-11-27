@@ -258,7 +258,7 @@ function NewProjectBody({ onCreated }: { onCreated: (id: string) => void }) {
           {shown.kind !== 'empty' && shown.kind !== 'checking' && (
             <div
               key={shown.kind}
-              className="grid gap-1 transition duration-150 ease-calm starting:translate-y-1 starting:opacity-0 motion-reduce:transition-none"
+              className="grid gap-1 transition duration-calm ease-settle starting:translate-y-1 starting:opacity-0 motion-reduce:transition-none"
             >
               <SourceOptions
                 source={shown}
