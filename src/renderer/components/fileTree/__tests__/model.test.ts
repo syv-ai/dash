@@ -122,6 +122,57 @@ describe('buildTree', () => {
     expect(root.tally.changed).toBe(1);
   });
 
+  it('marks a folder ignored when git lists it as one ignored entry', () => {
+    const root = buildTree([], {
+      paths: [],
+      dirs: [],
+      ignored: { files: [], dirs: ['node_modules'] },
+    });
+    expect(root.folders.get('node_modules')).toMatchObject({ ignored: true, untracked: false });
+  });
+
+  it('marks a folder ignored when all it holds is ignored, at any depth', () => {
+    const root = buildTree([], {
+      paths: ['src/a.ts'],
+      dirs: [],
+      ignored: { files: ['out/x.js', 'out/deep/y.js', 'src/.env'], dirs: ['out/cache'] },
+    });
+    const out = root.folders.get('out')!;
+    expect(out.ignored).toBe(true);
+    expect(out.folders.get('deep')!.ignored).toBe(true);
+    expect(root.folders.get('src')!.ignored).toBe(false);
+  });
+
+  it('marks a folder untracked when everything beneath it is new, its subfolders too', () => {
+    const root = buildTree(
+      [
+        f('scratch/a.txt', 'untracked'),
+        f('scratch/sub/b.txt', 'untracked'),
+        f('src/new.ts', 'untracked'),
+      ],
+      {
+        paths: ['scratch/a.txt', 'scratch/sub/b.txt', 'src/new.ts', 'src/old.ts'],
+        dirs: [],
+        ignored: { files: ['scratch/.cache'], dirs: [] },
+      },
+    );
+    const scratch = root.folders.get('scratch')!;
+    expect(scratch).toMatchObject({ untracked: true, ignored: false });
+    expect(scratch.folders.get('sub')!.untracked).toBe(true);
+    // A tracked folder holding a new file is not new itself.
+    expect(root.folders.get('src')!.untracked).toBe(false);
+  });
+
+  it('marks an untracked symlinked folder untracked', () => {
+    const root = buildTree([f('linked', 'untracked')], { paths: [], dirs: ['linked'] });
+    expect(root.folders.get('linked')!.untracked).toBe(true);
+  });
+
+  it('marks a folder of only changed tracked files neither', () => {
+    const root = buildTree([f('src/a.ts'), f('src/gone.ts', 'deleted')]);
+    expect(root.folders.get('src')).toMatchObject({ untracked: false, ignored: false });
+  });
+
   it('orders files by code unit (the editor tree’s order)', () => {
     const root = buildTree([f('package.json'), f('README.md')]);
     expect(root.files.map((x) => x.path)).toEqual(['README.md', 'package.json']);
@@ -379,6 +430,14 @@ describe('treeColumns', () => {
   it('counts a closed folder’s lines', () => {
     const closed = state({ open: new Map([['t:dir', false]]) });
     expect(treeColumns(flattenTree(one(tree), closed)).add).toBe(5); // "+1200"
+  });
+
+  it('draws the status column for a closed untracked folder’s U', () => {
+    const rows = flattenTree(
+      one(buildTree([f('new/a.ts', 'untracked')])),
+      state({ open: new Map([['t:new', false]]) }),
+    );
+    expect(treeColumns(rows).status).toBe(true);
   });
 
   it('draws the badge columns only when a file has one', () => {

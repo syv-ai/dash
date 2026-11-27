@@ -17,7 +17,7 @@ export interface TreeFile {
   /** Its change in this tree's view; null for an unchanged file. A gitignored
    *  file listed by "all files" carries a zero-stat `ignored` change. */
   change: FileChange | null;
-  /** Gitignored, or inside an ignored folder: shown quietly. */
+  /** Gitignored, or inside an ignored folder: shown quietly, as its folder is. */
   ignored: boolean;
 }
 
@@ -44,7 +44,12 @@ export interface TreeFolder {
   /** Git lists it as one entry (ignored, or a symlink): its contents are read
    *  from disk when it opens, one level at a time. */
   lazy: boolean;
+  /** Gitignored as a whole (git lists it as one ignored entry, or all it
+   *  holds is ignored): shown quietly, and so is all it holds. */
   ignored: boolean;
+  /** Untracked as a whole, as git sees a new folder: everything beneath it is
+   *  untracked (or ignored), or git lists the folder itself as untracked. */
+  untracked: boolean;
   /** Its own change, when git sees the folder as one entry (an untracked
    *  symlinked directory). */
   change: FileChange | null;
@@ -77,6 +82,7 @@ function newFolder(
     files: [],
     lazy: opts.lazy ?? false,
     ignored: opts.ignored ?? false,
+    untracked: false,
     change: null,
     tally: zeroTally(),
   };
@@ -120,6 +126,32 @@ function tallyUp(node: TreeFolder): FolderTally {
   }
   node.tally = t;
   return t;
+}
+
+/** Marks each folder that git sees as one untracked or ignored whole, from
+ *  what it holds: all of it ignored, or all untracked and ignored with
+ *  something untracked. A lazy folder keeps what its listing said (its
+ *  contents aren't known), a folder git lists as an untracked change is
+ *  untracked. An empty folder is neither. */
+function markWholes(node: TreeFolder): void {
+  for (const child of node.folders.values()) markWholes(child);
+  if (node.change?.status === 'untracked') node.untracked = true;
+  if (node.lazy) return;
+  let any = false;
+  let allIgnored = true;
+  let allNew = true;
+  let someUntracked = false;
+  const see = (ignored: boolean, untracked: boolean) => {
+    any = true;
+    if (!ignored) allIgnored = false;
+    if (!ignored && !untracked) allNew = false;
+    if (untracked) someUntracked = true;
+  };
+  for (const f of node.files) see(f.ignored, f.change?.status === 'untracked');
+  for (const child of node.folders.values()) see(child.ignored, child.untracked);
+  if (!any) return;
+  node.ignored = allIgnored;
+  node.untracked = node.untracked || (allNew && someUntracked);
 }
 
 /**
@@ -167,6 +199,7 @@ export function buildTree(changes: readonly FileChange[], repo?: RepoFiles): Tre
     });
   }
   tallyUp(root);
+  markWholes(root);
   return root;
 }
 
@@ -407,7 +440,7 @@ export interface TreeColumns {
   comments: boolean;
   add: number;
   del: number;
-  /** A file's status letter (folders show none). */
+  /** A file's status letter (folders show none, but an untracked one's U). */
   status: boolean;
   /** A PR's viewed check (its tree marks files viewed). */
   viewed: boolean;
@@ -441,7 +474,9 @@ export function treeColumns(
       cols.status = true;
       cols.add = Math.max(cols.add, signed(c.additions));
       cols.del = Math.max(cols.del, signed(c.deletions));
-    } else if (row.kind === 'folder' && !row.open) {
+    } else if (row.kind === 'folder') {
+      if (row.folder.untracked) cols.status = true;
+      if (row.open) continue;
       const t = row.folder.tally;
       cols.add = Math.max(cols.add, signed(t.add + t.untrackedAdd));
       cols.del = Math.max(cols.del, signed(t.del));

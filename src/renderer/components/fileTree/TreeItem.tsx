@@ -146,7 +146,8 @@ export function TreeNote({ row }: { row: Extract<FileTreeRow, { kind: 'note' }> 
 
 /** The row's columns at rest, each as wide as the tree's widest value: the
  *  PR's threads, your comments, lines added and removed (a folder's while
- *  it is closed), a file's status letter (boxed when staged) and, in a
+ *  it is closed), a file's status letter (boxed when staged; an untracked
+ *  folder's U) and, in a
  *  PR's tree, a check once it is viewed. A folder shows no count of its
  *  changes: its lines say as much, and the counts crowded the column.
  *  Blank columns before the row's first value aren't drawn (`rowColumns`),
@@ -170,11 +171,15 @@ function Columns({
       del = c.deletions;
       status = STATUS_LETTER[c.status];
     }
-  } else if (!row.open) {
-    const t = row.folder.tally;
-    // New files count too, so the folders sum to the tree's total.
-    add = t.add + t.untrackedAdd;
-    del = t.del;
+  } else {
+    // A new folder reads as new, as its files do.
+    if (row.folder.untracked) status = STATUS_LETTER.untracked;
+    if (!row.open) {
+      const t = row.folder.tally;
+      // New files count too, so the folders sum to the tree's total.
+      add = t.add + t.untrackedAdd;
+      del = t.del;
+    }
   }
   const cols = rowColumns(treeCols, {
     threads: !!badges?.threads,
