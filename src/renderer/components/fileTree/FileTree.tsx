@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { LIST_ROW_PX } from '../ui/ListRow';
 import { Tree, TreeHeading, type TreeHandle } from '../ui/Tree';
 import { useEditorTabs } from '../../stores/editorTabsStore';
 import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
@@ -18,7 +19,7 @@ import {
   type TreeSection,
   type TreeSelection,
 } from './model';
-import { TreeItem, TreeNote } from './TreeItem';
+import { FILE_ROW, TreeItem, TreeNote } from './TreeItem';
 
 export type FileRow = Extract<TreeRow, { kind: 'file' }>;
 
@@ -49,8 +50,9 @@ export interface FileTreeProps {
   gapAbove?: boolean;
 }
 
-/** Rows ListRow `sm` draws; a section header a little shorter. */
-const estimate = (row: TreeRow | undefined) => (row?.kind === 'section' ? 28 : 32);
+/** A file row's height; a section header's (`TreeHeading`). */
+const estimate = (row: TreeRow | undefined) =>
+  row?.kind === 'section' ? 28 : LIST_ROW_PX[FILE_ROW];
 
 /**
  * The app's one file tree (Files, a PR's files, the Agent tab's scratchpad), on the

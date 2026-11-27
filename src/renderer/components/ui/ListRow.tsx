@@ -3,6 +3,11 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../../lib/cn';
 import { focusRing } from './styles';
 
+/** Each size's row height (px), for a list that places rows before it
+ *  measures them (`VirtualList`'s `estimateSize`). In step with the `size`
+ *  classes below. */
+export const LIST_ROW_PX = { xs: 26, sm: 32, md: 36 } as const;
+
 const listRowVariants = cva(
   cn(
     'group/row flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 text-left text-ink transition-colors duration-150 hover:bg-hover data-[selected=true]:bg-select [&_svg]:shrink-0',
@@ -10,7 +15,7 @@ const listRowVariants = cva(
   ),
   {
     variants: {
-      size: { sm: 'h-8 text-sm', md: 'h-9 text-base' },
+      size: { xs: 'h-6.5 text-sm', sm: 'h-8 text-sm', md: 'h-9 text-base' },
       // A second line: the row grows; leading and trailing centre on both
       // lines (T21).
       twoLine: { true: 'h-auto py-2', false: '' },
@@ -87,9 +92,9 @@ const STRONG = 'font-semibold';
 export const TREE_INDENT_PX = 12;
 
 /**
- * A sidebar or tree row: 32–36px, rounded-lg, hover tint, select tint when
- * `selected`. Leading slot, truncating label (with badges after it and an
- * optional second line), trailing slot (ink-3).
+ * A sidebar or tree row: 26–36px (`LIST_ROW_PX`), rounded-lg, hover tint,
+ * select tint when `selected`. Leading slot, truncating label (with badges
+ * after it and an optional second line), trailing slot (ink-3).
  */
 export function ListRow({
   selected = false,

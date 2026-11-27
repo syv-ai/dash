@@ -23,7 +23,7 @@ import { HoverSwapSlot } from '../ui/HoverSwapSlot';
 import { IconButton } from '../ui/IconButton';
 import { IdeIcon } from '../ui/IdeIcon';
 import { LineStats } from '../ui/LineStats';
-import { ListRow } from '../ui/ListRow';
+import { ListRow, type LIST_ROW_PX } from '../ui/ListRow';
 import { Tooltip } from '../ui/Tooltip';
 import { TreeRow, type TreeRowContext } from '../ui/Tree';
 import { usePreferredIde } from '../../hooks/usePreferredIde';
@@ -40,6 +40,10 @@ import {
   type TreeColumns,
   type TreeRow as FileTreeRow,
 } from './model';
+
+/** Every file tree's row size (Files, a PR's files, the Agent tab's
+ *  scratchpad): its height is `LIST_ROW_PX[FILE_ROW]`. */
+export const FILE_ROW: keyof typeof LIST_ROW_PX = 'xs';
 
 const STATUS_LETTER: Record<FileChangeStatus, string> = {
   modified: 'M',
@@ -90,7 +94,7 @@ export function TreeItem({
   const item = (
     <TreeRow
       ctx={ctx}
-      size="sm"
+      size={FILE_ROW}
       dimmed={quiet}
       changed={isChanged(row)}
       title={folder ? undefined : path}
@@ -128,7 +132,7 @@ export function TreeNote({ row }: { row: Extract<FileTreeRow, { kind: 'note' }> 
   return (
     <ListRow
       as="div"
-      size="sm"
+      size={FILE_ROW}
       role="presentation"
       dimmed
       indent={row.depth}
