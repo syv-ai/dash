@@ -50,7 +50,8 @@ import { IconButton } from '../ui/IconButton';
 import { Input } from '../ui/Input';
 import { ListRow } from '../ui/ListRow';
 import { Notice } from '../ui/Notice';
-import { ViewPanel, ViewTabs } from '../ui/ViewTabs';
+import { Tooltip } from '../ui/Tooltip';
+import { ViewPanel, ViewTabs, type ViewTabsOption } from '../ui/ViewTabs';
 import { formatRelativeTime } from '../../../shared/relativeTime';
 import { useSectionOpen } from '../review/useSectionOpen';
 import { instructionFiles, memoryGroups, type AgentPane } from './agentTab';
@@ -83,7 +84,8 @@ export function AgentView({
 }) {
   const scratchpad = useTaskScratchpad(task.id);
   const project = useProjects((s) => s.projects.find((p) => p.id === task.projectId) ?? null);
-  const { memory, error } = useProjectMemory(pane === 'memory' ? (project?.path ?? null) : null);
+  // Read on either pane: the Memory tab counts the memories.
+  const { memory, error } = useProjectMemory(project?.path ?? null);
 
   const end =
     pane === 'scratchpad'
@@ -129,44 +131,81 @@ export function AgentView({
             aria-label="Scratchpad or memory"
             value={pane}
             onChange={onPane}
-            options={AGENT_PANE_TABS}
+            options={agentPaneTabs(memory?.entries.length)}
           />
         }
         end={end || undefined}
       />
       <ViewPanel value={pane} order={AGENT_PANES} className="flex min-h-0 flex-1 flex-col">
         {pane === 'scratchpad' ? (
-          <ScratchpadPane scratchpad={scratchpad} activePath={activePath} onOpenFile={onOpenFile} />
-        ) : error ? (
-          <EmptyState illustration={Brain} title="Could not read memory" description={error} />
-        ) : (
-          memory &&
-          project && (
-            <MemoryPane
-              task={task}
-              projectId={project.id}
-              projectPath={project.path}
-              dir={memory.dir}
-              hasIndex={memory.hasIndex}
-              entries={memory.entries}
-              notices={memoryNotices(memory)}
-              repoPaths={repoPaths}
+          <>
+            <PaneScope
+              text={`Temporary files from ${task.name}'s session, deleted with the task`}
+              tooltip={`Claude Code's scratch folder for ${task.name}'s session. It stays while the task sleeps and goes with the session: when the task is deleted or its session restarted.`}
+            />
+            <ScratchpadPane
+              scratchpad={scratchpad}
               activePath={activePath}
               onOpenFile={onOpenFile}
             />
-          )
+          </>
+        ) : (
+          <>
+            {project && (
+              <PaneScope
+                text={`Memory for ${project.name}`}
+                tooltip={`Claude Code's auto memory for ${project.name}, shared by all its tasks.`}
+              />
+            )}
+            {error ? (
+              <EmptyState illustration={Brain} title="Could not read memory" description={error} />
+            ) : (
+              memory &&
+              project && (
+                <MemoryPane
+                  task={task}
+                  projectId={project.id}
+                  projectPath={project.path}
+                  dir={memory.dir}
+                  hasIndex={memory.hasIndex}
+                  entries={memory.entries}
+                  notices={memoryNotices(memory)}
+                  repoPaths={repoPaths}
+                  activePath={activePath}
+                  onOpenFile={onOpenFile}
+                />
+              )
+            )}
+          </>
         )}
       </ViewPanel>
     </div>
   );
 }
 
-/** The sub-views' tabs, in order. */
-const AGENT_PANE_TABS: { value: AgentPane; label: string }[] = [
-  { value: 'scratchpad', label: 'Scratchpad' },
-  { value: 'memory', label: 'Memory' },
-];
-const AGENT_PANES = AGENT_PANE_TABS.map((t) => t.value);
+/** The panes, in order: the tabs' and the panel's slide. */
+const AGENT_PANES: readonly AgentPane[] = ['scratchpad', 'memory'];
+
+/** The panes' tabs. Memory counts the memory files: not MEMORY.md (the
+ *  index) nor the repo's CLAUDE.md files (instructions, not memories). */
+function agentPaneTabs(memoryCount: number | undefined): ViewTabsOption<AgentPane>[] {
+  return AGENT_PANES.map((value) =>
+    value === 'scratchpad'
+      ? { value, label: 'Scratchpad' }
+      : { value, label: 'Memory', count: memoryCount || undefined, countLabel: 'Memories' },
+  );
+}
+
+/** A pane's first line: whose it is (the session's, the project's), in full
+ *  in the tooltip when it doesn't fit. Inset 22px, its text in line with the
+ *  pill tabs' and the rows' labels. */
+function PaneScope({ text, tooltip }: { text: string; tooltip: string }) {
+  return (
+    <Tooltip content={tooltip}>
+      <p className="type-caption shrink-0 truncate px-5.5 pt-2">{text}</p>
+    </Tooltip>
+  );
+}
 
 /** Surface a failed action instead of dropping it. */
 async function attempt(
@@ -491,9 +530,11 @@ function GroupSection({
   children: ReactNode;
 }) {
   const section = useSectionOpen(id, true);
+  // `min-w-0`: the section's body is a one-column grid, whose `auto` column
+  // would otherwise grow to a row's unwrapped preview, past the pane's edge.
   return (
     <DetailSection title={label} summary={String(count)} collapsible {...section}>
-      <div>{children}</div>
+      <div className="min-w-0">{children}</div>
     </DetailSection>
   );
 }
