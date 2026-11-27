@@ -1,5 +1,12 @@
 import { isPrComment } from '../../../shared/diffComments';
-import type { DiffComment, PrProvider, PrReviewThread, PrVerdict } from '../../../shared/types';
+import { formatTimeAgo } from '../../../shared/relativeTime';
+import type {
+  DiffComment,
+  PrProvider,
+  PrReviewThread,
+  PrVerdict,
+  PrViewerReview,
+} from '../../../shared/types';
 import { plural, providerName } from './labels';
 import { threadGroups, type ThreadItem } from './outline';
 
@@ -79,4 +86,54 @@ export function postingItems(
 ): ThreadItem[] {
   const { unresolved, resolved } = threadGroups(threads, drafts);
   return [...unresolved, ...resolved].filter((i) => i.kind === 'draft' || i.replies.length > 0);
+}
+
+/** What the person's own review said, as Finish review names it. */
+export const OWN_REVIEW_LABELS: Record<PrViewerReview['state'], string> = {
+  approved: 'Approved',
+  approved_with_suggestions: 'Approved with suggestions',
+  changes_requested: 'Changes requested',
+  commented: 'Commented',
+  waiting: 'Waiting for author',
+  rejected: 'Rejected',
+};
+
+/** "Approved 3 days ago · new commits since"; "None" before a first review.
+ *  `now` in ms. */
+export function ownReviewLine(review: PrViewerReview | null, now: number): string {
+  if (!review) return 'None';
+  const at = Date.parse(review.at);
+  const when = at > 0 ? formatTimeAgo(at / 1000, now / 1000) : '';
+  return [
+    [OWN_REVIEW_LABELS[review.state], when].filter(Boolean).join(' '),
+    review.stale && 'new commits since',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/** "1 new thread, 2 replies": the person's drafts that post (a draft on
+ *  lines starts a thread; a draft reply adds to one); "None" without. */
+export function draftsLine(drafts: readonly Pick<DiffComment, 'replyTo'>[]): string {
+  const replies = drafts.filter((c) => c.replyTo).length;
+  const threads = drafts.length - replies;
+  return (
+    [
+      threads > 0 && plural(threads, 'new thread'),
+      replies > 0 && (replies === 1 ? '1 reply' : `${replies} replies`),
+    ]
+      .filter(Boolean)
+      .join(', ') || 'None'
+  );
+}
+
+/** "2 open, 9 resolved": the PR's threads; "None" without. */
+export function threadsLineShort(threads: readonly Pick<PrReviewThread, 'resolved'>[]): string {
+  const resolved = threads.filter((t) => t.resolved).length;
+  const open = threads.length - resolved;
+  return (
+    [open > 0 && `${open} open`, resolved > 0 && `${resolved} resolved`]
+      .filter(Boolean)
+      .join(', ') || 'None'
+  );
 }

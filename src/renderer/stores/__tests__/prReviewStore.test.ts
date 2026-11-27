@@ -27,6 +27,7 @@ const review = (n: number, provider: PrProvider = 'github'): PrReview => ({
   reviewers: [],
   assignees: [],
   issues: [],
+  viewerReview: null,
   checks: [],
   files: [],
 });

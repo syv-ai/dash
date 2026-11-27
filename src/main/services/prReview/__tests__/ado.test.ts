@@ -12,6 +12,7 @@ import {
   adoReviewFrom,
   adoSummaryBody,
   adoThreadBody,
+  adoViewerReview,
   adoVote,
   adoWriteError,
   changeTrackingIds,
@@ -181,6 +182,44 @@ describe('adoReviewFrom', () => {
       'src/app/unmoved.ts',
       'src/app/deleted.ts',
     ]);
+  });
+});
+
+describe('adoViewerReview', () => {
+  const vote = (id: string, date: string) => ({
+    properties: { CodeReviewThreadType: { $type: 'System.String', $value: 'VoteUpdate' } },
+    comments: [{ id: 1, commentType: 'system', publishedDate: date, author: { id } }],
+  });
+  const its = (...dates: string[]) => ({
+    value: dates.map((createdDate, i) => ({ id: i + 1, createdDate })),
+  });
+
+  it('is null without a vote of the viewer', () => {
+    const pr = {
+      reviewers: [
+        { id: 'me', vote: 0 },
+        { id: 'ann', vote: 10 },
+      ],
+    };
+    expect(adoViewerReview(pr, its(), { value: [] }, 'me')).toBeNull();
+    expect(adoViewerReview(pr, its(), { value: [] }, '')).toBeNull();
+  });
+
+  it('dates the vote by its newest VoteUpdate and is stale after a later push', () => {
+    const pr = { reviewers: [{ id: 'me', vote: -5 }] };
+    const threads = {
+      value: [
+        vote('me', '2026-11-01T00:00:00Z'),
+        vote('me', '2026-11-03T00:00:00Z'),
+        vote('ann', '2026-11-09T00:00:00Z'),
+      ],
+    };
+    expect(adoViewerReview(pr, its('2026-10-01T00:00:00Z'), threads, 'me')).toEqual({
+      state: 'waiting',
+      at: '2026-11-03T00:00:00Z',
+      stale: false,
+    });
+    expect(adoViewerReview(pr, its('2026-11-04T00:00:00Z'), threads, 'me')?.stale).toBe(true);
   });
 });
 

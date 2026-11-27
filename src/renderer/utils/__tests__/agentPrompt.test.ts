@@ -163,6 +163,7 @@ const review = (number: number, threads: PrReviewThread[]): PrReview => ({
   reviewers: [],
   assignees: [],
   issues: [],
+  viewerReview: null,
   checks: [],
   files: [],
 });

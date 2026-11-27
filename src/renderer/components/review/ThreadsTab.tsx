@@ -115,16 +115,25 @@ export function ThreadItems({
   items,
   context,
   onNavigate,
+  onOpened,
 }: {
   items: ThreadItem[];
   context: PrThreadContext;
   onNavigate: Navigate;
+  /** After a posted thread's place opened in the editor (Finish review
+   *  closes then, as it does on `onNavigate`). */
+  onOpened?: () => void;
 }) {
   return (
     <Cards>
       {items.map((i) =>
         i.kind === 'posted' ? (
-          <PostedThreadCard key={i.thread.id} thread={i.thread} context={context} />
+          <PostedThreadCard
+            key={i.thread.id}
+            thread={i.thread}
+            context={context}
+            onOpened={onOpened}
+          />
         ) : (
           <DraftThreadCard
             key={i.draft.id}
@@ -144,9 +153,11 @@ export function ThreadItems({
 function PostedThreadCard({
   thread,
   context,
+  onOpened,
 }: {
   thread: PrReviewThread;
   context: PrThreadContext;
+  onOpened?: () => void;
 }) {
   const line = isInlineThread(thread) ? thread.line : null;
   return (
@@ -156,7 +167,12 @@ function PostedThreadCard({
       defaultOpen={false}
       showLocation
       onOpenLocation={
-        line === null ? undefined : () => openFileAt(thread.path, threadRange({ ...thread, line }))
+        line === null
+          ? undefined
+          : () => {
+              openFileAt(thread.path, threadRange({ ...thread, line }));
+              onOpened?.();
+            }
       }
     />
   );
@@ -243,10 +259,9 @@ function SummaryCard({ text }: { text: string }) {
   return (
     <Card>
       <CommentFrame
-        avatar={<Avatar name="You" icon={Pencil} dashed />}
+        avatar={<Avatar name="You" icon={Pencil} />}
         name="Review summary"
         badge={<DraftBadge />}
-        footer={<p className="type-caption">Posts when you finish the review.</p>}
       >
         <Markdown text={text} />
       </CommentFrame>

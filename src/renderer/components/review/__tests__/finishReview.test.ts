@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { DiffComment, PrReviewThread } from '../../../../shared/types';
 import {
   canPost,
+  draftsLine,
   finishOffered,
+  ownReviewLine,
+  threadsLineShort,
   offeredVerdict,
   postLabel,
   postingItems,
@@ -107,5 +110,34 @@ describe('finishOffered', () => {
       'open',
       'done',
     ]);
+  });
+});
+
+describe('Finish review metadata', () => {
+  const now = Date.parse('2026-11-27T12:00:00Z');
+
+  it("says what the person's last review was, when, and whether commits came after", () => {
+    expect(ownReviewLine(null, now)).toBe('None');
+    expect(
+      ownReviewLine({ state: 'approved', at: '2026-11-27T09:00:00Z', stale: false }, now),
+    ).toBe('Approved 3 hr ago');
+    expect(ownReviewLine({ state: 'changes_requested', at: '', stale: true }, now)).toBe(
+      'Changes requested · new commits since',
+    );
+  });
+
+  it('counts the drafts as new threads and replies', () => {
+    expect(draftsLine([])).toBe('None');
+    expect(draftsLine([{ replyTo: null }])).toBe('1 new thread');
+    expect(draftsLine([{ replyTo: null }, { replyTo: 'T' }, { replyTo: 'U' }])).toBe(
+      '1 new thread, 2 replies',
+    );
+  });
+
+  it("counts the PR's threads, open and resolved", () => {
+    expect(threadsLineShort([])).toBe('None');
+    expect(threadsLineShort([{ resolved: true }, { resolved: false }, { resolved: true }])).toBe(
+      '1 open, 2 resolved',
+    );
   });
 });

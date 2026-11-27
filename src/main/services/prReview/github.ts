@@ -8,6 +8,7 @@ import type {
   PrListFilter,
   PrReviewComment,
   PrReviewer,
+  PrViewerReview,
   PrReviewThread,
   PrState,
   PrVerdict,
@@ -54,7 +55,7 @@ export const PR_REVIEW_QUERY = `query($owner: String!, $name: String!, $number: 
         nodes { id author { login url } body createdAt url reactionGroups { content viewerHasReacted reactors { totalCount } } }
       }
       reviews(first: 100) {
-        nodes { id author { login url } body state createdAt url reactionGroups { content viewerHasReacted reactors { totalCount } } }
+        nodes { id author { login url } body state createdAt submittedAt commit { oid } url reactionGroups { content viewerHasReacted reactors { totalCount } } }
       }
       reviewRequests(first: 100) {
         nodes { requestedReviewer { ... on User { login url } ... on Team { name url } } }
@@ -211,7 +212,7 @@ function listVars(filter: PrListFilter = {}): Record<string, string> {
   };
 }
 
-const REVIEW_STATES: Record<string, PrReviewer['state']> = {
+const REVIEW_STATES: Record<string, PrViewerReview['state']> = {
   APPROVED: 'approved',
   CHANGES_REQUESTED: 'changes_requested',
   COMMENTED: 'commented',
@@ -234,6 +235,28 @@ function reviewersFrom(p: Node): PrReviewer[] {
     if (name) byName.set(name, { name, url: profileUrl(who), state: 'pending' });
   }
   return [...byName.values()];
+}
+
+/** The viewer's latest submitted review (dismissed and pending ones don't
+ *  count), its verdict kept through a later plain comment as `reviewersFrom`
+ *  keeps it; stale once the PR's head has moved past the commit it reviewed. */
+export function githubViewerReview(p: Node, viewer: string): PrViewerReview | null {
+  if (!viewer) return null;
+  const mine = nodes(p.reviews).filter(
+    (r) => login(r.author) === viewer && REVIEW_STATES[str(r.state)],
+  );
+  const last = mine[mine.length - 1];
+  if (!last) return null;
+  const verdict = [...mine]
+    .reverse()
+    .find((r) => r.state === 'APPROVED' || r.state === 'CHANGES_REQUESTED');
+  const reviewed = str((last.commit as Node | null)?.oid);
+  const head = str(p.headRefOid);
+  return {
+    state: REVIEW_STATES[str((verdict ?? last).state)]!,
+    at: str(last.submittedAt) || str(last.createdAt),
+    stale: !!reviewed && !!head && reviewed !== head,
+  };
 }
 
 /** The head commit's check runs and statuses. */
@@ -286,6 +309,7 @@ export function githubReviewFrom(
     baseRef: str(p.baseRefName),
     headRef: str(p.headRefName),
     reviewers: reviewersFrom(p),
+    viewerReview: githubViewerReview(p, viewer),
     assignees: nodes(p.assignees).map(login).filter(Boolean),
     issues: nodes(p.closingIssuesReferences).flatMap((i) => {
       const n = num(i.number);

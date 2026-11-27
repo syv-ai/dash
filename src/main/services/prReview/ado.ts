@@ -7,6 +7,7 @@ import type {
   PrReactionContent,
   PrReviewComment,
   PrReviewer,
+  PrViewerReview,
   PrReviewThread,
   PrState,
   PrVerdict,
@@ -38,7 +39,7 @@ interface RawComment {
   isDeleted?: boolean;
   publishedDate?: string;
   lastUpdatedDate?: string;
-  author?: { displayName?: string } | null;
+  author?: { id?: string; displayName?: string } | null;
   /** Who liked it (ADO's one reaction). */
   usersLiked?: { id?: string }[] | null;
 }
@@ -157,7 +158,7 @@ function stateFrom(pr: RawPr): PrState {
 }
 
 // A reviewer's vote: 10 approved, 5 with suggestions, 0 none yet, -5 waiting, -10 rejected.
-const VOTE_STATES: Record<number, PrReviewer['state']> = {
+const VOTE_STATES: Record<number, PrViewerReview['state']> = {
   10: 'approved',
   5: 'approved_with_suggestions',
   [-5]: 'waiting',
@@ -170,6 +171,41 @@ const reviewersFrom = (pr: RawPr): PrReviewer[] =>
     url: null,
     state: VOTE_STATES[r.vote ?? 0] ?? 'pending',
   }));
+
+/**
+ * The viewer's vote, if they cast one, as their review: when is the newest
+ * vote ADO wrote down for them (its VoteUpdate threads), and it is stale
+ * once a push (an iteration) came after it. ADO may reset votes on a push,
+ * leaving none.
+ */
+export function adoViewerReview(
+  pr: RawPr,
+  iterations: unknown,
+  threads: unknown,
+  me: string,
+): PrViewerReview | null {
+  const vote = me ? (pr.reviewers ?? []).find((r) => r.id === me)?.vote : undefined;
+  const state = vote ? VOTE_STATES[vote] : undefined;
+  if (!state) return null;
+  const at = list<RawThread>(threads)
+    .filter((t) => threadType(t) === 'VoteUpdate')
+    .flatMap((t) => t.comments ?? [])
+    .filter((c) => c.author?.id === me && c.publishedDate)
+    .map((c) => c.publishedDate!)
+    .sort()
+    .pop();
+  const stale =
+    !!at && list<RawIteration>(iterations).some((i) => !!i.createdDate && i.createdDate > at);
+  return { state, at: at ?? '', stale };
+}
+
+/** A thread's `CodeReviewThreadType` (VoteUpdate, RefUpdate, …); '' for a person's. */
+function threadType(t: RawThread): string {
+  const v = t.properties?.CodeReviewThreadType;
+  if (typeof v === 'string') return v;
+  const inner = (v as { $value?: unknown } | null | undefined)?.$value;
+  return typeof inner === 'string' ? inner : '';
+}
 
 /** A comment's likes as its one reaction; none when no one liked it. `me`
  *  is the viewer's identity id ('' when unknown). */
@@ -318,6 +354,7 @@ export function adoReviewFrom(
     baseRef: branchName(pr.targetRefName),
     headRef: branchName(pr.sourceRefName),
     reviewers: reviewersFrom(pr),
+    viewerReview: adoViewerReview(pr, raw.iterations, raw.threads, raw.me),
     assignees: [],
     issues: raw.issues ?? [],
     checks: raw.checks,

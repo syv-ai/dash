@@ -6,7 +6,7 @@ import { prStateIcon, prStatusText } from '../ui/prStatusColors';
 import { mergeVerb, plural, providerName } from './labels';
 
 /** A branch, linked to its page on the forge when the remote names one. */
-function Branch({ remote, name }: { remote: string | null; name: string }) {
+export function Branch({ remote, name }: { remote: string | null; name: string }) {
   const href = remote ? branchUrl(remote, name) : null;
   return href ? (
     <TextLink href={href} title={`Open ${name} on the forge`}>

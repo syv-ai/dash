@@ -16,26 +16,23 @@ export function initials(name: string): string {
 
 /**
  * A person without a picture: their initials on a neutral disc (24px), or an
- * `icon` in it (the agent, a draft). `dashed` rings it in a dashed line, for
- * something not yet posted. Neutral by rule: colour means agent state.
+ * `icon` in it (the agent, a draft). Neutral by rule: colour means agent
+ * state.
  */
 export function Avatar({
   name,
   icon: Icon,
-  dashed = false,
   className,
 }: {
   name: string;
   icon?: LucideIcon;
-  dashed?: boolean;
   className?: string;
 }) {
   return (
     <span
       aria-hidden
       className={cn(
-        'inline-flex size-6 shrink-0 select-none items-center justify-center rounded-full text-xs font-semibold leading-none text-ink-2',
-        dashed ? 'border border-dashed border-ink-3' : 'bg-select',
+        'inline-flex size-6 shrink-0 select-none items-center justify-center rounded-full bg-select text-xs font-semibold leading-none text-ink-2',
         className,
       )}
     >

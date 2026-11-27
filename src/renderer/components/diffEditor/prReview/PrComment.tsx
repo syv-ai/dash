@@ -129,16 +129,17 @@ export function PostedComment({
   );
 }
 
-/** "Draft · not posted": what marks a comment that is only here. */
+/** "Draft": what marks a comment that is only here. */
 export function DraftBadge() {
-  return <Badge size="sm">Draft · not posted</Badge>;
+  return <Badge size="sm">Draft</Badge>;
 }
 
 /**
  * A comment that is only here: the person's or the agent's draft (a reply, a
- * line comment, the review's summary). A dashed avatar and "Draft · not
- * posted" tell it from a posted one; its actions edit, demote and delete; a
- * reply on the own PR posts from here, any other draft with Finish review.
+ * line comment, the review's summary). Its "Draft" badge tells it from a
+ * posted one; a double click edits it, as a comment's bubble in the editor
+ * does, and its actions edit, demote and delete; a reply on the own PR posts
+ * from here, any other draft with Finish review.
  */
 export function DraftComment({
   draft,
@@ -158,24 +159,32 @@ export function DraftComment({
   if (editing) {
     return <DraftEditor comment={draft} mentions={mentions} onDone={() => setEditing(false)} />;
   }
-  const footer =
-    poster && draft.replyTo ? (
-      <div className="flex flex-wrap justify-end gap-1.5">
-        <PostReplyButtons draft={draft} poster={poster} />
-      </div>
-    ) : (
-      <p className="type-caption">Posts when you finish the review.</p>
-    );
+  // The comment's double click edits; its controls' clicks stay their own.
+  const own = (node: ReactNode) => (
+    <div className="contents" onDoubleClick={(e) => e.stopPropagation()}>
+      {node}
+    </div>
+  );
   return (
-    <CommentFrame
-      avatar={<Avatar name={agent ? 'Agent' : 'You'} icon={agent ? Bot : Pencil} dashed />}
-      name={agent ? 'Agent' : 'You'}
-      badge={<DraftBadge />}
-      subtitle={place}
-      actions={<DraftActions comment={draft} onEdit={() => setEditing(true)} />}
-      footer={footer}
-    >
-      <Markdown text={draft.text} />
-    </CommentFrame>
+    <div onDoubleClick={() => setEditing(true)}>
+      <CommentFrame
+        avatar={<Avatar name={agent ? 'Agent' : 'You'} icon={agent ? Bot : Pencil} />}
+        name={agent ? 'Agent' : 'You'}
+        badge={<DraftBadge />}
+        subtitle={place && own(place)}
+        actions={own(<DraftActions comment={draft} onEdit={() => setEditing(true)} />)}
+        footer={
+          poster &&
+          draft.replyTo &&
+          own(
+            <div className="flex flex-wrap justify-end gap-1.5">
+              <PostReplyButtons draft={draft} poster={poster} />
+            </div>,
+          )
+        }
+      >
+        <Markdown text={draft.text} />
+      </CommentFrame>
+    </div>
   );
 }

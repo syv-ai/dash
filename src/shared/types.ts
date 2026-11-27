@@ -712,6 +712,17 @@ export interface PrReviewer {
     | 'rejected';
 }
 
+/** The person's own latest review of a PR (GitHub's review, ADO's vote). */
+export interface PrViewerReview {
+  /** What it said: on GitHub an approval or change request outlasts a
+   *  later plain comment, as on the forge. */
+  state: Exclude<PrReviewer['state'], 'pending'>;
+  /** When, ISO 8601; '' when the forge doesn't say. */
+  at: string;
+  /** Commits have landed on the PR since. */
+  stale: boolean;
+}
+
 /** One CI check on a PR's head. */
 export interface PrCheck {
   name: string;
@@ -779,6 +790,8 @@ export interface PrReview {
    *  can't be resolved locally. */
   behindBase: number | null;
   reviewers: PrReviewer[];
+  /** The person's own latest review; null when they haven't reviewed it. */
+  viewerReview: PrViewerReview | null;
   /** [] on ADO, which has none. */
   assignees: string[];
   /** The issues it closes (GitHub) or its linked work items (ADO). */

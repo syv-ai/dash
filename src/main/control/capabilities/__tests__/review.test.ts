@@ -87,6 +87,7 @@ const review = (pr: PrRef): PrReview => ({
   reviewers: [{ name: 'ana', url: null, state: 'commented' }],
   assignees: [],
   issues: [],
+  viewerReview: null,
   checks: [{ name: 'ci', state: 'passing', url: 'https://ci' }],
   files: [
     { path: 'src/a.ts', status: 'modified', additions: 3, deletions: 1, blob: 'x' },

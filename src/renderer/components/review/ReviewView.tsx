@@ -205,6 +205,7 @@ function Review({
       {finishing && (
         <FinishReviewSheet
           review={review}
+          remote={remote}
           projectId={task.projectId}
           cwd={task.path}
           taskId={task.id}

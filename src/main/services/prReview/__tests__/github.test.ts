@@ -8,6 +8,7 @@ import {
   githubRelevantPrsFrom,
   githubReplyRequest,
   githubReviewFrom,
+  githubViewerReview,
   githubWriteError,
   makeGithubProvider,
   restCommentFrom,
@@ -271,6 +272,47 @@ const submission: PrSubmission = {
   ],
   replies: [{ draftId: 'd3', threadId: 'T_9', body: 'agreed' }],
 };
+
+describe('githubViewerReview', () => {
+  const review = (
+    login: string,
+    state: string,
+    oid = 'H1',
+    submittedAt = '2026-11-01T00:00:00Z',
+  ) => ({
+    author: { login },
+    state,
+    submittedAt,
+    commit: { oid },
+  });
+  const pr = (reviews: unknown[], headRefOid = 'H1') => ({
+    headRefOid,
+    reviews: { nodes: reviews },
+  });
+
+  it('is null when the viewer has no submitted review', () => {
+    expect(githubViewerReview(pr([review('ann', 'APPROVED')]), 'me')).toBeNull();
+    expect(
+      githubViewerReview(pr([review('me', 'PENDING'), review('me', 'DISMISSED')]), 'me'),
+    ).toBeNull();
+    expect(githubViewerReview(pr([review('me', 'APPROVED')]), '')).toBeNull();
+  });
+
+  it('keeps an approval through a later plain comment, dated by the latest review', () => {
+    const r = githubViewerReview(
+      pr([
+        review('me', 'APPROVED', 'H1', '2026-11-01T00:00:00Z'),
+        review('me', 'COMMENTED', 'H1', '2026-11-02T00:00:00Z'),
+      ]),
+      'me',
+    );
+    expect(r).toEqual({ state: 'approved', at: '2026-11-02T00:00:00Z', stale: false });
+  });
+
+  it('is stale once the head moved past the commit it reviewed', () => {
+    expect(githubViewerReview(pr([review('me', 'COMMENTED', 'H0')], 'H1'), 'me')?.stale).toBe(true);
+  });
+});
 
 describe('githubProvider.submit', () => {
   it('puts comments and replies in one pending review, then submits it with the verdict', async () => {

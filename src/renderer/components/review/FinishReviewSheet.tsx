@@ -11,15 +11,32 @@ import { DetailItem, DetailList } from '../ui/DetailList';
 import { Dialog, DialogFooter, DialogHeader } from '../ui/Dialog';
 import { Field } from '../ui/Field';
 import { IconButton } from '../ui/IconButton';
+import { LineStats } from '../ui/LineStats';
+import { prStateIcon, prStatusText } from '../ui/prStatusColors';
+import { TextLink } from '../ui/TextLink';
 import { useModalClose } from '../ui/Modal';
 import { Select } from '../ui/Select';
 import { Textarea } from '../ui/Textarea';
 import { ThreadItems } from './ThreadsTab';
-import { canPost, offeredVerdict, postingItems, postLabel, VERDICT_LABELS } from './finishReview';
-import { plural, providerName } from './labels';
+import { ChecksRollupIcon } from './ChecksRollupIcon';
+import {
+  canPost,
+  draftsLine,
+  offeredVerdict,
+  ownReviewLine,
+  postingItems,
+  postLabel,
+  threadsLineShort,
+  VERDICT_LABELS,
+} from './finishReview';
+import { diffTotals, plural, providerName } from './labels';
+import { checksRollup, checksSummary } from './outline';
+import { Branch } from './ReviewHeader';
 
 interface Props {
   review: PrReview;
+  /** The project's git remote: where branch links point. */
+  remote: string | null;
   projectId: string;
   cwd: string;
   taskId: string;
@@ -32,10 +49,19 @@ interface Props {
   onClose: () => void;
 }
 
+const PR_STATE_LABELS: Record<PrReview['state'], string> = {
+  open: 'Open',
+  draft: 'Draft',
+  merged: 'Merged',
+  closed: 'Closed',
+};
+
 /**
  * Finish review: the one place a review posts. Two columns: on the left what
- * the review is (the PR, what posts where), the verdict and the summary (the
- * review's PR-level comment, a stored draft the agent may have written); on
+ * the review is (the PR and its branches, linked; its state, checks and
+ * changes; the person's last review; its threads and the drafts that post),
+ * the verdict and the summary (the review's PR-level comment, a stored draft
+ * the agent may have written), which takes the column's height left; on
  * the right every thread a comment or reply of the review posts in, as the
  * Threads tab draws them (threads fold), scrolling on its own. Then a button that says what
  * posts where. Nothing posts from the keyboard.
@@ -52,6 +78,7 @@ export function FinishReviewSheet(props: Props) {
 
 function Sheet({
   review,
+  remote,
   projectId,
   cwd,
   taskId,
@@ -69,7 +96,6 @@ function Sheet({
   const [error, setError] = useState<{ error: PrWriteError; posted: number } | null>(null);
   const toPost = { comments: comments.length, summary: body, verdict };
   const forge = providerName(review.provider);
-  const replies = comments.filter((c) => c.replyTo).length;
   const items = useMemo(() => postingItems(review.threads, comments), [review, comments]);
   const context = usePrThreadContext({
     review,
@@ -94,30 +120,75 @@ function Sheet({
     }
   }
 
+  const StateIcon = prStateIcon(review.state);
+  const totals = diffTotals(review.files);
+  const checks = checksSummary(review.checks);
+
   return (
     <>
-      <DialogHeader
-        title={`Finish review of PR #${review.number}`}
-        description={<span title={review.title}>{review.title}</span>}
-        closeDisabled={busy}
-      />
+      <DialogHeader title={`Finish review of PR #${review.number}`} closeDisabled={busy} />
       <div className="flex min-h-0 flex-1">
-        <div className="scrollbar-thin-hover grid w-90 shrink-0 content-start gap-5 overflow-y-auto px-5 pt-1 pb-5">
+        {/* A column whose Summary takes the height left, its bottom edge on
+            the threads pane's. */}
+        <div className="scrollbar-thin-hover flex w-90 shrink-0 flex-col gap-5 overflow-y-auto px-5 pt-1">
           <DetailList>
-            <DetailItem label="Posts to">{forge}</DetailItem>
-            <DetailItem label="Author">{review.author}</DetailItem>
-            <DetailItem label="Into" title={`${review.headRef} → ${review.baseRef}`}>
-              {review.baseRef}
+            <DetailItem label="Pull request" title={review.title}>
+              <TextLink href={review.url} title={`Open on ${forge}`}>
+                <span className="tabular-nums">#{review.number}</span> {review.title}
+              </TextLink>
+            </DetailItem>
+            <DetailItem label="State">
+              <span className="inline-flex items-center gap-1.5">
+                <StateIcon
+                  size={14}
+                  strokeWidth={1.8}
+                  className={prStatusText(review.state)}
+                  aria-hidden
+                />
+                {PR_STATE_LABELS[review.state]}
+              </span>
+            </DetailItem>
+            <DetailItem label="Author">
+              {review.authorUrl ? (
+                <TextLink href={review.authorUrl} title={`${review.author}'s profile`}>
+                  {review.author}
+                </TextLink>
+              ) : (
+                review.author
+              )}
+            </DetailItem>
+            <DetailItem label="Branches" title={`${review.headRef} into ${review.baseRef}`}>
+              <Branch remote={remote} name={review.baseRef} /> ←{' '}
+              <Branch remote={remote} name={review.headRef} />
+            </DetailItem>
+            <DetailItem label="Checks">
+              {checks ? (
+                <span className="inline-flex items-center gap-1.5 tabular-nums">
+                  <ChecksRollupIcon ci={checksRollup(review.checks)!} />
+                  {checks}
+                </span>
+              ) : (
+                'None'
+              )}
+            </DetailItem>
+            <DetailItem label="Changes">
+              <span className="tabular-nums">
+                {plural(totals.files, 'file')}
+                {(totals.additions > 0 || totals.deletions > 0) && ', '}
+                <LineStats add={totals.additions} del={totals.deletions} />
+              </span>
+            </DetailItem>
+            <DetailItem label="Commits">
+              <span className="tabular-nums">{review.commits}</span>
+            </DetailItem>
+            <DetailItem label="Your review">
+              <span className="tabular-nums">{ownReviewLine(review.viewerReview, Date.now())}</span>
             </DetailItem>
             <DetailItem label="Threads">
-              <span className="tabular-nums">
-                {[
-                  comments.length > replies && plural(comments.length - replies, 'new thread'),
-                  replies > 0 && (replies === 1 ? '1 reply' : `${replies} replies`),
-                ]
-                  .filter(Boolean)
-                  .join(', ') || 'None'}
-              </span>
+              <span className="tabular-nums">{threadsLineShort(review.threads)}</span>
+            </DetailItem>
+            <DetailItem label="Drafts">
+              <span className="tabular-nums">{draftsLine(comments)}</span>
             </DetailItem>
             {noteCount > 0 && (
               <DetailItem label="Notes">
@@ -136,6 +207,8 @@ function Sheet({
           )}
           <Field
             label="Summary"
+            fill
+            className="min-h-40"
             hint={{
               title: 'Summary',
               body: `A comment on the whole PR, posted with the review on ${forge}.`,
@@ -155,7 +228,7 @@ function Sheet({
               // Keys stay in the field: no app shortcut fires, nothing posts.
               onKeyDown={(e) => e.stopPropagation()}
               placeholder="A comment on the whole PR (optional)"
-              autoGrow={{ minRows: 6, maxRows: 24 }}
+              className="h-full resize-none"
             />
           </Field>
         </div>
@@ -175,6 +248,7 @@ function Sheet({
                   onNavigate(scope, path, id);
                   close();
                 }}
+                onOpened={close}
               />
             ) : (
               <p className="type-caption px-2.5">Only the verdict and summary post.</p>

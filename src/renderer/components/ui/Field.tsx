@@ -63,6 +63,7 @@ export function Field({
   note,
   trailing,
   as = 'label',
+  fill = false,
   className,
   children,
 }: {
@@ -72,12 +73,21 @@ export function Field({
   /** At the label's end, quiet ("optional", "Drafted by the agent"). */
   trailing?: React.ReactNode;
   as?: 'label' | 'div';
+  /** Take the height left in a flex column, the control stretching to its
+   *  bottom edge (a summary beside a pane it lines up with). */
+  fill?: boolean;
   className?: string;
   children: React.ReactNode;
 }) {
   const Comp = as;
   return (
-    <Comp className={cn('grid min-w-0 content-start gap-1.5 py-1', className)}>
+    <Comp
+      className={cn(
+        'grid min-w-0 content-start gap-1.5 py-1',
+        fill && 'flex-1 grid-rows-[auto_minmax(0,1fr)] content-stretch pb-0',
+        className,
+      )}
+    >
       <span className="flex min-h-4 items-center gap-1.5">
         <span className="type-label min-w-0 truncate">{label}</span>
         {hint && <InfoTip content={hint} />}
