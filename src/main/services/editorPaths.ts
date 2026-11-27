@@ -4,7 +4,7 @@ import path from 'path';
 /*
  * Where an editor path may lead (A10): inside a task's worktree, or inside one
  * of the folders outside it a task's editor may open. Pure (the disk only),
- * shared by the editor's IPC and the control API's `present`.
+ * shared by the editor's IPC and the control API's `show`.
  */
 
 export function safeRealpath(p: string): string {

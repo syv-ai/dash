@@ -37,7 +37,7 @@ describe('dashSessionAccess', () => {
 
   it("gives the task's caller and token, and allows the read-only commands", () => {
     initTokens(userData);
-    setReadOnlyCapabilities(['tasks.list', 'review.drafts_list']);
+    setReadOnlyCapabilities(['tasks.list', 'review.drafts_list', 'show']);
     const access = dashSessionAccess({ id: 't1', dashAccess: true })!;
     expect(access.env).toEqual({
       DASH_CALLER: 'task:t1',
@@ -49,8 +49,10 @@ describe('dashSessionAccess', () => {
     expect(access.allow).toEqual([
       'Bash(dashctl tasks list:*)',
       'Bash(dashctl review drafts-list:*)',
+      'Bash(dashctl show:*)',
       `Bash("${dashctl}" tasks list:*)`,
       `Bash("${dashctl}" review drafts-list:*)`,
+      `Bash("${dashctl}" show:*)`,
     ]);
     expect(access.dashctl).toBe(dashctl);
   });

@@ -9,7 +9,6 @@ import {
   openTab,
   parseLayout,
   pinTab,
-  presentTab,
   retainTabs,
   serializeLayout,
   type EditorLayout,
@@ -17,6 +16,7 @@ import {
   type OpenOptions,
 } from '../components/diffEditor/tabs/editorLayout';
 import { track } from '../lib/telemetry';
+import type { LineRange } from '../../shared/showFile';
 
 /** A span of text, 1-based (Monaco's IRange shape, so LSP ranges convert to it). */
 export interface TextRange {
@@ -42,14 +42,18 @@ export interface ExpandFolderRequest {
   nonce: number;
 }
 
-/** A workspace's presented tab (`dashctl present`): read-only, rendered. */
-export interface Presented {
+/** The file `dashctl show` last put in a workspace's editor, while its tab is open. */
+export interface Shown {
   path: string;
-  /** Moves with each `present`, which reloads the file. */
+  /** Moves with each show: the pane reads the file again and applies it. */
   nonce: number;
-  /** The sidebar has shown it (expanded, the list folded); until then it
-   *  waits for its task to be the one open. */
-  shown: boolean;
+  /** Lines to scroll to and highlight, in the source. */
+  lines: LineRange | null;
+  /** Open rendered (a Markdown or HTML file shown without lines or `--source`). */
+  rendered: boolean;
+  /** The sidebar has put it on screen (expanded, the list folded); until
+   *  then it waits for its task to be the one open. */
+  onScreen: boolean;
 }
 
 interface EditorTabsState {
@@ -74,12 +78,13 @@ interface EditorTabsState {
   clearReveal(nonce: number): void;
   expandFolder: ExpandFolderRequest | null;
   requestExpandFolder(path: string): void;
-  /** Per workspace: its presented tab, while it is open. */
-  presented: Record<string, Presented>;
-  /** Show `path` in the workspace's presented tab (the one before's place). */
-  present(key: string, path: string): void;
-  /** The sidebar has shown the workspace's presented tab. */
-  markPresentedShown(key: string, nonce: number): void;
+  /** Per workspace: the file `dashctl show` put there last, while it is open. */
+  shown: Record<string, Shown>;
+  /** Show `path` in the workspace's focused group, as its preview tab (the
+   *  next file shown takes its place unless the person kept it). */
+  show(key: string, path: string, opts: { lines: LineRange | null; rendered: boolean }): void;
+  /** The sidebar has put the workspace's shown file on screen. */
+  markShownOnScreen(key: string, nonce: number): void;
   /** The editor's file tree column is folded away (every workspace's). */
   treeCollapsed: boolean;
   setTreeCollapsed(collapsed: boolean): void;
@@ -125,16 +130,16 @@ function without<T>(record: Record<string, T>, key: string): Record<string, T> {
 }
 
 export const useEditorTabs = create<EditorTabsState>((set, get) => {
-  // A presented tab lasts while it is open; closing it ends it.
+  // A shown file lasts while its tab is open; closing it ends it.
   const update = (key: string, fn: (layout: EditorLayout) => EditorLayout) => {
     const prev = get().layouts[key] ?? EMPTY_LAYOUT;
     const next = fn(prev);
     if (next === prev) return;
-    const shown = get().presented[key];
+    const shown = get().shown[key];
     const ended = shown && !openPaths(next).includes(shown.path);
     set((s) => ({
       layouts: { ...s.layouts, [key]: next },
-      ...(ended ? { presented: without(s.presented, key) } : {}),
+      ...(ended ? { shown: without(s.shown, key) } : {}),
     }));
     writeStored(key, next);
   };
@@ -147,28 +152,25 @@ export const useEditorTabs = create<EditorTabsState>((set, get) => {
       const layout = (persist && readStored(key)) || EMPTY_LAYOUT;
       set((s) => ({ layouts: { ...s.layouts, [key]: layout } }));
     },
-    // Opened for itself (the tree, a link), a presented file becomes a
-    // plain tab, editable again.
     open: (key, path, opts) => {
-      if (get().presented[key]?.path === path) {
-        set((s) => ({ presented: without(s.presented, key) }));
-      }
       update(key, (l) => openTab(l, path, opts));
       track('file_opened');
     },
-    presented: {},
-    present: (key, path) => {
+    shown: {},
+    show: (key, path, { lines, rendered }) => {
       get().load(key, true);
-      const before = get().presented[key]?.path ?? null;
-      update(key, (l) => presentTab(l, path, before));
+      update(key, (l) => openTab(l, path, { preview: true }));
       set((s) => ({
-        presented: { ...s.presented, [key]: { path, nonce: ++nonce, shown: false } },
+        shown: {
+          ...s.shown,
+          [key]: { path, nonce: ++nonce, lines, rendered, onScreen: false },
+        },
       }));
     },
-    markPresentedShown: (key, n) => {
-      const p = get().presented[key];
-      if (p?.nonce !== n || p.shown) return;
-      set((s) => ({ presented: { ...s.presented, [key]: { ...p, shown: true } } }));
+    markShownOnScreen: (key, n) => {
+      const p = get().shown[key];
+      if (p?.nonce !== n || p.onScreen) return;
+      set((s) => ({ shown: { ...s.shown, [key]: { ...p, onScreen: true } } }));
     },
     activate: (key, group, path) => update(key, (l) => activateTab(l, group, path)),
     close: (key, group, path) => update(key, (l) => closeTab(l, group, path)),

@@ -1015,6 +1015,14 @@
 .monaco-select-line-margin {
   background-color: hsl(var(--primary) / 0.32);
 }
+/* Lines `dashctl show` points at: a calm wash on the selection role, never a
+ * state colour, across the code and its gutter (useShownLines). */
+.monaco-shown-line {
+  background-color: hsl(var(--select));
+}
+.monaco-shown-line-margin {
+  background-color: hsl(var(--select));
+}
 
 /* Inline git blame — the contiguous run of lines from the hovered line's commit.
  * Faint enough to read under the comment shade bands. The blame text itself lives

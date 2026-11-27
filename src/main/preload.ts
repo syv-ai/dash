@@ -182,7 +182,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // App lifecycle
   onBeforeQuit: listen('app:beforeQuit'),
   onFocusTask: listen<{ taskId: string; projectId?: string }>('app:focusTask'),
-  onPresentFile: listen<{ taskId: string; path: string }>('app:presentFile'),
+  onShowFile: listen<import('@shared/showFile').ShowFileRequest>('app:showFile'),
   onOrchestratorAccessRequest: (callback: (request: { id: string; open: boolean }) => void) => {
     const opened = (_event: unknown, r: { id: string }) => callback({ id: r.id, open: true });
     const ended = (_event: unknown, r: { id: string }) => callback({ id: r.id, open: false });

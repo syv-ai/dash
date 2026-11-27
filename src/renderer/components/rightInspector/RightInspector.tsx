@@ -75,7 +75,7 @@ import type { DiffFileTarget } from '../../stores/editorsStore';
 import { useSettings } from '../../stores/settingsStore';
 import { useUi } from '../../stores/uiStore';
 import { useEditorTabs } from '../../stores/editorTabsStore';
-import { useShowPresented } from '../diffEditor/presented';
+import { useShowOnScreen } from '../diffEditor/showFile';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { matchesBinding, type KeyBinding } from '../../keybindings';
 import type { ContextUsage, RateLimits, Task } from '../../../shared/types';
@@ -320,8 +320,8 @@ export function RightInspector({
     setAgentPane('memory');
     if (railedRef.current) onShowRef.current({ terminal: false });
   }, [memoryAsked, showSegment]);
-  // A file `dashctl present`ed: the editor expanded, the list folded beside it.
-  useShowPresented(task.id, expanded, () => {
+  // A file `dashctl show`n: the editor expanded, the list folded beside it.
+  useShowOnScreen(task.id, expanded, () => {
     if (railedRef.current) onShowRef.current({ terminal: false });
     onOpenEditor();
   });

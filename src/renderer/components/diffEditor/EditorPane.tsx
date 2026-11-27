@@ -37,8 +37,9 @@ import { useGitBlame } from './blame/useGitBlame';
 import { useFileLoad } from './editor/useFileLoad';
 import { usePaneModels } from './editor/usePaneModels';
 import { dirtyVersion, isDirty, subscribeDirty } from './models';
-import type { TextRange } from '../../stores/editorTabsStore';
+import type { Shown, TextRange } from '../../stores/editorTabsStore';
 import { useEditorSave } from './editor/useEditorSave';
+import { useShownLines } from './editor/useShownLines';
 import { absolutePath, isOutsideWorktree } from './editor/fileRef';
 import { useTreeVersion } from '../fileTree/useTreeVersion';
 import { useMonacoEditor } from './editor/useMonacoEditor';
@@ -89,10 +90,10 @@ interface EditorPaneProps {
   onRevealed: (nonce: number) => void;
   /** `filePath` turned out to be a folder (a tab from before it was one). */
   onIsDirectory: (path: string) => void;
-  /** Set while this is the workspace's presented tab (`dashctl present`):
-   *  read-only, rendered first, following the file on disk; each new value
-   *  (presented again) reloads it. */
-  presentNonce: number | null;
+  /** Set while this is the file `dashctl show` put here last: it follows the
+   *  file on disk, and each new show reads it again, opens it rendered or
+   *  in its source, and points at its lines. */
+  show: Shown | null;
 }
 
 export function EditorPane({
@@ -113,7 +114,7 @@ export function EditorPane({
   revealRange,
   onRevealed,
   onIsDirectory,
-  presentNonce,
+  show,
 }: EditorPaneProps) {
   // The store holds the active task's comments: they belong here only while
   // this is that task's folder (activeTaskId is null otherwise).
@@ -144,22 +145,26 @@ export function EditorPane({
   const kind = previewKind(filePath);
   const canPreview = kind !== null;
 
-  // A file opens in source view, a presented one rendered (and again each
-  // time it is presented).
-  const presented = presentNonce !== null;
+  // A file opens in its source; one shown rendered opens rendered (again
+  // each time it is shown).
+  const showNonce = show?.nonce ?? null;
+  const showRendered = show?.rendered ?? false;
   useEffect(() => {
-    setPreviewing(presentNonce !== null && kind !== null);
-  }, [filePath, kind, presentNonce]);
-  // Presented again: read it again. Presented, it follows the file as it
-  // changes on disk (the folder watch the file tree uses).
-  const lastPresent = useRef(presentNonce);
+    setPreviewing(showRendered && kind !== null);
+  }, [filePath, kind, showNonce, showRendered]);
+  // Shown again: read it again. Shown, it follows the file as it changes on
+  // disk (the folder watch the file tree uses).
+  const lastShow = useRef(showNonce);
   useEffect(() => {
-    const again = lastPresent.current !== null && presentNonce !== lastPresent.current;
-    if (presentNonce !== null && again) reload();
-    lastPresent.current = presentNonce;
-  }, [presentNonce, reload]);
+    const again = lastShow.current !== null && showNonce !== lastShow.current;
+    if (showNonce !== null && again) reload();
+    lastShow.current = showNonce;
+  }, [showNonce, reload]);
   const absFile = absolutePath(cwd, filePath);
-  const diskVersion = useTreeVersion(absFile.slice(0, absFile.lastIndexOf('/')), presented);
+  const diskVersion = useTreeVersion(
+    absFile.slice(0, absFile.lastIndexOf('/')),
+    showNonce !== null,
+  );
   useEffect(() => {
     if (diskVersion > 0) reload();
   }, [diskVersion, reload]);
@@ -252,7 +257,7 @@ export function EditorPane({
     monaco,
     !commentsDisabled,
   );
-  const editable = !isCommitView && working !== null && !presented;
+  const editable = !isCommitView && working !== null;
   // Shared with every other view of the file: one buffer, one dirty flag.
   useSyncExternalStore(subscribeDirty, dirtyVersion);
   const dirty = editable && isDirty(working.uri.toString());
@@ -332,6 +337,15 @@ export function EditorPane({
     if (!target) return;
     if (revealLive(target)) onClearReveal();
   }, [revealCommentId, liveComments, revealLive, onClearReveal]);
+
+  // Lines `dashctl show` points at, once the file is on screen.
+  useShownLines({
+    editor: modifiedEditor,
+    monaco,
+    lines: show?.lines ?? null,
+    nonce: showNonce,
+    ready: isFileLoaded,
+  });
 
   // A range asked for from outside (openFileAt): reveal it once on screen.
   useEffect(() => {

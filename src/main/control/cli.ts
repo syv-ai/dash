@@ -43,7 +43,7 @@ interface ObjectSchema {
 
 const kebab = (s: string) => s.replace(/_/g, '-').replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 /** A capability's command words: 'tasks.create' → tasks create; one without
- *  a namespace ('present') is a command of its own. */
+ *  a namespace ('show') is a command of its own. */
 const words = (capability: string) => {
   const [ns, verb] = capability.split('.');
   return verb === undefined ? [kebab(ns!)] : [ns!, kebab(verb)];

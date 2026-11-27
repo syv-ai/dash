@@ -34,7 +34,7 @@ export function dashSkill(dashctl: string | null): string {
     : '';
   return `---
 name: dash
-description: How to reach Dash from a Dash task with the dashctl command — tasks, services, presenting a file (a plan, a report) for the person to read, and above all PR review (reading the PR and its threads, notes vs comments, line drafts, replies, the review summary). Use before running dashctl, whenever asked to review a PR or leave review notes or comments in Dash, and when you have a plan or report for the person to read.
+description: How to reach Dash from a Dash task with the dashctl command — tasks, services, showing the person a file (lines of code to explain something, or a plan or report rendered), and above all PR review (reading the PR and its threads, notes vs comments, line drafts, replies, the review summary). Use before running dashctl, whenever asked to review a PR or leave review notes or comments in Dash, and when you want to show the person some code, a plan or a report.
 ---
 
 ${MARKER}
@@ -60,10 +60,16 @@ EOF
 
 ## Showing the person a file
 
-\`dashctl present <path>\` opens a file in front of the person, in your task's editor: a read-only tab, Markdown and HTML rendered (they can toggle to the source), any other file as code. Use it to hand over something to read: a plan for review, a report, a summary of what you changed. Presenting again reuses the tab and reloads it, and the tab follows the file as you edit it, so present once and keep writing. The file must be in your checkout, your scratchpad or the project's memory folder; write anything else there first. The HTML is shown without scripts, network or images from outside the file, so inline what it needs (\`data:\` images, a \`<style>\` block).
+\`dashctl show <path>\` opens a file in front of the person, in your task's editor. Use it to explain something in the code (point at the lines you mean instead of pasting them), or to hand over a plan, a report or a summary to read. It never asks permission.
+
+- Code and any other text file open as an ordinary tab the person can edit. \`--lines 42\` or \`--lines 10-20\` scrolls to those lines and highlights them.
+- Markdown and HTML open rendered. \`--source\` opens the source instead, as \`--lines\` does.
+- Showing the same file again reuses its tab and reads it again, and the tab follows the file while you write it. Another file takes the previous one's tab, unless the person has kept it.
+- The file must be in your checkout, your scratchpad or the project's memory folder; write anything else there first. HTML is shown without scripts, network or images from outside the file, so inline what it needs (\`data:\` images, a \`<style>\` block).
 
 \`\`\`sh
-dashctl present docs/plan.md
+dashctl show src/auth/session.ts --lines 40-58   # "this is where the expired session slips through"
+dashctl show docs/plan.md                         # a plan for the person to review, rendered
 \`\`\`
 
 ## Reviewing a PR

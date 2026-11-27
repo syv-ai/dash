@@ -10,7 +10,7 @@ import { registerProjectCapabilities } from '../capabilities/projects';
 import { registerTaskCapabilities } from '../capabilities/tasks';
 import { registerServiceCapabilities } from '../capabilities/services';
 import { registerReviewCapabilities } from '../capabilities/review';
-import { registerPresentCapabilities } from '../capabilities/present';
+import { registerShowCapabilities } from '../capabilities/show';
 import { commandLine, findProject, resolveArgv, resultText, usageText } from '../cli';
 import { mainCheckout } from '../projectPaths';
 import { ControlServer } from '../server';
@@ -33,7 +33,7 @@ function catalog() {
   registerTaskCapabilities(r, none);
   registerServiceCapabilities(r, none);
   registerReviewCapabilities(r, none);
-  registerPresentCapabilities(r, none);
+  registerShowCapabilities(r, none);
   return r.listFor(orch);
 }
 
@@ -76,14 +76,20 @@ describe('dashctl argv', () => {
   });
 
   it('takes a command with no namespace, its path made absolute', () => {
-    expect(
-      resolveArgv(['present', 'docs/plan.md'], commands, null, projects, '/repos/dash'),
-    ).toEqual({ kind: 'call', name: 'present', input: { path: '/repos/dash/docs/plan.md' } });
-    expect(resolve(['help'])).toMatchObject({
-      text: expect.stringContaining('dashctl present <path>'),
+    const show = (argv: string[]) => resolveArgv(argv, commands, null, projects, '/repos/dash');
+    expect(show(['show', 'src/app.ts', '--lines', '10-20'])).toEqual({
+      kind: 'call',
+      name: 'show',
+      input: { path: '/repos/dash/src/app.ts', lines: '10-20' },
     });
-    expect(resolve(['present', '--help'])).toMatchObject({ kind: 'help' });
-    expect(resolve(['present'])).toMatchObject({ kind: 'usage' });
+    expect(show(['show', 'docs/plan.md', '--source'])).toMatchObject({
+      input: { path: '/repos/dash/docs/plan.md', source: true },
+    });
+    expect(resolve(['help'])).toMatchObject({
+      text: expect.stringContaining('dashctl show <path> [options]'),
+    });
+    expect(resolve(['show', '--help'])).toMatchObject({ kind: 'help' });
+    expect(resolve(['show'])).toMatchObject({ kind: 'usage' });
   });
 
   it('finds a project by id, name or path', () => {
@@ -248,9 +254,9 @@ describe('dashctl argv', () => {
   });
 
   it('names commands after their capability', () => {
-    expect(
-      commands.map(commandLine).every((l) => /^dashctl ([a-z]+ [a-z-]+|present)\b/.test(l)),
-    ).toBe(true);
+    expect(commands.map(commandLine).every((l) => /^dashctl ([a-z]+ [a-z-]+|show)\b/.test(l))).toBe(
+      true,
+    );
     expect(usageText(commands)).not.toContain('_');
   });
 });

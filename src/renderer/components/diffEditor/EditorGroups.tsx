@@ -167,7 +167,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, actions }: Props) {
   };
 
   const reveal = useEditorTabs((s) => (s.reveal?.key === tabsKey ? s.reveal : null));
-  const presented = useEditorTabs((s) => s.presented[tabsKey] ?? null);
+  const shown = useEditorTabs((s) => s.shown[tabsKey] ?? null);
   const clearReveal = useCallback((n: number) => useEditorTabs.getState().clearReveal(n), []);
   const split = layout.groups.length > 1;
   const openAt = useCallback(
@@ -215,8 +215,8 @@ export function EditorGroups({ ws, terminalTheme, isDark, actions }: Props) {
           const filePath = group.active;
           // A file outside the worktree opens plain (A10): working view, no git or comments.
           const plain = !!filePath && isOutsideWorktree(filePath);
-          // The presented tab (`dashctl present`) shows the file itself, never a diff.
-          const presentNonce = presented && presented.path === filePath ? presented.nonce : null;
+          // A file `dashctl show`n opens on the working tree, whatever the view.
+          const show = shown && shown.path === filePath ? shown : null;
           const groupReveal =
             reveal && reveal.group === index && reveal.path === group.active
               ? { range: reveal.range, nonce: reveal.nonce }
@@ -258,8 +258,8 @@ export function EditorGroups({ ws, terminalTheme, isDark, actions }: Props) {
                           cwd={cwd}
                           git={ws.git && !plain}
                           filePath={filePath}
-                          view={plain || presentNonce !== null ? PLAIN_VIEW : ws.view}
-                          presentNonce={presentNonce}
+                          view={plain || show ? PLAIN_VIEW : ws.view}
+                          show={show}
                           activeTaskId={plain ? null : ws.activeTaskId}
                           terminalTheme={terminalTheme}
                           isDark={isDark}

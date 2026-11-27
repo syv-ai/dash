@@ -1,5 +1,6 @@
 import type { ControlInfo, IpcResponse } from '../../shared/types';
 import type { ToastPayload } from '../../shared/toast';
+import type { ShowFileRequest } from '../../shared/showFile';
 
 /** App info, dialogs, external/editor/IDE launch, app-lifecycle events, and
  *  settings mutations — the cross-cutting "shell" surface. */
@@ -38,8 +39,8 @@ export interface SystemApi {
   onBeforeQuit: (callback: () => void) => () => void;
   /** `projectId` is absent only from an older sender; then only the task is selected. */
   onFocusTask: (callback: (target: { taskId: string; projectId?: string }) => void) => () => void;
-  /** `dashctl present`: show `path` (as the editor names it) in a task's editor. */
-  onPresentFile: (callback: (target: { taskId: string; path: string }) => void) => () => void;
+  /** `dashctl show`: a file for a task's editor to show. */
+  onShowFile: (callback: (request: ShowFileRequest) => void) => () => void;
   /** An agent outside Dash asks to control it (`open`), or the ask timed out (`!open`). */
   onOrchestratorAccessRequest: (
     callback: (request: { id: string; open: boolean }) => void,

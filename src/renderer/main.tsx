@@ -4,7 +4,7 @@ import { App } from './App';
 import './index.css';
 import { installErrorReporting, reportError } from './lib/telemetry';
 import { installPrOutcomeTelemetry } from './lib/prOutcomeTelemetry';
-import { installPresentRequests } from './components/diffEditor/presented';
+import { installShowRequests } from './components/diffEditor/showFile';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { resolveTerminalFontValue, DEFAULT_FONT_MONO_STACK } from './terminal/terminalFonts';
 
@@ -19,7 +19,7 @@ if (resolvedFont !== DEFAULT_FONT_MONO_STACK) {
 
 installErrorReporting();
 installPrOutcomeTelemetry();
-installPresentRequests();
+installShowRequests();
 
 // React 19 hands render errors here instead of logging them itself, so log
 // as it would, then report. A boundary's catch (ui/ErrorBoundary: the root

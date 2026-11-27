@@ -97,40 +97,6 @@ export function openTab(layout: EditorLayout, path: string, opts: OpenOptions = 
   };
 }
 
-/**
- * Show `path` as a kept tab and focus its group (`dashctl present`): in place
- * of `replacing`, the tab shown before, wherever that is open (a group that
- * holds both keeps the one); else where `path` is open already; else a new
- * tab in the focused group.
- */
-export function presentTab(
-  layout: EditorLayout,
-  path: string,
-  replacing: string | null,
-): EditorLayout {
-  let next = layout;
-  if (replacing && replacing !== path) {
-    next = {
-      ...layout,
-      groups: layout.groups.map((g) => {
-        if (!g.tabs.includes(replacing)) return g;
-        const tabs = g.tabs.includes(path)
-          ? g.tabs.filter((t) => t !== replacing)
-          : g.tabs.map((t) => (t === replacing ? path : t));
-        return {
-          tabs,
-          active: g.active === replacing ? path : g.active,
-          preview: g.preview === replacing ? null : g.preview,
-        };
-      }),
-    };
-  }
-  const at = next.groups.findIndex((g) => g.tabs.includes(path));
-  if (at < 0) return openTab(next, path);
-  const group = at as GroupIndex;
-  return pinTab(activateTab(next, group, path), group, path);
-}
-
 /** Keep `path`'s tab in `group` open: it stops being the preview. */
 export function pinTab(layout: EditorLayout, group: GroupIndex, path: string): EditorLayout {
   const g = layout.groups[group];
