@@ -113,7 +113,8 @@ export function firstChangedTreeFile(paths: readonly string[]): string | null {
  * The view to show as review mode becomes known, starts or ends (each
  * `undefined` until main has said): a task found in review mode, opened or
  * just entered, shows Overview (D118); Overview and Comments are the mode's
- * alone, so ending it on either shows Files.
+ * alone, so ending it on either shows Files; Agent is normal mode's alone,
+ * so reaching it in review mode shows Overview.
  */
 export function segmentOnMode<S extends CodeSegment | 'details'>({
   segment,
@@ -124,7 +125,7 @@ export function segmentOnMode<S extends CodeSegment | 'details'>({
   was: boolean | undefined;
   now: boolean | undefined;
 }): S | 'overview' | 'files' {
-  if (now && !was) return 'overview';
+  if (now && (!was || segment === 'agent')) return 'overview';
   const reviewOnly = segment === 'overview' || segment === 'comments';
   return reviewOnly && !now ? 'files' : segment;
 }

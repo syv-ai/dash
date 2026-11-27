@@ -147,6 +147,13 @@ describe('segmentOnMode', () => {
     expect(on('history', undefined, false)).toBe('history');
   });
 
+  it("leaves Agent for Overview in review mode; it is normal mode's alone", () => {
+    expect(on('agent', true, true)).toBe('overview');
+    expect(on('agent', false, true)).toBe('overview');
+    expect(on('agent', true, false)).toBe('agent');
+    expect(on('agent', undefined, undefined)).toBe('agent');
+  });
+
   it('leaves Overview and Comments for Files once review mode ends; they are its alone', () => {
     expect(on('overview', true, false)).toBe('files');
     expect(on('comments', true, false)).toBe('files');

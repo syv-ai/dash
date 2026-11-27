@@ -255,20 +255,6 @@ export function RightInspector({
   }, []);
   // Agent's pane: the session's scratchpad or the project's memory.
   const [agentPane, setAgentPane] = useState<AgentPane>('scratchpad');
-  // Asked for this task's memory (a menu's "Memories", a project's count,
-  // `showMemory`): Agent on its Memory pane, shown narrow if collapsed (A12).
-  const memoryAsked = useUi((s) => s.memoryRequestTaskId === task.id);
-  const onShowRef = useRef(onShow);
-  onShowRef.current = onShow;
-  const railedRef = useRef(railed);
-  railedRef.current = railed;
-  useEffect(() => {
-    if (!memoryAsked) return;
-    useUi.getState().setMemoryRequestTaskId(null);
-    showSegment('agent');
-    setAgentPane('memory');
-    if (railedRef.current) onShowRef.current({ terminal: false });
-  }, [memoryAsked, showSegment]);
   // Files' scope: the user's pick for this task, else the changes when its
   // status first loads with any, else all files. Taken once, so the tree
   // doesn't swap under the user as changes come and go.
@@ -317,6 +303,25 @@ export function RightInspector({
   const { mode } = review;
   const reviewing = mode !== null;
   const tally = useReviewTally(task.id, review.review);
+
+  // Asked for this task's memory (a menu's "Memories", a project's count,
+  // `showMemory`): Agent on its Memory pane, shown narrow if collapsed (A12).
+  // Agent is normal mode's alone, so the ask ends review mode first.
+  const memoryAsked = useUi((s) => s.memoryRequestTaskId === task.id);
+  const onShowRef = useRef(onShow);
+  onShowRef.current = onShow;
+  const railedRef = useRef(railed);
+  railedRef.current = railed;
+  const exitReviewRef = useRef<(() => void) | null>(null);
+  exitReviewRef.current = reviewing ? review.exit : null;
+  useEffect(() => {
+    if (!memoryAsked) return;
+    useUi.getState().setMemoryRequestTaskId(null);
+    exitReviewRef.current?.();
+    showSegment('agent');
+    setAgentPane('memory');
+    if (railedRef.current) onShowRef.current({ terminal: false });
+  }, [memoryAsked, showSegment]);
 
   // Leaving History drops the commit it showed (D2): for the PR's view in
   // review mode, the working tree otherwise.
@@ -559,6 +564,7 @@ export function RightInspector({
   }
 
   // The views' tabs, in order (Details is the row's end button, not a tab).
+  // Review mode has no Agent: the PR is the subject, not the session.
   const viewTabs: ViewTabsOption<Segment>[] = reviewing
     ? [
         { value: 'overview', label: 'Overview' },
@@ -575,7 +581,6 @@ export function RightInspector({
           countLabel: 'Unresolved',
         },
         { value: 'history', label: 'History' },
-        { value: 'agent', label: 'Agent' },
       ]
     : [
         {
@@ -694,8 +699,8 @@ export function RightInspector({
     />
   );
 
-  // Agent: the session's scratchpad and the project's memory, alike in
-  // either mode. Their files open here, in the task's editor, as Files' do
+  // Agent (normal mode's): the session's scratchpad and the project's
+  // memory. Their files open here, in the task's editor, as Files' do
   // (A10): a scratchpad or memory file by its absolute path, plain.
   const agentView = (
     <AgentView
