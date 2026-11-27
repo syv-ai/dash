@@ -10,7 +10,7 @@ import { EmptyState } from '../ui/EmptyState';
 import { Markdown } from '../ui/Markdown';
 import { HoverCard } from '../ui/HoverCard';
 import { CommitHoverCard } from '../commits/CommitHoverCard';
-import { LineStats, lineStatsColumns, type LineStatsColumns } from '../ui/LineStats';
+import { LineStats, lineStatsWidth } from '../ui/LineStats';
 import { cn } from '../../lib/cn';
 
 /** The task's open PR in History. `threads` and `body` are null until its
@@ -83,8 +83,8 @@ export function HistoryList({
     onSelectView({ kind: 'commit', hash });
   };
 
-  // The +/− columns fit the list's widest counts, the PR's included.
-  const lines = useMemo(() => lineStatsColumns(pr ? [pr, ...commits] : commits), [pr, commits]);
+  // The +/− cell fits the list's widest pair, the PR's included.
+  const statsWidth = useMemo(() => lineStatsWidth(pr ? [pr, ...commits] : commits), [pr, commits]);
 
   // Keep the selected row in sight when the view changes elsewhere.
   const listRef = useRef<HTMLDivElement>(null);
@@ -99,7 +99,7 @@ export function HistoryList({
       ref={listRef}
       className="scrollbar-gutter-stable scrollbar-thin-hover @container flex h-full min-h-0 flex-col gap-px overflow-y-auto pb-2"
     >
-      {pr && <PrRow pr={pr} lines={lines} />}
+      {pr && <PrRow pr={pr} statsWidth={statsWidth} />}
       {loading && commits.length === 0 && <EmptyState title="Loading…" />}
       {!loading && commits.length === 0 && (
         <EmptyState icon={<History size={14} strokeWidth={1.8} />} title="No commits yet" />
@@ -112,7 +112,7 @@ export function HistoryList({
             <CommitRow
               commit={c}
               cwd={cwd}
-              lines={lines}
+              statsWidth={statsWidth}
               selected={selected}
               unfolded={unfolded}
               commentCount={commentCountByScope.get(`commit:${c.hash}`) ?? 0}
@@ -149,7 +149,7 @@ export function HistoryList({
 /** A commit row's fixed columns, so they line up from row to row; the
  *  subject takes what is left and truncates first. The author shows only
  *  where the list is wide enough (its hover card names it anyway). The
- *  lines added and deleted are two more, sized to the list (`LineStats`). */
+ *  lines added and deleted share one more, sized to the list (`LineStats`). */
 const COL = {
   sha: 'w-13 shrink-0',
   when: 'w-7 shrink-0',
@@ -157,14 +157,14 @@ const COL = {
 } as const;
 
 /**
- * A commit as columns: short sha, age, author, lines added, lines deleted,
+ * A commit as columns: short sha, age, author, lines added and deleted,
  * then its subject. Comments on it, the "not pushed" arrow and (selected) the fold
  * chevron trail it.
  */
 function CommitRow({
   commit,
   cwd,
-  lines,
+  statsWidth,
   selected,
   unfolded,
   commentCount,
@@ -173,7 +173,7 @@ function CommitRow({
 }: {
   commit: CommitSummary;
   cwd: string;
-  lines: LineStatsColumns;
+  statsWidth: number;
   selected: boolean;
   /** Its files are listed under it. */
   unfolded: boolean;
@@ -199,7 +199,7 @@ function CommitRow({
               <span className={COL.sha}>{commit.shortHash}</span>
               <span className={COL.when}>{when}</span>
               <span className={COL.author}>{commit.authorName}</span>
-              <LineStats add={commit.additions} del={commit.deletions} columns={lines} />
+              <LineStats add={commit.additions} del={commit.deletions} width={statsWidth} />
             </span>
           }
           trailing={
@@ -232,8 +232,8 @@ function CommitRow({
 
 /** The task's PR: review it (review mode), with a hover card holding its
  *  description. Its icon and number sit in the sha column, its lines in the
- *  commits' line columns. */
-function PrRow({ pr, lines }: { pr: PrEntry; lines: LineStatsColumns }) {
+ *  commits' line cell. */
+function PrRow({ pr, statsWidth }: { pr: PrEntry; statsWidth: number }) {
   return (
     <HoverCard
       onOpen={pr.onPeek}
@@ -251,7 +251,7 @@ function PrRow({ pr, lines }: { pr: PrEntry; lines: LineStatsColumns }) {
               </span>
               <span className={COL.when} />
               <span className={COL.author} />
-              <LineStats add={pr.additions ?? 0} del={pr.deletions ?? 0} columns={lines} />
+              <LineStats add={pr.additions ?? 0} del={pr.deletions ?? 0} width={statsWidth} />
             </span>
           }
           trailing={(pr.threads ?? 0) > 0 && <CountBadge count={pr.threads!} />}
