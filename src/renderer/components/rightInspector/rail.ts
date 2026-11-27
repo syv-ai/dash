@@ -9,6 +9,11 @@
 import type { GitStatus } from '../../../shared/types';
 import type { SidebarView } from './sidebarState';
 
+/** The rail's width (px): the collapsed sidebar's panel, and the expanded
+ *  sidebar's list column folded (it folds to the rail, never to nothing),
+ *  as wide as its figures need ("100%", "Weekly") whatever the window's. */
+export const TASK_RAIL_PX = 48;
+
 type Status = Pick<GitStatus, 'hasUpstream' | 'ahead' | 'behind' | 'files'>;
 
 /** The rail's parts, each null (or false) where it has nothing to say. */

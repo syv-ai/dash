@@ -25,6 +25,7 @@ import {
 } from './lib/inspectorWidths';
 import { headerModelName } from './lib/modelName';
 import { RightInspector } from './components/rightInspector/RightInspector';
+import { TASK_RAIL_PX } from './components/rightInspector/rail';
 import { usePlannedMotion } from './lib/usePlannedMotion';
 import type { LeftHold, LeftPanelSize } from './lib/leftHold';
 import { whenFramesSettle } from './lib/framesSettled';
@@ -106,9 +107,6 @@ function leftHoldFade(hold: LeftHold | null): string | undefined {
 
 /** The left sidebar collapsed (%): its rail. */
 const SIDEBAR_COLLAPSED_PCT = 3;
-/** The task sidebar collapsed (px): its rail (`TaskRail`), as wide as its
- *  figures need ("100%", "Weekly") whatever the window's width. */
-const TASK_RAIL_PX = 48;
 /** The shell's two resize handles and rounding, in px: what an expanding
  *  task sidebar leaves beside the centre's MAIN_MIN_PX. */
 const SHELL_SLACK_PX = 8;

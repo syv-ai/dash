@@ -15,11 +15,11 @@ import { Info, X } from 'lucide-react';
 import { WorkingFiles, type RepoView } from '../changes/WorkingFiles';
 import { CommitBar } from '../changes/CommitBar';
 import { useCommitRun } from '../changes/useCommitRun';
-import { ShellDrawerWrapper } from '../terminal/ShellDrawerWrapper';
+import { ShellDrawerWrapper, expandShellDrawer } from '../terminal/ShellDrawerWrapper';
 import { PortsDrawerWrapper } from './PortsDrawerWrapper';
 import { UsageSection } from './UsageSection';
 import { TaskRail } from './TaskRail';
-import type { RailShow } from './rail';
+import { TASK_RAIL_PX, type RailShow } from './rail';
 import { ViewRow, type ViewRowExtra } from './ViewRow';
 import { viewRowMinPx } from './viewRowFit';
 import { TaskDetails } from './TaskDetails';
@@ -282,7 +282,9 @@ export function RightInspector({
     prLive: checkout.live,
   });
   const { view, selectView } = ws;
-  const treePanel = useTreePanel();
+  // Expanded, the list column folds to the rail, never to nothing (T12).
+  const treePanel = useTreePanel(TASK_RAIL_PX);
+  const treeFolded = useEditorTabs((s) => s.treeCollapsed);
   const openEditor = () => {
     if (!expanded) onOpenEditor();
   };
@@ -383,6 +385,25 @@ export function RightInspector({
     if (on === 'details') setSegment('details');
     else if (on) onPickSegment(on, false);
     onShow({ terminal });
+  };
+  // The folded list column's rail: the same picks, unfolding the column
+  // beside the editor; the terminal opens its drawer under the editor.
+  const columnRef = useRef<HTMLDivElement>(null);
+  const unfoldFromRail = ({ view: on, terminal }: RailShow) => {
+    if (on === 'details') setSegment('details');
+    else if (on) onPickSegment(on, false);
+    useEditorTabs.getState().setTreeCollapsed(false);
+    if (!terminal) return;
+    const drawer = shellDrawerRef.current;
+    if (drawer?.isCollapsed()) {
+      setShellDrawerAnimating(true);
+      expandShellDrawer(drawer);
+    }
+    requestAnimationFrame(() =>
+      columnRef.current
+        ?.querySelector<HTMLElement>('.terminal-drawer .xterm-helper-textarea')
+        ?.focus(),
+    );
   };
   const toggleDetails = () => {
     if (segment === 'details') selectSegment(lastCodeSegment);
@@ -766,23 +787,26 @@ export function RightInspector({
   );
   const sheet = useMovable(withPorts(onSheet(list)));
 
+  // The rail: the collapsed sidebar's, and the expanded one's list column
+  // folded; `onShow` shows what it was clicked for.
+  const rail = (onRailShow: (show: RailShow) => void) => (
+    <TaskRail
+      contextUsage={contextUsage}
+      rateLimits={rateLimits}
+      status={statusIsOwn ? gitStatus : null}
+      prs={prs}
+      onShow={onRailShow}
+    />
+  );
+
   return (
     <>
-      {railed && (
-        <div className="h-full bg-ground pt-2 pr-2 pb-2">
-          <TaskRail
-            contextUsage={contextUsage}
-            rateLimits={rateLimits}
-            status={statusIsOwn ? gitStatus : null}
-            prs={prs}
-            onShow={showFromRail}
-          />
-        </div>
-      )}
+      {railed && <div className="h-full bg-ground pt-2 pr-2 pb-2">{rail(showFromRail)}</div>}
       {/* pb-2: the terminal sheet keeps the same 8px gutter from the window's
           bottom edge as the main sheet. The sheets (list, editor, terminals)
           share the terminal palette's ground. */}
       <div
+        ref={columnRef}
         className={cn('flex h-full min-w-0 flex-col bg-ground pt-2 pr-2 pb-2', railed && 'hidden')}
         style={{ '--sheet-bg': terminalTheme.background } as CSSProperties}
       >
@@ -816,7 +840,10 @@ export function RightInspector({
                   maxSize={reviewing ? '60%' : '50%'}
                   {...treePanel}
                 >
-                  <div className="flex h-full min-h-0 flex-col pr-2">
+                  {/* Folded, the rail; the column stays mounted out of
+                      sight (its tree's open folders and scroll). */}
+                  {treeFolded && <div className="h-full pr-2">{rail(unfoldFromRail)}</div>}
+                  <div className={cn('flex h-full min-h-0 flex-col pr-2', treeFolded && 'hidden')}>
                     <MovableSlot host={top.host} />
                     <div className="min-h-0 flex-1">
                       <MovableSlot host={sheet.host} />

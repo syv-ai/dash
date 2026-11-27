@@ -5,14 +5,15 @@ import { panelEaseMs, type PanelImperativeHandle } from '../ui/Resizable';
 import { useEditorTabs } from '../../stores/editorTabsStore';
 
 /*
- * The editor's file tree column folds away to nothing and back, from a toggle
- * at the start of the editor's tab strip. The fold is remembered (one flag for
- * every editor, in editorTabsStore); dragging the column shut sets it too.
+ * The editor's file tree column folds away and back, from a toggle at the
+ * start of the editor's tab strip. The fold is remembered (one flag for every
+ * editor, in editorTabsStore); dragging the column shut sets it too.
  */
 
-/** Props for the `ResizablePanel` holding the tree: collapsible to 0, easing
- *  when the toggle drives it, and kept in step with the remembered flag. */
-export function useTreePanel() {
+/** Props for the `ResizablePanel` holding the tree: collapsible to
+ *  `collapsedSize` (px; the host's rail), easing when the toggle drives it,
+ *  and kept in step with the remembered flag. */
+export function useTreePanel(collapsedSize: number) {
   const collapsed = useEditorTabs((s) => s.treeCollapsed);
   const panelRef = useRef<PanelImperativeHandle | null>(null);
   const [animate, setAnimate] = useState(false);
@@ -37,8 +38,8 @@ export function useTreePanel() {
     panelRef,
     animate,
     collapsible: true,
-    collapsedSize: 0,
-    ...(startCollapsed ? { defaultSize: 0 } : {}),
+    collapsedSize,
+    ...(startCollapsed ? { defaultSize: collapsedSize } : {}),
     onCollapse: () => set(true),
     onExpand: () => set(false),
   };
