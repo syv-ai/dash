@@ -7,8 +7,9 @@ import { Tooltip, type TooltipContent } from './Tooltip';
 /** A rail's width (px), both sidebars': the app sidebar's collapsed panel,
  *  the task sidebar's, and its list column folded (it folds to the rail,
  *  never to nothing). As wide as its figures need ("100%", "Weekly", a
- *  session's ring) whatever the window's. */
-export const RAIL_PX = 48;
+ *  session's ring with room around its dot) whatever the window's; on the
+ *  4px grid (X1). */
+export const RAIL_PX = 56;
 
 /**
  * A collapsed sidebar's rail: its items stacked from the top, centred, its

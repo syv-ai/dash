@@ -3,8 +3,8 @@
  * half: the warn amber at 65 %, easing to the fail red at 100 %.
  *
  * - `usageColor`: the done green up to 40 %, easing to the amber at 65 % —
- *   the right sidebar's limits and session figures, its rail, and Settings'
- *   meters (T30).
+ *   the right sidebar's limits and session figures, its rail, the left
+ *   sidebar's rail's session rings (X1), and Settings' meters (T30).
  * - `quietUsageColor`: plain ink below 65 % — a task row's context in the
  *   left sidebar, where green would read as the session's state (S1).
  *

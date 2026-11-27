@@ -1,5 +1,5 @@
 import type { ContextUsage } from '../../../shared/types';
-import { quietUsageColor } from '../../lib/usageColor';
+import { usageColor } from '../../lib/usageColor';
 import { useSettings } from '../../stores/settingsStore';
 import { levelCells } from '../rightInspector/UsageSection';
 import { ProgressRing } from '../ui/ProgressRing';
@@ -8,8 +8,9 @@ import { StatusDot } from '../ui/StatusDot';
 import { railInitials } from './railInitials';
 import { STATE_LABELS, type TaskStateRow } from './taskStates';
 
-/** A session's ring (px): room for its dot inside, the rail's width around it. */
-const RING_PX = 20;
+/** A session's ring (px): an 8px clearing between it and its dot, the
+ *  rail's width around it. */
+const RING_PX = 28;
 const RING_STROKE_PX = 2;
 
 /**
@@ -17,11 +18,12 @@ const RING_STROKE_PX = 2;
  * each its state dot inside a ring of its context use and its initials
  * under them (`railInitials`), so a session is known without its name. The
  * ring reads as a task row's context does (`ContextLevel`): the Session
- * level (`levelCells`, so the figures never disagree), in plain ink until it
- * nears full (`quietUsageColor`; green would read as the session's state),
- * just the track until the session has replied or while the setting hides
- * it. The tooltip names the task, its project, state and context; a click
- * selects it.
+ * level (`levelCells`, so the figures never disagree), coloured as the
+ * limits are (`usageColor`, the task rail's ramp: the ring sits apart from
+ * the state dot inside it, so its green doesn't read as the session's
+ * state, X1), just the track until the session has replied or while the
+ * setting hides it. The tooltip names the task, its project, state and
+ * context; a click selects it.
  */
 export function SessionRail({
   rows,
@@ -71,7 +73,7 @@ export function SessionRail({
               value={pct}
               size={RING_PX}
               stroke={RING_STROKE_PX}
-              color={pct === null ? undefined : quietUsageColor(pct)}
+              color={pct === null ? undefined : usageColor(pct)}
               aria-label={cell?.aria ?? 'Session context used'}
             >
               <StatusDot state={state} className="block" />
