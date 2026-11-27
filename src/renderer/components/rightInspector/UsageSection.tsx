@@ -147,25 +147,37 @@ export function LevelReading({
 const shown = (cells: Cell[], density: UsageDensity) =>
   density === 'full' ? cells : cells.filter((c) => c.kind !== 'pace');
 
+/**
+ * A limit's column. A window missing from the account's limits is one that
+ * isn't running: Claude Code drops a window from its status line once its
+ * reset time passes (as `mergeRateLimits` drops an expired reading), and the
+ * next message starts a new one. Nothing has been used in it, so it reads
+ * 0%, not "—" (R16).
+ */
 export function limitCell(
   limit: LimitKey,
   info: RateLimitInfo | undefined,
   now: number,
 ): LevelCell {
   const long = LIMIT_LABELS[limit];
-  const pct = info ? Math.round(info.usedPercentage) : null;
+  const pct = info ? Math.round(info.usedPercentage) : 0;
   const resetsAt = info?.resetsAt ?? 0;
   const ttr = resetsAt ? formatTtr(resetsAt * 1000 - now) : undefined;
+  const used = { label: 'Used', value: `${pct}%` };
   const tooltip: RichTooltip = info
     ? {
         title: `${long} limit`,
         ...(ttr ? { body: TTR_MEANING } : {}),
         rows: [
-          { label: 'Used', value: `${pct}%` },
+          used,
           ...(ttr ? [{ label: 'Resets', value: `${formatResetAt(resetsAt)} (${ttr})` }] : []),
         ],
       }
-    : { title: `${long} limit`, body: 'No window running; the next message starts one.' };
+    : {
+        title: `${long} limit`,
+        body: 'No window running; the next message starts one.',
+        rows: [used],
+      };
   return {
     key: limit,
     kind: 'level',
@@ -223,7 +235,7 @@ export function levelCells({
     cells.push(sessionCell(contextUsage && contextUsage.percentage > 0 ? contextUsage : null));
   }
   // Both limits show once the account reports either: a window that isn't
-  // running (it reset, and no message has started the next) reads "—".
+  // running (it reset, and no message has started the next) reads 0%.
   if (showLimits && rateLimits) {
     cells.push(limitCell('fiveHour', rateLimits.fiveHour, now));
     cells.push(limitCell('sevenDay', rateLimits.sevenDay, now));

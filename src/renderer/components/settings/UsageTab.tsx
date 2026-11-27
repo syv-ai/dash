@@ -1,5 +1,6 @@
 import React from 'react';
-import type { RateLimits } from '../../../shared/types';
+import type { RateLimitInfo, RateLimits } from '../../../shared/types';
+import type { LimitKey } from '../../lib/pace';
 import { usageColor } from '../../lib/usageColor';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useSettings } from '../../stores/settingsStore';
@@ -8,6 +9,21 @@ import { FormSection, SettingRow } from '../ui/Field';
 import { Input } from '../ui/Input';
 import { Meter } from '../ui/Meter';
 import { SwitchField } from '../ui/SwitchField';
+import { LIMIT_LABELS } from '../rightInspector/UsageSection';
+
+const LIMIT_KEYS = Object.keys(LIMIT_LABELS) as LimitKey[];
+
+/** A limit's meter; a window that isn't running (it reset, and no message
+ *  has started the next) reads 0%, as in the task sidebar (R16). */
+function LimitMeter({ label, info }: { label: string; info: RateLimitInfo | undefined }) {
+  const pct = info?.usedPercentage ?? 0;
+  const detail = info?.resetsAt
+    ? `resets ${formatResetTime(info.resetsAt)}`
+    : info
+      ? undefined
+      : 'starts with the next message';
+  return <Meter label={label} value={pct} color={usageColor(pct)} detail={detail} />;
+}
 
 export function UsageTab({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
   const globalTokenStats = useRuntime((s) => s.globalTokenStats);
@@ -25,7 +41,6 @@ export function UsageTab({ latestRateLimits }: { latestRateLimits?: RateLimits }
   const setShowTaskCost = useSettings((s) => s.setShowTaskCost);
   const showProjectTokens = useSettings((s) => s.showProjectTokens);
   const setShowProjectTokens = useSettings((s) => s.setShowProjectTokens);
-  const { fiveHour, sevenDay } = latestRateLimits ?? {};
 
   return (
     <>
@@ -45,28 +60,11 @@ export function UsageTab({ latestRateLimits }: { latestRateLimits?: RateLimits }
       </FormSection>
 
       <FormSection title="Rate limits">
-        {fiveHour || sevenDay ? (
+        {latestRateLimits ? (
           <div className="grid gap-3">
-            {fiveHour && (
-              <Meter
-                label="5-hour"
-                value={fiveHour.usedPercentage}
-                color={usageColor(fiveHour.usedPercentage)}
-                detail={
-                  fiveHour.resetsAt ? `resets ${formatResetTime(fiveHour.resetsAt)}` : undefined
-                }
-              />
-            )}
-            {sevenDay && (
-              <Meter
-                label="Weekly"
-                value={sevenDay.usedPercentage}
-                color={usageColor(sevenDay.usedPercentage)}
-                detail={
-                  sevenDay.resetsAt ? `resets ${formatResetTime(sevenDay.resetsAt)}` : undefined
-                }
-              />
-            )}
+            {LIMIT_KEYS.map((key) => (
+              <LimitMeter key={key} label={LIMIT_LABELS[key]} info={latestRateLimits[key]} />
+            ))}
           </div>
         ) : (
           <p className="type-caption py-1">Shown after the first reply from the API.</p>
