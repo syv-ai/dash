@@ -5,6 +5,7 @@ import {
   goneRows,
   hideWindow,
   newRows,
+  oneRun,
   revealWindow,
   sameKeys,
   slideRoom,
@@ -126,6 +127,31 @@ describe('slideRoom', () => {
 
   it('falls back with no run (a reorder)', () => {
     expect(slideRoom([], 200, 999)).toBe(999);
+  });
+});
+
+describe('oneRun', () => {
+  const keep = (ks: string[]) => (k: React.Key) => ks.includes(k as string);
+
+  it('plays a folder opening or closing: one run', () => {
+    const opened = newRows(stack(['f', 'a', 'b', 'g']), keep(['f', 'g']));
+    expect(oneRun(opened, [])).toBe(true);
+    expect(oneRun([], goneRows(stack(['f', 'a', 'b', 'g']), keep(['f', 'g'])))).toBe(true);
+  });
+
+  it('cuts a reveal that opens one folder and closes another', () => {
+    // f opens (a, b come) as g closes (c, d go): ghosts would cover a and b.
+    const before = stack(['f', 'g', 'c', 'd']);
+    const after = stack(['f', 'a', 'b', 'g']);
+    const opened = newRows(after, keep(['f', 'g', 'c', 'd']));
+    const closed = goneRows(before, keep(['f', 'a', 'b', 'g']));
+    expect(oneRun(opened, closed)).toBe(false);
+  });
+
+  it('cuts two runs of the same kind, and plays none (a reorder)', () => {
+    const twoOpened = newRows(stack(['f', 'a', 'g', 'b']), keep(['f', 'g']));
+    expect(oneRun(twoOpened, [])).toBe(false);
+    expect(oneRun([], [])).toBe(true);
   });
 });
 

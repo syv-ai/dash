@@ -13,6 +13,7 @@ import {
   goneRows,
   hideWindow,
   newRows,
+  oneRun,
   revealWindow,
   sameKeys,
   slideRoom,
@@ -107,30 +108,43 @@ function useListMotion(
 
   // The rows this change removes become ghosts in the same render, so each
   // keeps its element and its last render (React bails out on the same
-  // node): nothing remounts. Planned once per `keys`.
+  // node): nothing remounts. Planned once per `keys`. A change of more than
+  // one run (`oneRun`) cuts: no ghosts, and the ones still covering go.
   const change = React.useRef<{
     keys: readonly React.Key[];
     listed: Set<React.Key>;
     leaving: Ghost[];
+    cut: boolean;
   }>(null);
   if (change.current?.keys !== keys) {
     const was = shown.current;
     const moving = enabled && was !== null && !sameKeys(was.keys, keys) && !reducedMotion();
     const listed = moving ? new Set(keys) : new Set<React.Key>();
-    const leaving = moving
-      ? goneRows(was.slots, (k) => listed.has(k)).flatMap((gone) => {
-          const node = was.nodes.get(gone.key);
-          return node === undefined ? [] : [{ ...gone, node }];
-        })
+    const gone = moving ? goneRows(was.slots, (k) => listed.has(k)) : [];
+    const before = new Set(was?.keys);
+    const entering = moving
+      ? newRows(
+          items.map(({ key, start, size }) => ({ key, start, size })),
+          (k) => before.has(k),
+        )
       : [];
-    change.current = { keys, listed, leaving };
+    const cut = moving && !oneRun(entering, gone);
+    const leaving = cut
+      ? []
+      : gone.flatMap((g) => {
+          const node = was!.nodes.get(g.key);
+          return node === undefined ? [] : [{ ...g, node }];
+        });
+    change.current = { keys, listed, leaving, cut };
   }
-  const { listed, leaving } = change.current;
+  const { listed, leaving, cut } = change.current;
   // This change's ghosts render now, before the effect below files them.
   const filed = new Set(ghosts.current);
-  const rendered = [...ghosts.current, ...leaving.filter((g) => !filed.has(g))].filter(
-    (g) => !nodes.has(g.key) && !done.current.has(g),
-  );
+  const rendered = cut
+    ? []
+    : [...ghosts.current, ...leaving.filter((g) => !filed.has(g))].filter(
+        (g) => !nodes.has(g.key) && !done.current.has(g),
+      );
 
   React.useLayoutEffect(() => {
     const slots = items.map(({ key, start, size }) => ({ key, start, size }));
@@ -139,6 +153,12 @@ function useListMotion(
     const box = boxRef.current;
     if (!enabled || !was || !box || reducedMotion()) return;
     const changed = !sameKeys(was.keys, keys);
+    if (changed && cut) {
+      // Every row straight to its place.
+      for (const { anim } of sliding.current.values()) anim.cancel();
+      sliding.current.clear();
+      return;
+    }
     const fresh = rendered.filter((g) => !exiting.current.has(g));
     if (!changed && sliding.current.size === 0 && fresh.length === 0) return;
 
@@ -237,9 +257,14 @@ function useListMotion(
 
   // File this change's ghosts (and drop any whose row came back).
   React.useLayoutEffect(() => {
+    if (cut) {
+      for (const g of ghosts.current) done.current.add(g);
+      ghosts.current = [];
+      return;
+    }
     if (leaving.length === 0 && listed.size === 0) return;
     ghosts.current = [...ghosts.current.filter((x) => !listed.has(x.key)), ...leaving];
-  }, [leaving, listed]);
+  }, [leaving, listed, cut]);
 
   return rendered;
 }

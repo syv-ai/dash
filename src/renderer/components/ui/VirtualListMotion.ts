@@ -11,6 +11,9 @@
  *    the slice of the eased progress in which the moving edge crosses it.
  *  - A run of removed rows is kept briefly (the list renders them as
  *    inert ghosts) and covers bottom-up as the rows below slide up.
+ *  - A change of more than one run (a reveal that closes one folder and
+ *    opens another) cuts: its runs would move through each other's room,
+ *    ghosts over the rows that take their place.
  */
 import type { Key } from 'react';
 
@@ -62,6 +65,14 @@ export const newRows = (after: readonly Slot[], wasListed: (key: Key) => boolean
 /** The rows rendered before that are no longer in the list. */
 export const goneRows = (before: readonly Slot[], isListed: (key: Key) => boolean) =>
   inRuns(before, (s) => !isListed(s.key));
+
+/** Whether a change plays as one motion: at most one run of rows comes or
+ *  goes. More can't share the rows between them (each run's edge pulls
+ *  them its own way), so they cut. */
+export function oneRun(entering: readonly RunSlot[], leaving: readonly RunSlot[]): boolean {
+  const runs = (slots: readonly RunSlot[]) => new Set(slots.map((s) => s.runTop)).size;
+  return runs(entering) + runs(leaving) <= 1;
+}
 
 /** Where a row sits in its run, and the room the run's edge travels: no
  *  further than the list's visible bottom, so a run taller than what shows
