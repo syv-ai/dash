@@ -11,15 +11,15 @@
  *
  * Review mode (spec Revision 4) has its own views, each scoped to a PR:
  * Overview, Files (the PR's changed files, or all of them at its head),
- * Comments and History, then Agent as in normal mode; the editor shows the
+ * Threads and History, then Agent as in normal mode; the editor shows the
  * PR's view, except a commit picked in History.
  */
 
 import { treeOrder } from '../fileTree/treeOrder';
 
 /** The view switch's views: normal mode's Files, History and Agent; review
- *  mode's Overview, Files, Comments, History and Agent. */
-export type CodeSegment = 'overview' | 'files' | 'comments' | 'history' | 'agent';
+ *  mode's Overview, Files, Threads, History and Agent. */
+export type CodeSegment = 'overview' | 'files' | 'threads' | 'history' | 'agent';
 
 /** What the sidebar's list shows: a view, or the task's details (an icon
  *  toggle at the view row's end, read least often). */
@@ -36,7 +36,7 @@ export type SegmentPick =
   /** Show the picked view; while expanded, unfold a folded tree column. */
   | 'select'
   /** Nothing: a single click on the current view, or re-picking a narrow
-   *  view with no first file (Files on its changes with none, Comments with
+   *  view with no first file (Files on its changes with none, Threads with
    *  no open thread on the code, Agent, which has no first file of its own). */
   | 'none';
 
@@ -65,7 +65,7 @@ export function pickSegment({
   changesOnly: boolean;
   /** The working tree's changes, as Files lists them on its changes. */
   listedChanges: number;
-  /** Review mode's Comments has an open thread on the code to open at. */
+  /** Review mode's Threads has an open thread on the code to open at. */
   openThread: boolean;
 }): SegmentPick {
   if (next !== current) return 'select';
@@ -73,7 +73,7 @@ export function pickSegment({
   if (expanded) return 'narrow';
   const empty =
     (next === 'files' && changesOnly && listedChanges === 0) ||
-    (next === 'comments' && !openThread) ||
+    (next === 'threads' && !openThread) ||
     next === 'agent';
   return empty ? 'none' : 'expand';
 }
@@ -112,7 +112,7 @@ export function firstChangedTreeFile(paths: readonly string[]): string | null {
 /**
  * The view to show as review mode becomes known, starts or ends (each
  * `undefined` until main has said): a task found in review mode, opened or
- * just entered, shows Overview (D118); Overview and Comments are the mode's
+ * just entered, shows Overview (D118); Overview and Threads are the mode's
  * alone, so ending it on either shows Files; Agent is normal mode's alone,
  * so reaching it in review mode shows Overview.
  */
@@ -126,7 +126,7 @@ export function segmentOnMode<S extends CodeSegment | 'details'>({
   now: boolean | undefined;
 }): S | 'overview' | 'files' {
   if (now && (!was || segment === 'agent')) return 'overview';
-  const reviewOnly = segment === 'overview' || segment === 'comments';
+  const reviewOnly = segment === 'overview' || segment === 'threads';
   return reviewOnly && !now ? 'files' : segment;
 }
 

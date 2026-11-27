@@ -73,7 +73,7 @@ EOF
 Every draft has a \`--kind\`:
 
 - **note**: for whoever works on this task (the person, or you later). It is never posted. Use it for things to check, fix or keep in mind.
-- **comment**: for the PR's author, posted when the person posts the review. A reply to a thread is always a comment.
+- **comment**: for the PR's author, posted when the person posts the review. A thread holds comments: one on lines starts a thread (the person sees it in review mode's Threads tab), and a reply to a thread is always a comment.
 
 If the person hasn't said which they want, ask rather than guess.
 

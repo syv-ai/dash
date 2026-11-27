@@ -267,7 +267,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
     defineCapability({
       name: 'review.drafts_create',
       summary:
-        "Write a note or draft a review comment on a PR's lines, or draft a reply to one of its threads, in the task's diff editor. Nothing is posted: the person reviews, edits and posts comments; notes stay local. For a comment on the whole PR, use `dashctl review summary-set` instead.",
+        "Write a note or draft a review comment on a PR's lines (a comment there starts a thread), or draft a reply to one of its threads, in the task's diff editor. Nothing is posted: the person reviews, edits and posts comments; notes stay local. For a comment on the whole PR, use `dashctl review summary-set` instead.",
       input: z.object({
         taskId: TASK_ID_FIELD,
         number: NUMBER,

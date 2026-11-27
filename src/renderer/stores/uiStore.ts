@@ -50,9 +50,9 @@ export interface UiState {
   // The update the sidebar banner was closed for. Session-only: a ready
   // update installs on quit, and a newer version brings the banner back.
   dismissedUpdateVersion: string | null;
-  /** Review mode's Comments tab: which side of its switch shows.
+  /** Review mode's Threads tab: which side of its switch shows.
    *  Session-only, the same for every task. */
-  reviewCommentsPane: ReviewCommentsPane;
+  reviewThreadsPane: ReviewThreadsPane;
   /** Review mode's Files lists every file at the PR's head, not only the
    *  changed ones. Session-only, the same for every task. */
   reviewAllFiles: boolean;
@@ -61,9 +61,9 @@ export interface UiState {
   reviewSections: Readonly<Record<string, boolean>>;
 }
 
-/** The Comments tab's switch: every exchange with the author, and the notes
+/** The Threads tab's switch: every exchange with the author, and the notes
  *  to the agent. */
-export type ReviewCommentsPane = 'comments' | 'notes';
+export type ReviewThreadsPane = 'threads' | 'notes';
 
 export interface UiActions {
   setShowTaskModal: (v: boolean) => void;
@@ -85,7 +85,7 @@ export interface UiActions {
   setChangesAnimating: (v: boolean) => void;
   setShellDrawerAnimating: (v: boolean) => void;
   setDismissedUpdateVersion: (v: string | null) => void;
-  setReviewCommentsPane: (v: ReviewCommentsPane) => void;
+  setReviewThreadsPane: (v: ReviewThreadsPane) => void;
   setReviewAllFiles: (v: boolean) => void;
   setReviewSectionOpen: (id: string, open: boolean) => void;
   // Data-mutating UI flows (own their modal state; delegate domain ops to projectsStore)
@@ -115,7 +115,7 @@ const initialState: UiState = {
   changesAnimating: false,
   shellDrawerAnimating: false,
   dismissedUpdateVersion: null,
-  reviewCommentsPane: 'comments',
+  reviewThreadsPane: 'threads',
   reviewAllFiles: false,
   reviewSections: {},
 };
@@ -148,7 +148,7 @@ export const useUi = create<UiStore>((set, get) => ({
   setChangesAnimating: (v) => set({ changesAnimating: v }),
   setShellDrawerAnimating: (v) => set({ shellDrawerAnimating: v }),
   setDismissedUpdateVersion: (v) => set({ dismissedUpdateVersion: v }),
-  setReviewCommentsPane: (v) => set({ reviewCommentsPane: v }),
+  setReviewThreadsPane: (v) => set({ reviewThreadsPane: v }),
   setReviewAllFiles: (v) => set({ reviewAllFiles: v }),
   setReviewSectionOpen: (id, open) =>
     set((s) => ({ reviewSections: { ...s.reviewSections, [id]: open } })),

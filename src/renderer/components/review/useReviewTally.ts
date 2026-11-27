@@ -4,13 +4,13 @@ import type { PrReview } from '../../../shared/types';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { reviewComments, reviewTally } from './outline';
 
-/** Review mode's comment counts for the task (`reviewTally`): the view
- *  switch's Comments tab and the Comments | Notes switch show the same ones.
+/** Review mode's counts for the task (`reviewTally`): the view switch's
+ *  Threads tab and the Threads | Notes switch show the same ones.
  *  Null until the PR's review has loaded. */
 export function useReviewTally(
   taskId: string,
   review: PrReview | null,
-): { comments: number; notes: number } | null {
+): { threads: number; notes: number } | null {
   const byFile = useCommentsStore((s) => (s.taskId === taskId && !s.disabled ? s.byFile : null));
   return useMemo(() => {
     if (!review) return null;

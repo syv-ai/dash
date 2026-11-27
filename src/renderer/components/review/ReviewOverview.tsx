@@ -72,7 +72,7 @@ function Issues({ issues }: { issues: PrIssue[] }) {
  * opened and last moved, its files and lines changed, threads, reviewers,
  * assignees and linked issues), its checks and its description, each a band that folds; the
  * open ones are remembered for the session. The general conversation lives
- * in the Comments tab.
+ * in the Threads tab.
  */
 export function ReviewOverview({ review, remote }: { review: PrReview; remote: string | null }) {
   const about = useSectionOpen('overview.about', true);
@@ -123,7 +123,7 @@ export function ReviewOverview({ review, remote }: { review: PrReview; remote: s
       <DetailSection title="Description" collapsible {...description}>
         <div className="type-body">
           {review.body.trim() ? (
-            <Markdown text={review.body} codeLook="outline" />
+            <Markdown text={review.body} />
           ) : (
             <p className="type-caption">No description.</p>
           )}

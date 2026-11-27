@@ -459,7 +459,7 @@ export function RightInspector({
   };
 
   // The comments to send: the editor holds them; the header's button opens
-  // it. Review mode's Comments tab counts and lists them itself.
+  // it. Review mode's Threads tab counts and lists them itself.
   const showComments = !reviewing && commentCount > 0;
   // The commit actions, as Files' footer while it lists changes (review
   // mode's Files are the PR's).
@@ -575,9 +575,9 @@ export function RightInspector({
           countLabel: 'Changed files',
         },
         {
-          value: 'comments',
-          label: 'Comments',
-          count: tally?.comments || undefined,
+          value: 'threads',
+          label: 'Threads',
+          count: tally?.threads || undefined,
           countLabel: 'Unresolved',
         },
         { value: 'history', label: 'History' },

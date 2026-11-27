@@ -4,7 +4,7 @@ import {
   DELETED_BLOB,
   checksRollup,
   checksSummary,
-  commentGroups,
+  threadGroups,
   draftPlace,
   firstOpenThread,
   fileRows,
@@ -23,7 +23,7 @@ import {
   trayNotes,
   treeBadges,
   viewedPaths,
-  type CommentItem,
+  type ThreadItem,
 } from '../outline';
 
 const file = (path: string, blob: string | null = `b-${path}`): PrFile => ({
@@ -146,9 +146,9 @@ describe('nextUnviewed', () => {
   });
 });
 
-describe('commentGroups', () => {
-  it('puts open threads and the person’s draft comments together, by file and line', () => {
-    const g = commentGroups(
+describe('threadGroups', () => {
+  it('puts open threads and the person’s draft threads together, by file and line', () => {
+    const g = threadGroups(
       [
         thread('r', { resolved: true }),
         thread('late', { line: 9 }),
@@ -158,8 +158,8 @@ describe('commentGroups', () => {
       ],
       [draft('mine', { startLine: 5, endLine: 5 }), draft('top', { filePath: '0.ts' })],
     );
-    const ids = (items: CommentItem[]) =>
-      items.map((i) => (i.kind === 'thread' ? i.thread.id : `draft:${i.draft.id}`));
+    const ids = (items: ThreadItem[]) =>
+      items.map((i) => (i.kind === 'posted' ? i.thread.id : `draft:${i.draft.id}`));
     expect(ids(g.unresolved)).toEqual([
       'draft:top',
       'outdated',
@@ -172,19 +172,19 @@ describe('commentGroups', () => {
   });
 
   it('nests a draft reply under its thread, open or resolved', () => {
-    const g = commentGroups(
+    const g = threadGroups(
       [thread('T'), thread('R', { resolved: true })],
       [draft('a', { replyTo: 'T' }), draft('b', { replyTo: 'R' }), draft('c', { replyTo: 'T' })],
     );
-    const replies = (i: CommentItem | undefined) =>
-      i?.kind === 'thread' ? i.replies.map((c) => c.id) : null;
+    const replies = (i: ThreadItem | undefined) =>
+      i?.kind === 'posted' ? i.replies.map((c) => c.id) : null;
     expect(replies(g.unresolved[0])).toEqual(['a', 'c']);
     expect(replies(g.resolved[0])).toEqual(['b']);
     expect(g.unresolved).toHaveLength(1);
   });
 
-  it('keeps a reply whose thread is gone as its own draft row', () => {
-    const g = commentGroups([], [draft('lost', { replyTo: 'gone' })]);
+  it('keeps a reply whose thread is gone as its own draft thread', () => {
+    const g = threadGroups([], [draft('lost', { replyTo: 'gone' })]);
     expect(g.unresolved).toEqual([{ kind: 'draft', draft: draft('lost', { replyTo: 'gone' }) }]);
   });
 });
@@ -393,7 +393,7 @@ describe('the Changes tab', () => {
 });
 
 describe('reviewTally', () => {
-  it('counts Unresolved’s rows and every unsent note of the task', () => {
+  it('counts Unresolved’s threads and every unsent note of the task', () => {
     const byFile = {
       'a.ts': [
         draft('n1', { kind: 'note' }),
@@ -409,12 +409,12 @@ describe('reviewTally', () => {
         byFile,
       ),
       // Threads 1 and 2 and the new draft c1; the replies sit in their threads.
-    ).toEqual({ comments: 3, notes: 2 });
+    ).toEqual({ threads: 3, notes: 2 });
   });
 
-  it('counts a reply whose thread is gone as its own row, as Unresolved shows it', () => {
+  it('counts a reply whose thread is gone as its own draft thread, as Unresolved shows it', () => {
     expect(reviewTally([], [draft('r', { replyTo: 'gone' })], {})).toEqual({
-      comments: 1,
+      threads: 1,
       notes: 0,
     });
   });

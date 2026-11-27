@@ -50,7 +50,7 @@ describe('pickSegment', () => {
     expect(pick('files', 'files', false, { changesOnly: true })).toBe('expand');
     expect(pick('history', 'history', false)).toBe('expand');
     expect(pick('overview', 'overview', false)).toBe('expand');
-    expect(pick('comments', 'comments', false)).toBe('expand');
+    expect(pick('threads', 'threads', false)).toBe('expand');
   });
 
   it('does nothing when a narrow Files listing no changes is picked again', () => {
@@ -64,16 +64,16 @@ describe('pickSegment', () => {
     );
   });
 
-  it('does nothing when a narrow Comments without an open thread is picked again', () => {
-    expect(pick('comments', 'comments', false, { openThread: false })).toBe('none');
-    expect(pick('comments', 'comments', true, { openThread: false })).toBe('narrow');
+  it('does nothing when a narrow Threads without an open thread is picked again', () => {
+    expect(pick('threads', 'threads', false, { openThread: false })).toBe('none');
+    expect(pick('threads', 'threads', true, { openThread: false })).toBe('narrow');
   });
 
   it('shows another view without changing the state, whatever Files lists', () => {
     expect(pick('history', 'files', false)).toBe('select');
     expect(pick('files', 'history', true)).toBe('select');
     expect(pick('history', 'files', true, { changesOnly: true, listedChanges: 0 })).toBe('select');
-    expect(pick('files', 'comments', true, { openThread: false })).toBe('select');
+    expect(pick('files', 'threads', true, { openThread: false })).toBe('select');
   });
 
   it('shows the view picked from the details', () => {
@@ -154,9 +154,9 @@ describe('segmentOnMode', () => {
     expect(on('agent', undefined, undefined)).toBe('agent');
   });
 
-  it('leaves Overview and Comments for Files once review mode ends; they are its alone', () => {
+  it('leaves Overview and Threads for Files once review mode ends; they are its alone', () => {
     expect(on('overview', true, false)).toBe('files');
-    expect(on('comments', true, false)).toBe('files');
+    expect(on('threads', true, false)).toBe('files');
     expect(on('files', true, false)).toBe('files');
     expect(on('details', true, false)).toBe('details');
   });

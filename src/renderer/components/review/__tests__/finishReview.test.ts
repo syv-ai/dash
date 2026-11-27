@@ -102,7 +102,7 @@ describe('finishOffered', () => {
         draft('line', { kind: 'comment', startLine: 5, endLine: 5 }),
       ],
     );
-    expect(items.map((i) => (i.kind === 'thread' ? i.thread.id : `draft:${i.draft.id}`))).toEqual([
+    expect(items.map((i) => (i.kind === 'posted' ? i.thread.id : `draft:${i.draft.id}`))).toEqual([
       'draft:line',
       'open',
       'done',

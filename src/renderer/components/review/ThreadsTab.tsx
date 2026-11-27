@@ -23,20 +23,21 @@ import { DetailSection } from '../ui/DetailList';
 import { Markdown } from '../ui/Markdown';
 import { TextLink } from '../ui/TextLink';
 import { Composer } from './DraftActions';
-import { commentGroups, draftPlace, threadRange, type CommentItem } from './outline';
+import { threadGroups, draftPlace, threadRange, type ThreadItem } from './outline';
 import { useSectionOpen } from './useSectionOpen';
 
 type Navigate = (scope: string, path: string, commentId: string) => void;
 
 /**
- * The Comments tab's Comments: every exchange with the author, each a card.
- * General (the PR's conversation, with reactions and Reply, and the review's summary
- * while it is a draft), Unresolved (open threads, on the code or off it,
- * with the person's draft comments among them by file and line) and
+ * The Threads tab's Threads: every exchange with the author, each a thread
+ * card (a lone comment is a thread of one). General (the PR's conversation,
+ * with reactions and Reply, and the review's summary while it is a draft),
+ * Unresolved (open threads, on the code or off it, with the person's draft
+ * threads among them by file and line) and
  * Resolved (folded). A thread's card is the one drawn under its line
  * (`PrThreadCard`), its draft replies inside it.
  */
-export function CommentsTab({
+export function ThreadsTab({
   review,
   taskId,
   projectId,
@@ -57,15 +58,15 @@ export function CommentsTab({
   summary: string;
   onNavigate: Navigate;
 }) {
-  const groups = useMemo(() => commentGroups(review.threads, comments), [review, comments]);
-  const general = useSectionOpen('comments.general', false);
-  const unresolved = useSectionOpen('comments.unresolved', true);
-  const resolved = useSectionOpen('comments.resolved', false);
+  const groups = useMemo(() => threadGroups(review.threads, comments), [review, comments]);
+  const general = useSectionOpen('threads.general', false);
+  const unresolved = useSectionOpen('threads.unresolved', true);
+  const resolved = useSectionOpen('threads.resolved', false);
   const context = usePrThreadContext({ review, projectId, cwd, taskId, draftScope });
   if (!context) return null;
   const generalCount = review.conversation.length + (summary ? 1 : 0);
   if (generalCount + groups.unresolved.length + groups.resolved.length === 0) {
-    return <p className="type-caption px-2.5 pt-2">No comments yet.</p>;
+    return <p className="type-caption px-2.5 pt-2">No threads yet.</p>;
   }
   return (
     <div>
@@ -86,7 +87,7 @@ export function CommentsTab({
           collapsible
           {...unresolved}
         >
-          <CommentItems items={groups.unresolved} context={context} onNavigate={onNavigate} />
+          <ThreadItems items={groups.unresolved} context={context} onNavigate={onNavigate} />
         </DetailSection>
       )}
       {groups.resolved.length > 0 && (
@@ -96,7 +97,7 @@ export function CommentsTab({
           collapsible
           {...resolved}
         >
-          <CommentItems items={groups.resolved} context={context} onNavigate={onNavigate} />
+          <ThreadItems items={groups.resolved} context={context} onNavigate={onNavigate} />
         </DetailSection>
       )}
     </div>
@@ -108,24 +109,24 @@ function Cards({ children }: { children: ReactNode }) {
   return <div className="grid gap-2.5 px-2.5 pt-1 pb-3">{children}</div>;
 }
 
-/** A list of the tab's rows (threads with their draft replies, draft line
- *  comments) as its cards; Finish review lists what posts with it too. */
-export function CommentItems({
+/** A list of the tab's threads (posted ones with their draft replies, draft
+ *  threads) as its cards; Finish review lists what posts with it too. */
+export function ThreadItems({
   items,
   context,
   onNavigate,
 }: {
-  items: CommentItem[];
+  items: ThreadItem[];
   context: PrThreadContext;
   onNavigate: Navigate;
 }) {
   return (
     <Cards>
       {items.map((i) =>
-        i.kind === 'thread' ? (
-          <ThreadCard key={i.thread.id} thread={i.thread} context={context} />
+        i.kind === 'posted' ? (
+          <PostedThreadCard key={i.thread.id} thread={i.thread} context={context} />
         ) : (
-          <DraftCard
+          <DraftThreadCard
             key={i.draft.id}
             comment={i.draft}
             mentions={context.mentions}
@@ -140,7 +141,13 @@ export function CommentItems({
 /** A thread's card, folded to start, naming where it sits; one on a line
  *  opens its file there (expanding the sidebar). The card lists its draft
  *  replies. */
-function ThreadCard({ thread, context }: { thread: PrReviewThread; context: PrThreadContext }) {
+function PostedThreadCard({
+  thread,
+  context,
+}: {
+  thread: PrReviewThread;
+  context: PrThreadContext;
+}) {
   const line = isInlineThread(thread) ? thread.line : null;
   return (
     <PrThreadCard
@@ -155,9 +162,10 @@ function ThreadCard({ thread, context }: { thread: PrReviewThread; context: PrTh
   );
 }
 
-/** One of the person's (or the agent's) draft line comments, a thread the
- *  review will start: where it sits (opens it there) and its text. */
-function DraftCard({
+/** A draft thread, the person's (or the agent's), which the review will
+ *  start: its one entry, the draft comment, where it sits (opens it there)
+ *  and its text. */
+function DraftThreadCard({
   comment: c,
   mentions,
   onNavigate,

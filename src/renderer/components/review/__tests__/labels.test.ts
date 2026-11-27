@@ -45,7 +45,7 @@ describe('reviewerGroups', () => {
 describe('threadsLine', () => {
   it('says how many threads and how many are resolved', () => {
     expect(threadsLine([{ resolved: true }, { resolved: false }])).toBe(
-      '2 comment threads (1 of 2 resolved)',
+      '2 threads (1 of 2 resolved)',
     );
     expect(threadsLine([])).toBeNull();
   });

@@ -54,7 +54,7 @@ export interface ReviewMode {
   /** Open a file of the PR in the PR's view. */
   openFile: (path: string, opts?: OpenOptions) => void;
   /** Expand on a re-picked narrow view, when review mode decides what opens
-   *  (Overview and Files: the PR's first changed file; Comments: the first
+   *  (Overview and Files: the PR's first changed file; Threads: the first
    *  open thread's, at its line). False: it doesn't. */
   expandOn: (on: CodeSegment) => boolean;
   /** What picking a view does to the editor's view (leaving History). */
@@ -123,7 +123,7 @@ export function useReviewMode(
     then?.();
   }, [follow, modeKey, review?.head]);
   // A task found in review mode, or entering it, shows Overview; Overview
-  // and Comments are the mode's alone, so ending the mode leaves them for
+  // and Threads are the mode's alone, so ending the mode leaves them for
   // Files. Read off the mode before (the sidebar starts on `initialSegment`'s).
   const known = taskPrs.mode === undefined ? undefined : reviewing;
   const knownBefore = useRef(known);
@@ -180,7 +180,7 @@ export function useReviewMode(
     openFile,
     expandOn: (on) => {
       if (!mode || on === 'history') return false;
-      if (on === 'comments') {
+      if (on === 'threads') {
         const thread = review && firstOpenThread(review.threads);
         if (!thread) return true;
         if (view.kind !== 'pr') void showPr(mode);

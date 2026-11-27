@@ -14,7 +14,7 @@ import { Notice } from '../ui/Notice';
 import { Segmented } from '../ui/Segmented';
 import { finishOffered, unsentNoteCount } from './finishReview';
 import { FinishReviewSheet } from './FinishReviewSheet';
-import { CommentsTab } from './CommentsTab';
+import { ThreadsTab } from './ThreadsTab';
 import { NotesTray } from './NotesTray';
 import { fileRows, reviewComments } from './outline';
 import { ReviewFiles, type RepoFiles } from './ReviewFiles';
@@ -32,8 +32,8 @@ interface ReviewViewProps {
   repo: RepoFiles;
   /** History's list, scoped to the PR by the host. */
   history: ReactNode;
-  /** The Comments | Notes switch's counts, as the view switch shows them. */
-  tally: { comments: number; notes: number } | null;
+  /** The Threads | Notes switch's counts, as the view switch shows them. */
+  tally: { threads: number; notes: number } | null;
   /** The file showing in the focused editor group. */
   activePath: string | null;
   /** Open a file of the PR in its view, expanding the sidebar. */
@@ -54,7 +54,7 @@ interface ReviewViewProps {
 /**
  * The task sidebar's list column in review mode (spec Revision 4), under the
  * mode's banner and views: the PR's header, then the picked view: Overview,
- * Files (the PR's changed files, or all at its head), Comments (a switch
+ * Files (the PR's changed files, or all at its head), Threads (a switch
  * between every exchange with the author, the person's drafts among them,
  * and the notes to the agent) or History; Finish review… is the column's
  * sticky footer on every view, the one way to it.
@@ -89,7 +89,7 @@ function Review({
   const remote = useProjects(
     (s) => s.projects.find((p) => p.id === task.projectId)?.gitRemote ?? null,
   );
-  const pane = useUi((s) => s.reviewCommentsPane);
+  const pane = useUi((s) => s.reviewThreadsPane);
   const [finishing, setFinishing] = useState(false);
   const scope = prScope(mode.provider, mode.number);
   const commentsReady = useCommentsStore((s) => s.taskId === task.id && !s.disabled);
@@ -146,20 +146,20 @@ function Review({
               canOpenToSide={canOpenToSide}
               onOpenFile={onOpenFile}
             />
-          ) : tab === 'comments' ? (
+          ) : tab === 'threads' ? (
             <div className="pt-2">
               <div className="px-2.5 pb-2">
                 <Segmented
-                  aria-label="Comments or notes"
+                  aria-label="Threads or notes"
                   size="sm"
                   fullWidth={false}
                   value={pane}
-                  onChange={(p) => useUi.getState().setReviewCommentsPane(p)}
+                  onChange={(p) => useUi.getState().setReviewThreadsPane(p)}
                   options={[
                     {
-                      value: 'comments',
-                      label: 'Comments',
-                      count: tally?.comments || undefined,
+                      value: 'threads',
+                      label: 'Threads',
+                      count: tally?.threads || undefined,
                       countLabel: 'Unresolved',
                     },
                     {
@@ -171,8 +171,8 @@ function Review({
                   ]}
                 />
               </div>
-              {pane === 'comments' ? (
-                <CommentsTab
+              {pane === 'threads' ? (
+                <ThreadsTab
                   review={review}
                   taskId={task.id}
                   projectId={task.projectId}

@@ -14,7 +14,7 @@ import { IconButton } from '../ui/IconButton';
 import { useModalClose } from '../ui/Modal';
 import { Select } from '../ui/Select';
 import { Textarea } from '../ui/Textarea';
-import { CommentItems } from './CommentsTab';
+import { ThreadItems } from './ThreadsTab';
 import { canPost, offeredVerdict, postingItems, postLabel, VERDICT_LABELS } from './finishReview';
 import { plural, providerName } from './labels';
 
@@ -36,8 +36,8 @@ interface Props {
  * Finish review: the one place a review posts. Two columns: on the left what
  * the review is (the PR, what posts where), the verdict and the summary (the
  * review's PR-level comment, a stored draft the agent may have written); on
- * the right every comment and reply that posts, as the Comments tab draws
- * them (threads fold), scrolling on its own. Then a button that says what
+ * the right every thread a comment or reply of the review posts in, as the
+ * Threads tab draws them (threads fold), scrolling on its own. Then a button that says what
  * posts where. Nothing posts from the keyboard.
  */
 export function FinishReviewSheet(props: Props) {
@@ -109,10 +109,10 @@ function Sheet({
             <DetailItem label="Into" title={`${review.headRef} → ${review.baseRef}`}>
               {review.baseRef}
             </DetailItem>
-            <DetailItem label="Comments">
+            <DetailItem label="Threads">
               <span className="tabular-nums">
                 {[
-                  comments.length > replies && plural(comments.length - replies, 'comment'),
+                  comments.length > replies && plural(comments.length - replies, 'new thread'),
                   replies > 0 && (replies === 1 ? '1 reply' : `${replies} replies`),
                 ]
                   .filter(Boolean)
@@ -160,15 +160,15 @@ function Sheet({
           </Field>
         </div>
         <section
-          aria-label="Comments that post"
+          aria-label="Threads that post"
           className="flex min-w-0 flex-1 flex-col rounded-l-xl bg-dialog-well"
         >
           <h3 className="type-heading shrink-0 px-5 pt-4 pb-2">
-            {comments.length > 0 ? plural(comments.length, 'comment') : 'No comments'}
+            {items.length > 0 ? plural(items.length, 'thread') : 'No threads'}
           </h3>
           <div className="scrollbar-thin-hover min-h-0 flex-1 overflow-y-auto px-2.5">
             {context && items.length > 0 ? (
-              <CommentItems
+              <ThreadItems
                 items={items}
                 context={context}
                 onNavigate={(scope, path, id) => {

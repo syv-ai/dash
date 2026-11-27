@@ -20,7 +20,7 @@ const EMPTY: DiffComment[] = [];
 
 /**
  * One PR review thread, the same card under its line in the editor and in
- * the Comments tab: a header (fold, status, where, Ask agent), then its
+ * the Threads tab: a header (fold, status, where, Ask agent), then its
  * posted comments, the task's draft replies (marked not posted), a reply
  * box, and Reply / Resolve. Folded, it shows who started it, its first line
  * and how many replies follow, and a Reply that opens it on the reply box.

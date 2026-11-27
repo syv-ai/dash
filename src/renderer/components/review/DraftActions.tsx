@@ -8,7 +8,7 @@ import { IconButton } from '../ui/IconButton';
 import { rowAction } from './rowAction';
 
 /** A draft comment's actions — edit, make it a note (line comments only),
- *  delete — for the Comments tab's draft rows and the Finish-review sheet's cards.
+ *  delete — for the Threads tab's draft rows and the Finish-review sheet's cards.
  *  Their clicks stay their own inside a clickable row. */
 export function DraftActions({ comment: c, onEdit }: { comment: DiffComment; onEdit: () => void }) {
   const store = useCommentsStore.getState;

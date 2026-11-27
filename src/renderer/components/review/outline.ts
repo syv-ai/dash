@@ -105,37 +105,39 @@ export const viewedPaths = (rows: readonly FileRow[]): Set<string> =>
 
 // ── Threads ──
 
-/** A row of the Comments tab: a PR thread with the person's draft replies to
- *  it, or one of their own draft line comments (a thread still to start). */
-export type CommentItem =
-  | { kind: 'thread'; thread: PrReviewThread; replies: DiffComment[] }
+/** A row of the Threads tab, a thread either way: one posted on the PR, with
+ *  the person's draft replies to it, or a draft thread the review will start,
+ *  whose one entry is their draft comment. A thread holds comments (entries);
+ *  a lone comment is a thread with one. */
+export type ThreadItem =
+  | { kind: 'posted'; thread: PrReviewThread; replies: DiffComment[] }
   | { kind: 'draft'; draft: DiffComment };
 
-export interface CommentGroups {
-  /** Open threads (on the code or off it) and the person's draft comments. */
-  unresolved: CommentItem[];
-  resolved: CommentItem[];
+export interface ThreadGroups {
+  /** Open threads (on the code or off it) and the person's draft threads. */
+  unresolved: ThreadItem[];
+  resolved: ThreadItem[];
 }
 
 /** Where a row sits for ordering: its file, then its line; a thread off the
  *  code (no line) leads its file. */
-const itemPlace = (i: CommentItem): { path: string; line: number } =>
-  i.kind === 'thread'
+const itemPlace = (i: ThreadItem): { path: string; line: number } =>
+  i.kind === 'posted'
     ? { path: i.thread.path, line: i.thread.line ?? 0 }
     : { path: i.draft.filePath, line: i.draft.startLine };
 
 /**
- * The Comments tab's groups, each by file and line: open threads with the
- * person's draft comments among them, and resolved threads. A draft reply
- * goes with its thread; one whose thread is gone stands as its own draft row.
+ * The Threads tab's groups, each by file and line: open threads with the
+ * person's draft threads among them, and resolved threads. A draft reply
+ * goes with its thread; one whose thread is gone stands as its own draft thread.
  */
-export function commentGroups(
+export function threadGroups(
   threads: readonly PrReviewThread[],
   drafts: readonly DiffComment[],
-): CommentGroups {
+): ThreadGroups {
   const known = new Set(threads.map((t) => t.id));
   const replies = new Map<string, DiffComment[]>();
-  const own: CommentItem[] = [];
+  const own: ThreadItem[] = [];
   for (const c of drafts) {
     if (c.replyTo && known.has(c.replyTo)) {
       const list = replies.get(c.replyTo);
@@ -143,12 +145,12 @@ export function commentGroups(
       else replies.set(c.replyTo, [c]);
     } else own.push({ kind: 'draft', draft: c });
   }
-  const item = (t: PrReviewThread): CommentItem => ({
-    kind: 'thread',
+  const item = (t: PrReviewThread): ThreadItem => ({
+    kind: 'posted',
     thread: t,
     replies: replies.get(t.id) ?? [],
   });
-  const byPlace = (a: CommentItem, b: CommentItem) => {
+  const byPlace = (a: ThreadItem, b: ThreadItem) => {
     const pa = itemPlace(a);
     const pb = itemPlace(b);
     return treeOrder(pa.path, pb.path) || pa.line - pb.line;
@@ -165,8 +167,8 @@ export function commentGroups(
 /** A thread drawn on a line of the code. */
 type LineThread = PrReviewThread & { line: number };
 
-/** The first open thread on the code in the Comments tab's order (by file,
- *  then line): what re-picking a narrow Comments opens at. Null with none. */
+/** The first open thread on the code in the Threads tab's order (by file,
+ *  then line): what re-picking a narrow Threads opens at. Null with none. */
 export function firstOpenThread(threads: readonly PrReviewThread[]): LineThread | null {
   return (
     threads
@@ -270,9 +272,9 @@ export function trayNotes(byFile: Readonly<Record<string, DiffComment[]>>): {
 }
 
 /**
- * Review mode's comment counts (D171): Comments counts the rows of its
- * Unresolved group (open threads, on the code or off it, and the person's
- * new draft comments; a draft reply sits in its thread's row), which the
+ * Review mode's counts (D171): Threads counts the threads of its Unresolved
+ * group (open threads, on the code or off it, and the person's draft
+ * threads; a draft reply sits in its thread), which the
  * view switch's tab shows too; Notes counts the task's unsent notes, as its
  * To send does.
  */
@@ -280,9 +282,9 @@ export function reviewTally(
   threads: readonly PrReviewThread[],
   comments: readonly DiffComment[],
   byFile: Readonly<Record<string, DiffComment[]>>,
-): { comments: number; notes: number } {
+): { threads: number; notes: number } {
   return {
-    comments: commentGroups(threads, comments).unresolved.length,
+    threads: threadGroups(threads, comments).unresolved.length,
     notes: trayNotes(byFile).unsent.length,
   };
 }

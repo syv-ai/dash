@@ -13,7 +13,7 @@ import { typeIntoTask } from '../../../utils/typeIntoTask';
 import { mentionCandidates } from '../comments/mentions';
 
 /** What a thread card works with, wherever it is drawn (under its line in
- *  the editor, or in the Comments tab): the PR, who owns drafts, and the
+ *  the editor, or in the Threads tab): the PR, who owns drafts, and the
  *  writes a card can make. */
 export interface PrThreadContext {
   review: PrReview;
