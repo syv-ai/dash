@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   formatTokens,
+  formatTokensPrecise,
   formatCost,
   formatDuration,
   formatResetAt,
@@ -47,6 +48,27 @@ describe('formatTokens', () => {
 
   it('stays in T past a thousand trillion', () => {
     expect(formatTokens(1_500_000_000_000_000)).toBe('1500T');
+  });
+});
+
+describe('formatTokensPrecise', () => {
+  it('formats <1000 as a plain integer', () => {
+    expect(formatTokensPrecise(0)).toBe('0');
+    expect(formatTokensPrecise(999)).toBe('999');
+  });
+
+  it('keeps two decimals in every unit, trailing zeros included', () => {
+    expect(formatTokensPrecise(2_213_456_789)).toBe('2.21B');
+    expect(formatTokensPrecise(1_049_999)).toBe('1.05M');
+    expect(formatTokensPrecise(12_344)).toBe('12.34k');
+    expect(formatTokensPrecise(120_400_000_000)).toBe('120.40B');
+    expect(formatTokensPrecise(1_000_000)).toBe('1.00M');
+  });
+
+  it('moves to the next unit when rounding reaches 1000', () => {
+    expect(formatTokensPrecise(999_994)).toBe('999.99k');
+    expect(formatTokensPrecise(999_995)).toBe('1.00M');
+    expect(formatTokensPrecise(999_995_000)).toBe('1.00B');
   });
 });
 

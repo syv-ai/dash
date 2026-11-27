@@ -7,19 +7,44 @@
 const TOKEN_UNITS = ['', 'k', 'M', 'B', 'T'] as const;
 
 /**
- * Compact token count, at most three significant figures: one decimal below
- * 10 of a unit (`1.5k`, `2.4M`, `1.2B`), whole numbers above (`12k`, `120B`),
- * a trailing `.0` dropped (`1k`). The unit is picked after rounding, so a
- * count that rounds up to 1000 of one unit reads as 1 of the next
- * (999_999 → `1M`, never `1000k`). Past trillions it stays in `T`.
+ * `n` in the largest token unit that keeps it below 1000, rounded to
+ * `places(value)` decimals (always 0 for a plain count). The unit is picked
+ * after rounding, so a count that rounds up to 1000 of one unit reads as 1 of
+ * the next (999_999 → 1M, never 1000k). Past trillions it stays in `T`.
  */
-export function formatTokens(n: number): string {
+function inTokenUnits(
+  n: number,
+  places: (value: number) => number,
+): { value: number; places: number; unit: string } {
   let value = n;
   for (let unit = 0; ; unit++) {
-    const rounded = value < 10 && unit > 0 ? Math.round(value * 10) / 10 : Math.round(value);
-    if (rounded < 1000 || unit === TOKEN_UNITS.length - 1) return `${rounded}${TOKEN_UNITS[unit]}`;
+    const p = unit === 0 ? 0 : places(value);
+    const rounded = Math.round(value * 10 ** p) / 10 ** p;
+    if (rounded < 1000 || unit === TOKEN_UNITS.length - 1) {
+      return { value: rounded, places: p, unit: TOKEN_UNITS[unit] ?? '' };
+    }
     value /= 1000;
   }
+}
+
+/**
+ * Compact token count, at most three significant figures: one decimal below
+ * 10 of a unit (`1.5k`, `2.4M`, `1.2B`), whole numbers above (`12k`, `120B`),
+ * a trailing `.0` dropped (`1k`).
+ */
+export function formatTokens(n: number): string {
+  const { value, unit } = inTokenUnits(n, (v) => (v < 10 ? 1 : 0));
+  return `${value}${unit}`;
+}
+
+/**
+ * Token count to two decimals in its unit (`2.21B`, `1.05M`, `12.34k`),
+ * trailing zeros kept so the width holds steady as it climbs (`1.00M`); a
+ * plain count below 1000. For the task header, where the count is watched.
+ */
+export function formatTokensPrecise(n: number): string {
+  const { value, places, unit } = inTokenUnits(n, () => 2);
+  return `${value.toFixed(places)}${unit}`;
 }
 
 /** Dollar cost: cents below $100 (`$4.32`), whole dollars at or above (`$123`). */

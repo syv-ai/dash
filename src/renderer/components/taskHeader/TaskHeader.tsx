@@ -140,7 +140,12 @@ export function TaskHeader({
       </Tooltip>
     ),
     tokens: showTokens && (
-      <TokenBadge totalTokens={task.totalTokens} totalCostUsd={task.totalCostUsd} size="sm" />
+      <TokenBadge
+        totalTokens={task.totalTokens}
+        totalCostUsd={task.totalCostUsd}
+        size="sm"
+        precise
+      />
     ),
     pr: <PrBadge prs={prs} allPrs={allPrs} taskId={task.id} variant="button" />,
   };

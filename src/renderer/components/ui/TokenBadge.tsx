@@ -1,16 +1,24 @@
 import React from 'react';
-import { formatTokens, formatCost } from '../../utils/format';
+import { formatTokens, formatTokensPrecise, formatCost } from '../../utils/format';
 import { useSettings } from '../../stores/settingsStore';
 import { Tooltip } from './Tooltip';
 import { Badge } from './Badge';
+import { cn } from '../../lib/cn';
 
 interface TokenBadgeProps {
   totalTokens: number;
   totalCostUsd: number;
   size?: 'sm' | 'md';
+  /** Two decimals in the unit (`2.21B`) instead of the compact count (`2.2B`). */
+  precise?: boolean;
 }
 
-export function TokenBadge({ totalTokens, totalCostUsd, size = 'md' }: TokenBadgeProps) {
+export function TokenBadge({
+  totalTokens,
+  totalCostUsd,
+  size = 'md',
+  precise = false,
+}: TokenBadgeProps) {
   const showCost = useSettings((s) => s.showTaskCost);
   if (totalTokens === 0) return null;
   return (
@@ -25,7 +33,9 @@ export function TokenBadge({ totalTokens, totalCostUsd, size = 'md' }: TokenBadg
       }}
     >
       <Badge size={size === 'sm' ? 'sm' : 'md'} className="font-normal">
-        <span>{formatTokens(totalTokens)}</span>
+        <span className={cn(precise && 'tabular-nums')}>
+          {precise ? formatTokensPrecise(totalTokens) : formatTokens(totalTokens)}
+        </span>
         {showCost && (
           <>
             <span className="text-ink-3">·</span>
