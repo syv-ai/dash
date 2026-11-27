@@ -15,17 +15,11 @@ const TWO_DIGITS = '00%';
  * row and plain ink until it nears full (green would read as the session's
  * state), with the same rich tooltip (percent,
  * tokens). The card sets the column it sits in. Nothing until the session
- * has replied, or while the setting hides the session level; `reserve` keeps
- * a two-digit reading's room even then (the Projects view, whose names must
- * not move as a percent comes or changes).
+ * has replied, or while the setting hides the session level, but always a
+ * two-digit reading's room, so no row's name moves as a percent comes or
+ * changes.
  */
-export function ContextLevel({
-  usage,
-  reserve = false,
-}: {
-  usage: ContextUsage | undefined;
-  reserve?: boolean;
-}) {
+export function ContextLevel({ usage }: { usage: ContextUsage | undefined }) {
   const showSession = useSettings((s) => s.showUsageInline);
   const [cell] = levelCells({ contextUsage: usage, showSession, showLimits: false, now: 0 });
   const reading = cell && cell.pct !== null && (
@@ -35,7 +29,6 @@ export function ContextLevel({
       </span>
     </Tooltip>
   );
-  if (!reserve) return reading || null;
   // The reading over an unseen two-digit one in one cell: the wider sets
   // the width, right-aligned like the column.
   return (

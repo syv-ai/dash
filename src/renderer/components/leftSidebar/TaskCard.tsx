@@ -34,9 +34,6 @@ interface TaskCardProps {
   /** Set the percent column apart from the name and its marks (the Tasks
    *  view, whose rows lead with the name; T28). */
   spacedEnd?: boolean;
-  /** Keep a two-digit percent's room on every row, sleeping ones too, so no
-   *  name moves as a percent comes or changes (the Projects view). */
-  reservePercent?: boolean;
   onSelect: () => void;
   onOpenIde: () => void;
   onClose: () => void;
@@ -64,8 +61,8 @@ export const TASK_INDENT_PX = 10;
  * A task row, the same in the Tasks and Projects views: the state dot, the
  * name with its marks (a favourite's star, the main-checkout M: labels, not
  * controls, T22), the second line if any; at the end the status badges, then
- * a live session's last column: the context percent at rest, the sleep
- * button in its place on hover or keyboard focus (T24). Dot and end centre
+ * the last column: the context percent at rest, the sleep button in its
+ * place on hover or keyboard focus (T24), its room kept on every row. Dot and end centre
  * on the row. The task menu is right-click only (T23).
  */
 export function TaskCard({
@@ -77,7 +74,6 @@ export function TaskCard({
   indentStep,
   drag,
   spacedEnd = false,
-  reservePercent = false,
   onSelect,
   onOpenIde,
   onClose,
@@ -151,28 +147,27 @@ export function TaskCard({
             {(prs || allPrs) && (
               <PrBadge prs={prs ?? []} allPrs={allPrs} variant="icon" taskId={task.id} />
             )}
-            {/* One column at the row's end, while the session is live: the
+            {/* One column at the row's end: the
                 percent at rest, the sleep button in its place on hover or
                 keyboard focus. It is as wide as the wider of the two, so the
                 name keeps its width (T24) and a short percent leaves no slack
                 before it (T26); right-aligned, the column lines up down the
-                list. `reservePercent` keeps it on every row, at least a
-                two-digit percent wide. */}
-            {(state !== 'asleep' || reservePercent) && (
-              <span className={cn('flex', spacedEnd && 'pl-2')}>
-                <HoverSwapSlot
-                  reserve
-                  rest={<ContextLevel usage={usage} reserve={reservePercent} />}
-                  actions={
-                    <SleepTaskButton
-                      activityState={activityInfo?.state}
-                      onClose={onClose}
-                      variant="ink"
-                    />
-                  }
-                />
-              </span>
-            )}
+                list. It is on every row, sleeping ones too, at least a
+                two-digit percent wide, so no name moves as a percent comes
+                or changes. */}
+            <span className={cn('flex', spacedEnd && 'pl-2')}>
+              <HoverSwapSlot
+                reserve
+                rest={<ContextLevel usage={usage} />}
+                actions={
+                  <SleepTaskButton
+                    activityState={activityInfo?.state}
+                    onClose={onClose}
+                    variant="ink"
+                  />
+                }
+              />
+            </span>
           </>
         }
       >

@@ -425,7 +425,6 @@ export function ProjectsSection({
             state={agentState(taskActivity[task.id], !!unseenTaskIds?.has(task.id))}
             usage={contextUsage?.[task.id]}
             indentStep={TASK_INDENT_PX}
-            reservePercent
             drag={{
               isDragging: draggingTaskId === task.id,
               handlers: getTaskDragHandlers(task.id, row.siblings, project.id),
