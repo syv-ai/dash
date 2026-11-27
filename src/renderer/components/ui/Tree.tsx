@@ -200,7 +200,7 @@ export function TreeRow({
       data-key={node.key}
       selected={ctx.selected}
       indent={node.depth}
-      leading={leading ?? (branch ? <BranchChevron open={!!node.open} /> : undefined)}
+      leading={leading ?? (branch ? <FlushChevron open={!!node.open} /> : undefined)}
       {...props}
       ref={setRef}
       onFocus={(e: React.FocusEvent) => e.target === e.currentTarget && ctx.onFocusRow()}
@@ -231,6 +231,19 @@ export function BranchChevron({ open }: { open: boolean }) {
         open && 'rotate-90',
       )}
     />
+  );
+}
+
+/** `TreeRow`'s own chevron, its ink on the row's start: lucide's glyph sits
+ *  ~3.5px inside its 14px box, so at rest it read as indented past a
+ *  same-depth file's name, which starts on the padding (D268). `left` moves
+ *  only the ink; the folder's name keeps its place. A chevron centred in its
+ *  own button (the left sidebar) keeps the box. */
+function FlushChevron({ open }: { open: boolean }) {
+  return (
+    <span className="relative -left-0.75 flex">
+      <BranchChevron open={open} />
+    </span>
   );
 }
 
