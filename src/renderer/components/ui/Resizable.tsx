@@ -7,11 +7,12 @@ import {
   type GroupProps,
   type PanelImperativeHandle,
   type PanelProps,
+  type PanelSize,
   type SeparatorProps,
 } from 'react-resizable-panels';
 import { cn } from '../../lib/cn';
 
-export type { PanelImperativeHandle };
+export type { PanelImperativeHandle, PanelSize };
 
 /** How long an animated panel eases (see `[data-animating]` in index.css,
  *  which must match). */

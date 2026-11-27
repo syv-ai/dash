@@ -3,7 +3,7 @@ import { EXPAND_EASE_MS, panelEaseMs } from '../components/ui/Resizable';
 import type { SidebarMotion } from '../components/rightInspector/RightInspector';
 import { whenFramesSettle } from './framesSettled';
 import { useUi } from '../stores/uiStore';
-import { leftHoldOf, type LeftHold, type LeftPanelSize } from './leftHold';
+import { heldAcrossRail, type Held, type PanelExtent } from './railCrossing';
 
 /** The most a planned motion's ease waits for its held layout's long frames. */
 const SETTLE_CAP_MS = 250;
@@ -40,11 +40,11 @@ export interface MotionPlan {
  * `phase`: where any motion is. `easeNow`: the ease in force, for clearing
  * panels' `animate` flags.
  */
-export function usePlannedMotion(measureLeft?: () => LeftPanelSize | null) {
+export function usePlannedMotion(measureLeft?: () => PanelExtent | null) {
   const [state, setState] = useState<{
     phase: SidebarMotion['phase'];
     hold?: Hold;
-    left?: LeftHold;
+    left?: Held;
   } | null>(null);
   const measureLeftRef = useRef(measureLeft);
   measureLeftRef.current = measureLeft;
@@ -82,7 +82,7 @@ export function usePlannedMotion(measureLeft?: () => LeftPanelSize | null) {
       const leftBefore = plan.movesLeft ? measureLeftRef.current?.() : null;
       const width = plan.move();
       const leftAfter = leftBefore && measureLeftRef.current?.();
-      const left = leftBefore && leftAfter ? leftHoldOf(leftBefore, leftAfter) : undefined;
+      const left = leftBefore && leftAfter ? heldAcrossRail(leftBefore, leftAfter) : undefined;
       const hold = plan.hold && { ...plan.hold, width: width ?? plan.hold.width };
       setState({ phase: 'easing', hold, left });
       timer = setTimeout(() => {

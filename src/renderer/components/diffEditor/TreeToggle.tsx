@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { IconButton } from '../ui/IconButton';
-import { panelEaseMs, type PanelImperativeHandle } from '../ui/Resizable';
+import { panelEaseMs, type PanelImperativeHandle, type PanelSize } from '../ui/Resizable';
+import { heldAcrossRail, type Held } from '../../lib/railCrossing';
 import { useEditorTabs } from '../../stores/editorTabsStore';
 
 /*
@@ -12,7 +13,9 @@ import { useEditorTabs } from '../../stores/editorTabsStore';
 
 /** Props for the `ResizablePanel` holding the tree: collapsible to
  *  `collapsedSize` (px; the host's rail), easing when the toggle drives it,
- *  and kept in step with the remembered flag. */
+ *  and kept in step with the remembered flag. `held`: its content's hold
+ *  while it crosses to or from the rail, toggled or dragged (`ui/HeldFrame`),
+ *  at its open width. */
 export function useTreePanel(collapsedSize: number) {
   const collapsed = useEditorTabs((s) => s.treeCollapsed);
   const panelRef = useRef<PanelImperativeHandle | null>(null);
@@ -33,15 +36,57 @@ export function useTreePanel(collapsedSize: number) {
     };
   }, [collapsed]);
 
+  // The open width (px) and the split's (px), as the panel last reported
+  // them; `folded` as of the last crossing (null before the first, the
+  // mount's own, which holds nothing).
+  const [held, setHeld] = useState<Held | null>(null);
+  const extent = useRef<{ openPx: number; groupPx: number; folded: boolean | null }>({
+    openPx: 0,
+    groupPx: 0,
+    folded: null,
+  });
+  const heldTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(heldTimer.current), []);
+  const cross = (folded: boolean) => {
+    const was = extent.current.folded;
+    extent.current.folded = folded;
+    if (was === null || panelEaseMs() === 0) return;
+    const { openPx, groupPx } = extent.current;
+    // Where it is heading, from the layout (the DOM is still easing).
+    const pct = panelRef.current?.getSize().asPercentage ?? 0;
+    const next = heldAcrossRail(
+      { px: was ? collapsedSize : openPx, collapsed: was },
+      { px: (pct / 100) * groupPx, collapsed: folded },
+    );
+    if (!next) return;
+    setHeld(next);
+    window.clearTimeout(heldTimer.current);
+    heldTimer.current = window.setTimeout(() => setHeld(null), panelEaseMs());
+  };
+  const onResize = (size: PanelSize) => {
+    if (size.asPercentage > 0) extent.current.groupPx = (size.inPixels * 100) / size.asPercentage;
+    // Folding, the layout is collapsed from the first frame: the width kept
+    // is the one it had open.
+    if (panelRef.current?.isCollapsed() === false) extent.current.openPx = size.inPixels;
+  };
+
   const set = (next: boolean) => useEditorTabs.getState().setTreeCollapsed(next);
   return {
+    held,
     panelRef,
     animate,
     collapsible: true,
     collapsedSize,
     ...(startCollapsed ? { defaultSize: collapsedSize } : {}),
-    onCollapse: () => set(true),
-    onExpand: () => set(false),
+    onResize,
+    onCollapse: () => {
+      cross(true);
+      set(true);
+    },
+    onExpand: () => {
+      cross(false);
+      set(false);
+    },
   };
 }
 

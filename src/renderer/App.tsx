@@ -27,9 +27,9 @@ import { headerModelName } from './lib/modelName';
 import { RightInspector } from './components/rightInspector/RightInspector';
 import { TASK_RAIL_PX } from './components/rightInspector/rail';
 import { usePlannedMotion } from './lib/usePlannedMotion';
-import type { LeftHold, LeftPanelSize } from './lib/leftHold';
+import type { PanelExtent } from './lib/railCrossing';
+import { HeldFrame } from './components/ui/HeldFrame';
 import { whenFramesSettle } from './lib/framesSettled';
-import { cn } from './lib/cn';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
 import { TaskModal } from './components/task/TaskModal';
 import { NewProjectDialog } from './components/newProject/NewProjectDialog';
@@ -96,15 +96,6 @@ const INSPECTOR_MAX_PCT = 85;
 /** The centre (the agent's terminal) at its narrowest, in px: its header's
  *  name, branch and actions still fit, and the TUI reflows to it. */
 const MAIN_MIN_PX = 280;
-/** The left sidebar's content crossing to or from its rail (`LeftHold`):
- *  it fades in as the panel opens, and out, quicker, as it closes. */
-function leftHoldFade(hold: LeftHold | null): string | undefined {
-  if (!hold) return undefined;
-  return hold.to === 'expanded'
-    ? 'motion-safe:animate-fade-in'
-    : 'opacity-0 transition-opacity duration-150 ease-out motion-reduce:transition-none';
-}
-
 /** The left sidebar collapsed (%): its rail. */
 const SIDEBAR_COLLAPSED_PCT = 3;
 /** The shell's two resize handles and rounding, in px: what an expanding
@@ -998,7 +989,7 @@ export function App() {
   // The left sidebar's body: the motion reads its panel's end layout in px
   // from the shell's width (the panel's own px is mid-transition).
   const sidebarBodyRef = useRef<HTMLDivElement>(null);
-  const measureLeft = useCallback((): LeftPanelSize | null => {
+  const measureLeft = useCallback((): PanelExtent | null => {
     const panel = sidebarPanelRef.current;
     const groupPx = sidebarBodyRef.current?.closest(
       '[data-slot="resizable-panel-group"]',
@@ -1487,6 +1478,8 @@ export function App() {
   // full content through the ease, so collapsing switches after it and
   // restoring before it, not on the ease's first frame.
   const sidebarRail = sidebarCollapsed && !(motionPhase === 'easing' && sidebarAnimating);
+  // The task sidebar shows its rail once it has closed and until it opens.
+  const taskRailed = changesPanelCollapsed && !sidebarMotion;
 
   return (
     <div
@@ -1525,70 +1518,58 @@ export function App() {
             setTimeout(() => setSidebarAnimating(false), easeNow());
           }}
         >
-          {/* Crossing between its rail and its content in an ease
-              (`leftHold`), the content is held at its expanded width, clipped
-              here, so its fitted rows never pass through the widths between,
-              and fades; the rail fades in as it comes. */}
-          <div className={cn('h-full overflow-clip', sidebarRail && 'motion-safe:animate-fade-in')}>
-            <div
-              ref={sidebarBodyRef}
-              className={cn('h-full', leftHold && 'w-(--held-width)', leftHoldFade(leftHold))}
-              style={
-                leftHold
-                  ? ({ '--held-width': `${leftHold.width}px` } as React.CSSProperties)
-                  : undefined
-              }
-            >
-              <ErrorBoundary area="The sidebar">
-                <LeftSidebar
-                  projects={projects}
-                  activeProjectId={activeProjectId}
-                  onSelectProject={(id) => {
-                    setActiveProjectId(id);
-                    setActiveTaskId(null);
-                  }}
-                  onOpenFolder={() => {
-                    setShowAddProjectModal(true);
-                  }}
-                  onDeleteProject={handleDeleteProject}
-                  onProjectSettings={(id) => {
-                    const p = projects.find((proj) => proj.id === id);
-                    if (p) setProjectSettingsTarget(p);
-                  }}
-                  tasksByProject={tasksByProject}
-                  activeTaskId={activeTaskId}
-                  onSelectTask={handleSelectTask}
-                  onNewTask={(id) => void handleNewTask(id)}
-                  onDeleteTask={handleDeleteTask}
-                  onArchiveTask={(id) => {
-                    void handleArchiveTask(id);
-                  }}
-                  onRestoreTask={(id) => {
-                    void handleRestoreTask(id);
-                  }}
-                  onCloseTask={(id) => void handleCloseTask(id)}
-                  onTaskSettings={handleTaskSettings}
-                  onOpenSettings={() => {
-                    setSettingsInitialTab(undefined);
-                    setShowSettings(true);
-                  }}
-                  onShowCommitGraph={(projectId) => {
-                    setActiveProjectId(projectId);
-                    setShowCommitGraph(true);
-                  }}
-                  collapsed={sidebarRail}
-                  unseenTaskIds={unseenTaskIds}
-                  onReorderProjects={handleReorderProjects}
-                  onReorderTasks={handleReorderTasks}
-                  onReorderTasksCommit={(projectId, reordered) => {
-                    void handleReorderTasksCommit(projectId, reordered);
-                  }}
-                  contextUsage={contextUsage}
-                  onMinWidth={setSidebarMinPx}
-                />
-              </ErrorBoundary>
-            </div>
-          </div>
+          {/* Crossing between its rail and its content in an ease, held at
+              its open width and faded (`leftHold`). */}
+          <HeldFrame held={leftHold} railed={sidebarRail} bodyRef={sidebarBodyRef}>
+            <ErrorBoundary area="The sidebar">
+              <LeftSidebar
+                projects={projects}
+                activeProjectId={activeProjectId}
+                onSelectProject={(id) => {
+                  setActiveProjectId(id);
+                  setActiveTaskId(null);
+                }}
+                onOpenFolder={() => {
+                  setShowAddProjectModal(true);
+                }}
+                onDeleteProject={handleDeleteProject}
+                onProjectSettings={(id) => {
+                  const p = projects.find((proj) => proj.id === id);
+                  if (p) setProjectSettingsTarget(p);
+                }}
+                tasksByProject={tasksByProject}
+                activeTaskId={activeTaskId}
+                onSelectTask={handleSelectTask}
+                onNewTask={(id) => void handleNewTask(id)}
+                onDeleteTask={handleDeleteTask}
+                onArchiveTask={(id) => {
+                  void handleArchiveTask(id);
+                }}
+                onRestoreTask={(id) => {
+                  void handleRestoreTask(id);
+                }}
+                onCloseTask={(id) => void handleCloseTask(id)}
+                onTaskSettings={handleTaskSettings}
+                onOpenSettings={() => {
+                  setSettingsInitialTab(undefined);
+                  setShowSettings(true);
+                }}
+                onShowCommitGraph={(projectId) => {
+                  setActiveProjectId(projectId);
+                  setShowCommitGraph(true);
+                }}
+                collapsed={sidebarRail}
+                unseenTaskIds={unseenTaskIds}
+                onReorderProjects={handleReorderProjects}
+                onReorderTasks={handleReorderTasks}
+                onReorderTasksCommit={(projectId, reordered) => {
+                  void handleReorderTasksCommit(projectId, reordered);
+                }}
+                contextUsage={contextUsage}
+                onMinWidth={setSidebarMinPx}
+              />
+            </ErrorBoundary>
+          </HeldFrame>
         </ResizablePanel>
         <ResizableHandle disabled={sidebarCollapsed} />
 
@@ -1684,53 +1665,46 @@ export function App() {
               {/* Collapsed, it shows its rail once it has closed and until it
                   opens (`railed`), the rest mounted out of sight; Monaco and
                   xterm re-lay out once shown. */}
-              {/* Held at the expanded width while it eases (`sidebarMotion`),
-                  clipped here (the panel itself would scroll). */}
-              {/* `overflow-clip`, not hidden: a clip can't be scrolled, so the
-                  editor taking focus mid-motion can't slide the held layout. */}
-              <div className="h-full overflow-clip">
-                <div
-                  ref={inspectorBodyRef}
-                  className={cn('h-full', sidebarMotion && 'w-(--held-width)')}
-                  style={
-                    sidebarMotion
-                      ? ({ '--held-width': `${sidebarMotion.width}px` } as React.CSSProperties)
-                      : undefined
-                  }
-                >
-                  <ErrorBoundary key={activeTask.id} area="The task sidebar">
-                    <RightInspector
-                      task={activeTask}
-                      modelName={headerModelName(
-                        statusLineData[activeTask.id]?.model,
-                        activeTask.model,
-                      )}
-                      rateLimits={latestRateLimits}
-                      paces={paces}
-                      contextUsage={contextUsage[activeTask.id]}
-                      diff={inlineEditor?.target ?? null}
-                      expanded={expanded || expandedShown}
-                      motion={sidebarMotion}
-                      onEditorMounted={handleEditorMounted}
-                      terminalTheme={resolvedTerminalTheme}
-                      isDark={theme === 'dark'}
-                      onViewDiff={handleViewDiff}
-                      onOpenEditor={() => {
-                        useEditors.getState().open({ cwd: activeTask.path, filePath: '' });
-                      }}
-                      onNarrow={narrowEditor}
-                      onCloseDiff={() => closeEditorOf(activeTask.path)}
-                      onCommitFinished={refreshActiveGitStatus}
-                      shellDrawerRef={shellDrawerPanelRef}
-                      onTuiActiveChange={handleTuiPanelActive}
-                      onTaskSettings={() => handleTaskSettings(activeTask.id)}
-                      onMinWidth={setInspectorMinPx}
-                      railed={changesPanelCollapsed && !sidebarMotion}
-                      onShow={showInspectorNarrow}
-                    />
-                  </ErrorBoundary>
-                </div>
-              </div>
+              {/* Held at its width while it eases (`sidebarMotion`), clipped
+                  here (the panel itself would scroll); its content doesn't
+                  fade (D264), its rail fades in as it comes. */}
+              <HeldFrame
+                held={sidebarMotion && { width: sidebarMotion.width }}
+                railed={taskRailed}
+                bodyRef={inspectorBodyRef}
+              >
+                <ErrorBoundary key={activeTask.id} area="The task sidebar">
+                  <RightInspector
+                    task={activeTask}
+                    modelName={headerModelName(
+                      statusLineData[activeTask.id]?.model,
+                      activeTask.model,
+                    )}
+                    rateLimits={latestRateLimits}
+                    paces={paces}
+                    contextUsage={contextUsage[activeTask.id]}
+                    diff={inlineEditor?.target ?? null}
+                    expanded={expanded || expandedShown}
+                    motion={sidebarMotion}
+                    onEditorMounted={handleEditorMounted}
+                    terminalTheme={resolvedTerminalTheme}
+                    isDark={theme === 'dark'}
+                    onViewDiff={handleViewDiff}
+                    onOpenEditor={() => {
+                      useEditors.getState().open({ cwd: activeTask.path, filePath: '' });
+                    }}
+                    onNarrow={narrowEditor}
+                    onCloseDiff={() => closeEditorOf(activeTask.path)}
+                    onCommitFinished={refreshActiveGitStatus}
+                    shellDrawerRef={shellDrawerPanelRef}
+                    onTuiActiveChange={handleTuiPanelActive}
+                    onTaskSettings={() => handleTaskSettings(activeTask.id)}
+                    onMinWidth={setInspectorMinPx}
+                    railed={taskRailed}
+                    onShow={showInspectorNarrow}
+                  />
+                </ErrorBoundary>
+              </HeldFrame>
             </ResizablePanel>
           </>
         )}

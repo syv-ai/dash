@@ -31,6 +31,7 @@ import { track } from '../../lib/telemetry';
 import { useSettledTrack } from '../../lib/useSettledTrack';
 import { ViewPanel, ViewTabs, type ViewTabsOption } from '../ui/ViewTabs';
 import { MovableSlot, useMovable } from '../ui/Movable';
+import { HeldFrame } from '../ui/HeldFrame';
 import { folderSheet, folderStripSlot } from '../ui/FolderTab';
 import {
   ResizableHandle,
@@ -283,8 +284,9 @@ export function RightInspector({
   });
   const { view, selectView } = ws;
   // Expanded, the list column folds to the rail, never to nothing (T12).
-  const treePanel = useTreePanel(TASK_RAIL_PX);
-  const treeFolded = useEditorTabs((s) => s.treeCollapsed);
+  const { held: treeHeld, ...treePanel } = useTreePanel(TASK_RAIL_PX);
+  // Its rail shows once it has folded and until it unfolds (`treeHeld`).
+  const treeRailed = useEditorTabs((s) => s.treeCollapsed) && !treeHeld;
   const openEditor = () => {
     if (!expanded) onOpenEditor();
   };
@@ -841,14 +843,19 @@ export function RightInspector({
                   {...treePanel}
                 >
                   {/* Folded, the rail; the column stays mounted out of
-                      sight (its tree's open folders and scroll). */}
-                  {treeFolded && <div className="h-full pr-2">{rail(unfoldFromRail)}</div>}
-                  <div className={cn('flex h-full min-h-0 flex-col pr-2', treeFolded && 'hidden')}>
-                    <MovableSlot host={top.host} />
-                    <div className="min-h-0 flex-1">
-                      <MovableSlot host={sheet.host} />
+                      sight (its tree's open folders and scroll), held at its
+                      width and faded as it folds and unfolds. */}
+                  <HeldFrame held={treeHeld} railed={treeRailed}>
+                    {treeRailed && <div className="h-full pr-2">{rail(unfoldFromRail)}</div>}
+                    <div
+                      className={cn('flex h-full min-h-0 flex-col pr-2', treeRailed && 'hidden')}
+                    >
+                      <MovableSlot host={top.host} />
+                      <div className="min-h-0 flex-1">
+                        <MovableSlot host={sheet.host} />
+                      </div>
                     </div>
-                  </div>
+                  </HeldFrame>
                 </ResizablePanel>
                 {/* A press (a drag, the double click that resets) or a key on
                   it makes the width that follows the user's. */}
