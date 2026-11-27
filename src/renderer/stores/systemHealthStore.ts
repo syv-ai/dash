@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { SystemHealthSnapshot } from '@shared/systemHealth';
-import { idleTaskIds } from '../lib/memoryWarning';
+import { idleTaskIds } from '../lib/idleTasks';
 import { useProjects } from './projectsStore';
 import { useRuntime } from './runtimeStore';
 

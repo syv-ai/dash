@@ -54,6 +54,7 @@ import { getBillionToastContent } from './utils/billionToast';
 import { useStatusLine } from './hooks/useStatusLine';
 import { useThresholdAlerts } from './hooks/useThresholdAlerts';
 import { useSystemHealth } from './hooks/useSystemHealth';
+import { useAutoSleep } from './hooks/useAutoSleep';
 import type { Task, WorktreeMigrationProject, WorktreeMigrationResult } from '../shared/types';
 import { defaultEffortFrom } from '../shared/effort';
 import type { CreateTaskOptions, TaskModalDefaults } from './components/task/TaskModal';
@@ -612,6 +613,7 @@ export function App() {
   // Threshold alerts — fires toast notifications when usage exceeds thresholds
   useThresholdAlerts(statusLineData, latestRateLimits, usageThresholds, taskNames);
   useSystemHealth();
+  useAutoSleep();
 
   // Persist usage thresholds
 

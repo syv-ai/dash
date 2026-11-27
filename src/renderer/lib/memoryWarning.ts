@@ -1,24 +1,9 @@
-import type { ActivityInfo } from '@shared/types';
 import {
   BYTES_PER_GB,
   type MemoryAlert,
   type MemoryPressure,
   type SystemHealthSnapshot,
 } from '@shared/systemHealth';
-
-/**
- * Tasks the memory warning may put to sleep: a live session at rest (the orb
- * done or unseen), not working, not waiting on the user, not failed, and not
- * the task on screen.
- */
-export function idleTaskIds(
-  activity: Readonly<Record<string, ActivityInfo>>,
-  activeTaskId: string | null,
-): string[] {
-  return Object.entries(activity)
-    .filter(([id, a]) => a.state === 'idle' && !a.compacting && id !== activeTaskId)
-    .map(([id]) => id);
-}
 
 /** "9.2 GB", or "850 MB" under a gigabyte. */
 export function formatMemory(bytes: number): string {

@@ -6,11 +6,11 @@ import { cn } from '../../lib/cn';
 import {
   formatMemory,
   healthSummary,
-  idleTaskIds,
   PRESSURE_LABEL,
   sleepIdleLabel,
   usageOfThreshold,
 } from '../../lib/memoryWarning';
+import { idleTaskIds } from '../../lib/idleTasks';
 import { useProjects } from '../../stores/projectsStore';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useSettings } from '../../stores/settingsStore';

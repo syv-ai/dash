@@ -509,6 +509,10 @@ export interface ActivityTiming {
   waitingSince: number | null;
 }
 
+/** Why the renderer puts a task's session to sleep (`session_slept.reason`):
+ *  a person's "Put to sleep" or "Sleep idle tasks", or the auto-sleep setting. */
+export type RendererSleepReason = 'manual' | 'auto_sleep';
+
 // ── Claude Code session supervisor ─────────────────────────────
 
 /** `state` column of `claude agents --json`. */

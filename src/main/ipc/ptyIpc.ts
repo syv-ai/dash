@@ -27,7 +27,9 @@ import { contextUsageService } from '../services/ContextUsageService';
 import { remoteControlService } from '../services/remoteControlService';
 import { TelemetryService } from '../services/TelemetryService';
 import { ipcError } from './ipcErrors';
-import type { PermissionMode } from '@shared/types';
+import type { PermissionMode, RendererSleepReason } from '@shared/types';
+
+const sleepReasonSchema = z.enum(['manual', 'auto_sleep'] satisfies RendererSleepReason[]);
 
 export function registerPtyIpc(): void {
   ipcMain.handle(
@@ -169,10 +171,10 @@ export function registerPtyIpc(): void {
   // client goes with it). Killing the agent PTY alone only detaches the
   // client — the session keeps running — so the renderer's "Put to sleep"
   // path calls this instead of pty:kill.
-  ipcMain.handle('pty:stopSession', async (_event, taskId: string) => {
+  ipcMain.handle('pty:stopSession', async (_event, taskId: string, reason: unknown) => {
     try {
       parseArgs('pty:stopSession', z.string(), taskId);
-      await stopTaskSession(taskId, 'manual');
+      await stopTaskSession(taskId, parseArgs('pty:stopSession', sleepReasonSchema, reason));
       return { success: true };
     } catch (error) {
       return errorResponse(error);

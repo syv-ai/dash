@@ -5,6 +5,7 @@ import type {
   ActivityInfo,
   RemoteControlState,
   StatusLineData,
+  RendererSleepReason,
 } from '../../shared/types';
 
 /** node-pty terminal lifecycle plus the per-PTY observation channels layered on
@@ -47,8 +48,9 @@ export interface PtyApi {
   ptyKill: (id: string) => void;
   ptyKillAwait: (id: string) => Promise<IpcResponse<void>>;
   /** Put the task to sleep: `claude stop` its supervisor job and kill the
-   *  attach client. The next ptyStartDirect resumes the same session. */
-  ptyStopSession: (taskId: string) => Promise<IpcResponse<void>>;
+   *  attach client. The next ptyStartDirect resumes the same session.
+   *  `reason` is for telemetry (`session_slept.reason`). */
+  ptyStopSession: (taskId: string, reason: RendererSleepReason) => Promise<IpcResponse<void>>;
   /** Stop + forget the task's supervisor job; the next ptyStartDirect resumes
    *  the same session in a fresh job (picks up env/ports changes). */
   ptyRestartSession: (taskId: string) => Promise<IpcResponse<void>>;

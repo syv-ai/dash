@@ -34,7 +34,7 @@ import { syncTaskSkills } from '../control/taskSkills';
 import { writeTaskSettings } from './taskSettings';
 import { writeHookSettings, setCommitAttributionValue } from './ptyHookSettings';
 import { dropTaskInbox } from './taskInbox';
-import type { PermissionMode, TaskModel } from '@shared/types';
+import type { PermissionMode, RendererSleepReason, TaskModel } from '@shared/types';
 
 // Launch configuration setters live in claudeEnv (shared with the supervisor
 // dispatch); re-exported so the IPC layer keeps one import site.
@@ -838,7 +838,7 @@ export async function startSessionAttach(options: {
 }
 
 /** Why a session was put to sleep (`session_slept.reason`, docs/telemetry.md). */
-export type SleepReason = 'manual' | 'task_archived' | 'project_archived' | 'quit';
+export type SleepReason = RendererSleepReason | 'task_archived' | 'project_archived' | 'quit';
 
 /** Stop the task's session (`claude stop`); the attach client goes with it. */
 export async function stopTaskSession(taskId: string, reason: SleepReason): Promise<void> {

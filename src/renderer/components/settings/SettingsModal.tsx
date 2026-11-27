@@ -26,6 +26,7 @@ import { TERMINAL_THEMES, resolveTheme } from '../../terminal/terminalThemes';
 import { TERMINAL_FONTS, resolveTerminalFontValue } from '../../terminal/terminalFonts';
 import { WEBGL_HELD_MAX, WEBGL_HELD_MIN } from '../../terminal/WebglLifecycle';
 import { formatCheckedAt, updateHeadline } from '../../utils/updateStatus';
+import { AUTO_SLEEP_CHOICES, AUTO_SLEEP_LABELS } from '../../lib/autoSleep';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useSettings } from '../../stores/settingsStore';
 import {
@@ -337,6 +338,8 @@ function SystemHealthTab() {
   const setWarning = useSettings((s) => s.setMemoryWarning);
   const gb = useSettings((s) => s.memoryWarningGb);
   const setGb = useSettings((s) => s.setMemoryWarningGb);
+  const autoSleep = useSettings((s) => s.autoSleepAfter);
+  const setAutoSleep = useSettings((s) => s.setAutoSleepAfter);
   // A draft while typing, so "0.5" isn't clamped at its "0"; kept on blur or Enter.
   const [draft, setDraft] = useState(String(gb));
   useEffect(() => setDraft(String(gb)), [gb]);
@@ -393,6 +396,22 @@ function SystemHealthTab() {
             />
             <span className="type-caption">GB</span>
           </span>
+        }
+      />
+      <SettingRow
+        label="Sleep idle sessions"
+        hint={{
+          title: "Frees a session's memory",
+          body: "Puts a task's session to sleep once it has sat at rest this long since you last saw it. A live session holds about 400 MB; a sleeping one holds nothing and wakes with its context when you open the task. Never a session that is working, waiting on you or finished unseen, the task on screen, a protected task, or one under remote control.",
+        }}
+        control={
+          <Select
+            aria-label="Sleep idle sessions"
+            className="w-40"
+            value={autoSleep}
+            onValueChange={setAutoSleep}
+            options={AUTO_SLEEP_CHOICES.map((v) => ({ value: v, label: AUTO_SLEEP_LABELS[v] }))}
+          />
         }
       />
     </FormSection>

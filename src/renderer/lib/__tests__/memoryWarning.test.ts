@@ -1,32 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { ActivityInfo } from '@shared/types';
 import type { MemoryAlert, SystemHealthSnapshot } from '@shared/systemHealth';
-import {
-  formatMemory,
-  healthSummary,
-  idleTaskIds,
-  memoryWarningCopy,
-  sleepIdleLabel,
-} from '../memoryWarning';
+import { formatMemory, healthSummary, memoryWarningCopy, sleepIdleLabel } from '../memoryWarning';
 
 const GB = 1024 ** 3;
-
-describe('idleTaskIds', () => {
-  const activity: Record<string, ActivityInfo> = {
-    done: { state: 'idle' },
-    open: { state: 'idle' },
-    working: { state: 'busy' },
-    asking: { state: 'waiting' },
-    failed: { state: 'error' },
-    asleep: { state: 'stopped' },
-    compacting: { state: 'idle', compacting: true },
-  };
-
-  it('takes live sessions at rest, never the task on screen', () => {
-    expect(idleTaskIds(activity, 'open')).toEqual(['done']);
-    expect(idleTaskIds(activity, null)).toEqual(['done', 'open']);
-  });
-});
 
 describe('formatMemory', () => {
   it.each([

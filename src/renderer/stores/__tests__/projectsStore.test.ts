@@ -333,7 +333,7 @@ describe('projectsStore archive/restore/close/update', () => {
     useProjects.getState().setActiveTask('t1');
     await useProjects.getState().closeTask('t1');
     // A bare ptyKill only detaches the attach client; sleeping means `claude stop`.
-    expect(api.ptyStopSession).toHaveBeenCalledWith('t1');
+    expect(api.ptyStopSession).toHaveBeenCalledWith('t1', 'manual');
     expect(api.ptyKill).not.toHaveBeenCalled();
     expect(api.ptyClearSnapshot).toHaveBeenCalledWith('t1');
     expect(useProjects.getState().activeTaskId).toBeNull();

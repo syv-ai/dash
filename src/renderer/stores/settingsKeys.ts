@@ -14,6 +14,7 @@ import { TERMINAL_THEME_IDS } from '../terminal/terminalThemes';
 import type { NotificationSound } from '../sounds';
 import type { UsageThresholds } from '@shared/types';
 import { clampMemoryWarningGb } from '@shared/systemHealth';
+import { AUTO_SLEEP_CHOICES, type AutoSleepAfter } from '../lib/autoSleep';
 import { parseKeybindings, type KeyBindingMap } from '../keybindings';
 
 /** The slice of settings managed by settingsStore. Grows as fields migrate. */
@@ -70,6 +71,8 @@ export interface SettingsState {
   memoryWarningGb: number;
   /** The health icon beside Settings, coloured by `healthLevel`. */
   systemHealthIcon: boolean;
+  /** Put a session to sleep once it has rested, seen, this long (autoSleep.ts). Off by default. */
+  autoSleepAfter: AutoSleepAfter;
 }
 
 /** One entry per managed setting: the store field, its existing localStorage
@@ -168,6 +171,7 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
     encode: (v) => String(v),
   }),
   entry('systemHealthIcon', 'systemHealthIcon', boolDefaultTrue()),
+  entry('autoSleepAfter', 'autoSleepAfter', strEnum(AUTO_SLEEP_CHOICES, 'off')),
 ];
 
 /** Initial state = every field decoded from an absent key (its default). */

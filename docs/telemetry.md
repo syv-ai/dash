@@ -64,23 +64,23 @@ The source of truth for what Dash sends to PostHog. Change this file in the same
 
 ### Sessions and turns
 
-| Event                | When                                                        | Properties                                                            |
-| -------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------- |
-| `session_started`    | a task's Claude Code session is dispatched (`claude --bg`)  | `resumed`, `model` (alias), `permission_mode`, `extra_flags`          |
-| `session_woken`      | a sleeping session is respawned                             |                                                                       |
-| `session_slept`      | a session is stopped (sleep)                                | `reason` (`manual`, `task_archived`, `project_archived`, `quit`)      |
-| `session_restarted`  | a session is re-dispatched (env change, update restart)     |                                                                       |
-| `terminal_started`   | a task pane attaches to its session                         |                                                                       |
-| `turn_completed`     | a turn ends (busy → idle/stopped), from ActivityMonitor     | `duration_bucket`, `interrupted`, `tool_call_bucket`, `subagent_used` |
-| `turn_failed`        | a turn ends in an error                                     | `error_type` (StopFailure's `error`, or `supervisor`)                 |
-| `wait_ended`         | a wait on the user (permission, question, elicitation) ends | `duration_bucket`, `kind`                                             |
-| `first_turn_started` | a task created this run starts its first turn               | `duration_bucket` (since the task was created)                        |
+| Event                | When                                                        | Properties                                                                     |
+| -------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `session_started`    | a task's Claude Code session is dispatched (`claude --bg`)  | `resumed`, `model` (alias), `permission_mode`, `extra_flags`                   |
+| `session_woken`      | a sleeping session is respawned                             |                                                                                |
+| `session_slept`      | a session is stopped (sleep)                                | `reason` (`manual`, `auto_sleep`, `task_archived`, `project_archived`, `quit`) |
+| `session_restarted`  | a session is re-dispatched (env change, update restart)     |                                                                                |
+| `terminal_started`   | a task pane attaches to its session                         |                                                                                |
+| `turn_completed`     | a turn ends (busy → idle/stopped), from ActivityMonitor     | `duration_bucket`, `interrupted`, `tool_call_bucket`, `subagent_used`          |
+| `turn_failed`        | a turn ends in an error                                     | `error_type` (StopFailure's `error`, or `supervisor`)                          |
+| `wait_ended`         | a wait on the user (permission, question, elicitation) ends | `duration_bucket`, `kind`                                                      |
+| `first_turn_started` | a task created this run starts its first turn               | `duration_bucket` (since the task was created)                                 |
 
 `duration_bucket` is one of `lt_10s`, `10s_1m`, `1m_5m`, `5m_15m`, `15m_1h`, `gt_1h`.
 
 - `wait_ended.kind` is what opened the wait: `permission` (PermissionRequest, or the `permission_prompt` notification), `question` (AskUserQuestion), `elicitation` (an MCP Elicitation, or its dialog notifications), `quota` (`quota_auto_resume_stale`), or `unknown` (the supervisor listing reported the wait with no hook).
 - `turn_completed.tool_call_bucket` counts every PreToolUse in the turn, the main agent's and its subagents' (count buckets as above); `subagent_used` is true when a SubagentStart came in it.
-- `session_slept.reason`: `manual` (Put to sleep), `task_archived`, `project_archived` (each live session in it), `quit` (with "Stop sessions on quit" on). Claude Code's own idle stop isn't Dash's to see.
+- `session_slept.reason`: `manual` (Put to sleep, Sleep idle tasks), `auto_sleep` (Settings → System health → Sleep idle sessions), `task_archived`, `project_archived` (each live session in it), `quit` (with "Stop sessions on quit" on). Claude Code's own idle stop isn't Dash's to see.
 - `session_started.extra_flags`: the flag names in the task's Extra arguments, sorted and comma-joined (`--add-dir,--chrome`), `''` for none. Never their values: those can be paths or prompts.
 - `terminal_started` lost its `source` (always `direct`): main can't tell a first open from a re-attach or a restore.
 

@@ -9,6 +9,7 @@ import type {
   BranchInfo,
   DeleteTaskOptions,
   TaskLaunchOptions,
+  RendererSleepReason,
 } from '../../shared/types';
 import type { DeleteProjectOptions } from '../components/project/DeleteProjectModal';
 import type { CreateTaskOptions } from '../components/task/TaskModal';
@@ -70,7 +71,8 @@ export interface ProjectsActions {
   commitTaskReorder: (projectId: string, reordered: Task[]) => Promise<void>;
   archiveTask: (id: string) => Promise<void>;
   restoreTask: (id: string) => Promise<void>;
-  closeTask: (id: string) => Promise<void>;
+  /** Put the task to sleep; `reason` is for telemetry ('manual' by default). */
+  closeTask: (id: string, reason?: RendererSleepReason) => Promise<void>;
   updateTask: (taskItem: Task, patch: Partial<Task>) => Promise<Task | null>;
   deleteTask: (taskItem: Task, options?: DeleteTaskOptions) => Promise<void>;
   deleteProject: (project: Project, options: DeleteProjectOptions) => Promise<void>;
@@ -285,13 +287,13 @@ export const useProjects = create<ProjectsStore>((set, get) => ({
   restoreTask: async (id) => {
     await window.electronAPI.restoreTask(id);
   },
-  closeTask: async (id) => {
+  closeTask: async (id, reason = 'manual') => {
     disposeTaskSessions(id);
     void window.electronAPI.ptyClearSnapshot(id);
     if (useProjects.getState().activeTaskId === id) useProjects.getState().setActiveTask(null);
     // "Put to sleep" = `claude stop` under the supervisor. A bare ptyKill only
     // detaches the attach client and leaves the session running.
-    const resp = await window.electronAPI.ptyStopSession(id);
+    const resp = await window.electronAPI.ptyStopSession(id, reason);
     if (!resp.success) toast.error(resp.error || 'Failed to put task to sleep');
   },
   updateTask: async (taskItem, patch) => {
