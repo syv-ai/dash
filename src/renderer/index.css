@@ -48,6 +48,10 @@
      gold, like VS Code's, user-requested (G1). Not warn amber, which
      means caution. */
   --color-changed: hsl(var(--changed));
+  /* Inline code's ink (ui/Code, Markdown's codespans): a calm rose, so a
+     command or path reads apart from the prose around it, user-requested
+     (S2). Not link blue, not a state's colour. */
+  --color-code-ink: hsl(var(--code-ink));
   --color-hover: hsl(var(--hover));
   --color-select: hsl(var(--select));
   --color-btn: hsl(var(--btn));
@@ -216,6 +220,9 @@
     /* Desaturated gold: 5.3:1 on ground, 6.4:1 on well (warn is
        34 78% 41%). */
     --changed: 40 48% 31%;
+    /* Rose: 5.8 / 7.0:1 on ground / well, 5.0 / 5.9:1 on Code's select
+       tint over them. */
+    --code-ink: 335 55% 40%;
     --hover: 225 20% 20% / 0.05;
     --select: 225 20% 20% / 0.09;
     --btn: 225 14% 22%;
@@ -339,6 +346,9 @@
     /* Soft gold: 10.7 / 9.9 / 8.9:1 on ground / well / raised, under ink
        (warn is 40 75% 62%). */
     --changed: 40 50% 68%;
+    /* Soft rose: 10.2 / 9.4 / 8.4:1 on ground / well / raised, 8.4 / 7.4 /
+       6.4:1 on Code's select tint over them; under ink (15.0 on well). */
+    --code-ink: 335 55% 78%;
     --hover: 0 0% 100% / 0.05;
     --select: 0 0% 100% / 0.09;
     --btn: 220 6% 91%;

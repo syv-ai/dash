@@ -1,7 +1,7 @@
 import { memo, useMemo, type ReactNode } from 'react';
 import { marked, type Token, type Tokens } from 'marked';
 import { CheckboxMark } from './Checkbox';
-import { Code, CodeLookContext, type CodeLook } from './Code';
+import { Code } from './Code';
 
 /**
  * Markdown (GitHub-flavoured) rendered as React elements from marked's tokens,
@@ -14,18 +14,13 @@ import { Code, CodeLookContext, type CodeLook } from './Code';
 export const Markdown = memo(function Markdown({
   text,
   className = '',
-  codeLook = 'tint',
 }: {
   text: string;
   className?: string;
-  /** How inline code looks (`Code`). */
-  codeLook?: CodeLook;
 }) {
   const tokens = useMemo(() => marked.lexer(text, { gfm: true, breaks: true }), [text]);
   return (
-    <CodeLookContext.Provider value={codeLook}>
-      <div className={`min-w-0 wrap-break-word [&>*+*]:mt-1.5 ${className}`}>{blocks(tokens)}</div>
-    </CodeLookContext.Provider>
+    <div className={`min-w-0 wrap-break-word [&>*+*]:mt-1.5 ${className}`}>{blocks(tokens)}</div>
   );
 });
 
