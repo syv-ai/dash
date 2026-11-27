@@ -99,6 +99,7 @@ export function TaskDetails({
   );
   const showCost = useSettings((s) => s.showTaskCost);
   const activity = useRuntime((s) => s.taskActivity[task.id]?.state ?? null);
+  const livePermissionMode = useRuntime((s) => s.taskActivity[task.id]?.permissionMode ?? null);
   const gitStatus = useGit((s) => s.gitStatus);
   const prs = useGit((s) => s.branchPrsByTask[task.id]);
   const lastCommit = useLastCommit(task.path, gitStatus);
@@ -115,6 +116,7 @@ export function TaskDetails({
           contextUsage && contextUsage.percentage > 0 ? contextUsage.percentage : null,
         showCost,
         activity,
+        livePermissionMode,
         lastActiveMs,
         homeDir: window.electronAPI.getHomeDir(),
         now,
@@ -127,6 +129,7 @@ export function TaskDetails({
       contextUsage,
       showCost,
       activity,
+      livePermissionMode,
       lastActiveMs,
       now,
     ],

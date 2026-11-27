@@ -10,14 +10,17 @@ import { ConfirmModal } from '../ui/ConfirmModal';
 import { useControlInfo } from '../../hooks/useControlInfo';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useTaskBranch } from '../../stores/gitStore';
+import { useBypassAvailability } from './switchPermissionMode';
+import { sessionModeNote } from './permissionSwitch';
 
 interface TaskSettingsModalProps {
   task: Task;
   /** True when a Claude PTY is currently attached to the task — drives the
-   *  "applies on next start" hint under the permission mode / model pickers. */
+   *  "applies on next start" hint under the model picker. */
   hasActiveSession: boolean;
   onClose: () => void;
   onRename: (id: string, name: string) => void;
+  /** Confirms and restarts a session itself (switchPermissionMode). */
   onPermissionModeChange: (id: string, mode: PermissionMode) => void;
   onModelChange: (id: string, model: TaskModel) => void;
   /** `restart` is true when the task has a session to restart (running or a
@@ -43,6 +46,8 @@ export function TaskSettingsModal({
   // A live session, or a parked job: either needs a restart, which rewrites its
   // settings file, for a Dash access change. 'stopped' with no job has nothing to restart.
   const activityState = useRuntime((s) => s.taskActivity[task.id]?.state);
+  const sessionMode = useRuntime((s) => s.taskActivity[task.id]?.permissionMode);
+  const bypass = useBypassAvailability(task.id);
   const hasSession = (!!activityState && activityState !== 'stopped') || !!task.jobId;
   // The value waiting on the restart confirmation, if any.
   const [pendingDashAccess, setPendingDashAccess] = useState<boolean | null>(null);
@@ -84,7 +89,8 @@ export function TaskSettingsModal({
             layout="row"
             value={task.permissionMode}
             onChange={(mode) => onPermissionModeChange(task.id, mode)}
-            helperText={hasActiveSession ? NEXT_START : undefined}
+            helperText={sessionModeNote(task.permissionMode, sessionMode)}
+            bypass={bypass}
           />
           <ModelPicker
             layout="row"

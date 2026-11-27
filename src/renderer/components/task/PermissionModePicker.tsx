@@ -1,8 +1,13 @@
 import React from 'react';
 import { Shield, FilePen, Zap, Flame } from 'lucide-react';
-import { isPermissionMode, type PermissionMode } from '../../../shared/types';
+import {
+  isPermissionMode,
+  type BypassAvailability,
+  type PermissionMode,
+} from '../../../shared/types';
 import { Field, SettingRow } from '../ui/Field';
 import { Select, type SelectOption } from '../ui/Select';
+import { bypassUnavailableReason } from './permissionSwitch';
 
 const OPTIONS: SelectOption<PermissionMode>[] = [
   { value: 'default', label: 'Default' },
@@ -33,6 +38,7 @@ export function PermissionModePicker({
   helperText,
   layout = 'field',
   width = 'md',
+  bypass = null,
 }: {
   value: PermissionMode;
   onChange: (mode: PermissionMode) => void;
@@ -42,13 +48,22 @@ export function PermissionModePicker({
   /** `row` only, the select's width: `md` lines up with the settings dialogs'
    *  fields; `sm` leaves the name room in a narrow column. */
   width?: 'sm' | 'md';
+  /** Claude Code's word on bypass for this task: Yolo is off, with why, when
+   *  it isn't available. Null while unknown (or for a task not made yet). */
+  bypass?: BypassAvailability | null;
 }) {
+  const offReason = value === 'bypassPermissions' ? null : bypassUnavailableReason(bypass);
+  const options = offReason
+    ? OPTIONS.map((o) =>
+        o.value === 'bypassPermissions' ? { ...o, disabled: true, disabledReason: offReason } : o,
+      )
+    : OPTIONS;
   const select = (
     <Select<PermissionMode>
       aria-label="Permission mode"
       value={value}
       onValueChange={onChange}
-      options={OPTIONS}
+      options={options}
       renderOption={(opt) => (
         <span className="inline-flex items-center gap-2 align-middle">
           <ModeIcon mode={opt.value} />

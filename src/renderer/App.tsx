@@ -68,6 +68,7 @@ import { useGit } from './stores/gitStore';
 import { useEditors } from './stores/editorsStore';
 import { mayCloseEditor } from './components/diffEditor/closeGuard';
 import { ConfirmHost } from './components/ui/ConfirmHost';
+import { switchPermissionMode } from './components/task/switchPermissionMode';
 import { ClaudeUpdateHost } from './components/claudeUpdate/ClaudeUpdateHost';
 import { useRuntime } from './stores/runtimeStore';
 import { useAppBootstrap } from './hooks/useAppBootstrap';
@@ -1779,7 +1780,7 @@ export function App() {
           }}
           onPermissionModeChange={(id, mode) => {
             if (!taskSettingsTarget || taskSettingsTarget.id !== id) return;
-            void persistTaskUpdate(taskSettingsTarget, { permissionMode: mode });
+            void switchPermissionMode(taskSettingsTarget, mode, persistTaskUpdate);
           }}
           onModelChange={(id, model) => {
             if (!taskSettingsTarget || taskSettingsTarget.id !== id) return;

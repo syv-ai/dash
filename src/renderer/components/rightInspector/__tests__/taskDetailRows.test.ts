@@ -49,6 +49,7 @@ const input = (
   contextPercent: null,
   showCost: true,
   activity: null,
+  livePermissionMode: null,
   lastActiveMs: null,
   homeDir: '/Users/me',
   now: NOW,
@@ -58,6 +59,16 @@ const input = (
 const labels = (rows: { label: string }[]) => rows.map((r) => r.label);
 
 describe('taskDetailSections', () => {
+  it("shows the mode the session reports over the task's, with the configured one on hover", () => {
+    const row = (live: TaskDetailsInput['livePermissionMode']) =>
+      taskDetailSections(input({ livePermissionMode: live })).session.find(
+        (r) => r.label === 'Permissions',
+      );
+    expect(row(null)).toMatchObject({ value: 'Accept edits', title: undefined });
+    expect(row('acceptEdits')).toMatchObject({ value: 'Accept edits', title: undefined });
+    expect(row('plan')).toMatchObject({ value: 'Plan', title: 'Configured: Accept edits' });
+  });
+
   it('shows only what is set: no parent, no activity, no session ids, no usage', () => {
     const s = taskDetailSections(input());
     expect(labels(s.task)).toEqual(['Name', 'Project', 'Kind', 'Worktree', 'Created']);

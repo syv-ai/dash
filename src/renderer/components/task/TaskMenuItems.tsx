@@ -9,6 +9,7 @@ import {
   FolderOpen,
   GitBranch,
   Link2,
+  Flame,
 } from 'lucide-react';
 import { DropdownMenuItem, DropdownMenuSeparator } from '../ui/DropdownMenu';
 import { IdeIcon } from '../ui/IdeIcon';
@@ -18,6 +19,7 @@ import { useProjects, selectTaskById } from '../../stores/projectsStore';
 import { sessionRegistry } from '../../terminal/SessionRegistry';
 import { copyText, revealLabel } from '../diffEditor/fileActions';
 import { showTaskMemory } from '../memory/showMemory';
+import { switchPermissionMode, useBypassAvailability } from './switchPermissionMode';
 
 /** What the favourite toggle says. */
 const favoriteLabel = (favorite: boolean) =>
@@ -82,6 +84,11 @@ export function TaskMenuItems({
   const { ideId, openLabel } = usePreferredIde();
   const task = useProjects((s) => selectTaskById(s, taskId));
   const setFavorite = useProjects((s) => s.setFavorite);
+  // Read as the menu opens. While unknown, or when a setting turns it off,
+  // the item stays out: Task settings shows it off with the reason.
+  const bypass = useBypassAvailability(taskId);
+  const canSwitchToYolo =
+    !!task && task.permissionMode !== 'bypassPermissions' && !!bypass?.available;
   return (
     <>
       {task && (
@@ -120,6 +127,12 @@ export function TaskMenuItems({
         <Settings size={13} strokeWidth={1.8} />
         Task settings
       </Item>
+      {canSwitchToYolo && (
+        <Item onSelect={() => void switchPermissionMode(task, 'bypassPermissions')}>
+          <Flame size={13} strokeWidth={1.8} />
+          Switch to Yolo…
+        </Item>
+      )}
       <Item
         onSelect={() => {
           focusTerminalOnClose = true;

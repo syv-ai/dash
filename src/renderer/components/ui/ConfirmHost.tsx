@@ -8,6 +8,8 @@ import { ConfirmModal } from './ConfirmModal';
  */
 
 export interface ConfirmOptions {
+  /** A short question above the message; omit when the message is one. */
+  title?: string;
   message: string;
   confirmLabel: string;
   /** A confirm that throws work away (Discard). */
@@ -44,6 +46,7 @@ export function ConfirmHost() {
   return (
     <ConfirmModal
       key={pending.id}
+      title={pending.title}
       message={pending.message}
       confirmLabel={pending.confirmLabel}
       destructive={pending.destructive}

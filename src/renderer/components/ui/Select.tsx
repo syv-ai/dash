@@ -2,6 +2,7 @@ import * as React from 'react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { ChevronDown, Check } from 'lucide-react';
 import { cn } from '../../lib/cn';
+import { InfoTip } from './InfoTip';
 import { focusRing, menuItem, menuSurface, radixMenuItemStates } from './styles';
 
 export interface SelectOption<T extends string> {
@@ -9,6 +10,9 @@ export interface SelectOption<T extends string> {
   label: string;
   /** Sets the label in this font, to preview it (a terminal font picker). */
   fontFamily?: string;
+  /** Shown but not pickable; `disabledReason` says why, behind an ⓘ. */
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
 /** An option's label, in its own font when it previews one. */
@@ -76,9 +80,19 @@ export function Select<T extends string>({
               <DropdownMenuPrimitive.RadioItem
                 key={opt.value}
                 value={opt.value}
+                disabled={opt.disabled}
                 className={cn(menuItem, radixMenuItemStates, 'justify-between')}
               >
                 <span className="truncate text-left">{render(opt)}</span>
+                {/* The disabled row takes no pointer; its ⓘ does. */}
+                {opt.disabled && opt.disabledReason && (
+                  <InfoTip
+                    content={opt.disabledReason}
+                    label="Why it is off"
+                    side="right"
+                    className="pointer-events-auto"
+                  />
+                )}
                 <DropdownMenuPrimitive.ItemIndicator>
                   <Check size={14} strokeWidth={1.8} />
                 </DropdownMenuPrimitive.ItemIndicator>

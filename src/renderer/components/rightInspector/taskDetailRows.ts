@@ -1,4 +1,4 @@
-import type { ActivityState, PermissionMode, Task, TaskModel } from '../../../shared/types';
+import type { ActivityState, SessionPermissionMode, Task, TaskModel } from '../../../shared/types';
 import { formatTimeAgo } from '../../../shared/relativeTime';
 import { tildePath } from '../../lib/displayPath';
 import { formatCost, formatTokensPrecise } from '../../utils/format';
@@ -26,6 +26,8 @@ export interface TaskDetailsInput {
   showCost: boolean;
   /** The session's live state, absent while Dash isn't attached to one. */
   activity: ActivityState | null;
+  /** The mode the session's hooks last reported, if it has. */
+  livePermissionMode: SessionPermissionMode | null;
   /** When the conversation last changed (its transcript's mtime, epoch ms). */
   lastActiveMs: number | null;
   /** The home folder, shown as `~` in paths. */
@@ -42,10 +44,12 @@ export interface TaskDetailSections {
   usage: DetailRow[];
 }
 
-const PERMISSION_LABELS: Record<PermissionMode, string> = {
+const PERMISSION_LABELS: Record<SessionPermissionMode, string> = {
   default: 'Ask every time',
+  plan: 'Plan',
   acceptEdits: 'Accept edits',
   auto: 'Auto (classifier approves safe actions)',
+  dontAsk: "Don't ask",
   bypassPermissions: 'Skip all prompts',
 };
 
@@ -147,7 +151,14 @@ export function taskDetailSections(input: TaskDetailsInput): TaskDetailSections 
         value: input.liveModel ?? MODEL_LABELS[task.model],
         title: input.liveModel ? `Configured: ${MODEL_LABELS[task.model]}` : undefined,
       },
-      { label: 'Permissions', value: PERMISSION_LABELS[task.permissionMode] },
+      {
+        label: 'Permissions',
+        value: PERMISSION_LABELS[input.livePermissionMode ?? task.permissionMode],
+        title:
+          input.livePermissionMode && input.livePermissionMode !== task.permissionMode
+            ? `Configured: ${PERMISSION_LABELS[task.permissionMode]}`
+            : undefined,
+      },
       {
         label: 'State',
         value: sessionState(task, input.activity),
