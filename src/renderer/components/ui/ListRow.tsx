@@ -22,9 +22,25 @@ const listRowVariants = cva(
       changed: { true: '', false: '' },
       // The row being dragged to a new place: faded where it will land.
       dragging: { true: 'opacity-40', false: '' },
+      // A physical press: the row shrinks a touch while held and springs
+      // back on release (100ms ease-out; `scale` takes no layout, so nothing
+      // beside it moves). Not while a control inside it is the one pressed,
+      // and not at all under reduced motion. Tailwind v4's scale-* sets
+      // `scale`, not `transform`, so that is the property listed.
+      pressable: {
+        true: 'transition-[color,background-color,scale] duration-[150ms,150ms,100ms] ease-out motion-safe:active:not-has-[button:active]:scale-98',
+        false: '',
+      },
     },
     compoundVariants: [{ changed: true, dimmed: false, className: 'text-changed' }],
-    defaultVariants: { size: 'md', twoLine: false, dimmed: false, changed: false, dragging: false },
+    defaultVariants: {
+      size: 'md',
+      twoLine: false,
+      dimmed: false,
+      changed: false,
+      dragging: false,
+      pressable: false,
+    },
   },
 );
 
@@ -45,6 +61,8 @@ export type ListRowProps = Omit<React.ComponentProps<'button'>, 'children'> &
     changed?: boolean;
     /** Being dragged to reorder: faded. */
     dragging?: boolean;
+    /** Shrinks a touch while pressed, a physical click (the task cards). */
+    pressable?: boolean;
     /** The focused task or project: its label (not the second line) in semibold. */
     strong?: boolean;
     /** Before the label: a StatusDot, a file icon. An icon that doesn't
@@ -79,6 +97,7 @@ export function ListRow({
   dimmed = false,
   changed = false,
   dragging = false,
+  pressable = false,
   strong = false,
   badges,
   leading,
@@ -109,7 +128,7 @@ export function ListRow({
       data-selected={selected}
       aria-current={selected ? 'true' : undefined}
       className={cn(
-        listRowVariants({ size, dimmed, changed, dragging, twoLine: !!description }),
+        listRowVariants({ size, dimmed, changed, dragging, pressable, twoLine: !!description }),
         className,
       )}
       // px-2.5 is 10px; a tree row adds its depth to the left of it.

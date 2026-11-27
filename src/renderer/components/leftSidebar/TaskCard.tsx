@@ -114,6 +114,7 @@ export function TaskCard({
         {...drag?.handlers}
         className="group/swap"
         dragging={drag?.isDragging}
+        pressable
         dimmed={isAtRest(state)}
         strong={ctx.selected}
         onActivate={onSelect}
