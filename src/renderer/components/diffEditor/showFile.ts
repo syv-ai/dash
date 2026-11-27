@@ -21,27 +21,29 @@ export function installShowRequests(): void {
 }
 
 /**
- * The open task's sidebar puts a shown file on screen: `expand` opens the
- * editor expanded (the left sidebar folds to its rail, D259); once it is,
- * the list column folds to the task rail beside it, in the tree toggle's
- * motion, so the file has the room. Folding waits for the split: the list
- * panel it folds mounts with it.
+ * The open task's sidebar puts a shown file on screen: `reveal` brings the
+ * task sidebar out of its rail if it is collapsed and opens the editor
+ * expanded (the left sidebar folds to its rail, D259); once the editor shows
+ * expanded (`onScreen`), the list column folds to the task rail beside it, in
+ * the tree toggle's motion, so the file has the room. Folding waits for both:
+ * the list panel it folds mounts with the split, and a collapsed sidebar
+ * hides it, so the file would never come on screen.
  */
-export function useShowOnScreen(taskId: string, expanded: boolean, expand: () => void): void {
+export function useShowOnScreen(taskId: string, onScreen: boolean, reveal: () => void): void {
   const pending = useEditorTabs((s) => {
     const p = s.shown[taskId];
     return p && !p.onScreen ? p.nonce : null;
   });
-  const expandRef = useRef(expand);
-  expandRef.current = expand;
+  const revealRef = useRef(reveal);
+  revealRef.current = reveal;
   useEffect(() => {
     if (pending === null) return;
-    if (!expanded) {
-      expandRef.current();
+    if (!onScreen) {
+      revealRef.current();
       return;
     }
     const tabs = useEditorTabs.getState();
     tabs.setTreeCollapsed(true);
     tabs.markShownOnScreen(taskId, pending);
-  }, [taskId, pending, expanded]);
+  }, [taskId, pending, onScreen]);
 }

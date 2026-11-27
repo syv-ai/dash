@@ -320,8 +320,10 @@ export function RightInspector({
     setAgentPane('memory');
     if (railedRef.current) onShowRef.current({ terminal: false });
   }, [memoryAsked, showSegment]);
-  // A file `dashctl show`n: the editor expanded, the list folded beside it.
-  useShowOnScreen(task.id, expanded, () => {
+  // A file `dashctl show`n: the sidebar out of its rail (hidden expanded, it
+  // shows narrow first, as the rail's click does), the editor expanded, the
+  // list folded beside it.
+  useShowOnScreen(task.id, expanded && !railed, () => {
     if (railedRef.current) onShowRef.current({ terminal: false });
     onOpenEditor();
   });
