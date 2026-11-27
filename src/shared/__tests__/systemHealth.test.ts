@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { healthLevel, type MemoryPressure } from '../systemHealth';
+import { healthLevel, memoryWarningDefaultGb, type MemoryPressure } from '../systemHealth';
 
 const level = (totalBytes: number, pressure: MemoryPressure | null) =>
   healthLevel({ totalBytes, thresholdBytes: 1000, pressure });
@@ -22,5 +22,12 @@ describe('healthLevel', () => {
   it('is critical under critical pressure, wherever usage is', () => {
     expect(level(10, 'critical')).toBe('critical');
     expect(level(5000, 'critical')).toBe('critical');
+  });
+});
+
+describe('memoryWarningDefaultGb', () => {
+  it('is 6 GB for macOS footprint and stays 8 GB where RSS or working set is measured', () => {
+    expect(memoryWarningDefaultGb(true)).toBe(6);
+    expect(memoryWarningDefaultGb(false)).toBe(8);
   });
 });

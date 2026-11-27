@@ -8,10 +8,24 @@
 /** The OS's own verdict on memory (macOS `kern.memorystatus_vm_pressure_level`). */
 export type MemoryPressure = 'normal' | 'warn' | 'critical';
 
-/** Memory is the physical footprint on macOS (Activity Monitor's Memory),
- *  which runs ~0.65 of the RSS this was first tuned on (8 GB): 6 keeps the
- *  warning near where it fired. [provisional, 2026-11-28] */
-export const MEMORY_WARNING_DEFAULT_GB = 6;
+/**
+ * The default threshold for the memory measure each platform uses. macOS
+ * measures physical footprint (Activity Monitor's Memory), which runs ~0.65
+ * of the RSS the 8 GB default was tuned on, so 6 keeps the warning near where
+ * it fired [provisional, 2026-11-28]. Linux (RSS) and Windows (working set)
+ * still measure what 8 was tuned on.
+ */
+export function memoryWarningDefaultGb(isMac: boolean): number {
+  return isMac ? 6 : 8;
+}
+
+/** Main has `process.platform`; the sandboxed renderer reads `navigator`. */
+const HOST_IS_MAC =
+  typeof process !== 'undefined' && typeof process.platform === 'string'
+    ? process.platform === 'darwin'
+    : typeof navigator !== 'undefined' && navigator.platform.includes('Mac');
+
+export const MEMORY_WARNING_DEFAULT_GB = memoryWarningDefaultGb(HOST_IS_MAC);
 export const MEMORY_WARNING_MIN_GB = 0.5;
 export const MEMORY_WARNING_MAX_GB = 256;
 
