@@ -20,6 +20,7 @@ import {
   WAIT_NOTIFICATIONS,
   type WaitKind,
 } from './hookPayload';
+import { logLimitEvent } from './limitEventLog';
 import { setTaskInbox } from './taskInbox';
 import { noteScratchpad } from './ScratchpadService';
 import { claudeConfigDir } from '../utils/claudePaths';
@@ -234,6 +235,16 @@ class HookServerImpl {
     }
   }
 
+  /** Keep a StopFailure or quota Notification as evidence (limitEventLog). */
+  private logLimitEvent(ptyId: string, payload: Record<string, unknown>): void {
+    logLimitEvent({
+      event: typeof payload.hook_event_name === 'string' ? payload.hook_event_name : 'unknown',
+      payload,
+      claudeVersion: claudeVersionFor(ptyId),
+      rateLimits: contextUsageService.getAllStatusLine()[ptyId]?.rateLimits,
+    });
+  }
+
   /** Read and parse a JSON POST body, enforcing a size limit. */
   private readJsonBody(
     req: http.IncomingMessage,
@@ -353,6 +364,7 @@ class HookServerImpl {
                 typeof payload.notification_type === 'string' ? payload.notification_type : '';
               const message = typeof payload.message === 'string' ? payload.message : undefined;
               const effect = WAIT_NOTIFICATIONS[notificationType as NotificationType];
+              if (notificationType.startsWith('quota_')) this.logLimitEvent(ptyId, payload);
 
               // These notifications come ~6 s into a wait, and only when the
               // user seems away: the state may already be set by the instant
@@ -475,6 +487,7 @@ class HookServerImpl {
 
           if (pathname === '/hook/stop-failure') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+              this.logLimitEvent(ptyId, payload);
               const error = stopFailureError(payload);
               console.error(`[HookServer] StopFailure for ptyId=${ptyId} type=${error.type}`);
               activityMonitor.setError(ptyId, error);
