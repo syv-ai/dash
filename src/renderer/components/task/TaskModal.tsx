@@ -393,7 +393,7 @@ function TaskModalBody({
         description={projectPath.split(/[\\/]/).pop()}
         closeDisabled={isCreating}
       />
-      <DialogBody className="overflow-visible">
+      <DialogBody>
         <div className="grid grid-cols-2 items-start gap-x-6">
           {/* ── Left: where and how the task runs ── */}
           <div className="grid min-w-0 gap-5">
@@ -428,7 +428,7 @@ function TaskModalBody({
                 }
               />
             ) : (
-              <div className="-my-3 grid divide-y divide-line">
+              <div className="grid gap-1">
                 <SwitchField
                   label="Git worktree"
                   hint="An isolated checkout for this task."
@@ -502,9 +502,8 @@ function TaskModalBody({
                     would fail. Block it and point at "New branch". */}
                 {branchInUse && (
                   <Notice icon={<GitBranch size={14} strokeWidth={1.8} />}>
-                    {selectedBranch?.name} is already checked out
-                    {branchHolder ? ` ${branchHolder}` : ''}. Git allows a branch in one worktree at
-                    a time: turn on New branch to start one from it, or pick a free branch.
+                    {selectedBranch?.name} is checked out{branchHolder ? ` ${branchHolder}` : ''}.
+                    Turn on New branch to start from it, or pick a free branch.
                   </Notice>
                 )}
 
@@ -553,8 +552,9 @@ function TaskModalBody({
               </Field>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1">
               <PermissionModePicker
+                layout="row"
                 value={permissionMode}
                 onChange={(v) => {
                   setPermissionMode(v);
@@ -562,22 +562,22 @@ function TaskModalBody({
                 }}
               />
               <ModelPicker
+                layout="row"
                 value={model}
                 onChange={(v) => {
                   setModel(v);
                   persistModelChoice(v);
                 }}
               />
+              {controlSupported && (
+                <SwitchField
+                  label="Dash access"
+                  hint="The agent can use Dash: its ports and services, tasks of its own, and PR review drafts. Adds a dash skill to the checkout (.claude/skills/dash, kept out of git) that explains dashctl."
+                  checked={dashAccess}
+                  onCheckedChange={setDashAccess}
+                />
+              )}
             </div>
-
-            {controlSupported && (
-              <SwitchField
-                label="Dash access"
-                hint="The agent can use Dash: its ports and services, tasks of its own, and PR review drafts. Adds a dash skill to the checkout (.claude/skills/dash, kept out of git) that explains dashctl."
-                checked={dashAccess}
-                onCheckedChange={setDashAccess}
-              />
-            )}
           </div>
 
           {/* ── Right: what the task starts with ── */}
