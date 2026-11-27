@@ -871,27 +871,40 @@ export async function removeTaskSession(taskId: string): Promise<void> {
  * Re-dispatch the task's session so it picks up a changed environment
  * (ports, user env vars, ultracode): stop + rm the current job, then the
  * next startDirectPty resumes the same session id in a fresh job. The
- * renderer's restart path calls this before re-attaching.
+ * renderer's restart path calls this before re-attaching. `fresh`: the next
+ * start begins a new conversation instead (same task, worktree and flags).
  */
 export async function restartTaskSession(
   taskId: string,
-  opts: { reattach?: boolean } = {},
+  opts: { reattach?: boolean; fresh?: boolean } = {},
 ): Promise<void> {
   // The next session reports its own inbox and mode at SessionStart.
   dropTaskInbox(taskId);
   activityMonitor.clearPermissionMode(taskId);
   await killPtyInternal(taskId, { notifyOwner: true, reattach: opts.reattach });
   const task = DatabaseService.getTask(taskId);
-  if (!task?.jobId) return;
+  if (!task) return;
+  if (!task.jobId) {
+    // No job to stop; a fresh start still mustn't resume the recorded (or
+    // the folder's newest) conversation.
+    if (opts.fresh) {
+      freshStarts.add(taskId);
+      DatabaseService.setTaskSession(taskId, { jobId: null, sessionId: null });
+    }
+    return;
+  }
   let sessionId = task.sessionId;
   try {
     sessionId = (await supervisorService.find(task.jobId))?.sessionId ?? sessionId;
   } catch {
     // Listing unavailable — the recorded id is the best we have.
   }
-  // A session that never took a turn has no transcript, and `--resume` of it
-  // fails the job ("source session … not found"): start it fresh instead.
-  if (sessionId && !fs.existsSync(sessionTranscriptPath({ ...task, jobId: null, sessionId })!)) {
+  // Asked to, or a session that never took a turn: it has no transcript, and
+  // `--resume` of it fails the job ("source session … not found").
+  if (
+    opts.fresh ||
+    (sessionId && !fs.existsSync(sessionTranscriptPath({ ...task, jobId: null, sessionId })!))
+  ) {
     sessionId = null;
     freshStarts.add(taskId);
   }
@@ -904,14 +917,17 @@ export async function restartTaskSession(
 /**
  * Restart the task's session and start it again as one session start (the
  * control API's tasks.restart). An open pane is told to re-attach, and its
- * start waits for this one, so it attaches to the fresh job.
+ * start waits for this one, so it attaches to the fresh job. `fresh` starts
+ * a new conversation; `prompt` is submitted as the new job's first message.
  */
 export async function restartAndStartTaskSession(
   taskId: string,
+  opts: { fresh?: boolean; prompt?: string } = {},
 ): Promise<{ jobId: string } | { needsTrust: string }> {
   try {
     const { jobId } = await queueSessionStart(taskId, async () => {
-      await restartTaskSession(taskId, { reattach: true });
+      await restartTaskSession(taskId, { reattach: true, fresh: opts.fresh });
+      if (opts.prompt) setInitialPrompt(taskId, opts.prompt);
       return startTaskSessionNow(taskId, {});
     });
     return { jobId };

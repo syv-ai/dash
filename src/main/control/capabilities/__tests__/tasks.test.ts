@@ -567,6 +567,79 @@ describe('archived tasks', () => {
   });
 });
 
+describe('tasks.restart', () => {
+  it('restarts now, fresh with a prompt when asked, and returns the task', async () => {
+    const result = await registry.call(orch, 'tasks.restart', {
+      taskId: 'child',
+      fresh: true,
+      prompt: 'Resume: read your state.',
+    });
+    expect(deps.restartSession).toHaveBeenCalledWith('child', {
+      fresh: true,
+      prompt: 'Resume: read your state.',
+    });
+    expect(result).toMatchObject({ id: 'child' });
+  });
+
+  it('queues a restart of a working task until its turn ends, answering at once', async () => {
+    activity = { child: { state: 'busy' } };
+    const result = await registry.call(orch, 'tasks.restart', {
+      taskId: 'child',
+      fresh: true,
+      whenIdle: true,
+    });
+    expect(result).toMatchObject({ queued: true, task: { state: 'working' } });
+    expect(deps.restartSession).not.toHaveBeenCalled();
+    emitActivity({ child: { state: 'waiting' } });
+    expect(deps.restartSession).not.toHaveBeenCalled();
+    emitActivity({ child: { state: 'idle' } });
+    expect(deps.restartSession).toHaveBeenCalledWith('child', { fresh: true, prompt: undefined });
+    expect(listeners).toHaveLength(0);
+    // Once only.
+    emitActivity({ child: { state: 'idle' } });
+    expect(deps.restartSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('restarts an idle task at once with --when-idle', async () => {
+    activity = { child: { state: 'idle' } };
+    expect(
+      await registry.call(orch, 'tasks.restart', { taskId: 'child', whenIdle: true }),
+    ).toMatchObject({ queued: false, task: { id: 'child' } });
+    expect(deps.restartSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a task restart itself only when idle, and a newer queued restart replaces the older', async () => {
+    activity = { me: { state: 'busy' } };
+    expect(await refusalOf(registry.call(asTask('me'), 'tasks.restart', { taskId: 'me' }))).toEqual(
+      {
+        status: 403,
+        message:
+          'a task can restart itself only with --when-idle: a restart now would cut the call making it',
+      },
+    );
+    await registry.call(asTask('me'), 'tasks.restart', { taskId: 'me', whenIdle: true });
+    await registry.call(asTask('me'), 'tasks.restart', {
+      taskId: 'me',
+      whenIdle: true,
+      fresh: true,
+      prompt: 'go',
+    });
+    expect(listeners).toHaveLength(1);
+    emitActivity({ me: { state: 'idle' } });
+    expect(deps.restartSession).toHaveBeenCalledTimes(1);
+    expect(deps.restartSession).toHaveBeenCalledWith('me', { fresh: true, prompt: 'go' });
+  });
+
+  it('drops a queued restart when the task is archived first', async () => {
+    activity = { child: { state: 'busy' } };
+    await registry.call(orch, 'tasks.restart', { taskId: 'child', whenIdle: true });
+    tasks.find((t) => t.id === 'child')!.archivedAt = '2026-01-04T00:00:00.000Z';
+    emitActivity({ child: { state: 'stopped' } });
+    expect(deps.restartSession).not.toHaveBeenCalled();
+    expect(listeners).toHaveLength(0);
+  });
+});
+
 describe('lifecycle capabilities', () => {
   it('a task cannot archive, restart or delete itself', async () => {
     expect(await status(registry.call(asTask('me'), 'tasks.archive', { taskId: 'me' }))).toBe(403);
@@ -582,7 +655,10 @@ describe('lifecycle capabilities', () => {
     await registry.call(asTask('me'), 'tasks.archive', { taskId: 'child' });
     expect(deps.archiveTask).toHaveBeenCalledWith('child');
     await registry.call(asTask('me'), 'tasks.restart', { taskId: 'child' });
-    expect(deps.restartSession).toHaveBeenCalledWith('child');
+    expect(deps.restartSession).toHaveBeenCalledWith('child', {
+      fresh: undefined,
+      prompt: undefined,
+    });
   });
 
   it('delete removes the worktree and maps deleteBranch onto both branch flags', async () => {

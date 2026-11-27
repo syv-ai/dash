@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import type { Task } from '@shared/types';
 
 const sup = vi.hoisted(() => {
@@ -51,6 +54,12 @@ vi.mock('../../control/taskAccess', () => ({
 }));
 vi.mock('../taskSettings', () => ({
   writeTaskSettings: (id: string) => `/u/task-settings/${id}.json`,
+}));
+/** Where the mocked registry says a session's transcript is; a missing file by default. */
+const transcript = vi.hoisted(() => ({ path: '/nonexistent/transcript.jsonl' }));
+vi.mock('../claudeSessionRegistry', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../claudeSessionRegistry')>()),
+  sessionTranscriptPath: () => transcript.path,
 }));
 const latestSession = vi.hoisted(() => ({ value: null as string | null }));
 vi.mock('../claudeCli', () => ({
@@ -223,6 +232,36 @@ describe('stopping or restarting the session under an open pane', () => {
     await startDirectPty({ id: 't1', cols: 80, rows: 24, sender: fakeOwner() as never });
     // s1 never took a turn: no transcript under the test's paths.
     await restartAndStartTaskSession('t1');
+    expect(sup.dispatch).toHaveBeenLastCalledWith(
+      expect.objectContaining({ resumeSessionId: null }),
+    );
+    latestSession.value = null;
+  });
+
+  it('resumes a session with a transcript, and starts fresh with the prompt when asked', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-restart-'));
+    transcript.path = path.join(dir, 's1.jsonl');
+    fs.writeFileSync(transcript.path, '{}\n');
+    try {
+      await restartAndStartTaskSession('t1');
+      expect(sup.dispatch).toHaveBeenLastCalledWith(
+        expect.objectContaining({ resumeSessionId: 's1', prompt: undefined }),
+      );
+      tasks.get('t1')!.sessionId = 's1';
+      await restartAndStartTaskSession('t1', { fresh: true, prompt: 'Resume: read your state.' });
+      expect(sup.dispatch).toHaveBeenLastCalledWith(
+        expect.objectContaining({ resumeSessionId: null, prompt: 'Resume: read your state.' }),
+      );
+    } finally {
+      transcript.path = '/nonexistent/transcript.jsonl';
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a fresh restart of a task with no job yet never resumes', async () => {
+    latestSession.value = 'someone-elses';
+    tasks.get('t1')!.jobId = null;
+    await restartAndStartTaskSession('t1', { fresh: true });
     expect(sup.dispatch).toHaveBeenLastCalledWith(
       expect.objectContaining({ resumeSessionId: null }),
     );

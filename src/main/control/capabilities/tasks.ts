@@ -108,8 +108,12 @@ export interface TaskCapabilityDeps {
    *  with the plugins of its `--plugin-dir` folders. */
   listAgents(projectPath: string, pluginDirs: string[]): Promise<AgentDefinition[]>;
   /** Re-dispatch the session and start it again, as one session start
-   *  (ptyManager.restartAndStartTaskSession), so an open pane re-attaches. */
-  restartSession(id: string): Promise<{ jobId: string } | { needsTrust: string }>;
+   *  (ptyManager.restartAndStartTaskSession), so an open pane re-attaches.
+   *  `fresh`: a new conversation; `prompt`: the new job's first message. */
+  restartSession(
+    id: string,
+    opts?: { fresh?: boolean; prompt?: string },
+  ): Promise<{ jobId: string } | { needsTrust: string }>;
   startSession(id: string): Promise<{ jobId: string } | { needsTrust: string }>;
   /** `claude logs <jobId>`: the raw repaint stream. */
   readLogs(jobId: string): Promise<string>;
@@ -1019,21 +1023,80 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     }),
   );
 
+  /** Restarts queued with --when-idle, by task: the unsubscribe of each. */
+  const queuedRestarts = new Map<string, () => void>();
+  /** A turn still runs (or waits on a person): a restart now would cut it. */
+  const midTurn = (state: TaskApiState) => state === 'working' || state === 'waiting';
+
   registry.register(
     defineCapability({
       name: 'tasks.restart',
       summary:
-        "Restart a task's Claude Code session (same conversation, fresh process, so it picks up changed settings). Returns the task. A task cannot restart itself.",
-      input: taskIdInput,
+        "Restart a task's Claude Code session: by default the same conversation in a fresh process, so it picks up changed settings; with --fresh a new conversation in the same task, worktree, name and launch settings. --prompt is sent as the new session's first message. With --when-idle the restart waits for the task's turn to end (idle, error or asleep): it returns {queued: true} at once, and a newer queued restart of the task replaces it; without it, returns the task. A task can restart itself only with --when-idle, since a restart now would cut its own call.",
+      input: z.object({
+        taskId: z.string().describe('The task id'),
+        fresh: z
+          .boolean()
+          .optional()
+          .describe('Start a new conversation instead of resuming the current one'),
+        prompt: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe(
+            "The new session's first message, as given (e.g. 'Resume: read your state.'); - reads stdin",
+          ),
+        whenIdle: z
+          .boolean()
+          .optional()
+          .describe(
+            "Restart once the task's current turn ends instead of now, returning {queued: true} at once (needed to restart yourself)",
+          ),
+      }),
       callers: ['orchestrator', 'task'],
-      cli: { args: ['taskId'] },
+      cli: { args: ['taskId'], stdin: 'prompt' },
       readOnly: false,
       target: { taskId: 'taskId' },
-      allowSelf: false,
-      handler: async (_ctx, input) => {
-        assertNotArchived(taskOrThrow(input.taskId));
-        await deps.restartSession(input.taskId);
-        return view(taskOrThrow(input.taskId));
+      handler: async (ctx, input) => {
+        const task = taskOrThrow(input.taskId);
+        assertNotArchived(task);
+        if (ctx.caller.kind === 'task' && ctx.caller.taskId === task.id && !input.whenIdle) {
+          throw new ControlError(
+            403,
+            'a task can restart itself only with --when-idle: a restart now would cut the call making it',
+          );
+        }
+        const opts = { fresh: input.fresh, prompt: input.prompt };
+        if (!input.whenIdle) {
+          await deps.restartSession(task.id, opts);
+          return view(taskOrThrow(task.id));
+        }
+        queuedRestarts.get(task.id)?.();
+        queuedRestarts.delete(task.id);
+        if (!midTurn(view(task).state)) {
+          await deps.restartSession(task.id, opts);
+          return { queued: false, task: view(taskOrThrow(task.id)) };
+        }
+        // Both run only from a later activity change (or a newer queued restart).
+        const cancel = () => {
+          unsubscribe();
+          if (queuedRestarts.get(task.id) === cancel) queuedRestarts.delete(task.id);
+        };
+        const unsubscribe = deps.onActivityChange(() => {
+          const now = deps.getTask(task.id);
+          if (now && midTurn(view(now).state)) return;
+          cancel();
+          // Gone or archived meanwhile: nothing to restart.
+          if (!now || now.archivedAt) return;
+          deps
+            .restartSession(task.id, opts)
+            .catch((err) =>
+              console.warn(`[tasks.restart] queued restart of ${task.id} failed:`, err),
+            );
+        });
+        queuedRestarts.set(task.id, cancel);
+        return { queued: true, task: view(task) };
       },
     }),
   );
