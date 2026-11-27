@@ -9,6 +9,7 @@ import { contextUsageService } from './ContextUsageService';
 import { stripHostTerminalEnv } from './hostTerminalEnv';
 import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
 import { TerminalMirror } from './TerminalMirror';
+import { createOutputBatcher, type OutputBatcher } from './ptyOutputBatcher';
 import { terminalSnapshotService } from './TerminalSnapshotService';
 import { ensureShellConfig, shellHistoryPath } from './ptyShellConfig';
 import {
@@ -61,9 +62,28 @@ interface PtyRecord {
    * its whole screen on every attach, so there is nothing to mirror.
    */
   mirror: TerminalMirror | null;
+  /** Coalesces output into `pty:data:<id>` sends (see ptyOutputBatcher). */
+  output: OutputBatcher | null;
 }
 
 const ptys = new Map<string, PtyRecord>();
+
+/**
+ * The record's batched `pty:data:<id>` sender, read at send time so a batch
+ * goes to the owner of the moment. `onlyWhileCurrent`: drop a batch once the
+ * record is no longer the id's (a replaced attach client printing as it
+ * exits); every path that replaces or removes a record flushes it first.
+ */
+function outputFor(
+  id: string,
+  record: PtyRecord,
+  opts: { onlyWhileCurrent?: boolean } = {},
+): OutputBatcher {
+  return createOutputBatcher((data) => {
+    if (opts.onlyWhileCurrent && ptys.get(id) !== record) return;
+    if (record.owner && !record.owner.isDestroyed()) record.owner.send(`pty:data:${id}`, data);
+  });
+}
 
 /** PTY id of the attach client for a session that belongs to no task. */
 export const FOREIGN_SESSION_PTY_PREFIX = 'session:';
@@ -494,6 +514,7 @@ function spawnAttach(options: {
     featureId: null,
     jobId: options.jobId,
     mirror: null,
+    output: null,
   };
   // A client spawned for this id while the caller awaited the session (two
   // pane starts at once) is replaced, not orphaned. Its own exit handler
@@ -504,16 +525,14 @@ function spawnAttach(options: {
     void gracefulKillProc(previous.proc);
   }
   ptys.set(options.id, record);
+  // A client being killed (hibernated, replaced) can still print while it
+  // exits; that output must not reach the pane's next client.
+  const output = (record.output = outputFor(options.id, record, { onlyWhileCurrent: true }));
 
-  // Forward output to renderer, replacing the Claude logo with "7" art.
-  const bannerFilter = createBannerFilter((filtered: string) => {
-    // A client being killed (hibernated, replaced) can still print while it
-    // exits; that output must not reach the pane's next client.
-    if (ptys.get(options.id) !== record) return;
-    if (record.owner && !record.owner.isDestroyed()) {
-      record.owner.send(`pty:data:${options.id}`, filtered);
-    }
-  });
+  // Forward output to renderer, replacing the Claude logo with "7" art. The
+  // activity clock and the remote-control watcher hear every chunk as it
+  // lands; only the IPC send is batched.
+  const bannerFilter = createBannerFilter((filtered: string) => output.push(filtered));
 
   proc.onData((data: string) => {
     bannerFilter(data);
@@ -528,6 +547,7 @@ function spawnAttach(options: {
     // process went away). The session and its activity entry live on; only
     // the client-side registrations go.
     remoteControlService.unregister(options.id);
+    output.flush();
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:exit:${options.id}`, { exitCode, signal });
     }
@@ -779,13 +799,11 @@ export async function runTrustPrompt(options: {
     featureId: null,
     jobId: null,
     mirror: null,
+    output: null,
   };
   ptys.set(options.id, record);
-  proc.onData((data: string) => {
-    if (record.owner && !record.owner.isDestroyed()) {
-      record.owner.send(`pty:data:${options.id}`, data);
-    }
-  });
+  const output = (record.output = outputFor(options.id, record));
+  proc.onData((data: string) => output.push(data));
 
   return new Promise<boolean>((resolve) => {
     let settled = false;
@@ -793,6 +811,7 @@ export async function runTrustPrompt(options: {
       if (settled) return;
       settled = true;
       clearInterval(poll);
+      output.flush();
       if (ptys.get(options.id) === record) ptys.delete(options.id);
       if (trusted) {
         untrustedRoots.delete(options.id);
@@ -961,6 +980,9 @@ export async function startPty(options: {
     // Serialize BEFORE claiming the owner: a chunk arriving mid-serialize
     // lands in the mirror only (next output repaints it) — never duplicated.
     const serializedState = existing.mirror ? await existing.mirror.serialize() : undefined;
+    // Batched output already in the mirror goes to the old owner, as it would
+    // have unbatched; the new one gets it in the serialized state.
+    existing.output?.flush();
     existing.owner = options.sender || null;
     return { reattached: true, isDirectSpawn: existing.isDirectSpawn, serializedState };
   }
@@ -1039,24 +1061,25 @@ export async function startPty(options: {
     featureId: null,
     jobId: null,
     mirror: new TerminalMirror(options.cols, options.rows),
+    output: null,
   };
 
   ptys.set(options.id, record);
+  const output = (record.output = outputFor(options.id, record));
   // Shell PTYs are not tracked by ActivityMonitor — only direct-spawn (Claude)
   // PTYs surface activity state to the renderer. The unregister() call on
   // shell PTY exit (below) is a no-op for unknown ids, so it's safe.
 
   proc.onData((data: string) => {
     record.mirror?.write(data);
-    if (record.owner && !record.owner.isDestroyed()) {
-      record.owner.send(`pty:data:${options.id}`, data);
-    }
+    output.push(data);
   });
 
   proc.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
     // Skip if this PTY was replaced by a new spawn (kill+restart on reattach)
     if (ptys.get(options.id) !== record) return;
     activityMonitor.unregister(options.id);
+    output.flush();
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:exit:${options.id}`, { exitCode, signal });
     }
@@ -1191,6 +1214,9 @@ function gracefulKillProc(proc: KillableProc, timeoutMs = GRACEFUL_KILL_TIMEOUT_
  *  Activity and context usage are keyed by task and describe the session,
  *  which outlives its attach client, so they stay for agent PTYs. */
 function teardownRecord(id: string, record: PtyRecord): void {
+  // Output that arrived before the kill still reaches the pane, ahead of any
+  // exit notice; the delete below then drops what the dying client prints.
+  record.output?.flush();
   ptys.delete(id);
   if (record.kind !== 'agent') {
     activityMonitor.unregister(id);
@@ -1390,6 +1416,7 @@ export async function startCommandPty(options: {
 }): Promise<{ reattached: boolean }> {
   const existing = ptys.get(options.id);
   if (existing) {
+    existing.output?.flush();
     existing.owner = options.owner;
     return { reattached: true };
   }
@@ -1413,22 +1440,23 @@ export async function startCommandPty(options: {
     featureId: options.featureId,
     jobId: null,
     mirror: new TerminalMirror(options.cols, options.rows),
+    output: null,
   };
 
   ptys.set(options.id, record);
+  const output = (record.output = outputFor(options.id, record));
 
   proc.onData((data: string) => {
     // The mirror always consumes — output emitted before any renderer
     // attaches (service startup banners) is recovered from its serialized
     // state on reattach.
     record.mirror?.write(data);
-    if (record.owner && !record.owner.isDestroyed()) {
-      record.owner.send(`pty:data:${options.id}`, data);
-    }
+    output.push(data);
   });
 
   proc.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
     if (ptys.get(options.id) !== record) return;
+    output.flush();
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:exit:${options.id}`, { exitCode, signal });
     }
@@ -1478,5 +1506,6 @@ export function __registerForTest(
     featureId: rec.featureId,
     jobId: null,
     mirror: null,
+    output: null,
   });
 }
