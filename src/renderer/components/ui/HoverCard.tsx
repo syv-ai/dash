@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { cn } from '../../lib/cn';
 import { Popover, PopoverAnchor, PopoverContent } from './Popover';
 
 /** What a hover card's anchor spreads on itself to open and close it. */
@@ -20,16 +21,19 @@ const CLOSE_DELAY_MS = 80;
  * footer. It never takes focus from the list it hovers over. `trigger`
  * renders the anchor (one element that takes a ref) with the handlers
  * spread on it; `onOpen` runs each time it opens (fetch what it shows).
+ * A `footer` (a meta line) stays put under a rule while a long body scrolls.
  */
 export function HoverCard({
   trigger,
   onOpen,
   side = 'right',
+  footer,
   children,
 }: {
   trigger: (handlers: HoverCardTrigger) => React.ReactElement;
   onOpen?: () => void;
   side?: 'right' | 'left' | 'top' | 'bottom';
+  footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -81,9 +85,19 @@ export function HoverCard({
         // Hovering must not take focus from the list.
         onOpenAutoFocus={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => e.preventDefault()}
-        className="max-h-110 w-105 overflow-y-auto"
+        className="flex max-h-110 w-105 flex-col"
       >
-        <div className="flex flex-col gap-2.5 p-3.5">{children}</div>
+        <div
+          className={cn(
+            'scrollbar-thin-hover flex min-h-0 flex-col gap-2.5 overflow-y-auto p-3.5',
+            footer && 'pb-2.5',
+          )}
+        >
+          {children}
+        </div>
+        {footer && (
+          <div className="mx-3.5 shrink-0 border-t border-line pt-1.5 pb-3.5">{footer}</div>
+        )}
       </PopoverContent>
     </Popover>
   );

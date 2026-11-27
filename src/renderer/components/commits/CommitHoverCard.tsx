@@ -3,7 +3,7 @@ import { formatRelativeTime } from '../../../shared/relativeTime';
 import type { CommitSummary } from '../diffEditor/types';
 import { HoverCard, type HoverCardTrigger } from '../ui/HoverCard';
 import { LineStats } from '../ui/LineStats';
-import { TextLink } from '../ui/TextLink';
+import { TextLink, type TextLinkLook } from '../ui/TextLink';
 import { useCommitLinks } from './useCommitLinks';
 
 /**
@@ -27,29 +27,49 @@ export function CommitHoverCard({
   const links = useCommitLinks(cwd, commit.hash, peeked);
   const when = formatRelativeTime(commit.authorDate, Date.now() / 1000);
   return (
-    <HoverCard trigger={trigger} side={side} onOpen={() => setPeeked(true)}>
+    <HoverCard
+      trigger={trigger}
+      side={side}
+      onOpen={() => setPeeked(true)}
+      footer={
+        <div className="type-caption flex items-center gap-2">
+          <CommitHash hash={commit.shortHash} url={links.commitUrl} look="prose" />
+          <span>·</span>
+          <CommitAuthor
+            name={commit.authorName}
+            url={links.authorUrl}
+            look="prose"
+            className="truncate"
+          />
+          <span>·</span>
+          <span className="tabular-nums">{when}</span>
+          <span className="ml-auto">
+            <LineStats add={commit.additions} del={commit.deletions} />
+          </span>
+        </div>
+      }
+    >
       <div className="type-heading wrap-break-word">{commit.subject || '(no subject)'}</div>
       {commit.body && <div className="type-body whitespace-pre-wrap">{commit.body}</div>}
-      <div className="type-caption flex items-center gap-2 border-t border-line pt-1.5">
-        <CommitHash hash={commit.shortHash} url={links.commitUrl} />
-        <span>·</span>
-        <CommitAuthor name={commit.authorName} url={links.authorUrl} className="truncate" />
-        <span>·</span>
-        <span className="tabular-nums">{when}</span>
-        <span className="ml-auto">
-          <LineStats add={commit.additions} del={commit.deletions} />
-        </span>
-      </div>
     </HoverCard>
   );
 }
 
-/** A commit's hash, a link to its forge page when it has one. */
-export function CommitHash({ hash, url }: { hash: string; url: string | null }) {
+/** A commit's hash, a link to its forge page when it has one (`quiet` ink
+ *  by default; the hover card's meta line takes the `link` colour). */
+export function CommitHash({
+  hash,
+  url,
+  look = 'quiet',
+}: {
+  hash: string;
+  url: string | null;
+  look?: TextLinkLook;
+}) {
   return (
     <span className="tabular-nums">
       {url ? (
-        <TextLink look="quiet" href={url} title="Open the commit on the remote">
+        <TextLink look={look} href={url} title="Open the commit on the remote">
           {hash}
         </TextLink>
       ) : (
@@ -63,16 +83,18 @@ export function CommitHash({ hash, url }: { hash: string; url: string | null }) 
 export function CommitAuthor({
   name,
   url,
+  look = 'quiet',
   className,
 }: {
   name: string;
   url: string | null;
+  look?: TextLinkLook;
   className?: string;
 }) {
   return (
     <span className={className}>
       {url ? (
-        <TextLink look="quiet" href={url} title="Open the author's profile">
+        <TextLink look={look} href={url} title="Open the author's profile">
           {name}
         </TextLink>
       ) : (
