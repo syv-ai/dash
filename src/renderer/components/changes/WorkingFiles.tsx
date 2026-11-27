@@ -40,6 +40,8 @@ export interface RepoView {
   changedFiles: readonly FileChange[];
   loading: boolean;
   badges: ReadonlyMap<string, FileBadges>;
+  /** Open one of a file's notes in the editor (a badge opens the first). */
+  openComment?: (path: string, commentId: string) => void;
 }
 
 interface WorkingFilesProps {
@@ -136,6 +138,9 @@ export function WorkingFiles({
           activePath={activePath}
           view={view}
           canOpenToSide={canOpenToSide}
+          // The badges count the editor's view; the changes are the working tree's.
+          badges={working ? repo.badges : undefined}
+          onOpenComment={repo.openComment}
         />
       ) : (
         <AllFiles
@@ -171,6 +176,8 @@ function ChangedFiles({
   activePath,
   view,
   canOpenToSide,
+  badges,
+  onOpenComment,
 }: {
   files: readonly FileChange[];
   /** Its tally, drawn above the tree; null: the top row shows it. */
@@ -181,6 +188,8 @@ function ChangedFiles({
   activePath: string | null;
   view: EditorView;
   canOpenToSide: boolean;
+  badges?: ReadonlyMap<string, FileBadges>;
+  onOpenComment?: (path: string, commentId: string) => void;
 }) {
   const sections = useMemo(() => changeSections(files), [files]);
   const selected = useMemo(
@@ -222,6 +231,8 @@ function ChangedFiles({
         selected={selected}
         onOpenFile={(row, opts) => onOpenChange(row.file.path, row.section === 'staged', opts)}
         canOpenToSide={canOpenToSide}
+        badges={badges}
+        onOpenComment={onOpenComment}
         actions={(row) => <ChangeActions row={row} files={files} />}
         spaceAction={(row) => stageToggle(row, files)}
         gapAbove={!tally}
@@ -276,6 +287,7 @@ function AllFiles({
         onOpenFile={onOpenFile}
         canOpenToSide={canOpenToSide}
         badgeCounts={badges}
+        onOpenComment={repo.openComment}
         actions={working ? (row) => <ChangeActions row={row} files={files} /> : undefined}
         spaceAction={working ? (row) => stageToggle(row, files) : undefined}
         tally={tally}

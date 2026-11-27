@@ -39,6 +39,9 @@ export interface FileTreeProps {
   /** The menu offers "Open in new pane". */
   canOpenToSide: boolean;
   badges?: ReadonlyMap<string, FileBadges>;
+  /** Open one of a file's notes in the editor: its badge opens the first.
+   *  Absent: the badges only count. */
+  onOpenComment?: (path: string, commentId: string) => void;
   /** Files named quietly (a PR's viewed ones). */
   quiet?: ReadonlySet<string>;
   /** A row's hover actions; null or absent: copy its relative path. */
@@ -70,6 +73,7 @@ export function FileTree({
   onOpenFile,
   canOpenToSide,
   badges,
+  onOpenComment,
   quiet,
   actions,
   spaceAction,
@@ -168,6 +172,7 @@ export function FileTree({
             onSpace={spaceAction?.(row) ?? undefined}
             canOpenToSide={canOpenToSide}
             onActivate={(opts) => (row.kind === 'file' ? onOpenFile(row, opts) : toggle(row))}
+            onOpenComment={onOpenComment}
           />
         );
       }}

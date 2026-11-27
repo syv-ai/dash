@@ -52,6 +52,8 @@ interface RepoTreeProps {
   /** The editor shows one pane: a file's menu offers "Open in new pane". */
   canOpenToSide: boolean;
   badgeCounts: ReadonlyMap<string, FileBadges>;
+  /** Open one of a file's notes (`FileTree`'s). */
+  onOpenComment?: (path: string, commentId: string) => void;
   /** Review mode's viewed marks: they take the rows' hover action and Space. */
   viewed?: ViewedColumn;
   /** A row's hover actions (Files' stage and discard); absent: copy its path. */
@@ -86,6 +88,7 @@ export function RepoTree({
   onOpenFile,
   canOpenToSide,
   badgeCounts,
+  onOpenComment,
   viewed,
   actions,
   spaceAction,
@@ -154,6 +157,7 @@ export function RepoTree({
           onOpenFile={(row, opts) => onOpenFile(row.file.path, opts)}
           canOpenToSide={canOpenToSide}
           badges={badges}
+          onOpenComment={onOpenComment}
           quiet={viewed?.paths}
           actions={
             viewed

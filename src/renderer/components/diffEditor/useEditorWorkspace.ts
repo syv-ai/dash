@@ -23,7 +23,7 @@ import {
 } from './tabs/editorLayout';
 import { isDirty, workingUri } from './models';
 import { absolutePath, isOutsideWorktree } from './editor/fileRef';
-import type { FileBadges } from '../fileTree/model';
+import { commentBadge, type FileBadges } from '../fileTree/model';
 
 const NO_COMMENTS: Record<string, DiffComment[]> = {};
 
@@ -324,8 +324,10 @@ export function useEditorWorkspace({
       return b;
     };
     for (const [path, list] of Object.entries(commentsByFile)) {
-      const n = list.filter((c) => c.viewScope === currentScope && needsAttention(c)).length;
-      if (n > 0) at(path).comments = n;
+      const badge = commentBadge(
+        list.filter((c) => c.viewScope === currentScope && needsAttention(c)),
+      );
+      if (badge) Object.assign(at(path), badge);
     }
     if (view.kind === 'pr' && viewReview) {
       for (const t of unresolvedThreads(viewReview)) at(t.path).threads++;

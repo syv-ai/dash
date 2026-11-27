@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildTree,
+  commentBadge,
   defaultOpen,
   flattenTree,
   folded,
@@ -510,6 +511,36 @@ describe('rowColumns', () => {
       ...narrow,
       comments: false,
     });
+  });
+});
+
+describe('commentBadge', () => {
+  const c = (
+    id: string,
+    startLine: number,
+    kind: 'note' | 'comment' = 'note',
+    createdAt = 't1',
+  ) => ({
+    id,
+    startLine,
+    kind,
+    createdAt,
+  });
+
+  it('is nothing for no notes', () => {
+    expect(commentBadge([])).toBeNull();
+  });
+
+  it('counts the notes and opens the first by line, the earlier made on a tie', () => {
+    expect(commentBadge([c('b', 9), c('a', 3, 'note', 't2'), c('z', 3, 'note', 't0')])).toEqual({
+      comments: 3,
+      firstComment: 'z',
+      commentKind: 'note',
+    });
+  });
+
+  it('reads as comments when any is a PR draft, as a gutter stack does', () => {
+    expect(commentBadge([c('a', 1), c('b', 2, 'comment')])!.commentKind).toBe('comment');
   });
 });
 

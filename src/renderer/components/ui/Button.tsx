@@ -25,6 +25,8 @@ export const buttonVariants = cva(
         destructive: 'bg-state-fail/12 text-state-fail hover:bg-state-fail/20',
       },
       size: {
+        // A count with its icon inside a dense row (a file tree's notes).
+        xs: 'h-5 gap-0.5 px-1 text-xs',
         sm: 'h-6.5 px-2.5 text-sm',
         md: 'h-7.5 px-3 text-sm',
         icon: 'size-7.5',

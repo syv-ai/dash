@@ -5,7 +5,13 @@
  * component windows. Every file tree in the app (Files, a PR's files, the
  * Agent tab's scratchpad) renders these rows through `FileTree`.
  */
-import type { DirEntry, FileChange, RepoListing } from '../../../shared/types';
+import type {
+  DiffComment,
+  DiffCommentKind,
+  DirEntry,
+  FileChange,
+  RepoListing,
+} from '../../../shared/types';
 import { treeOrder, folderOrder } from './treeOrder';
 import { treeKey as navKey, type TreeKeyAction, type TreeNode } from '../ui/treeNav';
 
@@ -412,12 +418,33 @@ export function folderRowIndex(rows: readonly TreeRow[], path: string): number {
  *  PR's view) the PR's unresolved threads on it. */
 export interface FileBadges {
   comments: number;
+  /** The first of them, by line: what its badge opens. */
+  firstComment?: string;
+  /** What they are: notes, or (any one a PR draft) comments. */
+  commentKind?: DiffCommentKind;
   threads: number;
   /** Its changes in the index (a whole tree, which has no Staged section):
    *  all of them, or some. */
   staged?: true | 'mixed';
   /** A PR's changed file: read through (true) or not; absent elsewhere. */
   viewed?: boolean;
+}
+
+/** A file's badge for its notes and comments needing attention: how many,
+ *  the first by line (ties: the earlier made), and a comment's kind if any
+ *  is one (as a gutter stack shows it). Null for none. */
+export function commentBadge(
+  list: readonly Pick<DiffComment, 'id' | 'startLine' | 'kind' | 'createdAt'>[],
+): Pick<FileBadges, 'comments' | 'firstComment' | 'commentKind'> | null {
+  if (list.length === 0) return null;
+  const first = list.reduce((a, b) =>
+    b.startLine < a.startLine || (b.startLine === a.startLine && b.createdAt < a.createdAt) ? b : a,
+  );
+  return {
+    comments: list.length,
+    firstComment: first.id,
+    commentKind: list.some((c) => c.kind === 'comment') ? 'comment' : 'note',
+  };
 }
 
 /** `badges` with each of a PR's changed files marked viewed or not. */

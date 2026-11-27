@@ -1,5 +1,6 @@
 import * as React from 'react';
 import {
+  Bot,
   Check,
   ChevronsDownUp,
   ChevronsUpDown,
@@ -8,6 +9,7 @@ import {
   FileText,
   FolderOpen,
   Link2,
+  MessageSquare,
 } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { CharColumn } from '../ui/CharColumn';
@@ -18,6 +20,7 @@ import {
   ContextMenuTrigger,
   type ContextMenuAction,
 } from '../ui/ContextMenu';
+import { Button } from '../ui/Button';
 import { CountBadge } from '../ui/CountBadge';
 import { HoverSwapSlot } from '../ui/HoverSwapSlot';
 import { IconButton } from '../ui/IconButton';
@@ -31,7 +34,7 @@ import { openInIde } from '../../lib/openInIde';
 import { absolutePath } from '../diffEditor/editor/fileRef';
 import { copyText, revealLabel } from '../diffEditor/fileActions';
 import type { OpenOptions } from '../diffEditor/tabs/editorLayout';
-import type { FileChangeStatus } from '../../../shared/types';
+import type { DiffCommentKind, FileChangeStatus } from '../../../shared/types';
 import {
   isChanged,
   rowColumns,
@@ -71,6 +74,9 @@ export interface TreeItemProps {
   canOpenToSide: boolean;
   /** A file: open it (a click previews, ⌥ to the side). A folder: toggle. */
   onActivate: (opts?: OpenOptions) => void;
+  /** Open one of a file's notes in the editor (its badge opens the first);
+   *  absent: the badge only counts. */
+  onOpenComment?: (path: string, commentId: string) => void;
 }
 
 /** A file tree's row (a `TreeRow`): its name, line and status columns,
@@ -87,9 +93,11 @@ export function TreeItem({
   onSpace,
   canOpenToSide,
   onActivate,
+  onOpenComment,
 }: TreeItemProps) {
   const folder = row.kind === 'folder';
   const path = folder ? row.folder.path : row.file.path;
+  const values = rowValues(row, cols, badges);
   // A file starts where its level's chevrons do (D268): no leading slot.
   const item = (
     <TreeRow
@@ -103,10 +111,15 @@ export function TreeItem({
       onSpace={onSpace}
       onDoubleClick={folder ? undefined : () => onActivate()}
       trailing={
-        <HoverSwapSlot
-          rest={<Columns row={row} cols={cols} badges={badges} />}
-          actions={actions ?? <CopyPathAction path={path} />}
-        />
+        <>
+          {values && (
+            <Badges path={path} cols={values.cols} badges={badges} onOpenComment={onOpenComment} />
+          )}
+          <HoverSwapSlot
+            rest={values && <Values values={values} badges={badges} />}
+            actions={actions ?? <CopyPathAction path={path} />}
+          />
+        </>
       }
     >
       {folder ? row.name : row.file.name}
@@ -144,26 +157,13 @@ export function TreeNote({ row }: { row: Extract<FileTreeRow, { kind: 'note' }> 
   );
 }
 
-/** The row's columns at rest, each as wide as the tree's widest value: the
- *  PR's threads, your comments, lines added and removed (a folder's while
- *  it is closed), a file's status letter (boxed when staged; an untracked
- *  folder's U) and, in a
- *  PR's tree, a check once it is viewed. A folder shows no count of its
- *  changes: its lines say as much, and the counts crowded the column.
- *  Blank columns before the row's first value aren't drawn (`rowColumns`),
- *  so its name runs up to that value. */
-function Columns({
-  row,
-  cols: treeCols,
-  badges,
-}: {
-  row: ItemRow;
-  cols: TreeColumns;
-  badges: FileBadges | undefined;
-}) {
+/** What a row shows in its columns: its lines (a folder's while closed),
+ *  its status letter, and which of the tree's columns it fills
+ *  (`rowColumns`); null: none. */
+function rowValues(row: ItemRow, treeCols: TreeColumns, badges: FileBadges | undefined) {
   let add = 0;
   let del = 0;
-  let status: React.ReactNode = null;
+  let status: string | null = null;
   if (row.kind === 'file') {
     const c = row.file.change;
     if (c) {
@@ -189,7 +189,25 @@ function Columns({
     status: !!status,
     viewed: !!badges?.viewed,
   });
-  if (!cols) return null;
+  return cols && { cols, add, del, status };
+}
+
+/** The row's badges, each as wide as the tree's widest: the PR's threads and
+ *  your notes or comments. They stay on hover (they aren't values the row's
+ *  actions stand in for), and your notes' badge opens the first. */
+function Badges({
+  path,
+  cols,
+  badges,
+  onOpenComment,
+}: {
+  path: string;
+  cols: TreeColumns;
+  badges: FileBadges | undefined;
+  onOpenComment?: (path: string, commentId: string) => void;
+}) {
+  if (!cols.threads && !cols.comments) return null;
+  const first = badges?.firstComment;
   return (
     <span className="flex items-center gap-1.5 text-xs">
       {cols.threads && (
@@ -198,13 +216,39 @@ function Columns({
         </span>
       )}
       {cols.comments && (
-        <span className="flex w-4.5 justify-end">
-          {!!badges?.comments && <CommentBadge count={badges.comments} />}
+        <span className="flex min-w-4.5 justify-end">
+          {!!badges?.comments && (
+            <CommentBadge
+              count={badges.comments}
+              kind={badges.commentKind ?? 'comment'}
+              onOpen={first && onOpenComment ? () => onOpenComment(path, first) : undefined}
+            />
+          )}
         </span>
       )}
-      {(cols.add > 0 || cols.del > 0) && (
-        <LineStats add={add} del={del} columns={{ add: cols.add, del: cols.del }} />
-      )}
+    </span>
+  );
+}
+
+/** The row's values at rest, each as wide as the tree's widest value: lines
+ *  added and removed (a folder's while it is closed), a file's status letter
+ *  (boxed when staged; an untracked folder's U) and, in a PR's tree, a check
+ *  once it is viewed. A folder shows no count of its changes: its lines say
+ *  as much, and the counts crowded the column. Blank columns before the
+ *  row's first value aren't drawn (`rowColumns`), so its name runs up to
+ *  that value. */
+function Values({
+  values: { cols, add, del, status },
+  badges,
+}: {
+  values: NonNullable<ReturnType<typeof rowValues>>;
+  badges: FileBadges | undefined;
+}) {
+  const lines = cols.add > 0 || cols.del > 0;
+  if (!lines && !cols.status && !cols.viewed) return null;
+  return (
+    <span className="flex items-center gap-1.5 text-xs">
+      {lines && <LineStats add={add} del={del} columns={{ add: cols.add, del: cols.del }} />}
       {cols.status && (
         <CharColumn chars={1} align="center">
           {status && badges?.staged ? (
@@ -256,14 +300,51 @@ function ThreadBadge({ count }: { count: number }) {
   );
 }
 
-/** Your notes and comments on a file needing attention. */
-function CommentBadge({ count }: { count: number }) {
-  const label = `${count} comment${count !== 1 ? 's' : ''}`;
+/** Your notes (or a PR's draft comments) on a file needing attention: their
+ *  icon, as the editor's gutter shows them, and how many. With `onOpen`, a
+ *  button that opens the first. */
+function CommentBadge({
+  count,
+  kind,
+  onOpen,
+}: {
+  count: number;
+  kind: DiffCommentKind;
+  onOpen?: () => void;
+}) {
+  const label = `${count} ${kind}${count !== 1 ? 's' : ''}`;
+  const Icon = kind === 'note' ? Bot : MessageSquare;
+  const content = (
+    <>
+      <Icon size={14} strokeWidth={1.8} className="text-icon" />
+      <span className="tabular-nums">{count}</span>
+    </>
+  );
   return (
     <Tooltip content={label}>
-      <span aria-label={label} className="flex">
-        <CountBadge count={count} />
-      </span>
+      {onOpen ? (
+        <Button
+          variant="ghost"
+          size="xs"
+          aria-label={`${label}: open the first`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen();
+          }}
+          // The row's own keys (Enter opens it, Space its toggle) stay off
+          // the button's.
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
+          }}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
+          {content}
+        </Button>
+      ) : (
+        <span aria-label={label} className="flex items-center gap-0.5 px-1">
+          {content}
+        </span>
+      )}
     </Tooltip>
   );
 }

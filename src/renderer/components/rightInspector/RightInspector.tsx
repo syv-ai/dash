@@ -39,6 +39,7 @@ import {
   panelEaseMs,
   type PanelImperativeHandle,
 } from '../ui/Resizable';
+import { commentScope } from '../diffEditor/comments/commentScope';
 import { HistoryList } from '../diffEditor/HistoryList';
 import { useEditorWorkspace, type EditorTarget } from '../diffEditor/useEditorWorkspace';
 import { activePath, type OpenOptions } from '../diffEditor/tabs/editorLayout';
@@ -654,6 +655,11 @@ export function RightInspector({
     changedFiles: ws.data.changedFiles,
     loading: ws.data.repoPathsLoading || ws.data.changedFilesLoading,
     badges: ws.badgeCounts,
+    // A badge opens the file at its first note, in the editor.
+    openComment: (path, commentId) => {
+      ws.navigateToComment(commentScope(view), path, commentId);
+      openEditor();
+    },
   };
   const filesView = (
     <WorkingFiles
