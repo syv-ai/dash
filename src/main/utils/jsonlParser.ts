@@ -8,6 +8,9 @@ import {
   type ToolResultInfo,
   type TokenUsage,
 } from '../../shared/sessionTypes';
+import { reportFindings } from '../claudeContract/driftReporter';
+import { checkTranscriptEntryType } from '../claudeContract/internalSchemas';
+import { parseClaudeVersion } from '../services/claudeCli';
 
 export function extractToolCalls(content: ContentBlock[] | string): ToolCallInfo[] {
   if (typeof content === 'string') return [];
@@ -41,7 +44,8 @@ export function extractToolResults(content: ContentBlock[] | string): ToolResult
   return results;
 }
 
-const VALID_TYPES = new Set<MessageType>([
+/** The entry types Dash reads; the rest of TRANSCRIPT_ENTRY_TYPES (`attachment`) it skips. */
+const READ_TYPES = new Set<MessageType>([
   'user',
   'assistant',
   'system',
@@ -50,9 +54,19 @@ const VALID_TYPES = new Set<MessageType>([
   'queue-operation',
 ]);
 
-/** Tracks unknown entry types we've already warned about so a Claude Code
- *  schema change is logged once per session, not on every line. */
-const warnedUnknownTypes = new Set<string>();
+/** Unknown entry types already reported, per Claude Code version: a
+ *  transcript of thousands of lines reports each once. */
+const reportedTypes = new Set<string>();
+
+/** Report an entry type Claude Code added since Dash last looked (claudeContract). */
+function noteEntryType(type: unknown, version: string | undefined): void {
+  const key = `${String(version)}\0${String(type)}`;
+  if (reportedTypes.has(key)) return;
+  reportedTypes.add(key);
+  const findings = checkTranscriptEntryType(type);
+  if (findings.length === 0) return;
+  reportFindings('transcript', findings, parseClaudeVersion(version)?.join('.') ?? 'unknown');
+}
 
 interface ChatHistoryEntry {
   uuid?: string;
@@ -95,13 +109,8 @@ export function parseJsonlLine(line: string): ParsedSessionMessage | null {
   if (!entry.uuid) return null;
 
   const type = entry.type as MessageType;
-  if (!VALID_TYPES.has(type)) {
-    if (entry.type && !warnedUnknownTypes.has(entry.type)) {
-      warnedUnknownTypes.add(entry.type);
-      console.warn('[jsonlParser] unknown entry type — Claude Code schema may have changed', {
-        type: entry.type,
-      });
-    }
+  if (!READ_TYPES.has(type)) {
+    noteEntryType(entry.type, entry.version);
     return null;
   }
 

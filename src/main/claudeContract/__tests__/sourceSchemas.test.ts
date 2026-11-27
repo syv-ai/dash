@@ -11,6 +11,7 @@ import {
   checkInstalledPlugins,
   checkJobState,
   checkSessionEntry,
+  checkTranscriptEntryType,
   checkTranscriptUsage,
 } from '../internalSchemas';
 import statusLineDocs from './fixtures/statusline-docs.json';
@@ -117,6 +118,15 @@ describe('internal files (loose)', () => {
       checkSessionEntry({ pid: 1, sessionId: 's', version: '2.1.332', peerFeatures: [] }),
     ).toEqual([]);
     expect(checkSessionEntry({ pid: '1' })).toEqual([{ kind: 'wrong-type', path: 'pid' }]);
+  });
+
+  it('knows the transcript entry types Claude Code writes, attachment included', () => {
+    expect(checkTranscriptEntryType('attachment')).toEqual([]);
+    expect(checkTranscriptEntryType('assistant')).toEqual([]);
+    expect(checkTranscriptEntryType('brand-new')).toEqual([
+      { kind: 'unknown-enum-value', path: 'type', value: 'brand-new' },
+    ]);
+    expect(checkTranscriptEntryType(7)).toEqual([{ kind: 'wrong-type', path: 'type' }]);
   });
 
   it('reports a model claudePricing prices as Sonnet by default', () => {

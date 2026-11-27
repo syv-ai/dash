@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { parseJsonlLine, deduplicateByRequestId, calculateMetrics } from '../jsonlParser';
 import type { ParsedSessionMessage } from '../../../shared/sessionTypes';
+import { installDriftReporter } from '../../claudeContract/driftReporter';
+import type { DriftReport } from '../../claudeContract/types';
+
+/** A fresh in-memory drift reporter; the reports it was handed. */
+function installReporter(): DriftReport[] {
+  const sent: DriftReport[] = [];
+  installDriftReporter({ dir: null, send: (r) => (sent.push(r), true) });
+  return sent;
+}
 
 function msg(partial: Partial<ParsedSessionMessage>): ParsedSessionMessage {
   return {
@@ -33,10 +42,32 @@ describe('parseJsonlLine', () => {
     expect(parseJsonlLine(JSON.stringify({ type: 'assistant', timestamp: 'now' }))).toBeNull();
   });
 
-  it('returns null for unknown entry types — forward-compat with schema bumps', () => {
-    expect(
-      parseJsonlLine(JSON.stringify({ uuid: 'x', type: 'something-new', timestamp: 'now' })),
-    ).toBeNull();
+  it('skips attachment entries without reporting drift', () => {
+    const sent = installReporter();
+    const line = {
+      uuid: 'x',
+      type: 'attachment',
+      version: '2.1.332',
+      attachment: { type: 'date' },
+    };
+    expect(parseJsonlLine(JSON.stringify(line))).toBeNull();
+    expect(sent).toEqual([]);
+  });
+
+  it('returns null for an unknown entry type and reports it once per version', () => {
+    const sent = installReporter();
+    const line = JSON.stringify({ uuid: 'x', type: 'something-new', version: '2.1.400' });
+    expect(parseJsonlLine(line)).toBeNull();
+    expect(parseJsonlLine(line)).toBeNull();
+    expect(sent).toEqual([
+      {
+        kind: 'unknown-enum-value',
+        path: 'type',
+        value: 'something-new',
+        source: 'transcript',
+        claudeVersion: '2.1.400',
+      },
+    ]);
   });
 
   it('parses a minimal assistant entry', () => {

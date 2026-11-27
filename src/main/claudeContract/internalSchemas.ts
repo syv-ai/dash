@@ -43,6 +43,31 @@ export function checkSessionEntry(raw: unknown): DriftFinding[] {
   return checkShape(sessionEntrySchema, raw);
 }
 
+/**
+ * Transcript entry types with a `uuid` that Claude Code writes, as seen live
+ * (2.1.332). The format is internal ("changes between versions",
+ * code.claude.com/docs/en/sessions), so these come from transcripts, not docs.
+ * `attachment` is context Claude Code attached to a turn (hook output,
+ * reminders, edited-file snippets, tool listings); Dash totals none of it.
+ */
+export const TRANSCRIPT_ENTRY_TYPES = [
+  'user',
+  'assistant',
+  'system',
+  'summary',
+  'file-history-snapshot',
+  'queue-operation',
+  'attachment',
+] as const;
+
+/** A transcript entry `type` Dash doesn't know: Claude Code wrote something new. */
+export function checkTranscriptEntryType(type: unknown): DriftFinding[] {
+  if ((TRANSCRIPT_ENTRY_TYPES as readonly unknown[]).includes(type)) return [];
+  if (typeof type !== 'string') return [{ kind: 'wrong-type', path: 'type' }];
+  const value = driftValue(type);
+  return [{ kind: 'unknown-enum-value', path: 'type', ...(value ? { value } : {}) }];
+}
+
 /** An assistant line's `message.usage`, which token and cost totals add up. */
 const usageSchema = z.looseObject({
   input_tokens: z.number(),
