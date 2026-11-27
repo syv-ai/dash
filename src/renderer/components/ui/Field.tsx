@@ -48,7 +48,9 @@ export function FormSection({
 
 /** A visible line under a row: kept short, for what mustn't hide in a tooltip. */
 function Note({ children }: { children: React.ReactNode }) {
-  return <div className="type-caption">{children}</div>;
+  // A note can name a setting or a path, one long word: it breaks anywhere so
+  // it never widens the column it sits in.
+  return <div className="type-caption wrap-anywhere">{children}</div>;
 }
 
 /**

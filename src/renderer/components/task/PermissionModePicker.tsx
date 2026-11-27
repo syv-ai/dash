@@ -45,16 +45,21 @@ export function PermissionModePicker({
   /** `row` only, the select's width: `md` lines up with the settings dialogs'
    *  fields; `sm` leaves the name room in a narrow column. */
   width?: 'sm' | 'md';
-  /** Claude Code's word on bypass for this task: Yolo is off, with why, when
-   *  it isn't available. Null while unknown (or for a task not made yet). */
+  /** Claude Code's word on bypass for the session's folder: Yolo is off, with
+   *  why, when it isn't available. Null while unknown. */
   bypass?: BypassAvailability | null;
 }) {
-  const offReason = value === 'bypassPermissions' ? null : bypassUnavailableReason(bypass);
-  const options = offReason
-    ? OPTIONS.map((o) =>
-        o.value === 'bypassPermissions' ? { ...o, disabled: true, disabledReason: offReason } : o,
-      )
-    : OPTIONS;
+  const offReason = bypassUnavailableReason(bypass);
+  // Yolo picked already (a task's setting, a new task's last choice) stays
+  // pickable, and the note says why it won't hold.
+  const onYolo = value === 'bypassPermissions';
+  const note = helperText ?? (onYolo && offReason ? offReason : undefined);
+  const options =
+    offReason && !onYolo
+      ? OPTIONS.map((o) =>
+          o.value === 'bypassPermissions' ? { ...o, disabled: true, disabledReason: offReason } : o,
+        )
+      : OPTIONS;
   const select = (
     <Select<PermissionMode>
       aria-label="Permission mode"
@@ -73,11 +78,11 @@ export function PermissionModePicker({
     <SettingRow
       label="Permission mode"
       hint={DESCRIPTIONS[value]}
-      note={helperText}
+      note={note}
       control={<div className={width === 'sm' ? 'w-48' : 'w-56'}>{select}</div>}
     />
   ) : (
-    <Field label="Permission mode" as="div" hint={DESCRIPTIONS[value]} note={helperText}>
+    <Field label="Permission mode" as="div" hint={DESCRIPTIONS[value]} note={note}>
       {select}
     </Field>
   );

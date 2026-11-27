@@ -34,6 +34,7 @@ import { BranchPrPicker } from './BranchPrPicker';
 import { findBranchHolder, describeBranchHolder } from './branchHolder';
 import { useProjects } from '../../stores/projectsStore';
 import { useSlashCommands } from './useSlashCommands';
+import { useBypassAvailability } from './changeSessionSetting';
 
 // Lives in shared/types (main's TaskService takes it too); re-exported so
 // imports don't churn.
@@ -172,6 +173,9 @@ function TaskModalBody({
     setText: setContextPrompt,
   });
   const [dashAccess, setDashAccess] = useState(taskDefaults?.dashAccess ?? false);
+  // The project's folder decides it for a task not made yet: a worktree reads
+  // the same project files, and its local file sits at this root.
+  const bypass = useBypassAvailability(projectPath);
   const controlSupported = useControlInfo()?.supported ?? false;
   const [pushRemote, setPushRemote] = useState(true);
   const [gitInitLoading, setGitInitLoading] = useState(false);
@@ -561,6 +565,7 @@ function TaskModalBody({
                   setPermissionMode(v);
                   localStorage.setItem('permissionMode', v);
                 }}
+                bypass={bypass}
               />
               <ModelPicker
                 layout="row"
