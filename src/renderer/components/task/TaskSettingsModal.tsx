@@ -9,6 +9,7 @@ import { SwitchField } from '../ui/SwitchField';
 import { Expandable } from '../ui/Expandable';
 import { ExtraArgsField } from './ExtraArgsField';
 import { AddDirsField } from './AddDirsField';
+import { EnvVarsField } from './EnvVarsField';
 import { EffortPicker } from './EffortPicker';
 import { useControlInfo } from '../../hooks/useControlInfo';
 import { useRuntime } from '../../stores/runtimeStore';
@@ -45,9 +46,11 @@ export function TaskSettingsModal({
   const bypass = useBypassAvailability(task.path);
   const [extraArgs, setExtraArgs] = useState(task.extraArgs ?? '');
   const [addDirs, setAddDirs] = useState<string[]>(task.addDirs);
+  const [env, setEnv] = useState<Record<string, string>>(task.env);
   // A saved change (or one made elsewhere) replaces the draft.
   useEffect(() => setExtraArgs(task.extraArgs ?? ''), [task.extraArgs]);
   useEffect(() => setAddDirs(task.addDirs), [task.addDirs]);
+  useEffect(() => setEnv(task.env), [task.env]);
 
   function handleSaveName() {
     const trimmed = name.trim();
@@ -102,14 +105,33 @@ export function TaskSettingsModal({
               onCheckedChange={(to) => onSessionSettingChange({ setting: 'dashAccess', to })}
             />
           )}
+          <SwitchField
+            label="Deny instead of prompting"
+            hint="A tool call that would wait on a permission prompt is denied, and the turn goes on: for a session nobody watches. Needs Claude Code 2.1.319 or later."
+            checked={task.denyInsteadOfPrompting}
+            onCheckedChange={(to) =>
+              onSessionSettingChange({ setting: 'denyInsteadOfPrompting', to })
+            }
+          />
         </FormSection>
         <FormSection>
-          <Expandable label="Advanced" defaultOpen={!!task.extraArgs || task.addDirs.length > 0}>
+          <Expandable
+            label="Advanced"
+            defaultOpen={
+              !!task.extraArgs || task.addDirs.length > 0 || Object.keys(task.env).length > 0
+            }
+          >
             <AddDirsField
               value={addDirs}
               onChange={setAddDirs}
               saved={task.addDirs}
               onApply={(to) => onSessionSettingChange({ setting: 'addDirs', to })}
+            />
+            <EnvVarsField
+              value={env}
+              onChange={setEnv}
+              saved={task.env}
+              onApply={(to) => onSessionSettingChange({ setting: 'env', to })}
             />
             <ExtraArgsField
               value={extraArgs}

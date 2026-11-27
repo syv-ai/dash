@@ -19,6 +19,7 @@ import { launchOptionsProblem } from '../../../shared/launchOptions';
 import { flagNoteText, validateExtraArgs } from '../../../shared/extraArgs';
 import { normalizeAddDirs } from '../../../shared/addDirs';
 import { pluginDirsOf } from '../../../shared/pluginDirs';
+import { envProblems, parseEnvAssignments } from '../../../shared/taskEnv';
 import type { AgentDefinition } from '../../../shared/slashCommands';
 import { githubSlug } from '../../../shared/urls';
 import type { WorkspaceTaskDefaults } from '../../services/WorkspaceConfigService';
@@ -68,6 +69,9 @@ export interface TaskView {
   addDirs: string[];
   extraArgs: string | null;
   agent: string | null;
+  /** The task's own env vars for its session. */
+  env: Record<string, string>;
+  denyInsteadOfPrompting: boolean;
 }
 
 /** Everything the task capabilities touch outside `control/`; index.ts wires the real services. */
@@ -175,6 +179,8 @@ export function toTaskView(
     addDirs: task.addDirs,
     extraArgs: task.extraArgs,
     agent: task.agent,
+    env: task.env,
+    denyInsteadOfPrompting: task.denyInsteadOfPrompting,
   };
   if (detail) view.detail = detail;
   return view;
@@ -203,16 +209,38 @@ const launchInputs = {
     .describe(
       "Your own claude flags, as one shell-quoted line (e.g. '--chrome'). Flags Dash sets itself (permissions, model, effort, agent, settings, …) are refused",
     ),
+  env: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "An env var for the session, KEY=VALUE (e.g. --env TEAMWORK_SEAT=lead); repeat for more. Dash's own keys, ANTHROPIC_*, CLAUDE_CODE_* and credentials are refused, and from a task also keys that make a program run code (NODE_OPTIONS, LD_*, GIT_SSH_COMMAND, EDITOR, …)",
+    ),
+  denyInsteadOfPrompting: z
+    .boolean()
+    .optional()
+    .describe(
+      'Deny a tool call that would wait on a permission prompt, so an unattended session keeps working (Claude Code permissions.denyInsteadOfPrompting, 2.1.319+)',
+    ),
 };
+
+/** `--env KEY=VALUE` words as an env, or a 400; undefined when not given. */
+function envOf(words: string[] | undefined): Record<string, string> | undefined {
+  if (words === undefined) return undefined;
+  const parsed = parseEnvAssignments(words);
+  if (!parsed.ok) throw new ControlError(400, parsed.error);
+  return parsed.env;
+}
 
 /**
  * 400 with the reason when the launch options can't be saved. From a task
- * caller, 403 for a risky flag too: like bypassPermissions (withoutBypass),
- * one agent must not loosen another's checks; a person can, in Task settings.
+ * caller, 403 for a risky flag or a code-running env var too: like
+ * bypassPermissions (withoutBypass), one agent must not loosen another's
+ * checks; a person can, in Task settings. (A task only reaches its own
+ * children here: the scope hides other tasks, and these refuse self.)
  */
 function assertLaunchOptions(
   caller: Caller,
-  opts: { extraArgs?: string | null; addDirs?: string[] },
+  opts: { extraArgs?: string | null; addDirs?: string[]; env?: Record<string, string> },
 ): void {
   const problem = launchOptionsProblem(opts);
   if (problem) throw new ControlError(400, problem);
@@ -222,6 +250,13 @@ function assertLaunchOptions(
     throw new ControlError(
       403,
       `a task can't give another task ${risky.map((r) => r.flag).join(', ')}: ${risky.map(flagNoteText).join(' ')} A person can set it in Task settings.`,
+    );
+  }
+  const env = envProblems(opts.env ?? {}, 'task');
+  if (env.length > 0) {
+    throw new ControlError(
+      403,
+      `a task can't give another task ${env.map((e) => e.key).join(', ')}: ${env.map((e) => e.problem).join(' ')} It would run outside that task's permission checks. A person can set it in Task settings.`,
     );
   }
 }
@@ -458,7 +493,12 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         if (!project) throw new ControlError(404, 'project not found');
         const defaults = deps.taskDefaults(project.path);
         const kind = input.kind ?? (project.isGitRepo ? 'new-branch' : 'in-place');
-        assertLaunchOptions(ctx.caller, { extraArgs: input.extraArgs, addDirs: input.addDir });
+        const env = envOf(input.env);
+        assertLaunchOptions(ctx.caller, {
+          extraArgs: input.extraArgs,
+          addDirs: input.addDir,
+          env,
+        });
         if (input.agent) {
           // The task's own --plugin-dir plugins count: its extra arguments, or
           // the project's default when it gives none (as TaskService resolves them).
@@ -490,6 +530,8 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           addDirs: input.addDir,
           effort: input.effort ?? null,
           agent: input.agent ?? null,
+          env,
+          denyInsteadOfPrompting: input.denyInsteadOfPrompting,
           parentTaskId: ctx.caller.kind === 'task' ? ctx.caller.taskId : null,
         } as const;
 
@@ -999,7 +1041,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.configure',
       summary:
-        "Change how a task's Claude Code session launches, as Task settings does: its effort, extra folders (--add-dir) and extra arguments. Only what is given changes. A task with a session restarts it to resume the same conversation with them. Returns the task and whether it restarted. A task cannot configure itself.",
+        "Change how a task's Claude Code session launches, as Task settings does: its effort, extra folders (--add-dir), extra arguments, env vars (--env) and whether it denies instead of prompting. Only what is given changes. A task with a session restarts it to resume the same conversation with them. Returns the task and whether it restarted. A task cannot configure itself.",
       input: z.object({
         taskId: z.string().describe('The task id'),
         effort: z
@@ -1012,6 +1054,10 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         extraArgs: launchInputs.extraArgs.describe(
           "The task's own claude flags, as one shell-quoted line; '' for none. Flags Dash sets itself are refused",
         ),
+        env: launchInputs.env.describe(
+          "The task's env vars, all of them, KEY=VALUE: repeat for more, --env '' for none. Dash's own keys, ANTHROPIC_*, CLAUDE_CODE_* and credentials are refused, and from a task also keys that make a program run code (NODE_OPTIONS, LD_*, GIT_SSH_COMMAND, EDITOR, …)",
+        ),
+        denyInsteadOfPrompting: launchInputs.denyInsteadOfPrompting,
       }),
       callers: ['orchestrator', 'task'],
       cli: { args: ['taskId'], paths: ['addDir'] },
@@ -1026,11 +1072,20 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           patch.effort = input.effort === 'default' ? null : input.effort;
         if (input.addDir !== undefined) patch.addDirs = normalizeAddDirs(input.addDir);
         if (input.extraArgs !== undefined) patch.extraArgs = input.extraArgs.trim() || null;
-        assertLaunchOptions(ctx.caller, { extraArgs: patch.extraArgs, addDirs: patch.addDirs });
+        const env = envOf(input.env);
+        if (env !== undefined) patch.env = env;
+        if (input.denyInsteadOfPrompting !== undefined) {
+          patch.denyInsteadOfPrompting = input.denyInsteadOfPrompting;
+        }
+        assertLaunchOptions(ctx.caller, {
+          extraArgs: patch.extraArgs,
+          addDirs: patch.addDirs,
+          env: patch.env,
+        });
         if (Object.keys(patch).length === 0) {
           throw new ControlError(
             400,
-            'nothing to change: give --effort, --add-dir or --extra-args',
+            'nothing to change: give --effort, --add-dir, --extra-args, --env or --deny-instead-of-prompting',
           );
         }
         deps.setLaunchOptions(task.id, patch);

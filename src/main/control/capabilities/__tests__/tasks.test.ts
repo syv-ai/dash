@@ -340,6 +340,8 @@ describe('tasks.create', () => {
         dashAccess: undefined,
         effort: null,
         agent: null,
+        env: undefined,
+        denyInsteadOfPrompting: undefined,
         parentTaskId: 'me',
       },
       { startSession: true, source: 'api' },
@@ -391,6 +393,29 @@ describe('tasks.create', () => {
       'no agent "ghost" in pA: its agents are reviewer',
     );
     expect(deps.createTask).not.toHaveBeenCalled();
+  });
+
+  it("passes a child's env and deny-instead-of-prompting, refusing a code-running key from a task", async () => {
+    await registry.call(asTask('me'), 'tasks.create', {
+      projectId: 'pA',
+      name: 'seat',
+      env: ['TEAMWORK_SEAT=seat'],
+      denyInsteadOfPrompting: true,
+    });
+    expect(deps.createTask.mock.calls[0]![0]).toMatchObject({
+      env: { TEAMWORK_SEAT: 'seat' },
+      denyInsteadOfPrompting: true,
+    });
+    expect(
+      await status(
+        registry.call(asTask('me'), 'tasks.create', {
+          projectId: 'pA',
+          name: 'x',
+          env: ['GIT_SSH_COMMAND=evil'],
+        }),
+      ),
+    ).toBe(403);
+    expect(deps.createTask).toHaveBeenCalledTimes(1);
   });
 
   it("checks the agent against the task's --plugin-dir plugins too, or the project default's", async () => {
@@ -988,6 +1013,56 @@ describe('tasks.configure', () => {
     });
     await registry.call(orch, 'tasks.configure', { taskId: 'child', extraArgs: '--tools Read' });
     expect(deps.setLaunchOptions).toHaveBeenCalledTimes(2);
+  });
+
+  it("sets a child's env and deny-instead-of-prompting from its parent, replacing the env", async () => {
+    tasks.find((t) => t.id === 'child')!.jobId = 'job-c';
+    const result = await registry.call(asTask('me'), 'tasks.configure', {
+      taskId: 'child',
+      env: ['TEAMWORK_SEAT=lead', 'NOTE=a=b'],
+      denyInsteadOfPrompting: true,
+    });
+    expect(deps.setLaunchOptions).toHaveBeenCalledWith('child', {
+      env: { TEAMWORK_SEAT: 'lead', NOTE: 'a=b' },
+      denyInsteadOfPrompting: true,
+    });
+    expect(result).toMatchObject({
+      restarted: true,
+      task: { env: { TEAMWORK_SEAT: 'lead', NOTE: 'a=b' }, denyInsteadOfPrompting: true },
+    });
+    await registry.call(orch, 'tasks.configure', { taskId: 'child', env: [''] });
+    expect(deps.setLaunchOptions).toHaveBeenLastCalledWith('child', { env: {} });
+  });
+
+  it('refuses env a task may not set: 400 for everyone, 403 for the code-running keys from a task', async () => {
+    const configure = (caller: typeof orch | ReturnType<typeof asTask>, env: string[]) =>
+      refusalOf(registry.call(caller, 'tasks.configure', { taskId: 'child', env }));
+    expect(await configure(orch, ['FOO'])).toEqual({
+      status: 400,
+      message: '--env FOO: write KEY=VALUE',
+    });
+    expect(await configure(orch, ['ANTHROPIC_API_KEY=x'])).toMatchObject({
+      status: 400,
+      message: expect.stringMatching(/^Environment: ANTHROPIC_API_KEY configures/),
+    });
+    expect(await configure(asTask('me'), ['NODE_OPTIONS=--require /x.js'])).toMatchObject({
+      status: 403,
+      message: expect.stringMatching(
+        /^a task can't give another task NODE_OPTIONS: NODE_OPTIONS makes a program load code/,
+      ),
+    });
+    // A task never reaches one it didn't create, nor itself.
+    expect(
+      await status(
+        registry.call(asTask('me'), 'tasks.configure', { taskId: 'sibling', env: ['A=1'] }),
+      ),
+    ).toBe(404);
+    expect(
+      await status(registry.call(asTask('me'), 'tasks.configure', { taskId: 'me', env: ['A=1'] })),
+    ).toBe(403);
+    // A person (an outside orchestrator) may.
+    await registry.call(orch, 'tasks.configure', { taskId: 'child', env: ['NODE_OPTIONS=--x'] });
+    expect(deps.setLaunchOptions).toHaveBeenCalledTimes(1);
   });
 
   it('says it did not restart when the folder now needs trust', async () => {

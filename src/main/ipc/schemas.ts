@@ -86,6 +86,8 @@ const createTaskCommon = {
   addDirs: z.array(z.string()).optional(),
   effort: taskEffortSchema.nullable().optional(),
   agent: agentNameSchema.nullable().optional(),
+  env: z.record(z.string(), z.string()).optional(),
+  denyInsteadOfPrompting: z.boolean().optional(),
   parentTaskId: z.string().nullable().optional(),
 };
 

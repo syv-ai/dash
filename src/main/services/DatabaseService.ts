@@ -27,6 +27,25 @@ function addDirsJson(folders: readonly string[] | undefined): string | null {
   return list.length > 0 ? JSON.stringify(list) : null;
 }
 
+/** `env` as stored: a JSON object, null for none. */
+function envJson(env: Readonly<Record<string, string>> | undefined): string | null {
+  return env && Object.keys(env).length > 0 ? JSON.stringify(env) : null;
+}
+
+/** `env` as read: a broken value, or a non-string value, reads as none. */
+function parseEnv(value: string | null): Record<string, string> {
+  if (!value) return {};
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter((e): e is [string, string] => typeof e[1] === 'string'),
+    );
+  } catch {
+    return {};
+  }
+}
+
 /** `add_dirs` as read: a broken value reads as none. */
 function parseAddDirs(value: string | null): string[] {
   if (!value) return [];
@@ -269,6 +288,8 @@ export class DatabaseService {
           addDirs: addDirsJson(data.addDirs),
           effort: data.effort ?? null,
           agent: data.agent ?? null,
+          env: envJson(data.env),
+          denyInsteadOfPrompting: data.denyInsteadOfPrompting ?? false,
           parentTaskId: data.parentTaskId ?? null,
           sortOrder: sortOrder ?? 0,
           createdAt: now,
@@ -343,6 +364,10 @@ export class DatabaseService {
     if (patch.extraArgs !== undefined) set.extraArgs = patch.extraArgs?.trim() || null;
     if (patch.addDirs !== undefined) set.addDirs = addDirsJson(patch.addDirs);
     if (patch.effort !== undefined) set.effort = patch.effort;
+    if (patch.env !== undefined) set.env = envJson(patch.env);
+    if (patch.denyInsteadOfPrompting !== undefined) {
+      set.denyInsteadOfPrompting = patch.denyInsteadOfPrompting;
+    }
     if (Object.keys(set).length === 0) return;
     const db = getDb();
     db.update(tasks)
@@ -729,6 +754,8 @@ export class DatabaseService {
       addDirs: parseAddDirs(row.addDirs),
       effort: isTaskEffort(row.effort) ? row.effort : null,
       agent: row.agent ?? null,
+      env: parseEnv(row.env),
+      denyInsteadOfPrompting: row.denyInsteadOfPrompting ?? false,
       parentTaskId: row.parentTaskId ?? null,
       favorite: row.favorite ?? false,
       sortOrder: row.sortOrder,

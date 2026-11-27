@@ -21,6 +21,8 @@ const launchOptionsInputSchema = z.looseObject({
   extraArgs: z.string().nullable().optional(),
   addDirs: z.array(z.string()).optional(),
   effort: taskEffortSchema.nullable().optional(),
+  env: z.record(z.string(), z.string()).optional(),
+  denyInsteadOfPrompting: z.boolean().optional(),
 });
 
 /** Task lifecycle from the task dialog and sidebar; TaskService does the work. */

@@ -85,6 +85,13 @@ export const tasks = sqliteTable(
     effort: text('effort'),
     // The custom agent the session runs as (`--agent`); fixed at creation.
     agent: text('agent'),
+    // The task's own env vars for its session, a JSON object; null when none.
+    env: text('env'),
+    // Deny a call that would wait on a permission prompt (the settings file's
+    // permissions.denyInsteadOfPrompting).
+    denyInsteadOfPrompting: integer('deny_instead_of_prompting', { mode: 'boolean' })
+      .notNull()
+      .default(false),
     parentTaskId: text('parent_task_id'),
     // Pinned to the top of the sidebar's task list.
     favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false),

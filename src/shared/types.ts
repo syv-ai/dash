@@ -141,6 +141,12 @@ export interface Task {
   effort: TaskEffort | null;
   /** The custom agent the session runs as (`--agent`); null for none. Fixed at creation. */
   agent: string | null;
+  /** The task's own env vars for its session, over Settings → Claude's and
+   *  under Dash's own (buildSessionEnv); {} for none. Checked by taskEnv.ts. */
+  env: Record<string, string>;
+  /** Deny a tool call that would wait on a permission prompt, instead of
+   *  waiting (`permissions.denyInsteadOfPrompting` in the task's settings file). */
+  denyInsteadOfPrompting: boolean;
   /** The task that created this one through the control API; null when a
    *  person created it. Fixed at creation. */
   parentTaskId: string | null;
@@ -185,6 +191,9 @@ export type CreateTaskOptions = {
   effort?: TaskEffort | null;
   /** `--agent` name (listAgents); fixed for the task's life. */
   agent?: string | null;
+  /** The task's own env vars (Task.env); undefined → none. */
+  env?: Record<string, string>;
+  denyInsteadOfPrompting?: boolean;
 } & (
   | { kind: 'worktree-new-branch'; baseRef: string; pushRemote: boolean }
   | { kind: 'worktree-existing'; branch: string; updateFromRemote?: boolean }
@@ -206,7 +215,10 @@ export type SetTaskDashAccessInput = { taskId: string; enabled: boolean };
  * besides mode and model). Only the keys given change; a running session
  * picks them up when it restarts (changeSessionSetting does that).
  */
-export type TaskLaunchOptions = Pick<Task, 'extraArgs' | 'addDirs' | 'effort'>;
+export type TaskLaunchOptions = Pick<
+  Task,
+  'extraArgs' | 'addDirs' | 'effort' | 'env' | 'denyInsteadOfPrompting'
+>;
 export type SetTaskLaunchOptionsInput = { taskId: string } & Partial<TaskLaunchOptions>;
 
 /** `task:setFavorite`: pin a task to the top of the sidebar's task list, or unpin it. */

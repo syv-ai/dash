@@ -1,19 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, Check, Copy, Plus, Trash2 } from 'lucide-react';
+import { AlertCircle, Check, Copy } from 'lucide-react';
 import type { ClaudeCliInfo } from '../../../shared/types';
 import { shellQuote } from '../../../shared/shellQuote';
 import { useControlInfo } from '../../hooks/useControlInfo';
 import { useSettings } from '../../stores/settingsStore';
 import { Code } from '../ui/Code';
 import { FormSection, SettingRow } from '../ui/Field';
+import { EnvVarList } from '../ui/EnvVarList';
 import { IconButton } from '../ui/IconButton';
-import { Input } from '../ui/Input';
 import { Notice } from '../ui/Notice';
 import { Segmented } from '../ui/Segmented';
 import { SwitchField } from '../ui/SwitchField';
 import { TextLink } from '../ui/TextLink';
-
-const ENV_VAR_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /** `claude --version` says "2.1.332 (Claude Code)"; the number alone. */
 export function cliVersion(info: ClaudeCliInfo): string | null {
@@ -172,94 +170,13 @@ function OrchestratorAccessRow() {
 function EnvVarsSection() {
   const vars = useSettings((s) => s.customClaudeEnvVars);
   const setVars = useSettings((s) => s.setCustomClaudeEnvVars);
-  const [newKey, setNewKey] = useState('');
-  const [newValue, setNewValue] = useState('');
-  const canAdd = ENV_VAR_NAME.test(newKey.trim());
-
-  function add() {
-    const key = newKey.trim();
-    if (!ENV_VAR_NAME.test(key)) return;
-    setVars({ ...vars, [key]: newValue });
-    setNewKey('');
-    setNewValue('');
-  }
-
-  function remove(key: string) {
-    const next = { ...vars };
-    delete next[key];
-    setVars(next);
-  }
-
-  const onEnter = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') add();
-  };
-
   return (
     <FormSection
       title="Environment variables"
       hint="Passed to Claude on new tasks."
       action={<TextLink href="https://code.claude.com/docs/en/env-vars">Reference</TextLink>}
     >
-      <div className="grid gap-1.5">
-        {Object.entries(vars).map(([key, value]) => (
-          <EnvVarRow
-            key={key}
-            name={<Input readOnly value={key} aria-label="Name" mono />}
-            value={<Input readOnly value={value} aria-label={`${key} value`} mono />}
-            action={
-              <IconButton title={`Remove ${key}`} onClick={() => remove(key)}>
-                <Trash2 size={14} strokeWidth={1.8} />
-              </IconButton>
-            }
-          />
-        ))}
-        <EnvVarRow
-          name={
-            <Input
-              value={newKey}
-              onChange={(e) => setNewKey(e.target.value)}
-              onKeyDown={onEnter}
-              placeholder="NAME"
-              aria-label="New variable name"
-              mono
-            />
-          }
-          value={
-            <Input
-              value={newValue}
-              onChange={(e) => setNewValue(e.target.value)}
-              onKeyDown={onEnter}
-              placeholder="value"
-              aria-label="New variable value"
-              mono
-            />
-          }
-          action={
-            <IconButton title="Add variable" onClick={add} disabled={!canAdd}>
-              <Plus size={14} strokeWidth={1.8} />
-            </IconButton>
-          }
-        />
-      </div>
+      <EnvVarList value={vars} onChange={setVars} />
     </FormSection>
-  );
-}
-
-function EnvVarRow({
-  name,
-  value,
-  action,
-}: {
-  name: React.ReactNode;
-  value: React.ReactNode;
-  action: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <div className="min-w-0 flex-1">{name}</div>
-      <span className="type-caption">=</span>
-      <div className="min-w-0 flex-1">{value}</div>
-      {action}
-    </div>
   );
 }

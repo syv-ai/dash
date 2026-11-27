@@ -47,6 +47,8 @@ function task(over: Partial<Task> = {}): Task {
     addDirs: [],
     effort: null,
     agent: null,
+    env: {},
+    denyInsteadOfPrompting: false,
     parentTaskId: null,
     favorite: false,
     sortOrder: 0,

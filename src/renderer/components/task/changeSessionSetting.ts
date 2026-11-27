@@ -51,6 +51,10 @@ function save(task: Task, change: SessionSettingChange): Promise<Task | null> {
       return store.setLaunchOptions(task, { addDirs: change.to });
     case 'effort':
       return store.setLaunchOptions(task, { effort: change.to });
+    case 'env':
+      return store.setLaunchOptions(task, { env: change.to });
+    case 'denyInsteadOfPrompting':
+      return store.setLaunchOptions(task, { denyInsteadOfPrompting: change.to });
   }
 }
 

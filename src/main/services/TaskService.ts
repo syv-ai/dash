@@ -76,7 +76,7 @@ export class TaskService {
     const projectDefaults = readTaskDefaults(project.path);
     const extraArgs = input.extraArgs ?? projectDefaults?.extraArgs;
     const addDirs = normalizeAddDirs(input.addDirs ?? projectDefaults?.addDirs);
-    const problem = launchOptionsProblem({ extraArgs: extraArgs ?? null, addDirs });
+    const problem = launchOptionsProblem({ extraArgs: extraArgs ?? null, addDirs, env: input.env });
     if (problem) throw new Error(problem);
 
     // saveTask enforces one active in-place task per project folder; check it
@@ -164,6 +164,8 @@ export class TaskService {
       addDirs,
       effort: input.effort ?? null,
       agent: input.agent?.trim() || null,
+      env: input.env,
+      denyInsteadOfPrompting: input.denyInsteadOfPrompting ?? false,
       parentTaskId: input.parentTaskId ?? null,
     });
 

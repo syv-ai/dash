@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Task } from '../../../../shared/types';
 import {
+  envRow,
   extraArgsRow,
   lastActiveRow,
   parseDbTime,
@@ -33,6 +34,8 @@ const TASK: Task = {
   addDirs: [],
   effort: null,
   agent: null,
+  env: {},
+  denyInsteadOfPrompting: false,
   parentTaskId: null,
   favorite: false,
   sortOrder: 0,
@@ -241,5 +244,18 @@ describe('extraArgsRow', () => {
   it('sits in the session section', () => {
     const rows = taskDetailSections(input({}, { extraArgs: '--chrome' })).session;
     expect(rows.find((r) => r.label === 'Extra arguments')?.value).toBe('--chrome');
+  });
+});
+
+describe('envRow', () => {
+  it('lists KEY=value in the code font, and nothing when the task has none', () => {
+    expect(envRow({ env: {} })).toBeNull();
+    expect(envRow({ env: { SEAT: 'lead', MODE: 'a=b' } })).toEqual({
+      label: 'Environment',
+      value: 'SEAT=lead, MODE=a=b',
+      title: 'SEAT=lead\nMODE=a=b',
+      copy: 'SEAT=lead\nMODE=a=b',
+      mono: true,
+    });
   });
 });

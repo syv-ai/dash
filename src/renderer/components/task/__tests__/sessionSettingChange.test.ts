@@ -18,6 +18,8 @@ const TASK: SessionSettingsOf = {
   extraArgs: '--chrome',
   addDirs: ['/lib'],
   effort: null,
+  env: { SEAT: 'lead' },
+  denyInsteadOfPrompting: false,
 };
 
 const plan = (
@@ -33,6 +35,21 @@ describe('planSessionSettingChange', () => {
     expect(plan({ setting: 'dashAccess', to: false }, true)).toEqual({ kind: 'none' });
     expect(plan({ setting: 'extraArgs', to: ' --chrome ' }, true)).toEqual({ kind: 'none' });
     expect(plan({ setting: 'effort', to: null }, true)).toEqual({ kind: 'none' });
+  });
+
+  it('restarts for a changed env, comparing keys and values in any order', () => {
+    expect(plan({ setting: 'env', to: { SEAT: 'lead' } }, true)).toEqual({ kind: 'none' });
+    expect(plan({ setting: 'env', to: { SEAT: 'lead', X: '1' } }, true)).toMatchObject({
+      kind: 'apply',
+      restart: true,
+      confirm: {
+        title: 'Restart with these environment variables?',
+        message: 'Changing them restarts the session, which resumes the same conversation.',
+      },
+    });
+    expect(plan({ setting: 'env', to: {} }, true)).toMatchObject({
+      confirm: { title: 'Drop the environment variables?' },
+    });
   });
 
   it('restarts for new folders, comparing the lists once normalized', () => {
@@ -107,6 +124,7 @@ describe('planSessionSettingChange', () => {
     [{ setting: 'model', to: 'default' }, 'Switch this task to Default?'],
     [{ setting: 'dashAccess', to: true }, 'Turn on Dash access?'],
     [{ setting: 'effort', to: 'ultracode' }, 'Switch this task to Ultracode effort?'],
+    [{ setting: 'denyInsteadOfPrompting', to: true }, 'Deny instead of prompting?'],
   ])('restarts a session for %o, since the job keeps its old flags', (change, title) => {
     expect(plan(change, true)).toEqual({
       kind: 'apply',

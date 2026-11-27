@@ -53,10 +53,11 @@ vi.mock('../ptyHookSettings', () => ({
   setCommitAttributionValue: () => {},
 }));
 
-const supported = vi.hoisted(() => ({ reject: null as Error | null }));
+const supported = vi.hoisted(() => ({ reject: null as Error | null, denyVersion: true }));
 vi.mock('../claudeCli', () => ({
   findClaudePath: async () => '/usr/local/bin/claude',
   findLatestSessionId: () => null,
+  isClaudeVersionAtLeast: () => supported.denyVersion,
   requireSupportedClaude: async () => {
     if (supported.reject) throw supported.reject;
   },
@@ -69,7 +70,10 @@ vi.mock('../claudeEnv', () => ({
     envCalls.push([isDark, cwd]);
     return { DASH_TEST: '1' };
   },
-  buildSessionEnv: (cwd: string) => ({ WEB_PORT: cwd === '/wt/fix-login' ? '3001' : '0' }),
+  buildSessionEnv: (cwd: string, taskEnv: Record<string, string> = {}) => ({
+    ...taskEnv,
+    WEB_PORT: cwd === '/wt/fix-login' ? '3001' : '0',
+  }),
   getDefaultEffort: () => defaultEffort.value,
   setClaudeEnvVars: () => {},
   setSyncShellEnv: () => {},
@@ -131,6 +135,8 @@ function seed(over: Partial<Task> = {}): Task {
     extraArgs: null,
     addDirs: [],
     effort: null,
+    env: {},
+    denyInsteadOfPrompting: false,
     ...over,
   } as Task;
   tasks.set(t.id, t);
@@ -272,6 +278,27 @@ describe('startTaskSession', () => {
       ],
     ]);
     expect(sup.dispatch.mock.calls[0]![0].settingsPath).toBe('/u/task-settings/t1.json');
+  });
+
+  it("writes the task's own env under Dash's, and deny-instead-of-prompting on a CLI that takes it", async () => {
+    seed({
+      dashAccess: true,
+      env: { SEAT: 'lead', DASH_CALLER: 'spoof' },
+      denyInsteadOfPrompting: true,
+    });
+    await startTaskSession('t1');
+    expect(settingsWrites[0]![1]).toMatchObject({
+      permissions: { allow: ['Bash(dashctl tasks get:*)'], denyInsteadOfPrompting: true },
+      env: { SEAT: 'lead', WEB_PORT: '3001', DASH_CALLER: 'task:t1', DASH_TOKEN: 'tok' },
+    });
+    supported.denyVersion = false;
+    tasks.set('t1', { ...tasks.get('t1')!, jobId: null });
+    await startTaskSession('t1');
+    supported.denyVersion = true;
+    expect(settingsWrites[1]![1]).toMatchObject({
+      permissions: { allow: ['Bash(dashctl tasks get:*)'] },
+    });
+    expect(settingsWrites[1]![1]).not.toHaveProperty('permissions.denyInsteadOfPrompting');
   });
 
   it('reads Dash access from the row at each start, so a restart after a toggle sees it', async () => {

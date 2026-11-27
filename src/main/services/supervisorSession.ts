@@ -57,7 +57,7 @@ export class ExtraArgsError extends Error {
 
 /** What a task's `--settings` file holds. */
 export interface SessionSettings {
-  permissions?: { allow: string[] };
+  permissions?: { allow?: string[]; denyInsteadOfPrompting?: true };
   env?: Record<string, string>;
   hooks?: { SessionStart: { matcher: string; hooks: { type: 'command'; command: string }[] }[] };
 }
@@ -74,9 +74,19 @@ export function buildSessionSettings(opts: {
   env?: Record<string, string>;
   /** Commands for every SessionStart (startup, resume, clear, compact). */
   sessionStart?: { type: 'command'; command: string }[];
+  /**
+   * `permissions.denyInsteadOfPrompting`: a call that would wait on a
+   * permission prompt is denied and the turn goes on (Claude Code 2.1.319+;
+   * honoured only from user settings or `--settings`, so this file is the
+   * place). Only `true` is written: absent is Claude Code's default.
+   */
+  denyInsteadOfPrompting?: boolean;
 }): SessionSettings {
   const settings: SessionSettings = {};
-  if (opts.allowTools?.length) settings.permissions = { allow: opts.allowTools };
+  const permissions: NonNullable<SessionSettings['permissions']> = {};
+  if (opts.allowTools?.length) permissions.allow = opts.allowTools;
+  if (opts.denyInsteadOfPrompting) permissions.denyInsteadOfPrompting = true;
+  if (Object.keys(permissions).length > 0) settings.permissions = permissions;
   if (opts.env && Object.keys(opts.env).length > 0) settings.env = opts.env;
   if (opts.sessionStart?.length) {
     settings.hooks = { SessionStart: [{ matcher: '', hooks: opts.sessionStart }] };

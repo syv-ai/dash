@@ -2,6 +2,10 @@ import * as os from 'os';
 import { stripHostTerminalEnv } from './hostTerminalEnv';
 import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
 import type { TaskEffort } from '@shared/effort';
+// Keys a user/task/ports override must never replace. The hook server port
+// isn't one: hooks read it from a file (HookServer.portFilePath), since the
+// supervisor reuses the dispatch-time env on every respawn.
+import { RESERVED_ENV_KEYS } from '@shared/taskEnv';
 
 /**
  * Environment and launch options shared by every `claude` process Dash starts
@@ -23,24 +27,6 @@ let syncShellEnv = false;
 // effort couldn't override it, and it doesn't take ultracode.
 let defaultEffort: TaskEffort | null = null;
 
-/**
- * Keys a user/ports override must never replace. The hook server port used to
- * be here as DASH_HOOK_PORT; hooks now read the port from a file (see
- * HookServer.portFilePath) because the supervisor reuses the dispatch-time env
- * on every respawn while Dash binds a new port each launch.
- */
-const RESERVED_ENV_KEYS = new Set([
-  'PATH',
-  'HOME',
-  'USER',
-  'TERM',
-  'COLORTERM',
-  'TERM_PROGRAM',
-  'COLORFGBG',
-  // Dash's own (see buildClaudeEnv); a user value would split writes from reads.
-  'CLAUDE_CONFIG_DIR',
-]);
-
 export function setClaudeEnvVars(vars: Record<string, string>): void {
   claudeEnvVars = vars;
 }
@@ -59,20 +45,24 @@ export function getDefaultEffort(): TaskEffort | null {
 
 /**
  * The env a task's session itself needs: the user's env vars from settings,
- * then the task's port vars (FRONTEND_PORT=…) so commands resolve the host
- * port the ports panel shows; ports after user vars so a project never
- * clobbers an allocated port. Reserved keys are never overridden. A session
- * gets this through its settings file (buildSessionSettings), not its
- * process env.
+ * then the task's own (Task settings → Environment), then the task's port
+ * vars (FRONTEND_PORT=…) so commands resolve the host port the ports panel
+ * shows; ports last so neither clobbers an allocated port. Reserved keys are
+ * never overridden. A session gets this through its settings file
+ * (buildSessionSettings), not its process env.
  */
-export function buildSessionEnv(cwd?: string): Record<string, string> {
+export function buildSessionEnv(
+  cwd?: string,
+  taskEnv: Readonly<Record<string, string>> = {},
+): Record<string, string> {
   const env: Record<string, string> = {};
-  const merge = (vars: Record<string, string>) => {
+  const merge = (vars: Readonly<Record<string, string>>) => {
     for (const [key, value] of Object.entries(vars)) {
       if (!RESERVED_ENV_KEYS.has(key)) env[key] = value;
     }
   };
   merge(claudeEnvVars);
+  merge(taskEnv);
   if (cwd) merge(WorkspacePortsRuntime.getEnvForWorktree(cwd));
   return env;
 }

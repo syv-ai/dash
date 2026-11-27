@@ -31,6 +31,13 @@ describe('buildSessionSettings', () => {
     });
   });
 
+  it('writes denyInsteadOfPrompting under permissions, only when on', () => {
+    expect(buildSessionSettings({ denyInsteadOfPrompting: true })).toEqual({
+      permissions: { denyInsteadOfPrompting: true },
+    });
+    expect(buildSessionSettings({ denyInsteadOfPrompting: false })).toEqual({});
+  });
+
   it('leaves out what is empty', () => {
     expect(buildSessionSettings({ allowTools: [], env: {}, sessionStart: [] })).toEqual({});
   });

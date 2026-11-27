@@ -17,6 +17,15 @@ describe('buildSessionEnv', () => {
     expect(buildSessionEnv('/wt/other')).toEqual({ MY_TOKEN: 'x', WEB_PORT: 'user' });
   });
 
+  it("puts the task's own env over the user's, under its ports and never a reserved key", () => {
+    setClaudeEnvVars({ SEAT: 'user', MY_TOKEN: 'x' });
+    expect(buildSessionEnv('/wt/a', { SEAT: 'lead', WEB_PORT: 'task', HOME: '/nope' })).toEqual({
+      MY_TOKEN: 'x',
+      SEAT: 'lead',
+      WEB_PORT: '3001',
+    });
+  });
+
   it('is part of the dispatch env too', () => {
     setClaudeEnvVars({ MY_TOKEN: 'x' });
     expect(buildClaudeEnv(true, '/wt/a')).toMatchObject({ MY_TOKEN: 'x', WEB_PORT: '3001' });

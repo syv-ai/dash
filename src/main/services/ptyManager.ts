@@ -11,7 +11,12 @@ import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
 import { TerminalMirror } from './TerminalMirror';
 import { terminalSnapshotService } from './TerminalSnapshotService';
 import { ensureShellConfig, shellHistoryPath } from './ptyShellConfig';
-import { findClaudePath, findLatestSessionId, requireSupportedClaude } from './claudeCli';
+import {
+  findClaudePath,
+  findLatestSessionId,
+  isClaudeVersionAtLeast,
+  requireSupportedClaude,
+} from './claudeCli';
 import { buildClaudeEnv, buildSessionEnv, getDefaultEffort } from './claudeEnv';
 import { supervisorService, DispatchError } from './SupervisorService';
 import {
@@ -144,6 +149,18 @@ export class UntrustedWorkspaceError extends Error {
 /** Tasks whose next dispatch starts a new conversation: restarted with no
  *  transcript to resume (restartTaskSession). Cleared by that dispatch. */
 const freshStarts = new Set<string>();
+
+/**
+ * Whether the CLI takes `permissions.denyInsteadOfPrompting` (2.1.319, newer
+ * than MIN_CLAUDE_VERSION). An older one isn't given the key: a settings key
+ * it doesn't know may cost the whole file (env, dashctl), and it would only
+ * prompt as before.
+ */
+function supportsDenyInsteadOfPrompting(): boolean {
+  if (isClaudeVersionAtLeast(2, 1, 319)) return true;
+  console.warn('[ptyManager] deny instead of prompting needs Claude Code 2.1.319 or later');
+  return false;
+}
 
 /** Trust root per task whose last dispatch was refused as untrusted. */
 const untrustedRoots = new Map<string, string>();
@@ -298,6 +315,10 @@ async function ensureTaskSession(opts: {
   agent: string | null;
   /** The project's (`.dash/config.json` session.appendSystemPrompt), read at this start. */
   appendSystemPrompt?: string;
+  /** The task's own env vars, for its settings file. */
+  taskEnv: Record<string, string>;
+  denyInsteadOfPrompting: boolean;
+  /** The dispatch process's env (buildClaudeEnv). */
   env: Record<string, string>;
   wakeStopped?: boolean;
 }): Promise<string> {
@@ -310,8 +331,10 @@ async function ensureTaskSession(opts: {
       opts.id,
       buildSessionSettings({
         allowTools: dash?.allow,
-        env: { ...buildSessionEnv(opts.cwd), ...dash?.env },
+        // Dash's own last: a task's env never replaces its dashctl access.
+        env: { ...buildSessionEnv(opts.cwd, opts.taskEnv), ...dash?.env },
         sessionStart: dash?.sessionStart,
+        denyInsteadOfPrompting: opts.denyInsteadOfPrompting && supportsDenyInsteadOfPrompting(),
       }),
     );
   } catch (err) {
@@ -606,6 +629,8 @@ async function startTaskSessionNow(
       effort: task.effort,
       appendSystemPrompt: projectAppendSystemPrompt(task.projectId),
       agent: task.agent,
+      taskEnv: task.env,
+      denyInsteadOfPrompting: task.denyInsteadOfPrompting,
       env,
       wakeStopped: opts.wakeStopped,
     });

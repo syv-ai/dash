@@ -138,6 +138,19 @@ export function extraArgsRow(task: Pick<Task, 'extraArgs'>): DetailRow | null {
   };
 }
 
+/** The task's own env vars as `KEY=value` lines, in the code font. Null when none. */
+export function envRow(task: Pick<Task, 'env'>): DetailRow | null {
+  const lines = Object.entries(task.env).map(([key, value]) => `${key}=${value}`);
+  if (lines.length === 0) return null;
+  return {
+    label: 'Environment',
+    value: lines.join(', '),
+    title: lines.join('\n'),
+    copy: lines.join('\n'),
+    mono: true,
+  };
+}
+
 /** Rows with a value; the rest are left out rather than shown as "—". */
 function present(rows: Array<DetailRow | null | false>): DetailRow[] {
   return rows.filter((r): r is DetailRow => !!r && r.value !== '');
@@ -187,6 +200,11 @@ export function taskDetailSections(input: TaskDetailsInput): TaskDetailSections 
             ? `Configured: ${PERMISSION_LABELS[task.permissionMode]}`
             : undefined,
       },
+      task.denyInsteadOfPrompting && {
+        label: 'Prompts',
+        value: 'Denied, not asked',
+        title: 'A tool call that would wait on a permission prompt is denied, and the turn goes on',
+      },
       {
         label: 'State',
         value: sessionState(task, input.activity),
@@ -201,6 +219,7 @@ export function taskDetailSections(input: TaskDetailsInput): TaskDetailSections 
         copy: task.addDirs.join('\n'),
       },
       extraArgsRow(task),
+      envRow(task),
     ]),
     usage: present([
       task.totalTokens > 0 && {

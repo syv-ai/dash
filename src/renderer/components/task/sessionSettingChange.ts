@@ -38,13 +38,32 @@ export type SessionSettingChange =
   /** Extra folders the session may read and edit (`--add-dir`). */
   | { setting: 'addDirs'; to: string[] }
   /** `--effort`; null → Settings → Claude's default. */
-  | { setting: 'effort'; to: TaskEffort | null };
+  | { setting: 'effort'; to: TaskEffort | null }
+  /** The task's own env vars, all of them. */
+  | { setting: 'env'; to: Record<string, string> }
+  | { setting: 'denyInsteadOfPrompting'; to: boolean };
 
 /** The task fields a session setting change reads. */
 export type SessionSettingsOf = Pick<
   Task,
-  'permissionMode' | 'model' | 'dashAccess' | 'extraArgs' | 'addDirs' | 'effort'
+  | 'permissionMode'
+  | 'model'
+  | 'dashAccess'
+  | 'extraArgs'
+  | 'addDirs'
+  | 'effort'
+  | 'env'
+  | 'denyInsteadOfPrompting'
 >;
+
+/** Whether two env sets hold the same keys and values, in any order. */
+export function sameEnv(
+  a: Readonly<Record<string, string>>,
+  b: Readonly<Record<string, string>>,
+): boolean {
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((k) => b[k] === a[k]);
+}
 
 /** Whether the change leaves the setting as it is (extra arguments compare trimmed). */
 function isUnchanged(task: SessionSettingsOf, change: SessionSettingChange): boolean {
@@ -52,6 +71,7 @@ function isUnchanged(task: SessionSettingsOf, change: SessionSettingChange): boo
     return (task.extraArgs?.trim() || null) === (change.to?.trim() || null);
   }
   if (change.setting === 'addDirs') return sameAddDirs(task.addDirs, change.to);
+  if (change.setting === 'env') return sameEnv(task.env, change.to);
   return task[change.setting] === change.to;
 }
 
@@ -123,6 +143,12 @@ function restartTitle(change: SessionSettingChange): string {
       return normalizeAddDirs(change.to).length > 0
         ? 'Restart with these folders?'
         : 'Drop the added folders?';
+    case 'env':
+      return Object.keys(change.to).length > 0
+        ? 'Restart with these environment variables?'
+        : 'Drop the environment variables?';
+    case 'denyInsteadOfPrompting':
+      return change.to ? 'Deny instead of prompting?' : 'Prompt again?';
   }
 }
 
@@ -156,7 +182,9 @@ export function planSessionSettingChange(opts: {
     confirm: {
       title: restartTitle(change),
       message:
-        change.setting === 'extraArgs' || change.setting === 'addDirs' ? RESTART_CHANGE : RESTART,
+        change.setting === 'extraArgs' || change.setting === 'addDirs' || change.setting === 'env'
+          ? RESTART_CHANGE
+          : RESTART,
       confirmLabel: RESTART_LABEL,
     },
   };

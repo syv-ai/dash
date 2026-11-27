@@ -470,6 +470,17 @@ export function runMigrations(): void {
   } catch {
     /* already exists */
   }
+  // A task's own env vars (JSON), and whether its session denies instead of prompting.
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN env TEXT`);
+  } catch {
+    /* already exists */
+  }
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN deny_instead_of_prompting INTEGER NOT NULL DEFAULT 0`);
+  } catch {
+    /* already exists */
+  }
 
   // The PR a task reviews, when the person picked one (else its own open PR is
   // the target): main and dashctl default to it.
