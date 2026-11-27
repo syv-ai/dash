@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode, Ref } from 'react';
 import { cn } from '../../lib/cn';
 import type { Held } from '../../lib/railCrossing';
+import { useRailDrag } from './Resizable';
 
 /** The content's look as it crosses to or from the rail. */
 const FADE = {
@@ -14,7 +15,10 @@ const FADE = {
  * fades as it crosses to or from the rail (`lib/railCrossing`). `railed`: the
  * panel shows its rail now, which fades in as it comes. The content stays
  * mounted throughout. `overflow-clip`, not hidden: a clip can't be scrolled,
- * so content taking focus mid-motion can't slide the held layout.
+ * so content taking focus mid-motion can't slide the held layout. In a
+ * panel dragged out of its rail (`ResizablePanel dragOpen`), the rail holds
+ * its width on its outer side while the pointer is down, and the content
+ * the drag's hold once released (`useRailDrag`).
  */
 export function HeldFrame({
   held,
@@ -27,12 +31,19 @@ export function HeldFrame({
   bodyRef?: Ref<HTMLDivElement>;
   children: ReactNode;
 }) {
+  const drag = useRailDrag();
+  const hold = drag.rail ? { width: drag.rail.width } : (held ?? drag.held);
   return (
     <div className={cn('h-full overflow-clip', railed && 'motion-safe:animate-fade-in')}>
       <div
         ref={bodyRef}
-        className={cn('h-full', held && 'w-(--held-width)', held?.fade && FADE[held.fade])}
-        style={held ? ({ '--held-width': `${held.width}px` } as CSSProperties) : undefined}
+        className={cn(
+          'h-full',
+          hold && 'w-(--held-width)',
+          drag.rail?.align === 'end' && 'ml-auto',
+          hold?.fade && FADE[hold.fade],
+        )}
+        style={hold ? ({ '--held-width': `${hold.width}px` } as CSSProperties) : undefined}
       >
         {children}
       </div>

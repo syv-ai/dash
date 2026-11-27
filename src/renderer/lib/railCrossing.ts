@@ -29,3 +29,28 @@ export function heldAcrossRail(before: PanelExtent, after: PanelExtent): Held | 
     fade: after.collapsed ? 'out' : 'in',
   };
 }
+
+/** How far past its rail a drag out must end to open the panel (px): a
+ *  press that barely moves leaves it railed. */
+export const RAIL_DRAG_SLOP_PX = 4;
+
+/**
+ * Where a drag out of the rail settles once released (X2), the panel having
+ * followed the pointer from the rail (`px`, its width at release): back to
+ * the rail if it ended within `slopPx` of it, else open, at least `minPx`
+ * (a width short of it snaps to it, one past it is kept).
+ */
+export function railDragEnd({
+  px,
+  railPx,
+  minPx,
+  slopPx = RAIL_DRAG_SLOP_PX,
+}: {
+  px: number;
+  railPx: number;
+  minPx: number;
+  slopPx?: number;
+}): { open: false } | { open: true; px: number } {
+  if (px < railPx + slopPx) return { open: false };
+  return { open: true, px: Math.round(Math.max(px, minPx)) };
+}

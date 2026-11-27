@@ -14,7 +14,8 @@ import { useEditorTabs } from '../../stores/editorTabsStore';
 /** Props for the `ResizablePanel` holding the tree: collapsible to
  *  `collapsedSize` (px; the host's rail), easing when the toggle drives it,
  *  and kept in step with the remembered flag. `held`: its content's hold
- *  while it crosses to or from the rail, toggled or dragged (`ui/HeldFrame`),
+ *  while it crosses to or from the rail, toggled or dragged (`ui/HeldFrame`;
+ *  dragged out of the rail, the panel's own `dragOpen` settles it),
  *  at its open width; `railed`: it shows its rail. */
 export function useTreePanel(collapsedSize: number) {
   const collapsed = useEditorTabs((s) => s.treeCollapsed);
@@ -85,6 +86,8 @@ export function useTreePanel(collapsedSize: number) {
     animate,
     collapsible: true,
     collapsedSize,
+    // Its handle drags it out of the rail too (X2).
+    dragOpen: true,
     ...(startCollapsed ? { defaultSize: collapsedSize } : {}),
     onResize,
     onCollapse: () => {

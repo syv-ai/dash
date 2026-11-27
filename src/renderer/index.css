@@ -627,14 +627,18 @@
    library sizes the outer [data-panel] element via flex-grow. A panel eases
    `--motion-slow` (PANEL_EASE_MS in ui/Resizable) on `ease-settle`. An
    ancestor can set both (`--panel-ease`, `--panel-curve`): the task
-   sidebar's planned motion does (EXPAND_EASE_MS, `ease-calm`). */
-[data-panel][data-animating='true'] {
+   sidebar's planned motion does (EXPAND_EASE_MS, `ease-calm`). A group
+   `[data-easing]` eases all its panels: a drag out of a rail settling
+   (`ResizablePanel dragOpen`) moves the neighbours with it. */
+[data-panel][data-animating='true'],
+[data-easing] > [data-panel] {
   transition:
     flex-grow var(--panel-ease, var(--motion-slow)) var(--panel-curve, var(--ease-settle)),
     flex-shrink var(--panel-ease, var(--motion-slow)) var(--panel-curve, var(--ease-settle));
 }
 @media (prefers-reduced-motion: reduce) {
-  [data-panel][data-animating='true'] {
+  [data-panel][data-animating='true'],
+  [data-easing] > [data-panel] {
     transition: none;
   }
 }

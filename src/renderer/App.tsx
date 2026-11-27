@@ -1508,6 +1508,7 @@ export function App() {
           maxSize="28%"
           collapsible
           collapsedSize={RAIL_PX}
+          dragOpen
           onCollapse={() => {
             setSidebarCollapsed(true);
             setTimeout(() => setSidebarAnimating(false), easeNow());
@@ -1570,7 +1571,7 @@ export function App() {
             </ErrorBoundary>
           </HeldFrame>
         </ResizablePanel>
-        <ResizableHandle disabled={sidebarCollapsed} />
+        <ResizableHandle />
 
         <ResizablePanel
           id="main"
@@ -1627,7 +1628,7 @@ export function App() {
 
         {activeTask && (
           <>
-            <ResizableHandle disabled={changesPanelCollapsed} />
+            <ResizableHandle />
             <ResizablePanel
               id="changes"
               panelRef={changesPanelRef}
@@ -1638,19 +1639,21 @@ export function App() {
               maxSize={`${INSPECTOR_MAX_PCT}%`}
               collapsible
               collapsedSize={RAIL_PX}
+              dragOpen
               onCollapse={() => {
                 expandedAtCollapseRef.current = inspectorExpandedRef.current;
                 setChangesPanelCollapsed(true);
                 setTimeout(() => setChangesAnimating(false), easeNow());
               }}
-              onExpand={() => {
+              onExpand={({ dragged }) => {
                 setChangesPanelCollapsed(false);
                 setTimeout(() => setChangesAnimating(false), easeNow());
                 // The panel comes back at the width it collapsed from, unless
                 // it went narrow or expanded meanwhile, or the layout was
-                // saved expanded (Dash quit with the editor shown).
+                // saved expanded (Dash quit with the editor shown). Dragged
+                // out of its rail, it keeps the width the drag left it.
                 const panel = changesPanelRef.current;
-                if (!panel) return;
+                if (!panel || dragged) return;
                 const width = widthOnShow({
                   expandedAtCollapse: expandedAtCollapseRef.current,
                   expanded: inspectorExpandedRef.current,
