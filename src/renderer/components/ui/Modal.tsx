@@ -135,7 +135,7 @@ export function Modal({
             header buttons) sits under the drag strip and swallows clicks. */}
         <div
           className={cn(
-            'titlebar-no-drag relative flex flex-col rounded-2xl bg-raised text-ink shadow-raised',
+            'titlebar-no-drag relative flex flex-col rounded-2xl bg-dialog text-ink shadow-raised',
             size,
             overflow === 'visible' ? 'overflow-visible' : 'overflow-hidden',
             closing ? 'animate-scale-out' : 'animate-scale-in',

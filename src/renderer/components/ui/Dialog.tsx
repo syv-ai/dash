@@ -2,8 +2,10 @@ import * as React from 'react';
 import { X } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { IconButton } from './IconButton';
+import { InfoTip } from './InfoTip';
 import { ListRow } from './ListRow';
 import { Modal, useModalClose } from './Modal';
+import type { TooltipContent } from './Tooltip';
 
 /**
  * The dialog pattern, built on `Modal` (which keeps the overlay, the Esc
@@ -16,9 +18,11 @@ import { Modal, useModalClose } from './Modal';
  *     <DialogFooter><Button variant="ghost">Cancel</Button><Button>Save</Button></DialogFooter>
  *   </Dialog>
  *
- * The card is `raised`, rounded-2xl, no border; header and footer are set
- * apart by space, not rules (`divided` adds a rule where a long body
- * scrolls under them). A dialog that applies changes live has no footer.
+ * The card is `dialog` (a step under `raised`, so menus and tooltips over it
+ * lift off), rounded-2xl, no border; header and footer are set apart by
+ * space, not rules (`divided` adds a rule where a long body scrolls under
+ * them). Explanations sit behind an ⓘ (`hint`), not in captions. A dialog
+ * that applies changes live has no footer.
  */
 
 const SIZES = {
@@ -75,17 +79,22 @@ export function DialogClose({ disabled }: { disabled?: boolean }) {
 }
 
 /**
- * The dialog's title (`type-title`), an optional line under it
- * (`type-caption`), optional icon actions, and the close button.
+ * The dialog's title (`type-title`) with an optional ⓘ (`hint`), an optional
+ * line under it that names what the dialog acts on (`description`: a path, a
+ * task), optional icon actions, and the close button.
  */
 export function DialogHeader({
   title,
+  hint,
   description,
   actions,
   closeDisabled,
   divided = false,
 }: {
   title: React.ReactNode;
+  /** What the dialog is for, behind an ⓘ beside the title. */
+  hint?: TooltipContent;
+  /** What it acts on (a path, a name); explanations go in `hint`. */
   description?: React.ReactNode;
   /** Icon buttons before the close button. */
   actions?: React.ReactNode;
@@ -102,8 +111,8 @@ export function DialogHeader({
       )}
     >
       <div className="grid min-w-0 flex-1 gap-0.5 pt-1">
-        <h2 className="type-title truncate">{title}</h2>
-        {description && <p className="type-caption">{description}</p>}
+        <TitleLine title={title} hint={hint} />
+        {description && <p className="type-caption truncate">{description}</p>}
       </div>
       <div className="flex shrink-0 items-center gap-1">
         {actions}
@@ -113,18 +122,22 @@ export function DialogHeader({
   );
 }
 
-/** The scrolling middle: 20px sides, sections 24px apart (`compact`: 16px,
- *  for a short confirm-sized body). */
-export function DialogBody({
-  compact = false,
-  className,
-  ...props
-}: React.ComponentProps<'div'> & { compact?: boolean }) {
+/** A dialog or section title with its ⓘ. */
+function TitleLine({ title, hint }: { title: React.ReactNode; hint?: TooltipContent }) {
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      <h2 className="type-title truncate">{title}</h2>
+      {hint && <InfoTip content={hint} side="bottom" />}
+    </div>
+  );
+}
+
+/** The scrolling middle: 20px sides, its blocks 20px apart. */
+export function DialogBody({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       className={cn(
-        'scrollbar-thin-hover grid min-h-0 flex-1 content-start overflow-y-auto px-5 pt-1 pb-5',
-        compact ? 'gap-4' : 'gap-6',
+        'scrollbar-thin-hover grid min-h-0 flex-1 content-start gap-5 overflow-y-auto px-5 pt-1 pb-5',
         className,
       )}
       {...props}
@@ -169,7 +182,7 @@ export interface NavDialogItem<T extends string> {
 }
 
 /**
- * A dialog with a nav column (Settings): the column is `well`, sunk one step
+ * A dialog with a nav column (Settings): the column is `dialog-well`, sunk one step
  * from the card and set apart by tone, as the main view's sidebars are; the
  * title sits at its top, then grouped `ListRow`s (the current one on the
  * select tint). The content column titles the current section and scrolls,
@@ -181,7 +194,7 @@ export function NavDialogLayout<T extends string>({
   value,
   onChange,
   heading,
-  description,
+  hint,
   navFooter,
   children,
 }: {
@@ -191,14 +204,15 @@ export function NavDialogLayout<T extends string>({
   onChange: (id: T) => void;
   /** The current section's name. */
   heading: React.ReactNode;
-  description?: React.ReactNode;
+  /** What the section holds, behind an ⓘ beside its name. */
+  hint?: TooltipContent;
   /** Pinned under the nav (a version). */
   navFooter?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex min-h-0 flex-1">
-      <nav aria-label={title} className="flex w-52 shrink-0 flex-col bg-well">
+      <nav aria-label={title} className="flex w-52 shrink-0 flex-col bg-dialog-well">
         <h2 className="type-title px-5 pt-5 pb-3">{title}</h2>
         <div className="scrollbar-thin-hover grid min-h-0 flex-1 content-start gap-4 overflow-y-auto px-2.5 pb-3">
           {groups.map((group) => (
@@ -223,9 +237,8 @@ export function NavDialogLayout<T extends string>({
       </nav>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex shrink-0 items-start gap-3 pt-4 pr-3 pb-2 pl-8">
-          <div className="grid min-w-0 flex-1 gap-0.5 pt-1">
-            <h2 className="type-title truncate">{heading}</h2>
-            {description && <p className="type-caption">{description}</p>}
+          <div className="min-w-0 flex-1 pt-1">
+            <TitleLine title={heading} hint={hint} />
           </div>
           <DialogClose />
         </header>
@@ -234,7 +247,7 @@ export function NavDialogLayout<T extends string>({
           key={value}
           className="scrollbar-thin-hover min-h-0 flex-1 overflow-y-auto px-8 pt-3 pb-8"
         >
-          <div className="grid max-w-150 animate-fade-in gap-8">{children}</div>
+          <div className="grid max-w-150 animate-fade-in gap-5">{children}</div>
         </div>
       </div>
     </div>

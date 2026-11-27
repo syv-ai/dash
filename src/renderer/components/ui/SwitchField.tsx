@@ -4,7 +4,7 @@ import { Switch } from './Switch';
 
 /**
  * A labelled on/off setting: a `SettingRow` with a `Switch` at its end. The
- * label toggles it too.
+ * label toggles it too (the ⓘ doesn't).
  */
 export function SwitchField({
   label,
@@ -17,8 +17,10 @@ export function SwitchField({
   children,
 }: {
   label: string;
+  /** What it does, behind an ⓘ beside the label. */
   hint?: React.ReactNode;
-  /** A second line under the hint (e.g. "Applies the next time…"). */
+  /** A short line kept in view under the label: a consequence ("Changing it
+   *  restarts the session"). */
   helperText?: React.ReactNode;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
@@ -36,14 +38,8 @@ export function SwitchField({
       label={label}
       htmlFor={id}
       disabled={disabled}
-      hint={
-        hint || helperText ? (
-          <>
-            {hint}
-            {helperText && <span className="mt-0.5 block">{helperText}</span>}
-          </>
-        ) : undefined
-      }
+      hint={hint}
+      note={helperText}
       control={
         <Switch
           id={id}

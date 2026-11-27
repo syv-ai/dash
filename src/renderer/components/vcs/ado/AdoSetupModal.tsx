@@ -50,7 +50,7 @@ function AdoSetupBody({ projectId, organizationUrl, project, onClose }: AdoSetup
         title="Connect Azure DevOps"
         description="This project's remote is on Azure DevOps. Add a personal access token to link work items to tasks."
       />
-      <DialogBody compact>
+      <DialogBody>
         <AdoFormFields state={conn} autoFocusPat />
         <AdoTestResult result={conn.testResult} />
       </DialogBody>

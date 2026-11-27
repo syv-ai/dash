@@ -161,7 +161,7 @@ export function SettingsModal({
         value={tab}
         onChange={setTab}
         heading={SECTIONS[tab].label}
-        description={SECTIONS[tab].description}
+        hint={SECTIONS[tab].description}
         navFooter={appVersion ? `Dash ${appVersion}` : null}
       >
         {tab === 'appearance' && <AppearanceTab />}
@@ -215,7 +215,7 @@ function AppearanceTab() {
         />
       </FormSection>
 
-      <FormSection title="Terminal" divided>
+      <FormSection title="Terminal">
         <SettingRow label="Palette" hint="The task terminal's colours.">
           <div role="radiogroup" aria-label="Terminal palette" className="grid grid-cols-3 gap-1">
             {TERMINAL_THEMES.map((t) => (
@@ -287,7 +287,7 @@ function NotificationsTab() {
   };
 
   return (
-    <FormSection title="When a task finishes" divided>
+    <FormSection title="When a task finishes">
       <SwitchField
         label="Desktop notification"
         hint="Names the task. Only while Dash isn't focused."
@@ -325,7 +325,7 @@ function IdeTab({ availableIDEs }: { availableIDEs: Array<{ id: string; label: s
   }
 
   return (
-    <FormSection divided>
+    <FormSection>
       <SettingRow
         label="Open tasks in"
         hint={
@@ -409,7 +409,7 @@ function AttributionTab({ activeProjectPath }: { activeProjectPath?: string }) {
   }, [activeProjectPath]);
 
   return (
-    <FormSection divided>
+    <FormSection>
       <SettingRow
         label="Commit trailer"
         hint={
@@ -461,7 +461,7 @@ function UpdatesTab({ appVersion }: { appVersion: string }) {
 
   return (
     <>
-      <FormSection divided>
+      <FormSection>
         <SettingRow
           label={updateHeadline(status)}
           hint={
@@ -509,7 +509,7 @@ function UpdatesTab({ appVersion }: { appVersion: string }) {
         </SettingRow>
       </FormSection>
 
-      <FormSection title="Behaviour" divided>
+      <FormSection title="Behaviour">
         <SwitchField
           label="Update automatically"
           hint="Downloads in the background and installs when you quit."
@@ -541,7 +541,7 @@ function PrivacyTab() {
   }, []);
 
   return (
-    <FormSection divided>
+    <FormSection>
       <SwitchField
         label="Send anonymous usage data"
         hint="Helps us see how Dash is used, so we can improve it."

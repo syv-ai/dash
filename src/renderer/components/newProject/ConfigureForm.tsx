@@ -30,7 +30,7 @@ export function ConfigureForm({ value, onChange, showName = true }: ConfigureFor
         </Field>
       )}
 
-      <FormSection title="New tasks" description="Prefilled into each new task; change them there.">
+      <FormSection title="New tasks" hint="Prefilled into each new task; change them there.">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Base branch">
             <Input

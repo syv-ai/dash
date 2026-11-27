@@ -7,6 +7,17 @@ import { focusRing, menuItem, menuSurface, radixMenuItemStates } from './styles'
 export interface SelectOption<T extends string> {
   value: T;
   label: string;
+  /** Sets the label in this font, to preview it (a terminal font picker). */
+  fontFamily?: string;
+}
+
+/** An option's label, in its own font when it previews one. */
+function OptionLabel<T extends string>({ option }: { option: SelectOption<T> }) {
+  return option.fontFamily ? (
+    <span style={{ fontFamily: option.fontFamily }}>{option.label}</span>
+  ) : (
+    <>{option.label}</>
+  );
 }
 
 interface SelectProps<T extends string> {
@@ -36,7 +47,7 @@ export function Select<T extends string>({
   'aria-label': ariaLabel,
 }: SelectProps<T>) {
   const selected = options.find((o) => o.value === value);
-  const render = renderOption ?? ((o: SelectOption<T>) => o.label);
+  const render = renderOption ?? ((o: SelectOption<T>) => <OptionLabel option={o} />);
 
   return (
     <DropdownMenuPrimitive.Root>

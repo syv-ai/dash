@@ -36,18 +36,40 @@ export function SwatchOption({
         focusRing,
       )}
     >
-      <span
-        className="flex h-7 items-center gap-1 rounded-md px-2 ring-1 ring-line ring-inset"
-        style={{ background }}
-      >
-        {colors.map((c, i) => (
-          <span key={i} className="size-1.5 rounded-full" style={{ background: c }} />
-        ))}
-      </span>
+      <SwatchStrip background={background} colors={colors} />
       <span className="flex items-center gap-1.5 px-0.5">
         <span className="type-body min-w-0 flex-1 truncate">{label}</span>
         {meta && <span className="type-caption shrink-0">{meta}</span>}
       </span>
     </button>
+  );
+}
+
+/**
+ * A palette's preview on its own: its background with a dot per accent
+ * colour. `sm` fits in a select's row beside the palette's name.
+ */
+export function SwatchStrip({
+  background,
+  colors,
+  size = 'md',
+}: {
+  background: string;
+  colors: string[];
+  size?: 'sm' | 'md';
+}) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'flex shrink-0 items-center rounded-md ring-1 ring-line ring-inset',
+        size === 'sm' ? 'h-4 gap-0.5 rounded-sm px-1' : 'h-7 gap-1 px-2',
+      )}
+      style={{ background }}
+    >
+      {colors.map((c, i) => (
+        <span key={i} className="size-1.5 rounded-full" style={{ background: c }} />
+      ))}
+    </span>
   );
 }

@@ -70,7 +70,7 @@ function RemoteControlBody({ ptyId, state }: RemoteControlBodyProps) {
         title="Remote control"
         description="Continue this session from your phone or another browser."
       />
-      <DialogBody compact className="justify-items-center text-center">
+      <DialogBody className="justify-items-center text-center">
         {enabling && !state?.url ? (
           <>
             <QrSlot>

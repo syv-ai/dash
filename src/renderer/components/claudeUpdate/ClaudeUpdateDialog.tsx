@@ -67,7 +67,7 @@ export function ClaudeUpdateDialog({
         title={`Restart on Claude Code ${state.installedVersion}`}
         description="Sessions restart on the new version. Conversations resume."
       />
-      <DialogBody compact>
+      <DialogBody>
         {restarting ? (
           indicator && (
             <p className="type-body">

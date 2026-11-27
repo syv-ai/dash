@@ -36,7 +36,7 @@ export function ClaudeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) 
         <CliStatus info={claudeInfo} />
       </FormSection>
 
-      <FormSection title="Sessions" divided>
+      <FormSection title="Sessions">
         <SettingRow
           label="Effort"
           hint="How much Claude reasons. Auto lets the model decide; X-High and Max need a newer model (Opus 4.8 and up), others use their highest level."
@@ -196,7 +196,7 @@ function EnvVarsSection() {
   return (
     <FormSection
       title="Environment variables"
-      description="Passed to Claude on new tasks."
+      hint="Passed to Claude on new tasks."
       action={<TextLink href="https://code.claude.com/docs/en/env-vars">Reference</TextLink>}
     >
       <div className="grid gap-1.5">

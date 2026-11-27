@@ -31,7 +31,7 @@ export function UsageTab({ latestRateLimits }: { latestRateLimits?: RateLimits }
     <>
       <FormSection
         title="Tokens"
-        description={`Across ${globalTokenStats.taskCount} ${
+        hint={`Across ${globalTokenStats.taskCount} ${
           globalTokenStats.taskCount === 1 ? 'task' : 'tasks'
         }; cost is worked out from the token counts.`}
       >
@@ -69,7 +69,7 @@ export function UsageTab({ latestRateLimits }: { latestRateLimits?: RateLimits }
         )}
       </FormSection>
 
-      <FormSection title="Display" divided>
+      <FormSection title="Display">
         <SwitchField
           label="Show rate limits"
           hint="The 5-hour and weekly limits in the task sidebar's usage row."
@@ -112,8 +112,7 @@ export function UsageTab({ latestRateLimits }: { latestRateLimits?: RateLimits }
 
       <FormSection
         title="Alerts"
-        description="Notify when usage passes a percentage. Leave blank for no alert."
-        divided
+        hint="Notify when usage passes a percentage. Leave blank for no alert."
       >
         <ThresholdRow
           label="Context window"

@@ -1,64 +1,74 @@
 import * as React from 'react';
 import { cn } from '../../lib/cn';
+import { InfoTip } from './InfoTip';
+import type { TooltipContent } from './Tooltip';
 
 /**
  * Form rows for dialogs (see `Dialog`). `FormSection` titles a group;
- * `Field` is a labelled input (label above, hint below); `SettingRow` is a
- * setting (text on the left, its control at the end of the line, or under
- * the text at full width when `stacked`).
+ * `SettingRow` is a setting, strictly one row (its name on the left, its
+ * control at the end); `Field` is a labelled input (label above). What a
+ * row does goes behind an ⓘ (`hint`); only a short, essential line (a
+ * consequence, an error) stays in the open (`note`).
  */
 
 /**
- * A titled group of rows: `type-heading`, an optional `type-caption` line,
- * an optional action at the end. `divided` splits settings rows with
- * hairlines; fields otherwise stack 12px apart. No card, no fill.
+ * A titled group of rows: `type-heading` (with its ⓘ), an optional action at
+ * the end, then the rows. No card, no fill, no rules: rows are set apart by
+ * their height.
  */
 export function FormSection({
   title,
-  description,
+  hint,
   action,
-  divided = false,
   className,
   children,
 }: {
   title?: React.ReactNode;
-  description?: React.ReactNode;
+  /** What the section is for, behind an ⓘ beside the title. */
+  hint?: TooltipContent;
   action?: React.ReactNode;
-  divided?: boolean;
   className?: string;
   children: React.ReactNode;
 }) {
   return (
     <section className={cn('grid content-start', className)}>
       {(title || action) && (
-        <header className="flex min-h-6 items-end gap-3 pb-1">
-          <div className="grid min-w-0 flex-1 gap-0.5">
-            {title && <h3 className="type-heading">{title}</h3>}
-            {description && <p className="type-caption">{description}</p>}
+        <header className="flex min-h-6 items-center gap-3 pb-1">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            {title && <h3 className="type-heading truncate">{title}</h3>}
+            {hint && <InfoTip content={hint} />}
           </div>
           {action && <div className="flex shrink-0 items-center gap-1">{action}</div>}
         </header>
       )}
-      <div className={divided ? 'grid divide-y divide-line' : 'grid gap-3 pt-2'}>{children}</div>
+      <div className="grid gap-1">{children}</div>
     </section>
   );
 }
 
+/** A visible line under a row: kept short, for what mustn't hide in a tooltip. */
+function Note({ children }: { children: React.ReactNode }) {
+  return <div className="type-caption">{children}</div>;
+}
+
 /**
- * A labelled input: `type-label` above, the control, a `type-caption` hint
- * below. A `label` element wraps it, so clicking the label focuses the
- * control; pass `as="div"` when the row holds more than one control.
+ * A labelled input: `type-label` above (with its ⓘ), the control, and a
+ * visible `note` under it only when it must be seen (a validation error).
+ * A `label` element wraps it, so clicking the label focuses the control;
+ * pass `as="div"` when the row holds more than one control.
  */
 export function Field({
   label,
   hint,
+  note,
   trailing,
   as = 'label',
   className,
   children,
 }: {
   label: React.ReactNode;
-  hint?: React.ReactNode;
+  hint?: TooltipContent;
+  note?: React.ReactNode;
   /** At the label's end, quiet ("optional", "Drafted by the agent"). */
   trailing?: React.ReactNode;
   as?: 'label' | 'div';
@@ -67,52 +77,64 @@ export function Field({
 }) {
   const Comp = as;
   return (
-    <Comp className={cn('grid min-w-0 content-start gap-1.5', className)}>
-      <span className="flex min-h-4 items-center gap-2">
-        <span className="type-label min-w-0 flex-1 truncate">{label}</span>
-        {trailing && <span className="type-caption shrink-0">{trailing}</span>}
+    <Comp className={cn('grid min-w-0 content-start gap-1.5 py-1', className)}>
+      <span className="flex min-h-4 items-center gap-1.5">
+        <span className="type-label min-w-0 truncate">{label}</span>
+        {hint && <InfoTip content={hint} />}
+        {trailing && <span className="type-caption ml-auto shrink-0 pl-2">{trailing}</span>}
       </span>
       {children}
-      {hint && <span className="type-caption">{hint}</span>}
+      {note && <Note>{note}</Note>}
     </Comp>
   );
 }
 
 /**
- * A setting: its name (`type-body`) and what it does (`type-caption`) on the
- * left, the `control` at the end of the first line. `children` go under the
- * text at full width (a segmented control, a list, a revealed detail).
+ * A setting, strictly one row: its name (`type-body`) and ⓘ on the left, the
+ * `control` at the end. `note` is a short line under it that must stay
+ * visible (a consequence); `children` go under the row at full width, for
+ * what the setting reveals (a path to copy, a download's progress).
  * `htmlFor` binds the name to the control.
  */
 export function SettingRow({
   label,
   hint,
+  note,
   control,
   htmlFor,
   disabled,
   children,
 }: {
   label: React.ReactNode;
-  hint?: React.ReactNode;
+  hint?: TooltipContent;
+  note?: React.ReactNode;
   control?: React.ReactNode;
   htmlFor?: string;
-  /** Dims the text with the control. */
+  /** Dims the name with the control. */
   disabled?: boolean;
   children?: React.ReactNode;
 }) {
   const Label = htmlFor ? 'label' : 'span';
   return (
-    <div className="grid gap-2.5 py-3">
-      {/* One line of text centres on the control; with a hint, the name
-          lines up with the control's top. */}
-      <div className={cn('flex gap-6', hint ? 'items-start' : 'items-center')}>
-        <div className={cn('grid min-w-0 flex-1 gap-0.5', disabled && 'opacity-50')}>
-          <Label htmlFor={htmlFor} className={cn('type-body', htmlFor && 'cursor-pointer')}>
-            {label}
-          </Label>
-          {hint && <div className="type-caption">{hint}</div>}
+    <div className="grid gap-2 py-1">
+      <div className="flex min-h-7.5 items-center gap-6">
+        <div className="grid min-w-0 flex-1 gap-0.5">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Label
+              htmlFor={htmlFor}
+              className={cn(
+                'type-body min-w-0 truncate',
+                htmlFor && 'cursor-pointer',
+                disabled && 'opacity-50',
+              )}
+            >
+              {label}
+            </Label>
+            {hint && <InfoTip content={hint} />}
+          </div>
+          {note && <Note>{note}</Note>}
         </div>
-        {control && <div className="flex min-h-4.5 shrink-0 items-center">{control}</div>}
+        {control && <div className="flex shrink-0 items-center">{control}</div>}
       </div>
       {children}
     </div>

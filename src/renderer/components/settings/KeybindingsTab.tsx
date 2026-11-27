@@ -62,7 +62,7 @@ export function KeybindingsTab() {
       </div>
 
       {groupByCategory(keybindings).map((group) => (
-        <FormSection key={group.category} title={group.category} divided>
+        <FormSection key={group.category} title={group.category}>
           {group.items.map((binding) => {
             const modified = isModified(binding);
             return (
@@ -93,7 +93,7 @@ export function KeybindingsTab() {
         </FormSection>
       ))}
 
-      <FormSection title="Active tasks" description="Fixed; not rebindable." divided>
+      <FormSection title="Active tasks" hint="Fixed; not rebindable.">
         {FIXED.map(({ label, keys }) => (
           <SettingRow key={label} label={label} control={<Keys keys={keys} />} />
         ))}
