@@ -12,6 +12,7 @@ import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
 import { Notice } from '../ui/Notice';
 import { Segmented } from '../ui/Segmented';
+import { ViewPanelBody } from '../ui/ViewTabs';
 import { finishOffered, unsentNoteCount } from './finishReview';
 import { FinishReviewSheet } from './FinishReviewSheet';
 import { ThreadsTab } from './ThreadsTab';
@@ -132,7 +133,8 @@ function Review({
             {notice}
           </Notice>
         )}
-        <div className="min-h-0 flex-1">
+        {/* The header stays put on a switch; only the view below it moves. */}
+        <ViewPanelBody className="min-h-0 flex-1">
           {tab === 'overview' ? (
             <ReviewOverview review={review} remote={remote} />
           ) : tab === 'files' ? (
@@ -189,7 +191,7 @@ function Review({
           ) : (
             history
           )}
-        </div>
+        </ViewPanelBody>
       </div>
       {/* The one way to Finish review…, on every view, in reach however far
           the column scrolls. */}

@@ -214,13 +214,18 @@ export function ViewTabs<T extends string>({
   );
 }
 
+/** A `ViewPanel`'s moving part, when a descendant names one (`ViewPanelBody`). */
+const PanelBody = React.createContext<((el: HTMLElement | null) => void) | null>(null);
+
 /**
  * The view a `ViewTabs` shows: when `value` changes to another of `order`
  * (the tabs' values, in their order), it slides in a short way from the side
- * of travel and fades in (`useSlideIn`); its content stays mounted. A host
- * whose views sit in a clipping box (a sheet) clips the slide. A sideways
- * scroll over it steps to the next or previous view, as over the tabs
- * (`useWheelTabSwitch`: content that can scroll that way keeps the gesture).
+ * of travel and fades in (`useSlideIn`); its content stays mounted. A view
+ * whose top is the same on every tab (review mode's PR header) wraps the
+ * rest in a `ViewPanelBody`, and only that moves. A host whose views sit in
+ * a clipping box (a sheet) clips the slide. A sideways scroll over it steps
+ * to the next or previous view, as over the tabs (`useWheelTabSwitch`:
+ * content that can scroll that way keeps the gesture).
  */
 export function ViewPanel<T extends string>({
   value,
@@ -237,13 +242,45 @@ export function ViewPanel<T extends string>({
   children: React.ReactNode;
 }) {
   const ref = React.useRef<HTMLDivElement>(null);
-  useSlideIn(ref, value, order);
+  const body = React.useRef<HTMLElement | null>(null);
+  // What slides: the named body while one is mounted, else the whole panel.
+  const moving = React.useMemo<React.RefObject<HTMLElement | null>>(
+    () => ({
+      get current() {
+        return body.current ?? ref.current;
+      },
+    }),
+    [],
+  );
+  const setBody = React.useCallback((el: HTMLElement | null) => {
+    body.current = el;
+  }, []);
+  useSlideIn(moving, value, order);
   useWheelTabSwitch(ref, (step) => {
     const next = stepTab(order, value, step);
     if (next !== undefined) onChange(next);
   });
   return (
-    <div ref={ref} className={className}>
+    <PanelBody.Provider value={setBody}>
+      <div ref={ref} className={className}>
+        {children}
+      </div>
+    </PanelBody.Provider>
+  );
+}
+
+/** The part of a `ViewPanel`'s view that moves on a switch; what sits above
+ *  it stays still. Outside a `ViewPanel` it is a plain box. */
+export function ViewPanelBody({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const setBody = React.useContext(PanelBody);
+  return (
+    <div ref={setBody ?? undefined} className={className}>
       {children}
     </div>
   );
