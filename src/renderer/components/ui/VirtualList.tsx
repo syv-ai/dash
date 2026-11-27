@@ -1,6 +1,7 @@
 import * as React from 'react';
 import {
   measureElement,
+  observeElementOffset,
   useVirtualizer,
   type VirtualItem,
   type Virtualizer,
@@ -48,6 +49,29 @@ export function measureShown<T extends Element>(
     instance.itemSizeCache.get(instance.options.getItemKey(index)) ??
     instance.options.estimateSize(index)
   );
+}
+
+/**
+ * The virtualizer's scroll-offset observer, which hears only `scroll` events,
+ * plus a re-read of the offset whenever the scroller resizes. A scroller that
+ * collapses, hides or expands with its panel can move its `scrollTop` (clamped
+ * to a shorter content, restored on show) without a `scroll` event, and a
+ * stale offset draws the rows of another scroll position: a blank band at the
+ * top while `scrollTop` is 0. Hardening, for a race seen once (5a).
+ */
+function observeOffsetAndSize(
+  instance: Virtualizer<HTMLDivElement, Element>,
+  cb: (offset: number, isScrolling: boolean) => void,
+): (() => void) | undefined {
+  const stop = observeElementOffset(instance, cb);
+  const el = instance.scrollElement;
+  if (!el) return stop;
+  const resized = new ResizeObserver(() => cb(el.scrollTop, false));
+  resized.observe(el);
+  return () => {
+    stop?.();
+    resized.disconnect();
+  };
 }
 
 /** Each item's wrapper: placed by the virtualizer through `transform`. */
@@ -305,6 +329,7 @@ export function VirtualList({
     overscan: 12,
     gap,
     measureElement: measureShown,
+    observeElementOffset: observeOffsetAndSize,
   });
   React.useImperativeHandle(
     handleRef,
