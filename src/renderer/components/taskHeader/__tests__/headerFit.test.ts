@@ -9,8 +9,8 @@ import {
   labelShows,
 } from '../headerFit';
 
-// tokens, model, setup, linked, branch, pr
-const widths = [40, 90, 70, 36, 120, 28];
+// tokens, model, linked, branch, pr (the branch with its chevron)
+const widths = [40, 90, 36, 136, 28];
 const need = (from: number, name = NAME_MIN_PX) =>
   name + widths.slice(from).reduce((sum, w) => sum + (w > 0 ? w + gap : 0), 0) + comfort;
 
@@ -26,9 +26,9 @@ describe('hiddenLabelCount', () => {
   it('then one at a time in order, the pull request last', () => {
     expect(hiddenLabelCount(need(1) - 1, 300, widths)).toBe(2);
     expect(hiddenLabelCount(need(2) - 1, 300, widths)).toBe(3);
-    expect(hiddenLabelCount(need(4), 300, widths)).toBe(4);
+    expect(hiddenLabelCount(need(3), 300, widths)).toBe(3);
+    expect(hiddenLabelCount(need(3) - 1, 300, widths)).toBe(4);
     expect(hiddenLabelCount(need(4) - 1, 300, widths)).toBe(5);
-    expect(hiddenLabelCount(need(5) - 1, 300, widths)).toBe(6);
   });
 
   it('reserves only the name it has when it is shorter than the minimum', () => {
@@ -36,10 +36,10 @@ describe('hiddenLabelCount', () => {
   });
 
   it('charges no gap for a label that is not there', () => {
-    const absent = [40, 90, 0, 0, 120, 28];
-    const room = NAME_MIN_PX + 40 + 90 + 120 + 28 + 4 * gap + comfort;
+    const absent = [40, 90, 0, 136, 28];
+    const room = NAME_MIN_PX + 40 + 90 + 136 + 28 + 4 * gap + comfort;
     expect(hiddenLabelCount(room, 300, absent)).toBe(0);
-    expect(hiddenLabelCount(room, 300, [40, 90, 1, 0, 120, 28])).toBe(1);
+    expect(hiddenLabelCount(room, 300, [40, 90, 1, 136, 28])).toBe(1);
   });
 });
 
@@ -52,10 +52,12 @@ describe('fitTaskHeader', () => {
 
 describe('labelShows', () => {
   it('drops labels in the given order', () => {
-    expect(HEADER_LABELS).toEqual(['tokens', 'model', 'setup', 'linked', 'branch', 'pr']);
+    expect(HEADER_LABELS).toEqual(['tokens', 'model', 'linked', 'branch', 'pr']);
     expect(labelShows('tokens', 1)).toBe(false);
     expect(labelShows('model', 1)).toBe(true);
-    expect(labelShows('pr', 5)).toBe(true);
-    expect(labelShows('pr', 6)).toBe(false);
+    expect(labelShows('branch', 3)).toBe(true);
+    expect(labelShows('branch', 4)).toBe(false);
+    expect(labelShows('pr', 4)).toBe(true);
+    expect(labelShows('pr', 5)).toBe(false);
   });
 });

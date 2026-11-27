@@ -1,12 +1,4 @@
-import {
-  FolderGit2,
-  GitBranch,
-  GitGraph,
-  Globe,
-  MoreHorizontal,
-  PanelLeft,
-  PanelRight,
-} from 'lucide-react';
+import { ChevronRight, GitGraph, Globe, MoreHorizontal, PanelLeft, PanelRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Project, Task } from '../../../shared/types';
 import { branchUrl } from '../../../shared/urls';
@@ -29,7 +21,6 @@ import {
   DropdownMenuTrigger,
 } from '../ui/DropdownMenu';
 import { TaskMenuItems, onTaskMenuCloseAutoFocus } from '../task/TaskMenuItems';
-import { SetupStatus } from '../task/SetupStatus';
 import { useFittedDensity } from '../ui/useFittedDensity';
 import { cn } from '../../lib/cn';
 import { LinkedItemBadges } from './LinkedItemBadges';
@@ -53,8 +44,8 @@ interface TaskHeaderProps {
 }
 
 /**
- * The task sheet's title row: name, branch, setup status and linked issues
- * on the left; the model, token badge and pull request, then open in IDE,
+ * The task sheet's title row: the name, a chevron and the branch, and linked
+ * issues on the left; the model, token badge and pull request, then open in IDE,
  * "…" (remote control, commit graph, the task's actions) and the
  * right-sidebar toggle on the right. The labels fit by measurement
  * (`headerFit`). Ahead/behind live in Files' sync row.
@@ -94,43 +85,37 @@ export function TaskHeader({
     branch && project.gitRemote && gitStatus?.hasUpstream
       ? branchUrl(project.gitRemote, branch)
       : null;
-  const BranchIcon = task.useWorktree ? FolderGit2 : GitBranch;
-
-  const branchText = (
-    <>
-      <BranchIcon size={14} strokeWidth={1.8} className="shrink-0 text-icon" />
-      {/* Capped so a long branch doesn't crowd the row; the tooltip names it. */}
-      <span className="max-w-64 truncate">{branch}</span>
-    </>
-  );
-
   // Each label once, rendered in the row and as its invisible measuring copy.
   const labels: Record<HeaderLabel, ReactNode> = {
+    // The chevron rides with the branch, so it gives way with it.
     branch: branch && (
-      <Tooltip
-        content={
-          branchHref
-            ? `${branch} · open the branch on the remote`
-            : gitStatus?.hasUpstream === false
-              ? `${branch} (no upstream)`
-              : branch
-        }
-      >
-        {branchHref ? (
-          <a
-            href={branchHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 transition-colors hover:text-ink"
-          >
-            {branchText}
-          </a>
-        ) : (
-          <span className="inline-flex items-center gap-1.5">{branchText}</span>
-        )}
-      </Tooltip>
+      <span className="inline-flex items-center gap-1.5">
+        <ChevronRight size={12} strokeWidth={1.8} className="-ml-1 shrink-0 text-icon" />
+        <Tooltip
+          content={
+            branchHref
+              ? `${branch} · open the branch on the remote`
+              : gitStatus?.hasUpstream === false
+                ? `${branch} (no upstream)`
+                : branch
+          }
+        >
+          {/* Capped so a long branch doesn't crowd the row; the tooltip names it. */}
+          {branchHref ? (
+            <a
+              href={branchHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="max-w-64 truncate transition-colors hover:text-ink"
+            >
+              {branch}
+            </a>
+          ) : (
+            <span className="max-w-64 truncate">{branch}</span>
+          )}
+        </Tooltip>
+      </span>
     ),
-    setup: task.useWorktree && <SetupStatus worktreePath={task.path} variant="pill" />,
     linked: task.linkedItems && task.linkedItems.length > 0 && (
       <LinkedItemBadges items={task.linkedItems} gitRemote={project.gitRemote ?? null} />
     ),
@@ -149,7 +134,7 @@ export function TaskHeader({
     ),
     pr: <PrBadge prs={prs} allPrs={allPrs} taskId={task.id} variant="button" />,
   };
-  // A label that renders nothing (no setup run, no tokens, no PR) measures 0
+  // A label that renders nothing (no tokens, no PR) measures 0
   // and takes no slot, so it leaves no stray gap. Unmeasured, all show.
   const label = (name: HeaderLabel) =>
     labelShows(name, hidden) &&
@@ -183,7 +168,6 @@ export function TaskHeader({
       >
         <h1 className={nameClass}>{task.name}</h1>
         {label('branch')}
-        {label('setup')}
         {label('linked')}
         <div className="flex-1" />
         {label('model')}

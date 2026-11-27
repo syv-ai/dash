@@ -3,7 +3,7 @@
  * the token count first, the pull request last. `linked` (the task's issue
  * badges) isn't in the user's list; it goes just before the branch.
  */
-export const HEADER_LABELS = ['tokens', 'model', 'setup', 'linked', 'branch', 'pr'] as const;
+export const HEADER_LABELS = ['tokens', 'model', 'linked', 'branch', 'pr'] as const;
 export type HeaderLabel = (typeof HEADER_LABELS)[number];
 
 /** The flex gap between the header's items (`gap-2.5`). */
