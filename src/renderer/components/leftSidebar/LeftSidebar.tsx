@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Search, Settings } from 'lucide-react';
 import type { ContextUsage, Project, Task } from '../../../shared/types';
 import { ClaudeUpdateButton } from '../claudeUpdate/ClaudeUpdateButton';
+import { SystemHealthButton } from '../systemHealth/SystemHealthButton';
 import { IconButton } from '../ui/IconButton';
 import { ViewPanel, ViewTabs } from '../ui/ViewTabs';
 import { ProjectsSection } from './ProjectsSection';
@@ -60,7 +61,9 @@ const isMac = window.electronAPI.getPlatform() === 'darwin';
  * The app sidebar: Projects | Tasks view tabs (`ViewTabs`' pills; counting
  * projects and live sessions) with, in the Projects view, create a project
  * (a task is made under its project) and find at the row's end, over the
- * project tree or the state-ordered task list, and settings (with the Claude Code update icon) at the foot.
+ * project tree or the state-ordered task list, and settings at the foot, with
+ * the health icon (Settings → System health) and the Claude Code update icon
+ * beside it (above it on the rail).
  * Collapsed, it is a rail of the tasks with a live session (`SessionRail`).
  */
 export function LeftSidebar(props: LeftSidebarProps) {
@@ -95,6 +98,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
           onSelectTask={props.onSelectTask}
         />
         <ClaudeUpdateButton />
+        <SystemHealthButton rail onSelectTask={props.onSelectTask} />
         {settingsButton}
       </div>
     );
@@ -202,6 +206,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
       <UpdateBanner />
       <div className="flex shrink-0 items-center gap-0.5 px-2 pt-1 pb-3">
         {settingsButton}
+        <SystemHealthButton onSelectTask={props.onSelectTask} />
         <ClaudeUpdateButton />
       </div>
     </div>

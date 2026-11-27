@@ -2,23 +2,15 @@ import { useEffect } from 'react';
 import { MemoryStick } from 'lucide-react';
 import type { MemoryAlert } from '@shared/systemHealth';
 import { toast } from '../components/ui/toast';
-import { idleTaskIds, memoryWarningCopy } from '../lib/memoryWarning';
+import { memoryWarningCopy } from '../lib/memoryWarning';
 import { track } from '../lib/telemetry';
-import { useProjects } from '../stores/projectsStore';
-import { useRuntime } from '../stores/runtimeStore';
 import { useSettings } from '../stores/settingsStore';
+import { idleTasksNow, sleepIdleTasks, useSystemHealthStore } from '../stores/systemHealthStore';
 
 const TOAST_KEY = 'memory-warning';
 
-function idleNow(): string[] {
-  return idleTaskIds(useRuntime.getState().taskActivity, useProjects.getState().activeTaskId);
-}
-
-/** Put every idle task to sleep, through the task's own "Put to sleep". */
-function sleepIdleTasks(): void {
-  const ids = idleNow();
-  for (const id of ids) void useProjects.getState().closeTask(id);
-  track('memory_warning_acted', { task_count: ids.length });
+function actOnWarning(): void {
+  track('memory_warning_acted', { task_count: sleepIdleTasks() });
 }
 
 /** The newest alert waiting for Dash to get focus (main raised a desktop
@@ -45,13 +37,13 @@ function onAlert(alert: MemoryAlert): void {
 }
 
 function showWarning(alert: MemoryAlert): void {
-  const copy = memoryWarningCopy(alert, idleNow().length);
+  const copy = memoryWarningCopy(alert, idleTasksNow().length);
   if (copy.action) {
     toast.offer(copy.title, {
       key: TOAST_KEY,
       icon: MemoryStick,
       description: copy.description,
-      action: { label: copy.action, onClick: sleepIdleTasks },
+      action: { label: copy.action, onClick: actOnWarning },
     });
   } else {
     toast.warning(copy.title, { key: TOAST_KEY, description: copy.description, lasting: true });
@@ -59,18 +51,26 @@ function showWarning(alert: MemoryAlert): void {
 }
 
 /**
- * The memory warning (Settings → Notifications): pushes the setting to main's
- * SystemHealthService and turns its alerts into a toast that offers to put the
- * idle tasks to sleep. While Dash is in the background main raises a desktop
- * notification instead, and the toast waits for focus.
+ * Settings → System health: pushes the settings to main's SystemHealthService,
+ * turns its alerts into a toast that offers to put the idle tasks to sleep
+ * (while Dash is in the background main raises a desktop notification
+ * instead, and the toast waits for focus), and keeps its snapshots for the
+ * sidebar's health icon (`useSystemHealthStore`).
  */
-export function useMemoryWarning(): void {
-  const enabled = useSettings((s) => s.memoryWarning);
+export function useSystemHealth(): void {
+  const alerts = useSettings((s) => s.memoryWarning);
+  const indicator = useSettings((s) => s.systemHealthIcon);
   const thresholdGb = useSettings((s) => s.memoryWarningGb);
 
   useEffect(() => {
-    window.electronAPI.systemHealthConfigure({ alerts: enabled, indicator: false, thresholdGb });
-  }, [enabled, thresholdGb]);
+    window.electronAPI.systemHealthConfigure({ alerts, indicator, thresholdGb });
+    // An icon turned off forgets its reading; turned back on, it waits for a fresh one.
+    if (!indicator) useSystemHealthStore.getState().setSnapshot(null);
+  }, [alerts, indicator, thresholdGb]);
 
   useEffect(() => window.electronAPI.onMemoryAlert(onAlert), []);
+  useEffect(
+    () => window.electronAPI.onSystemHealthSnapshot(useSystemHealthStore.getState().setSnapshot),
+    [],
+  );
 }

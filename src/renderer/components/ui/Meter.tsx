@@ -2,7 +2,8 @@ import * as React from 'react';
 import { cva } from 'class-variance-authority';
 import { cn } from '../../lib/cn';
 
-export type MeterTone = 'neutral' | 'needs' | 'fail' | 'work' | 'done';
+/** A state, or `warn`: caution, a level past its limit (not agent state). */
+export type MeterTone = 'neutral' | 'warn' | 'needs' | 'fail' | 'work' | 'done';
 
 /** 0–100, clamped; NaN reads as 0. */
 export function clampPercent(value: number): number {
@@ -13,6 +14,7 @@ const fillVariants = cva('h-full rounded-full transition-[width] duration-slow e
   variants: {
     tone: {
       neutral: 'bg-ink-3',
+      warn: 'bg-warn',
       needs: 'bg-state-needs',
       fail: 'bg-state-fail',
       work: 'bg-state-work',
@@ -25,6 +27,7 @@ const fillVariants = cva('h-full rounded-full transition-[width] duration-slow e
 /** A tone's text colour, for the percent in the label row. */
 const meterToneText: Record<MeterTone, string> = {
   neutral: 'text-ink',
+  warn: 'text-warn',
   needs: 'text-state-needs',
   fail: 'text-state-fail',
   work: 'text-state-work',
@@ -34,7 +37,7 @@ const meterToneText: Record<MeterTone, string> = {
 interface MeterProps {
   /** 0–100; values outside are clamped. */
   value: number;
-  /** Fill colour: ink-3, or a state. */
+  /** Fill colour: ink-3, warn, or a state. */
   tone?: MeterTone;
   /** Any CSS colour for the fill and the percent, over `tone`: a usage
    *  meter passes `usageColor(value)`, the limits' ramp (T30). */

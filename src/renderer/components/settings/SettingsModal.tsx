@@ -9,6 +9,7 @@ import {
   Download,
   FolderOpen,
   GitCommit,
+  HeartPulse,
   Info,
   Keyboard,
   Moon,
@@ -71,6 +72,7 @@ type SettingsTab =
   | 'claude-code'
   | 'keybindings'
   | 'usage'
+  | 'system-health'
   | 'updates'
   | 'telemetry'
   | 'about';
@@ -88,6 +90,7 @@ const SECTIONS: Record<SettingsTab, { label: string; icon: React.ReactNode }> = 
   'claude-code': { label: 'Claude', icon: icon(Sparkles) },
   keybindings: { label: 'Keybindings', icon: icon(Keyboard) },
   usage: { label: 'Usage', icon: icon(Activity) },
+  'system-health': { label: 'System health', icon: icon(HeartPulse) },
   updates: { label: 'Updates', icon: icon(Download) },
   telemetry: { label: 'Telemetry', icon: icon(ChartLine) },
   about: { label: 'About', icon: icon(Info) },
@@ -97,7 +100,7 @@ const NAV_GROUPS: Array<{ label: string; ids: SettingsTab[] }> = [
   { label: 'Interface', ids: ['appearance', 'notifications'] },
   { label: 'Editor', ids: ['ide'] },
   { label: 'Workflow', ids: ['attribution', 'claude-code', 'keybindings', 'usage'] },
-  { label: 'System', ids: ['updates', 'telemetry', 'about'] },
+  { label: 'System', ids: ['system-health', 'updates', 'telemetry', 'about'] },
 ];
 
 const isTab = (v: string | undefined): v is SettingsTab => !!v && v in SECTIONS;
@@ -162,6 +165,7 @@ export function SettingsModal({
         {tab === 'claude-code' && <ClaudeTab claudeInfo={claudeInfo} />}
         {tab === 'keybindings' && <KeybindingsTab />}
         {tab === 'usage' && <UsageTab latestRateLimits={latestRateLimits} />}
+        {tab === 'system-health' && <SystemHealthTab />}
         {tab === 'updates' && <UpdatesTab appVersion={appVersion} />}
         {tab === 'telemetry' && <TelemetryTab />}
         {tab === 'about' && (
@@ -320,15 +324,17 @@ function NotificationsTab() {
           }
         />
       </FormSection>
-      <MemoryWarningSection />
     </>
   );
 }
 
-/** The memory warning (SystemHealthService): its switch and its threshold. */
-function MemoryWarningSection() {
-  const enabled = useSettings((s) => s.memoryWarning);
-  const setEnabled = useSettings((s) => s.setMemoryWarning);
+/** The health icon and the memory warning (SystemHealthService), and the
+ *  threshold both read. */
+function SystemHealthTab() {
+  const icon = useSettings((s) => s.systemHealthIcon);
+  const setIcon = useSettings((s) => s.setSystemHealthIcon);
+  const warning = useSettings((s) => s.memoryWarning);
+  const setWarning = useSettings((s) => s.setMemoryWarning);
   const gb = useSettings((s) => s.memoryWarningGb);
   const setGb = useSettings((s) => s.setMemoryWarningGb);
   // A draft while typing, so "0.5" isn't clamped at its "0"; kept on blur or Enter.
@@ -341,21 +347,33 @@ function MemoryWarningSection() {
   };
   const id = useId();
 
+  const thresholdOff = !icon && !warning;
+
   return (
-    <FormSection title="When Dash uses a lot of memory">
+    <FormSection>
+      <SwitchField
+        label="Health icon"
+        hint={{
+          title: 'Beside Settings',
+          body: 'Turns amber when Dash and its sessions pass the threshold or macOS reports memory pressure, and breathes when the pressure is critical. Click it to see what uses the memory and to put idle tasks to sleep.',
+        }}
+        checked={icon}
+        onCheckedChange={setIcon}
+      />
       <SwitchField
         label="Memory warning"
         hint={{
           title: 'Dash and its sessions',
-          body: 'Counts Dash and every task session with its subagents, MCP servers and shells. Warns once when they pass the limit, or when macOS reports memory pressure, and offers to put idle tasks to sleep. A desktop notification while Dash is in the background.',
+          body: 'Counts Dash and every task session with its subagents, MCP servers and shells. Warns once when they pass the threshold, or when macOS reports memory pressure, and offers to put idle tasks to sleep. A desktop notification while Dash is in the background.',
         }}
-        checked={enabled}
-        onCheckedChange={setEnabled}
+        checked={warning}
+        onCheckedChange={setWarning}
       />
       <SettingRow
-        label="Warn above"
+        label="Threshold"
+        hint="Dash and its sessions together. The icon and the warning both use it."
         htmlFor={id}
-        disabled={!enabled}
+        disabled={thresholdOff}
         control={
           <span className="flex items-center gap-1.5">
             <Input
@@ -365,7 +383,7 @@ function MemoryWarningSection() {
               max={MEMORY_WARNING_MAX_GB}
               step={0.5}
               value={draft}
-              disabled={!enabled}
+              disabled={thresholdOff}
               onChange={(e) => setDraft(e.target.value)}
               onBlur={commit}
               onKeyDown={(e) => {

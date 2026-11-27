@@ -66,8 +66,10 @@ export interface SettingsState {
   /** Warn when Dash and its sessions use more memory than `memoryWarningGb`,
    *  or the OS reports memory pressure (SystemHealthService). */
   memoryWarning: boolean;
-  /** The memory warning's threshold in GB (clampMemoryWarningGb). */
+  /** The memory warning's and the health icon's threshold in GB (clampMemoryWarningGb). */
   memoryWarningGb: number;
+  /** The health icon beside Settings, coloured by `healthLevel`. */
+  systemHealthIcon: boolean;
 }
 
 /** One entry per managed setting: the store field, its existing localStorage
@@ -165,6 +167,7 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
     decode: (raw) => clampMemoryWarningGb(parseFloat(raw ?? '')),
     encode: (v) => String(v),
   }),
+  entry('systemHealthIcon', 'systemHealthIcon', boolDefaultTrue()),
 ];
 
 /** Initial state = every field decoded from an absent key (its default). */

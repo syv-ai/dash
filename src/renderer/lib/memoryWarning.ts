@@ -1,5 +1,10 @@
 import type { ActivityInfo } from '@shared/types';
-import { BYTES_PER_GB, type MemoryAlert } from '@shared/systemHealth';
+import {
+  BYTES_PER_GB,
+  type MemoryAlert,
+  type MemoryPressure,
+  type SystemHealthSnapshot,
+} from '@shared/systemHealth';
 
 /**
  * Tasks the memory warning may put to sleep: a live session at rest (the orb
@@ -41,7 +46,31 @@ export function memoryWarningCopy(alert: MemoryAlert, idleCount: number): Memory
     .map((t) => `${t.name} ${formatMemory(t.bytes)}`)
     .join(', ');
   const description = heaviest ? `${lead} Heaviest: ${heaviest}.` : lead;
-  const action =
-    idleCount === 0 ? null : `Sleep ${idleCount} idle ${idleCount === 1 ? 'task' : 'tasks'}`;
-  return { title, description, action };
+  return { title, description, action: sleepIdleLabel(idleCount) };
+}
+
+/** "Sleep 2 idle tasks", the toast's and the health popover's action, or null
+ *  when nothing is idle. */
+export function sleepIdleLabel(idleCount: number): string | null {
+  if (idleCount === 0) return null;
+  return `Sleep ${idleCount} idle ${idleCount === 1 ? 'task' : 'tasks'}`;
+}
+
+export const PRESSURE_LABEL: Record<MemoryPressure, string> = {
+  normal: 'Normal',
+  warn: 'Warning',
+  critical: 'Critical',
+};
+
+/** "6.8 GB of 8 GB": Dash's total against the threshold. */
+export function usageOfThreshold(s: SystemHealthSnapshot): string {
+  return `${formatMemory(s.totalBytes)} of ${formatMemory(s.thresholdBytes)}`;
+}
+
+/** The health icon's tooltip line: the usage, and the OS's pressure where it
+ *  has one; before the first sample, that it is measuring. */
+export function healthSummary(s: SystemHealthSnapshot | null): string {
+  if (!s) return 'Measuring…';
+  const usage = usageOfThreshold(s);
+  return s.pressure ? `${usage} · Memory pressure ${PRESSURE_LABEL[s.pressure]}` : usage;
 }
