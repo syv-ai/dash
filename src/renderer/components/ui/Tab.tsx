@@ -13,6 +13,9 @@ export type TabProps = Omit<React.ComponentProps<'div'>, 'onSelect'> & {
   indicator?: React.ReactNode;
 };
 
+/** A label layer: both share the one grid cell. */
+const stacked = 'col-start-1 row-start-1 truncate';
+
 /**
  * What every tab shape shares, unstyled: the tab role, Enter/Space to select,
  * middle-click to close, the label with its indicator, and the hover ×. The
@@ -54,7 +57,16 @@ export const Tab = React.forwardRef<HTMLDivElement, TabProps>(function Tab(
       {/* The label and its indicator sit together; the × floats in the right
           gutter so it never shifts them. */}
       <span className="flex min-w-0 items-center gap-1.5">
-        <span className="truncate text-sm font-medium">{children}</span>
+        {/* The selected tab's label is bold. Its bold copy, stacked in the
+            same cell and hidden, holds the width either way, so selecting a
+            tab never resizes it or moves its neighbours (or the strip's
+            indicator and fit, which measure the tabs). */}
+        <span className="grid min-w-0 text-sm">
+          <span className={cn(stacked, active ? 'font-semibold' : 'font-medium')}>{children}</span>
+          <span aria-hidden className={cn(stacked, 'invisible font-semibold')}>
+            {children}
+          </span>
+        </span>
         {indicator && (
           <span className={cn('flex shrink-0', onClose && 'group-hover/tab:invisible')}>
             {indicator}

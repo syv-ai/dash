@@ -189,9 +189,10 @@ export function ViewTabs<T extends string>({
               <ViewTab
                 key={opt.value}
                 variant={variant}
-                // The open folder is outlined, 2px wider: measured as shown.
-                // (A pill measures the same either way.)
-                active={opt.value === value}
+                // A tab measures the same selected or not (its bold label's
+                // width is held, a closed folder keeps the outline's sides),
+                // so none is: switching never re-fits the row.
+                active={false}
                 tabIndex={-1}
                 role="presentation"
                 onSelect={() => {}}

@@ -38,10 +38,15 @@ const folderTabVariants = cva(
     variants: {
       // The open folder: on the sheet's surface, outlined on three sides, its
       // open bottom laid over the sheet's top edge (the strip overlaps the
-      // sheet by 1px). The rest sit behind on the chrome, and lift on hover.
+      // sheet by 1px). The rest sit behind on the chrome, and lift on hover;
+      // their sides keep the outline's 1px, clear, so a folder is as wide
+      // open as closed and opening one never moves the tabs beside it.
       active: {
         true: 'z-10 h-8 border border-b-0 text-ink',
-        false: cn(closedBand, 'text-ink-2 hover:-translate-y-px hover:bg-hover hover:text-ink'),
+        false: cn(
+          closedBand,
+          'border-x border-transparent text-ink-2 hover:-translate-y-px hover:bg-hover hover:text-ink',
+        ),
       },
       // The open folder of a stack that isn't focused: still open, quieter.
       muted: { true: '', false: '' },
