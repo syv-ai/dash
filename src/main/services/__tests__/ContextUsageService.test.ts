@@ -64,17 +64,15 @@ describe('ContextUsageService', () => {
       spy.mockRestore();
     });
 
-    it('warns and reports zero usage when both current_usage and used_percentage are missing', () => {
+    it('reads null usage (no API response yet) as empty, without a warning', () => {
       const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       contextUsageService.updateFromStatusLine('pty1', {
-        context_window: { context_window_size: 200000 },
+        context_window: { context_window_size: 200000, current_usage: null, used_percentage: null },
       });
       const sl = contextUsageService.getAllStatusLine()['pty1']!;
       expect(sl.contextUsage.used).toBe(0);
-      expect(spy).toHaveBeenCalledWith(
-        '[ContextUsageService] no current_usage or used_percentage for ptyId=',
-        'pty1',
-      );
+      expect(sl.contextUsage.percentage).toBe(0);
+      expect(spy).not.toHaveBeenCalled();
       spy.mockRestore();
     });
 
@@ -90,7 +88,6 @@ describe('ContextUsageService', () => {
     });
 
     it('handles zero total gracefully', () => {
-      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       contextUsageService.updateFromStatusLine('pty1', {
         context_window: {
           context_window_size: 0,
@@ -99,11 +96,6 @@ describe('ContextUsageService', () => {
       });
       const sl = contextUsageService.getAllStatusLine()['pty1']!;
       expect(sl.contextUsage.percentage).toBe(0);
-      expect(spy).toHaveBeenCalledWith(
-        '[ContextUsageService] context_window_size is 0 or missing for ptyId=',
-        'pty1',
-      );
-      spy.mockRestore();
     });
 
     it('parses cost fields', () => {

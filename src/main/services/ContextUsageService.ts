@@ -7,8 +7,8 @@ const EMIT_DEBOUNCE_MS = 500;
 export interface RawStatusLinePayload {
   context_window?: {
     context_window_size?: number;
-    current_usage?: number | Record<string, number>;
-    used_percentage?: number;
+    current_usage?: number | Record<string, number> | null;
+    used_percentage?: number | null;
   };
   cost?: {
     total_cost_usd?: number;
@@ -44,16 +44,12 @@ class ContextUsageServiceImpl {
    * Called by HookServer when the status line script POSTs data.
    */
   updateFromStatusLine(ptyId: string, data: RawStatusLinePayload): void {
+    // Drift in the payload (no context_window, a size that isn't a number) is
+    // the contract's to report (statusLineSchema, checked in HookServer).
     const cw = data.context_window;
-    if (!cw) {
-      console.warn('[ContextUsageService] No context_window in statusLine data for ptyId=', ptyId);
-      return;
-    }
+    if (!cw) return;
 
     const total = typeof cw.context_window_size === 'number' ? cw.context_window_size : 0;
-    if (total === 0) {
-      console.warn('[ContextUsageService] context_window_size is 0 or missing for ptyId=', ptyId);
-    }
 
     // current_usage is an object: { input_tokens, output_tokens, cache_creation_input_tokens, ... }
     let used: number;
@@ -69,8 +65,9 @@ class ContextUsageServiceImpl {
       // current_usage) — a valid shape, not an error. Derive used from it.
       used = Math.round((cw.used_percentage / 100) * total);
     } else {
-      // Neither absolute usage nor a percentage — genuinely unexpected.
-      console.warn('[ContextUsageService] no current_usage or used_percentage for ptyId=', ptyId);
+      // Both null: the session has had no API response yet, or has just
+      // compacted. The docs say to treat it as empty
+      // (code.claude.com/docs/en/statusline, context_window).
       used = 0;
     }
 
