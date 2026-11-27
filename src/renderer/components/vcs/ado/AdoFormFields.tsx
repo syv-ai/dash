@@ -19,7 +19,7 @@ export function AdoFormFields({ state, autoFocusPat }: AdoFormFieldsProps) {
     <>
       <Field
         label="Organization URL"
-        hint={
+        note={
           orgUrl && !isUrlValid ? (
             <span className="text-state-fail">Starts with https://</span>
           ) : undefined

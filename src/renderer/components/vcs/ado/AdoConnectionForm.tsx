@@ -39,7 +39,8 @@ export function AdoConnectionForm({ projectId }: AdoConnectionFormProps) {
   return (
     <SwitchField
       label="Link work items"
-      hint={configured ? 'Connected.' : 'Not set up. Turning it on asks for a token.'}
+      hint="Link Azure DevOps work items to tasks. Turning it on asks for a personal access token."
+      helperText={enabled && configured ? 'Connected.' : undefined}
       checked={enabled}
       onCheckedChange={() => void handleToggle()}
     >

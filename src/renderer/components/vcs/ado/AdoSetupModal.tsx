@@ -3,6 +3,7 @@ import { useAdoConnection } from './useAdoConnection';
 import { AdoFormFields, AdoTestResult } from './AdoFormFields';
 import { Button } from '../../ui/Button';
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from '../../ui/Dialog';
+import { FormSection } from '../../ui/Field';
 import { useModalClose } from '../../ui/Modal';
 
 interface AdoSetupModalProps {
@@ -48,10 +49,12 @@ function AdoSetupBody({ projectId, organizationUrl, project, onClose }: AdoSetup
     <>
       <DialogHeader
         title="Connect Azure DevOps"
-        description="This project's remote is on Azure DevOps. Add a personal access token to link work items to tasks."
+        hint="This project's remote is on Azure DevOps. Add a personal access token to link work items to tasks."
       />
       <DialogBody>
-        <AdoFormFields state={conn} autoFocusPat />
+        <FormSection>
+          <AdoFormFields state={conn} autoFocusPat />
+        </FormSection>
         <AdoTestResult result={conn.testResult} />
       </DialogBody>
       <DialogFooter
