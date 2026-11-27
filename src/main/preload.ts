@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   restoreTask: (id: string) => ipcRenderer.invoke('task:restore', id),
   setTaskDashAccess: (input: unknown) => ipcRenderer.invoke('task:setDashAccess', input),
   setTaskFavorite: (input: unknown) => ipcRenderer.invoke('task:setFavorite', input),
+  setTaskLaunchOptions: (input: unknown) => ipcRenderer.invoke('task:setLaunchOptions', input),
   getBypassAvailability: (cwd: string) => ipcRenderer.invoke('claude:bypassAvailability', cwd),
   getTaskMessageAddresses: (id: string) => ipcRenderer.invoke('task:messageAddresses', id),
   getTaskLastActive: (id: string) => ipcRenderer.invoke('task:lastActive', id),
@@ -328,6 +329,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('workspaceConfig:read', projectPath, opts),
   writeWorkspaceConfig: (args: { projectPath: string; config: unknown }) =>
     ipcRenderer.invoke('workspaceConfig:write', args),
+  readLocalTaskDefaults: (projectPath: string) =>
+    ipcRenderer.invoke('workspaceConfig:readLocal', projectPath),
+  writeLocalTaskDefaults: (args: { projectPath: string; defaults: unknown }) =>
+    ipcRenderer.invoke('workspaceConfig:writeLocal', args),
   slashCommandsList: (args: { projectPath: string }) =>
     ipcRenderer.invoke('slashCommands:list', args),
 

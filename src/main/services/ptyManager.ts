@@ -12,7 +12,8 @@ import { ensureShellConfig, shellHistoryPath } from './ptyShellConfig';
 import { findClaudePath, findLatestSessionId, requireSupportedClaude } from './claudeCli';
 import { buildClaudeEnv, buildSessionEnv, isUltracode } from './claudeEnv';
 import { supervisorService, DispatchError } from './SupervisorService';
-import { buildSessionSettings, parseUntrustedRoot } from './supervisorSession';
+import { buildSessionSettings, ExtraArgsError, parseUntrustedRoot } from './supervisorSession';
+import { extraArgFlagNames, validateExtraArgs } from '@shared/extraArgs';
 import { isWorkspaceTrusted } from '../utils/claudePaths';
 import { DatabaseService } from './DatabaseService';
 import { dashSessionAccess } from '../control/taskAccess';
@@ -274,6 +275,8 @@ async function ensureTaskSession(opts: {
   sessionId: string | null;
   /** From the task row at this call, so a restart after toggling picks it up. */
   dashAccess: boolean;
+  /** The person's own flags, as typed (buildDispatchArgs checks them). */
+  extraArgs: string | null;
   env: Record<string, string>;
   wakeStopped?: boolean;
 }): Promise<string> {
@@ -346,9 +349,16 @@ async function ensureTaskSession(opts: {
       prompt,
       resumeSessionId,
       settingsPath,
+      extraArgs: opts.extraArgs,
       env: opts.env,
     });
   } catch (err) {
+    // Extra arguments Dash refuses: nothing was dispatched, so the first
+    // prompt waits for the start that follows the fix.
+    if (err instanceof ExtraArgsError) {
+      if (prompt !== undefined) setInitialPrompt(opts.id, prompt);
+      throw err;
+    }
     if (!(err instanceof DispatchError)) throw err;
     const root = parseUntrustedRoot(err.output);
     if (!root) throw err;
@@ -359,10 +369,13 @@ async function ensureTaskSession(opts: {
     throw new UntrustedWorkspaceError(err.message, root);
   }
   const { jobId, sessionId } = dispatched;
+  const extra = validateExtraArgs(opts.extraArgs);
   TelemetryService.capture('session_started', {
     resumed: Boolean(resumeSessionId),
     model: opts.model ?? 'default',
     permission_mode: opts.permissionMode ?? 'default',
+    // Flag names only, never their values (paths, prompts); '' for none.
+    extra_flags: extraArgFlagNames(extra.args).join(','),
   });
   // The supervisor accepted the folder, so it is trusted now (trusted outside
   // Dash, or after the trust prompt).
@@ -535,6 +548,7 @@ async function startTaskSessionNow(
       jobId: task.jobId,
       sessionId: task.sessionId,
       dashAccess: task.dashAccess,
+      extraArgs: task.extraArgs,
       env,
       wakeStopped: opts.wakeStopped,
     });

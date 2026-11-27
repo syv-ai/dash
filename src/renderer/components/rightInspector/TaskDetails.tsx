@@ -6,7 +6,9 @@ import { useGit } from '../../stores/gitStore';
 import { useRuntime } from '../../stores/runtimeStore';
 import { selectTaskById, useProjects } from '../../stores/projectsStore';
 import { useSettings } from '../../stores/settingsStore';
+import { Badge } from '../ui/Badge';
 import { DetailItem, DetailList, DetailSection } from '../ui/DetailList';
+import { Tooltip } from '../ui/Tooltip';
 import { Markdown } from '../ui/Markdown';
 import { PrRow } from '../ui/PrBadge';
 import { TextLink } from '../ui/TextLink';
@@ -71,7 +73,26 @@ function Rows({ rows }: { rows: DetailRow[] }) {
   return (
     <DetailList>
       {rows.map((r) => (
-        <DetailItem key={r.label} label={r.label} title={r.title ?? r.value} copy={r.copy}>
+        <DetailItem
+          key={r.label}
+          label={r.label}
+          title={r.title ?? r.value}
+          copy={r.copy}
+          mono={r.mono}
+          trailing={
+            r.caution && (
+              <Tooltip
+                content={r.caution.split('\n').map((line) => (
+                  <div key={line}>{line}</div>
+                ))}
+              >
+                <Badge tone="warn" size="sm" tabIndex={0}>
+                  Risky
+                </Badge>
+              </Tooltip>
+            )
+          }
+        >
           {r.value}
         </DetailItem>
       ))}

@@ -1,10 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import { hasExcludeEntry, withExcludeEntry, WORKTREES_EXCLUDE_ENTRY } from '../gitExclude';
+import {
+  hasExcludeEntry,
+  LOCAL_CONFIG_EXCLUDE_ENTRY,
+  withExcludeEntry,
+  WORKTREES_EXCLUDE_ENTRY,
+} from '../gitExclude';
 
 describe('gitExclude', () => {
   it('appends the entry with a comment to an empty file', () => {
     expect(withExcludeEntry('', WORKTREES_EXCLUDE_ENTRY)).toBe(
       '# Dash task worktrees\n.claude/worktrees/\n',
+    );
+  });
+
+  it('says why above each entry it adds: the personal config gets its own line', () => {
+    expect(withExcludeEntry('', LOCAL_CONFIG_EXCLUDE_ENTRY)).toBe(
+      '# Dash personal project config\n.dash/config.local.json\n',
     );
   });
 

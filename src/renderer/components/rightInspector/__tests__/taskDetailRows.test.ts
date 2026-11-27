@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Task } from '../../../../shared/types';
 import {
+  extraArgsRow,
   lastActiveRow,
   parseDbTime,
   taskDetailSections,
@@ -28,6 +29,7 @@ const TASK: Task = {
   sessionStoppedAt: null,
   archivedAt: null,
   dashAccess: false,
+  extraArgs: null,
   parentTaskId: null,
   favorite: false,
   sortOrder: 0,
@@ -184,5 +186,33 @@ describe('parseDbTime', () => {
     expect(parseDbTime(null)).toBeNull();
     expect(parseDbTime('')).toBeNull();
     expect(parseDbTime('soon')).toBeNull();
+  });
+});
+
+describe('extraArgsRow', () => {
+  it('is left out when the task has none', () => {
+    expect(extraArgsRow({ extraArgs: null })).toBeNull();
+    expect(extraArgsRow({ extraArgs: '  ' })).toBeNull();
+  });
+
+  it('shows them as typed, in the code font, copyable, with no chip when harmless', () => {
+    expect(extraArgsRow({ extraArgs: " --chrome --add-dir '/a b' " })).toEqual({
+      label: 'Extra arguments',
+      value: "--chrome --add-dir '/a b'",
+      copy: "--chrome --add-dir '/a b'",
+      mono: true,
+      caution: undefined,
+    });
+  });
+
+  it('names the risky flags in the caution chip', () => {
+    expect(extraArgsRow({ extraArgs: '--mcp-config m.json --tools Read' })?.caution).toBe(
+      '--mcp-config loads MCP servers, which can run any command.\n--tools limits the built-in tools; an empty list also stops dashctl.',
+    );
+  });
+
+  it('sits in the session section', () => {
+    const rows = taskDetailSections(input({}, { extraArgs: '--chrome' })).session;
+    expect(rows.find((r) => r.label === 'Extra arguments')?.value).toBe('--chrome');
   });
 });

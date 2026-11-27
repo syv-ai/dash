@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 import { toast } from '../components/ui/toast';
 import { sessionRegistry } from '../terminal/SessionRegistry';
-import type { Project, Task, BranchInfo, DeleteTaskOptions } from '../../shared/types';
+import type {
+  Project,
+  Task,
+  BranchInfo,
+  DeleteTaskOptions,
+  TaskLaunchOptions,
+} from '../../shared/types';
 import type { DeleteProjectOptions } from '../components/project/DeleteProjectModal';
 import type { CreateTaskOptions } from '../components/task/TaskModal';
 import { playPeonSound } from '../sounds';
@@ -72,6 +78,9 @@ export interface ProjectsActions {
   /** Turn a task's Dash access on or off; returns the updated task. A session
    *  picks it up when it restarts (changeSessionSetting does that). */
   setDashAccess: (taskItem: Task, enabled: boolean) => Promise<Task | null>;
+  /** Change how a task's session launches (extra arguments, …); returns the
+   *  updated task. A session picks it up when it restarts. */
+  setLaunchOptions: (taskItem: Task, patch: Partial<TaskLaunchOptions>) => Promise<Task | null>;
   /** Pin a task to the top of the task list, or unpin it. Shown at once;
    *  put back (with a toast) if main refuses. */
   setFavorite: (taskItem: Task, favorite: boolean) => Promise<void>;
@@ -395,6 +404,14 @@ export const useProjects = create<ProjectsStore>((set, get) => ({
     const resp = await window.electronAPI.setTaskDashAccess({ taskId: taskItem.id, enabled });
     if (!resp.success || !resp.data) {
       toast.error(resp.error || 'Failed to change Dash access');
+      return null;
+    }
+    return resp.data;
+  },
+  setLaunchOptions: async (taskItem, patch) => {
+    const resp = await window.electronAPI.setTaskLaunchOptions({ taskId: taskItem.id, ...patch });
+    if (!resp.success || !resp.data) {
+      toast.error(resp.error || 'Failed to save the task settings');
       return null;
     }
     return resp.data;

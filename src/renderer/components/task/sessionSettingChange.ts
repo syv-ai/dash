@@ -30,7 +30,20 @@ import type {
 export type SessionSettingChange =
   | { setting: 'permissionMode'; to: PermissionMode }
   | { setting: 'model'; to: TaskModel }
-  | { setting: 'dashAccess'; to: boolean };
+  | { setting: 'dashAccess'; to: boolean }
+  /** The person's own flags, as typed; null for none. */
+  | { setting: 'extraArgs'; to: string | null };
+
+/** The task fields a session setting change reads. */
+export type SessionSettingsOf = Pick<Task, 'permissionMode' | 'model' | 'dashAccess' | 'extraArgs'>;
+
+/** Whether the change leaves the setting as it is (extra arguments compare trimmed). */
+function isUnchanged(task: SessionSettingsOf, change: SessionSettingChange): boolean {
+  if (change.setting === 'extraArgs') {
+    return (task.extraArgs?.trim() || null) === (change.to?.trim() || null);
+  }
+  return task[change.setting] === change.to;
+}
 
 /** Names as the picker shows them; `plan` and `dontAsk` only a session reports. */
 export const MODE_LABELS: Record<SessionPermissionMode, string> = {
@@ -65,6 +78,7 @@ export type SessionSettingPlan =
 const BYPASS_RISK =
   'Yolo skips every permission prompt: Claude runs edits and shell commands without asking, with nothing to stop a prompt injection.';
 const RESTART = 'Switching restarts the session, which resumes the same conversation.';
+const RESTART_CHANGE = 'Changing them restarts the session, which resumes the same conversation.';
 const RESTART_LABEL = 'Restart session';
 
 /** Why Yolo can't be picked, or null when it can (or it isn't known yet). */
@@ -87,11 +101,15 @@ function restartTitle(change: SessionSettingChange): string {
       return `Switch this task to ${MODEL_LABELS[change.to]}?`;
     case 'dashAccess':
       return change.to ? 'Turn on Dash access?' : 'Turn off Dash access?';
+    case 'extraArgs':
+      return change.to?.trim()
+        ? 'Restart with these extra arguments?'
+        : 'Drop the extra arguments?';
   }
 }
 
 export function planSessionSettingChange(opts: {
-  task: Pick<Task, 'permissionMode' | 'model' | 'dashAccess'>;
+  task: SessionSettingsOf;
   change: SessionSettingChange;
   /** A live session or a parked job, either of which holds the old flags. */
   hasSession: boolean;
@@ -99,7 +117,7 @@ export function planSessionSettingChange(opts: {
   bypass: BypassAvailability | null;
 }): SessionSettingPlan {
   const { task, change, hasSession } = opts;
-  if (task[change.setting] === change.to) return { kind: 'none' };
+  if (isUnchanged(task, change)) return { kind: 'none' };
   if (change.setting === 'permissionMode' && change.to === 'bypassPermissions') {
     const reason = bypassUnavailableReason(opts.bypass);
     if (reason) return { kind: 'blocked', reason };
@@ -117,7 +135,11 @@ export function planSessionSettingChange(opts: {
   return {
     kind: 'apply',
     restart: true,
-    confirm: { title: restartTitle(change), message: RESTART, confirmLabel: RESTART_LABEL },
+    confirm: {
+      title: restartTitle(change),
+      message: change.setting === 'extraArgs' ? RESTART_CHANGE : RESTART,
+      confirmLabel: RESTART_LABEL,
+    },
   };
 }
 

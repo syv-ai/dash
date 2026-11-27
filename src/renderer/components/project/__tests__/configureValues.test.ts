@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { configToValues, valuesToConfig } from '../configureValues';
+import {
+  configToValues,
+  localToValues,
+  localValuesOk,
+  valuesToConfig,
+  valuesToLocal,
+} from '../configureValues';
 
 const fallbacks = { name: 'p', baseRef: 'origin/main' };
 
@@ -24,5 +30,19 @@ describe('configure form permissionMode', () => {
     expect(valuesToConfig(unset).taskDefaults?.permissionMode).toBeUndefined();
     const edits = { ...unset, permissionMode: 'acceptEdits' as const };
     expect(valuesToConfig(edits).taskDefaults?.permissionMode).toBe('acceptEdits');
+  });
+});
+
+describe('local-only defaults', () => {
+  it('round-trips extra arguments and drops a blank line', () => {
+    expect(localToValues({ extraArgs: '--chrome' })).toEqual({ extraArgs: '--chrome' });
+    expect(localToValues(undefined)).toEqual({ extraArgs: '' });
+    expect(valuesToLocal({ extraArgs: ' --chrome ' })).toEqual({ extraArgs: '--chrome' });
+    expect(valuesToLocal({ extraArgs: '  ' })).toEqual({ extraArgs: undefined });
+  });
+
+  it("can't be saved with extra arguments a task couldn't launch with", () => {
+    expect(localValuesOk({ extraArgs: '--chrome' })).toBe(true);
+    expect(localValuesOk({ extraArgs: '--settings x' })).toBe(false);
   });
 });

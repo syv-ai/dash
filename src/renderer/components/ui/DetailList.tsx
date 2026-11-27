@@ -115,6 +115,8 @@ export function DetailItem({
   label,
   title,
   copy,
+  mono = false,
+  trailing,
   children,
 }: {
   label: React.ReactNode;
@@ -122,15 +124,20 @@ export function DetailItem({
   title?: string;
   /** Text to put on the clipboard from a copy button beside the value. */
   copy?: string;
+  /** The value is code (command text): set in the code font. */
+  mono?: boolean;
+  /** A mark after the value (a caution chip), never truncated. */
+  trailing?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <>
       <dt className="type-label flex min-h-6 items-center truncate">{label}</dt>
       <dd className="group/detail flex min-h-6 min-w-0 items-center gap-1 text-ink">
-        <span className="min-w-0 truncate" title={title}>
+        <span className={cn('min-w-0 truncate', mono && 'font-mono')} title={title}>
           {children}
         </span>
+        {trailing}
         {copy && <CopyButton text={copy} />}
       </dd>
     </>

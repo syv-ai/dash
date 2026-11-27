@@ -8,7 +8,14 @@
 /** Entry Dash adds so the main checkout never lists task worktrees as untracked. */
 export const WORKTREES_EXCLUDE_ENTRY = '.claude/worktrees/';
 
-const DASH_EXCLUDE_COMMENT = '# Dash task worktrees';
+/** A project's personal Dash config (WorkspaceConfigService), never shared. */
+export const LOCAL_CONFIG_EXCLUDE_ENTRY = '.dash/config.local.json';
+
+/** The comment line Dash writes above each entry it adds, saying why. */
+const EXCLUDE_COMMENTS: Record<string, string> = {
+  [WORKTREES_EXCLUDE_ENTRY]: '# Dash task worktrees',
+  [LOCAL_CONFIG_EXCLUDE_ENTRY]: '# Dash personal project config',
+};
 
 /** True when `content` already ignores `entry` (with or without the trailing slash). */
 export function hasExcludeEntry(content: string, entry: string): boolean {
@@ -26,5 +33,6 @@ export function hasExcludeEntry(content: string, entry: string): boolean {
 export function withExcludeEntry(content: string, entry: string): string | null {
   if (hasExcludeEntry(content, entry)) return null;
   const body = content.length === 0 || content.endsWith('\n') ? content : `${content}\n`;
-  return `${body}${DASH_EXCLUDE_COMMENT}\n${entry}\n`;
+  const comment = EXCLUDE_COMMENTS[entry] ?? '# Dash';
+  return `${body}${comment}\n${entry}\n`;
 }

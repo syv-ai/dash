@@ -45,6 +45,8 @@ function save(task: Task, change: SessionSettingChange): Promise<Task | null> {
       return store.updateTask(task, { permissionMode: change.to });
     case 'model':
       return store.updateTask(task, { model: change.to });
+    case 'extraArgs':
+      return store.setLaunchOptions(task, { [change.setting]: change.to });
   }
 }
 

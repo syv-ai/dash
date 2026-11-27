@@ -181,6 +181,13 @@ export function flagNoteText(note: FlagNote): string {
   return `${note.flag} ${note.reason}`;
 }
 
+/** What a check says to the person, one line each: why it can't be read,
+ *  else the blocked flags then the risky ones. Empty when all is fine. */
+export function extraArgsMessages(check: ExtraArgsCheck): string[] {
+  if (check.error) return [check.error];
+  return [...check.blocked, ...check.risky].map(flagNoteText);
+}
+
 /**
  * Check a task's extra arguments: split like a shell (no expansion), then
  * look up each flag. Blocked flags are the ones Dash sets itself or that a

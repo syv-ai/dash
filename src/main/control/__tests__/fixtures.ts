@@ -19,6 +19,7 @@ export function makeTask(over: Partial<Task> & { id: string; projectId: string }
     sessionStoppedAt: null,
     archivedAt: null,
     dashAccess: false,
+    extraArgs: null,
     parentTaskId: null,
     favorite: false,
     sortOrder: 0,

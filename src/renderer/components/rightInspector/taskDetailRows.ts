@@ -1,5 +1,6 @@
 import type { ActivityState, SessionPermissionMode, Task, TaskModel } from '../../../shared/types';
 import { formatTimeAgo } from '../../../shared/relativeTime';
+import { flagNoteText, validateExtraArgs } from '../../../shared/extraArgs';
 import { liveModelDiffers } from '../task/sessionSettingChange';
 import { tildePath } from '../../lib/displayPath';
 import { formatCost, formatTokensPrecise } from '../../utils/format';
@@ -13,6 +14,10 @@ export interface DetailRow {
   /** Text a copy button beside the value puts on the clipboard (ids, the
    *  full path behind a `~` one). */
   copy?: string;
+  /** The value is command text (extra arguments): set in the code font. */
+  mono?: boolean;
+  /** A caution chip after the value, with this as its tooltip. */
+  caution?: string;
 }
 
 export interface TaskDetailsInput {
@@ -115,6 +120,23 @@ export function lastActiveRow(
   };
 }
 
+/**
+ * The task's own `claude` flags, as typed, with a caution chip naming the
+ * risky ones (they widen or strip what Claude Code guards). Null when none.
+ */
+export function extraArgsRow(task: Pick<Task, 'extraArgs'>): DetailRow | null {
+  const value = task.extraArgs?.trim();
+  if (!value) return null;
+  const { risky } = validateExtraArgs(value);
+  return {
+    label: 'Extra arguments',
+    value,
+    copy: value,
+    mono: true,
+    caution: risky.length > 0 ? risky.map(flagNoteText).join('\n') : undefined,
+  };
+}
+
 /** Rows with a value; the rest are left out rather than shown as "—". */
 function present(rows: Array<DetailRow | null | false>): DetailRow[] {
   return rows.filter((r): r is DetailRow => !!r && r.value !== '');
@@ -169,6 +191,7 @@ export function taskDetailSections(input: TaskDetailsInput): TaskDetailSections 
       !!task.sessionId && { label: 'Session', value: task.sessionId, copy: task.sessionId },
       !!task.jobId && { label: 'Job', value: task.jobId, copy: task.jobId },
       { label: 'Dash access', value: task.dashAccess ? 'On' : 'Off' },
+      extraArgsRow(task),
     ]),
     usage: present([
       task.totalTokens > 0 && {

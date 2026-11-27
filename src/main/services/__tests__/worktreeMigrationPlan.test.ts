@@ -43,6 +43,7 @@ function task(over: Partial<Task> = {}): Task {
     sessionStoppedAt: null,
     archivedAt: null,
     dashAccess: false,
+    extraArgs: null,
     parentTaskId: null,
     favorite: false,
     sortOrder: 0,

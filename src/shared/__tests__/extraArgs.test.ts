@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { extraArgFlagNames, flagName, flagNoteText, validateExtraArgs } from '../extraArgs';
+import {
+  extraArgFlagNames,
+  extraArgsMessages,
+  flagName,
+  flagNoteText,
+  validateExtraArgs,
+} from '../extraArgs';
 
 describe('flagName', () => {
   it('maps aliases and --flag=value to the long name', () => {
@@ -127,5 +133,18 @@ describe('extraArgFlagNames', () => {
       '--chrome',
       '--debug',
     ]);
+  });
+});
+
+describe('extraArgsMessages', () => {
+  it('says why a line cannot be read, else blocked then risky, one line each', () => {
+    expect(extraArgsMessages(validateExtraArgs('oops'))).toEqual([
+      'Start with a flag: "oops" would be sent to Claude as the prompt.',
+    ]);
+    expect(extraArgsMessages(validateExtraArgs('--tools Read --model x'))).toEqual([
+      "--model is set by the task's Model picker; use that instead.",
+      '--tools limits the built-in tools; an empty list also stops dashctl.',
+    ]);
+    expect(extraArgsMessages(validateExtraArgs('--chrome'))).toEqual([]);
   });
 });

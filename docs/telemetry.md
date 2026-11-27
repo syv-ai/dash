@@ -66,7 +66,7 @@ The source of truth for what Dash sends to PostHog. Change this file in the same
 
 | Event                | When                                                        | Properties                                                            |
 | -------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------- |
-| `session_started`    | a task's Claude Code session is dispatched (`claude --bg`)  | `resumed`, `model` (alias), `permission_mode`                         |
+| `session_started`    | a task's Claude Code session is dispatched (`claude --bg`)  | `resumed`, `model` (alias), `permission_mode`, `extra_flags`          |
 | `session_woken`      | a sleeping session is respawned                             |                                                                       |
 | `session_slept`      | a session is stopped (sleep)                                | `reason` (`manual`, `task_archived`, `project_archived`, `quit`)      |
 | `session_restarted`  | a session is re-dispatched (env change, update restart)     |                                                                       |
@@ -81,6 +81,7 @@ The source of truth for what Dash sends to PostHog. Change this file in the same
 - `wait_ended.kind` is what opened the wait: `permission` (PermissionRequest, or the `permission_prompt` notification), `question` (AskUserQuestion), `elicitation` (an MCP Elicitation, or its dialog notifications), `quota` (`quota_auto_resume_stale`), or `unknown` (the supervisor listing reported the wait with no hook).
 - `turn_completed.tool_call_bucket` counts every PreToolUse in the turn, the main agent's and its subagents' (count buckets as above); `subagent_used` is true when a SubagentStart came in it.
 - `session_slept.reason`: `manual` (Put to sleep), `task_archived`, `project_archived` (each live session in it), `quit` (with "Stop sessions on quit" on). Claude Code's own idle stop isn't Dash's to see.
+- `session_started.extra_flags`: the flag names in the task's Extra arguments, sorted and comma-joined (`--add-dir,--chrome`), `''` for none. Never their values: those can be paths or prompts.
 - `terminal_started` lost its `source` (always `direct`): main can't tell a first open from a re-attach or a restore.
 
 ### Review and editor

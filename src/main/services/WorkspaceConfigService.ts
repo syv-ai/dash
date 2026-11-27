@@ -13,10 +13,23 @@ export interface WorkspaceTaskDefaults {
   contextPrompt?: string;
   /** Default for a new task's Dash access (dashctl, the control API). */
   dashAccess?: boolean;
+  /** Default extra `claude` flags for a new task. Read from
+   *  `config.local.json` only, so a cloned repo can't plant flags. */
+  extraArgs?: string;
 }
+
+/** taskDefaults keys only `config.local.json` may set. */
+export const LOCAL_ONLY_TASK_DEFAULTS = ['extraArgs'] as const;
+export type LocalTaskDefaults = Pick<
+  WorkspaceTaskDefaults,
+  (typeof LOCAL_ONLY_TASK_DEFAULTS)[number]
+>;
 
 export interface WorkspaceConfig {
   taskDefaults?: WorkspaceTaskDefaults;
+  /** Read from config.json only: local-only keys it sets, which were ignored
+   *  (Project settings says so). Never written. */
+  ignoredLocalOnlyKeys?: string[];
 }
 
 function readJson(filePath: string): unknown {
@@ -31,7 +44,11 @@ function readJson(filePath: string): unknown {
   }
 }
 
-function parseTaskDefaults(value: unknown, source: string): WorkspaceTaskDefaults | undefined {
+function parseTaskDefaults(
+  value: unknown,
+  source: string,
+  opts: { local: boolean },
+): WorkspaceTaskDefaults | undefined {
   if (value === undefined) return undefined;
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     console.error(`[WorkspaceConfig] ${source}: 'taskDefaults' must be an object`);
@@ -44,15 +61,26 @@ function parseTaskDefaults(value: unknown, source: string): WorkspaceTaskDefault
   if (typeof obj.useWorktree === 'boolean') result.useWorktree = obj.useWorktree;
   if (typeof obj.contextPrompt === 'string') result.contextPrompt = obj.contextPrompt;
   if (typeof obj.dashAccess === 'boolean') result.dashAccess = obj.dashAccess;
+  if (opts.local && typeof obj.extraArgs === 'string' && obj.extraArgs.trim()) {
+    result.extraArgs = obj.extraArgs.trim();
+  }
   return Object.keys(result).length > 0 ? result : undefined;
+}
+
+/** The local-only taskDefaults keys a shared config.json sets anyway. */
+function localOnlyKeysIn(value: unknown): string[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  return LOCAL_ONLY_TASK_DEFAULTS.filter((k) => k in value).map((k) => `taskDefaults.${k}`);
 }
 
 function parseBaseConfig(parsed: unknown, source: string): WorkspaceConfig | null {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
   const obj = parsed as Record<string, unknown>;
   const result: WorkspaceConfig = {};
-  const taskDefaults = parseTaskDefaults(obj.taskDefaults, source);
+  const taskDefaults = parseTaskDefaults(obj.taskDefaults, source, { local: false });
   if (taskDefaults) result.taskDefaults = taskDefaults;
+  const ignored = localOnlyKeysIn(obj.taskDefaults);
+  if (ignored.length > 0) result.ignoredLocalOnlyKeys = ignored;
   return result;
 }
 
@@ -63,7 +91,9 @@ function applyLocalOverlay(
   const result: WorkspaceConfig = { ...base };
   // Local taskDefaults win key by key, so a personal override of one default
   // (e.g. dashAccess) keeps the shared rest.
-  const localDefaults = parseTaskDefaults(overlay.taskDefaults, LOCAL_CONFIG_FILE);
+  const localDefaults = parseTaskDefaults(overlay.taskDefaults, LOCAL_CONFIG_FILE, {
+    local: true,
+  });
   if (localDefaults) result.taskDefaults = { ...base.taskDefaults, ...localDefaults };
   return result;
 }
@@ -99,6 +129,51 @@ export function loadWorkspaceConfig(worktreePath: string): WorkspaceConfig | nul
   }
 
   return applyLocalOverlay(base, localParsed as Record<string, unknown>);
+}
+
+/** `.dash/config.local.json`'s local-only task defaults alone (Project settings' personal section). */
+export function loadLocalTaskDefaults(projectPath: string): LocalTaskDefaults {
+  const parsed = readJson(path.join(projectPath, DASH_DIR, LOCAL_CONFIG_FILE));
+  const obj = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  const all = parseTaskDefaults((obj as Record<string, unknown>).taskDefaults, LOCAL_CONFIG_FILE, {
+    local: true,
+  });
+  const result: LocalTaskDefaults = {};
+  for (const key of LOCAL_ONLY_TASK_DEFAULTS) {
+    if (all?.[key] !== undefined) result[key] = all[key];
+  }
+  return result;
+}
+
+/**
+ * Set the local-only task defaults in `.dash/config.local.json`, keeping every
+ * other key there (a personal dashAccess override, custom keys). An empty or
+ * undefined value removes its key. The caller keeps the file out of git
+ * (`.git/info/exclude`): it is the person's own.
+ */
+export function writeLocalTaskDefaults(projectPath: string, patch: LocalTaskDefaults): void {
+  const dashDir = path.join(projectPath, DASH_DIR);
+  const localPath = path.join(dashDir, LOCAL_CONFIG_FILE);
+  const existing = readJson(localPath);
+  const base: Record<string, unknown> =
+    existing && typeof existing === 'object' && !Array.isArray(existing)
+      ? { ...(existing as Record<string, unknown>) }
+      : {};
+  const prev = base.taskDefaults;
+  const defaults: Record<string, unknown> =
+    prev && typeof prev === 'object' && !Array.isArray(prev)
+      ? { ...(prev as Record<string, unknown>) }
+      : {};
+  for (const key of LOCAL_ONLY_TASK_DEFAULTS) {
+    const value = patch[key]?.trim();
+    if (value) defaults[key] = value;
+    else delete defaults[key];
+  }
+  if (Object.keys(defaults).length > 0) base.taskDefaults = defaults;
+  else delete base.taskDefaults;
+
+  if (!fs.existsSync(dashDir)) fs.mkdirSync(dashDir, { recursive: true });
+  fs.writeFileSync(localPath, JSON.stringify(base, null, 2) + '\n', 'utf-8');
 }
 
 /**

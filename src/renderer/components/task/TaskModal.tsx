@@ -35,6 +35,8 @@ import { findBranchHolder, describeBranchHolder } from './branchHolder';
 import { useProjects } from '../../stores/projectsStore';
 import { useSlashCommands } from './useSlashCommands';
 import { useBypassAvailability } from './changeSessionSetting';
+import { ExtraArgsField } from './ExtraArgsField';
+import { validateExtraArgs } from '../../../shared/extraArgs';
 
 // Lives in shared/types (main's TaskService takes it too); re-exported so
 // imports don't churn.
@@ -48,6 +50,8 @@ export interface TaskModalDefaults {
   useWorktree?: boolean;
   contextPrompt?: string;
   dashAccess?: boolean;
+  /** From `.dash/config.local.json` only. */
+  extraArgs?: string;
 }
 
 interface TaskModalProps {
@@ -173,6 +177,8 @@ function TaskModalBody({
     setText: setContextPrompt,
   });
   const [dashAccess, setDashAccess] = useState(taskDefaults?.dashAccess ?? false);
+  const [extraArgs, setExtraArgs] = useState(taskDefaults?.extraArgs ?? '');
+  const extraArgsOk = validateExtraArgs(extraArgs).ok;
   // The project's folder decides it for a task not made yet: a worktree reads
   // the same project files, and its local file sits at this root.
   const bypass = useBypassAvailability(projectPath);
@@ -327,6 +333,8 @@ function TaskModalBody({
       contextPrompt: contextPrompt.trim() || undefined,
       // Hidden toggle (win32, or info not loaded yet) → no access, as shown.
       dashAccess: controlSupported ? dashAccess : false,
+      // '' (not undefined) when cleared: the project default was prefilled.
+      extraArgs: extraArgs.trim(),
     };
 
     // The "Update from remote" choice only applies to a direct checkout of a
@@ -383,7 +391,8 @@ function TaskModalBody({
     // which legitimately has no branch to select.
     !requiresBranchSelection &&
     // Worktree on an already-checked-out branch would fail at create.
-    !branchInUse;
+    !branchInUse &&
+    extraArgsOk;
 
   return (
     <form
@@ -665,6 +674,10 @@ function TaskModalBody({
                 )}
               </Field>
             )}
+
+            <Expandable label="Advanced" hint="optional" defaultOpen={!!extraArgs.trim()}>
+              <ExtraArgsField value={extraArgs} onChange={setExtraArgs} />
+            </Expandable>
           </div>
         </div>
       </DialogBody>

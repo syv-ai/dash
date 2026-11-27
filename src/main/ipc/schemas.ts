@@ -71,6 +71,7 @@ const createTaskCommon = {
   linkedItems: z.array(linkedItemSchema).optional(),
   contextPrompt: z.string().optional(),
   dashAccess: z.boolean().optional(),
+  extraArgs: z.string().optional(),
   parentTaskId: z.string().nullable().optional(),
 };
 

@@ -12,7 +12,20 @@ import type {
   DeleteTaskOptions,
   SetTaskDashAccessInput,
   SetTaskFavoriteInput,
+  SetTaskLaunchOptionsInput,
 } from '@shared/types';
+import { validateExtraArgs, flagNoteText } from '@shared/extraArgs';
+
+const launchOptionsInputSchema = z.looseObject({
+  taskId: z.string(),
+  extraArgs: z.string().nullable().optional(),
+});
+
+/** Refuse extra arguments a dispatch would refuse, saying why. */
+function assertExtraArgs(value: string | null): void {
+  const check = validateExtraArgs(value);
+  if (!check.ok) throw new Error(check.error ?? check.blocked.map(flagNoteText).join(' '));
+}
 
 /** Task lifecycle from the task dialog and sidebar; TaskService does the work. */
 export function registerTaskIpc(): void {
@@ -71,6 +84,22 @@ export function registerTaskIpc(): void {
       const task = DatabaseService.getTask(input.taskId);
       if (!task) throw new Error(`Task not found: ${input.taskId}`);
       DatabaseService.setTaskDashAccess(input.taskId, input.enabled);
+      taskEvents.emitChanged(task.projectId);
+      return { success: true, data: DatabaseService.getTask(input.taskId) };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  // Only the options: the renderer restarts a running session afterwards
+  // (changeSessionSetting), and the next dispatch passes them.
+  ipcMain.handle('task:setLaunchOptions', (_event, input: SetTaskLaunchOptionsInput) => {
+    try {
+      parseArgs('task:setLaunchOptions', launchOptionsInputSchema, input);
+      const task = DatabaseService.getTask(input.taskId);
+      if (!task) throw new Error(`Task not found: ${input.taskId}`);
+      if (input.extraArgs !== undefined) assertExtraArgs(input.extraArgs);
+      DatabaseService.setTaskLaunchOptions(input.taskId, input);
       taskEvents.emitChanged(task.projectId);
       return { success: true, data: DatabaseService.getTask(input.taskId) };
     } catch (error) {

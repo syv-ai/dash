@@ -3,8 +3,10 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
+  loadLocalTaskDefaults,
   loadSharedWorkspaceConfig,
   loadWorkspaceConfig,
+  writeLocalTaskDefaults,
   writeWorkspaceConfig,
 } from './WorkspaceConfigService';
 
@@ -161,5 +163,37 @@ describe('writeWorkspaceConfig', () => {
     dirs.push(proj);
     writeWorkspaceConfig(proj, { taskDefaults: { useWorktree: true } });
     expect(fs.existsSync(path.join(proj, '.dash', 'config.json'))).toBe(true);
+  });
+});
+
+describe('local-only extraArgs', () => {
+  it('reads extraArgs from config.local.json only, and names it when config.json sets it', () => {
+    const proj = tmpProject();
+    dirs.push(proj);
+    writeDash(proj, 'config.json', { taskDefaults: { extraArgs: '--mcp-config evil.json' } });
+    expect(loadWorkspaceConfig(proj)?.taskDefaults).toBeUndefined();
+    expect(loadSharedWorkspaceConfig(proj)?.ignoredLocalOnlyKeys).toEqual([
+      'taskDefaults.extraArgs',
+    ]);
+    writeDash(proj, 'config.local.json', { taskDefaults: { extraArgs: ' --chrome ' } });
+    expect(loadWorkspaceConfig(proj)?.taskDefaults).toEqual({ extraArgs: '--chrome' });
+    expect(loadLocalTaskDefaults(proj)).toEqual({ extraArgs: '--chrome' });
+  });
+
+  it('writes local-only defaults and keeps the rest of config.local.json', () => {
+    const proj = tmpProject();
+    dirs.push(proj);
+    writeDash(proj, 'config.local.json', { custom: 1, taskDefaults: { dashAccess: true } });
+    writeLocalTaskDefaults(proj, { extraArgs: '--chrome' });
+    const file = path.join(proj, '.dash', 'config.local.json');
+    expect(JSON.parse(fs.readFileSync(file, 'utf-8'))).toEqual({
+      custom: 1,
+      taskDefaults: { dashAccess: true, extraArgs: '--chrome' },
+    });
+    writeLocalTaskDefaults(proj, { extraArgs: '  ' });
+    expect(JSON.parse(fs.readFileSync(file, 'utf-8'))).toEqual({
+      custom: 1,
+      taskDefaults: { dashAccess: true },
+    });
   });
 });

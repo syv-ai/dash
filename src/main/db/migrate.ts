@@ -446,6 +446,13 @@ export function runMigrations(): void {
     /* already exists */
   }
 
+  // The person's own `claude` flags for a task's session (Extra arguments).
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN extra_args TEXT`);
+  } catch {
+    /* already exists */
+  }
+
   // The PR a task reviews, when the person picked one (else its own open PR is
   // the target): main and dashctl default to it.
   rawDb.exec(`

@@ -11,6 +11,7 @@ import type {
   TokenStatsRollup,
   PermissionMode,
   TaskModel,
+  TaskLaunchOptions,
   TaskStatus,
   TaskPort,
   PortSource,
@@ -243,6 +244,7 @@ export class DatabaseService {
           linkedItems: linkedItemsJson,
           contextPrompt: data.contextPrompt ?? null,
           dashAccess: data.dashAccess ?? false,
+          extraArgs: data.extraArgs ?? null,
           parentTaskId: data.parentTaskId ?? null,
           sortOrder: sortOrder ?? 0,
           createdAt: now,
@@ -255,8 +257,8 @@ export class DatabaseService {
         // rename can't clobber it. Adding it here would null it out on every
         // update call that doesn't resend it (e.g. updateTask → rename wipes
         // the context prompt). Leave it out. Same for `dashAccess` (its setter is
-        // setTaskDashAccess), `favorite` (setTaskFavorite) and `parentTaskId`
-        // (fixed at creation).
+        // setTaskDashAccess), `favorite` (setTaskFavorite), the launch options
+        // (setTaskLaunchOptions) and `parentTaskId` (fixed at creation).
         .onConflictDoUpdate({
           target: tasks.id,
           set: {
@@ -306,6 +308,19 @@ export class DatabaseService {
     const db = getDb();
     db.update(tasks)
       .set({ dashAccess: enabled, updatedAt: new Date().toISOString() })
+      .where(eq(tasks.id, id))
+      .run();
+  }
+
+  /** Change a task's launch options (the keys given only). Kept separate
+   *  from saveTask so partial saves can't reset them. */
+  static setTaskLaunchOptions(id: string, patch: Partial<TaskLaunchOptions>): void {
+    const set: Partial<typeof tasks.$inferInsert> = {};
+    if (patch.extraArgs !== undefined) set.extraArgs = patch.extraArgs?.trim() || null;
+    if (Object.keys(set).length === 0) return;
+    const db = getDb();
+    db.update(tasks)
+      .set({ ...set, updatedAt: new Date().toISOString() })
       .where(eq(tasks.id, id))
       .run();
   }
@@ -684,6 +699,7 @@ export class DatabaseService {
       sessionStoppedAt: row.sessionStoppedAt ?? null,
       archivedAt: row.archivedAt,
       dashAccess: row.dashAccess ?? false,
+      extraArgs: row.extraArgs ?? null,
       parentTaskId: row.parentTaskId ?? null,
       favorite: row.favorite ?? false,
       sortOrder: row.sortOrder,

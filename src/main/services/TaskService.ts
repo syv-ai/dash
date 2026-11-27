@@ -17,7 +17,8 @@ import { AzureDevOpsService } from './AzureDevOpsService';
 import { ConnectionConfigService } from './ConnectionConfigService';
 import { TelemetryService } from './TelemetryService';
 import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
-import { loadWorkspaceConfig } from './WorkspaceConfigService';
+import { loadWorkspaceConfig, type WorkspaceTaskDefaults } from './WorkspaceConfigService';
+import { flagNoteText, validateExtraArgs } from '@shared/extraArgs';
 import {
   ensureWatching as ensurePortsConfigWatch,
   stop as stopPortsConfigWatch,
@@ -71,6 +72,14 @@ export class TaskService {
     const project = DatabaseService.getProjects().find((p) => p.id === input.projectId);
     if (!project) throw new Error(`Project not found: ${input.projectId}`);
     const { name, linkedItems, contextPrompt } = input;
+    const projectDefaults = readTaskDefaults(project.path);
+    const extraArgs = input.extraArgs ?? projectDefaults?.extraArgs;
+    const extraCheck = validateExtraArgs(extraArgs);
+    if (!extraCheck.ok) {
+      throw new Error(
+        `Extra arguments: ${extraCheck.error ?? extraCheck.blocked.map(flagNoteText).join(' ')}`,
+      );
+    }
 
     // saveTask enforces one active in-place task per project folder; check it
     // before the checkout too, or a refused task would still switch the
@@ -152,7 +161,8 @@ export class TaskService {
       branchCreatedByDash: input.kind === 'worktree-new-branch' && !!worktreeInfo,
       linkedItems: linkedItems ?? null,
       contextPrompt: contextPrompt ?? null,
-      dashAccess: resolveDashAccess(input.dashAccess, project.path),
+      dashAccess: input.dashAccess ?? projectDefaults?.dashAccess ?? false,
+      extraArgs: extraArgs?.trim() || null,
       parentTaskId: input.parentTaskId ?? null,
     });
 
@@ -333,13 +343,13 @@ export class TaskService {
 }
 
 /** Explicit flag → the project's `taskDefaults.dashAccess` → off. */
-function resolveDashAccess(explicit: boolean | undefined, projectPath: string): boolean {
-  if (explicit !== undefined) return explicit;
+/** The project's new-task defaults (config.json with config.local.json over it). */
+function readTaskDefaults(projectPath: string): WorkspaceTaskDefaults | undefined {
   try {
-    return loadWorkspaceConfig(projectPath)?.taskDefaults?.dashAccess ?? false;
+    return loadWorkspaceConfig(projectPath)?.taskDefaults;
   } catch (err) {
-    console.warn('[TaskService] could not read the project default for Dash access:', err);
-    return false;
+    console.warn('[TaskService] could not read the project task defaults:', err);
+    return undefined;
   }
 }
 

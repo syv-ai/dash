@@ -10,7 +10,12 @@ import {
 } from '../sessionSettingChange';
 
 const AVAILABLE = { available: true } as const;
-const TASK = { permissionMode: 'auto', model: 'haiku', dashAccess: false } as const;
+const TASK = {
+  permissionMode: 'auto',
+  model: 'haiku',
+  dashAccess: false,
+  extraArgs: '--chrome',
+} as const;
 
 const plan = (
   change: SessionSettingChange,
@@ -23,6 +28,29 @@ describe('planSessionSettingChange', () => {
     expect(plan({ setting: 'permissionMode', to: 'auto' }, true)).toEqual({ kind: 'none' });
     expect(plan({ setting: 'model', to: 'haiku' }, true)).toEqual({ kind: 'none' });
     expect(plan({ setting: 'dashAccess', to: false }, true)).toEqual({ kind: 'none' });
+    expect(plan({ setting: 'extraArgs', to: ' --chrome ' }, true)).toEqual({ kind: 'none' });
+  });
+
+  it('restarts for new extra arguments, and treats a blank line as none', () => {
+    expect(plan({ setting: 'extraArgs', to: '--chrome --verbose' }, true)).toMatchObject({
+      kind: 'apply',
+      restart: true,
+      confirm: {
+        title: 'Restart with these extra arguments?',
+        message: 'Changing them restarts the session, which resumes the same conversation.',
+      },
+    });
+    expect(plan({ setting: 'extraArgs', to: '  ' }, true)).toMatchObject({
+      confirm: { title: 'Drop the extra arguments?' },
+    });
+    expect(
+      planSessionSettingChange({
+        task: { ...TASK, extraArgs: null },
+        change: { setting: 'extraArgs', to: '' },
+        hasSession: true,
+        bypass: null,
+      }),
+    ).toEqual({ kind: 'none' });
   });
 
   it('restarts a task with a session into Yolo, after a confirm that says both', () => {

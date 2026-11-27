@@ -1,4 +1,4 @@
-import React, { useId, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import type { Task } from '../../../shared/types';
 import { Dialog, DialogBody, DialogHeader } from '../ui/Dialog';
 import { FormSection, SettingRow } from '../ui/Field';
@@ -6,6 +6,8 @@ import { Input } from '../ui/Input';
 import { PermissionModePicker } from './PermissionModePicker';
 import { ModelPicker } from './ModelPicker';
 import { SwitchField } from '../ui/SwitchField';
+import { Expandable } from '../ui/Expandable';
+import { ExtraArgsField } from './ExtraArgsField';
 import { useControlInfo } from '../../hooks/useControlInfo';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useTaskBranch } from '../../stores/gitStore';
@@ -39,6 +41,9 @@ export function TaskSettingsModal({
   const controlSupported = useControlInfo()?.supported ?? false;
   const sessionMode = useRuntime((s) => s.taskActivity[task.id]?.permissionMode);
   const bypass = useBypassAvailability(task.path);
+  const [extraArgs, setExtraArgs] = useState(task.extraArgs ?? '');
+  // A saved change (or one made elsewhere) replaces the draft.
+  useEffect(() => setExtraArgs(task.extraArgs ?? ''), [task.extraArgs]);
 
   function handleSaveName() {
     const trimmed = name.trim();
@@ -89,6 +94,17 @@ export function TaskSettingsModal({
               onCheckedChange={(to) => onSessionSettingChange({ setting: 'dashAccess', to })}
             />
           )}
+        </FormSection>
+        <FormSection>
+          <Expandable label="Advanced" defaultOpen={!!task.extraArgs}>
+            <ExtraArgsField
+              value={extraArgs}
+              onChange={setExtraArgs}
+              onCommit={(to) =>
+                onSessionSettingChange({ setting: 'extraArgs', to: to.trim() || null })
+              }
+            />
+          </Expandable>
         </FormSection>
       </DialogBody>
     </Dialog>

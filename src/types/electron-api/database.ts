@@ -5,6 +5,7 @@ import type {
   DeleteTaskOptions,
   SetTaskDashAccessInput,
   SetTaskFavoriteInput,
+  SetTaskLaunchOptionsInput,
   TaskMessageAddresses,
   IpcResponse,
   Project,
@@ -44,6 +45,8 @@ export interface DatabaseApi {
   /** Turn a task's Dash access on or off; returns the updated task. Applies at its next dispatch. */
   setTaskDashAccess: (input: SetTaskDashAccessInput) => Promise<IpcResponse<Task>>;
   setTaskFavorite: (input: SetTaskFavoriteInput) => Promise<IpcResponse<Task>>;
+  /** Change how the task's session launches (extra arguments, …); restart applies it. */
+  setTaskLaunchOptions: (input: SetTaskLaunchOptionsInput) => Promise<IpcResponse<Task>>;
   /** Whether Claude Code's settings let a session in `cwd` (a task's checkout, or a
    *  project's folder) skip permissions (claudeBypassPolicy). */
   getBypassAvailability: (cwd: string) => Promise<IpcResponse<BypassAvailability>>;

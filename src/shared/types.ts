@@ -128,6 +128,9 @@ export interface Task {
   archivedAt: string | null;
   /** Whether the task's session can reach Dash with dashctl (control API). */
   dashAccess: boolean;
+  /** The person's own `claude` flags for the session, as typed (shell
+   *  quoting, no expansion); null when none. Checked by validateExtraArgs. */
+  extraArgs: string | null;
   /** The task that created this one through the control API; null when a
    *  person created it. Fixed at creation. */
   parentTaskId: string | null;
@@ -162,6 +165,9 @@ export type CreateTaskOptions = {
   initialPrompt?: string;
   /** undefined → project taskDefaults.dashAccess → false. Resolved only in TaskService.create. */
   dashAccess?: boolean;
+  /** Extra `claude` flags, as typed. undefined → the project's default from
+   *  `.dash/config.local.json`. Resolved only in TaskService.create. */
+  extraArgs?: string;
 } & (
   | { kind: 'worktree-new-branch'; baseRef: string; pushRemote: boolean }
   | { kind: 'worktree-existing'; branch: string; updateFromRemote?: boolean }
@@ -177,6 +183,14 @@ export type CreateTaskInput = CreateTaskOptions & {
 
 /** `task:setDashAccess`: turn a task's Dash access on or off (applies at its next session start). */
 export type SetTaskDashAccessInput = { taskId: string; enabled: boolean };
+
+/**
+ * `task:setLaunchOptions`: change how a task's session is launched (the flags
+ * besides mode and model). Only the keys given change; a running session
+ * picks them up when it restarts (changeSessionSetting does that).
+ */
+export type TaskLaunchOptions = Pick<Task, 'extraArgs'>;
+export type SetTaskLaunchOptionsInput = { taskId: string } & Partial<TaskLaunchOptions>;
 
 /** `task:setFavorite`: pin a task to the top of the sidebar's task list, or unpin it. */
 export type SetTaskFavoriteInput = { taskId: string; favorite: boolean };

@@ -3,11 +3,16 @@ import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
 import { permissionModeSchema } from './schemas';
 import {
+  loadLocalTaskDefaults,
   loadSharedWorkspaceConfig,
   loadWorkspaceConfig,
+  writeLocalTaskDefaults,
   writeWorkspaceConfig,
+  type LocalTaskDefaults,
   type WorkspaceConfig,
 } from '../services/WorkspaceConfigService';
+import { GitService } from '../services/GitService';
+import { LOCAL_CONFIG_EXCLUDE_ENTRY } from '../services/gitExclude';
 
 const taskDefaultsSchema = z
   .object({
@@ -22,6 +27,8 @@ const taskDefaultsSchema = z
 const configSchema = z.looseObject({
   taskDefaults: taskDefaultsSchema,
 });
+
+const localTaskDefaultsSchema = z.object({ extraArgs: z.string().optional() });
 
 export function registerWorkspaceConfigIpc(): void {
   // `shared: true` reads config.json without the config.local.json overlay
@@ -54,6 +61,38 @@ export function registerWorkspaceConfigIpc(): void {
           args,
         );
         writeWorkspaceConfig(args.projectPath, args.config);
+        return { success: true };
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  );
+
+  // The personal, local-only task defaults (`config.local.json`), alone.
+  ipcMain.handle('workspaceConfig:readLocal', (_event, projectPath: string) => {
+    try {
+      parseArgs('workspaceConfig:readLocal', z.string(), projectPath);
+      return { success: true, data: loadLocalTaskDefaults(projectPath) };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  ipcMain.handle(
+    'workspaceConfig:writeLocal',
+    async (_event, args: { projectPath: string; defaults: LocalTaskDefaults }) => {
+      try {
+        parseArgs(
+          'workspaceConfig:writeLocal',
+          z.looseObject({ projectPath: z.string(), defaults: localTaskDefaultsSchema }),
+          args,
+        );
+        writeLocalTaskDefaults(args.projectPath, args.defaults);
+        // The file is the person's own: keep it out of git (best effort, a
+        // folder that isn't a repository has nothing to commit it to).
+        await GitService.ensureExcluded(args.projectPath, LOCAL_CONFIG_EXCLUDE_ENTRY).catch(
+          () => {},
+        );
         return { success: true };
       } catch (error) {
         return errorResponse(error);

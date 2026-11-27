@@ -133,6 +133,7 @@ const ALLOWED_PROPERTIES = new Set([
   'resumed',
   'model',
   'permission_mode',
+  'extra_flags',
   'provider',
   'verdict',
   'comment_count',

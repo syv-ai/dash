@@ -76,6 +76,9 @@ export const tasks = sqliteTable(
     // Control API: whether the task's session can reach Dash with dashctl, and the
     // task that created this one through the API (null if a person did).
     dashAccess: integer('dash_access', { mode: 'boolean' }).notNull().default(false),
+    // The person's own `claude` flags for the task's session, as typed; null
+    // when none (validateExtraArgs checks them at save and at dispatch).
+    extraArgs: text('extra_args'),
     parentTaskId: text('parent_task_id'),
     // Pinned to the top of the sidebar's task list.
     favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false),

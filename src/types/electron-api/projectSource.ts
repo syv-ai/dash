@@ -1,6 +1,9 @@
 import type { IpcResponse } from '../../shared/types';
 import type { PathFacts } from '../../shared/pathFacts';
-import type { WorkspaceConfig } from '../../main/services/WorkspaceConfigService';
+import type {
+  LocalTaskDefaults,
+  WorkspaceConfig,
+} from '../../main/services/WorkspaceConfigService';
 
 /** Creating a project's source tree (clone / empty / agent-scaffold) and reading
  *  or writing its `.dash/config.json` workspace config. */
@@ -14,6 +17,13 @@ export interface ProjectSourceApi {
   writeWorkspaceConfig: (args: {
     projectPath: string;
     config: WorkspaceConfig;
+  }) => Promise<IpcResponse<void>>;
+  /** `.dash/config.local.json`'s local-only task defaults alone (extra arguments). */
+  readLocalTaskDefaults: (projectPath: string) => Promise<IpcResponse<LocalTaskDefaults>>;
+  /** Set them, keeping the file's other keys; Dash keeps the file out of git. */
+  writeLocalTaskDefaults: (args: {
+    projectPath: string;
+    defaults: LocalTaskDefaults;
   }) => Promise<IpcResponse<void>>;
 
   // Project sources (clone / empty / scaffold)

@@ -1,5 +1,9 @@
 import type { PermissionMode } from '../../../shared/types';
-import type { WorkspaceConfig } from '../../../main/services/WorkspaceConfigService';
+import type {
+  LocalTaskDefaults,
+  WorkspaceConfig,
+} from '../../../main/services/WorkspaceConfigService';
+import { validateExtraArgs } from '../../../shared/extraArgs';
 
 /** The editable shape of the Project Settings form. */
 export interface ConfigureValues {
@@ -41,4 +45,23 @@ export function valuesToConfig(value: ConfigureValues): WorkspaceConfig {
     dashAccess: value.dashAccess || undefined,
   };
   return { taskDefaults };
+}
+
+/** The personal, local-only defaults (`.dash/config.local.json`) as the form edits them. */
+export interface LocalValues {
+  extraArgs: string;
+}
+
+export function localToValues(defaults: LocalTaskDefaults | undefined): LocalValues {
+  return { extraArgs: defaults?.extraArgs ?? '' };
+}
+
+/** Empty fields are dropped (main removes their keys). */
+export function valuesToLocal(value: LocalValues): LocalTaskDefaults {
+  return { extraArgs: value.extraArgs.trim() || undefined };
+}
+
+/** Whether the form can be saved: extra arguments a task could launch with. */
+export function localValuesOk(value: LocalValues): boolean {
+  return validateExtraArgs(value.extraArgs).ok;
 }
