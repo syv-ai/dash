@@ -491,6 +491,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   systemHealthConfigure: (config: import('@shared/systemHealth').SystemHealthConfig) =>
     ipcRenderer.send('systemHealth:configure', config),
   onMemoryAlert: listen<import('@shared/systemHealth').MemoryAlert>('systemHealth:alert'),
+  systemHealthSetLive: (live: boolean) => ipcRenderer.send('systemHealth:live', live),
+  onSystemHealthSnapshot:
+    listen<import('@shared/systemHealth').SystemHealthSnapshot>('systemHealth:snapshot'),
 
   // Workspace ports
   portsList: (taskId: string) => ipcRenderer.invoke('ports:list', taskId),

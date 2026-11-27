@@ -69,7 +69,7 @@ export function useMemoryWarning(): void {
   const thresholdGb = useSettings((s) => s.memoryWarningGb);
 
   useEffect(() => {
-    window.electronAPI.systemHealthConfigure({ enabled, thresholdGb });
+    window.electronAPI.systemHealthConfigure({ alerts: enabled, indicator: false, thresholdGb });
   }, [enabled, thresholdGb]);
 
   useEffect(() => window.electronAPI.onMemoryAlert(onAlert), []);

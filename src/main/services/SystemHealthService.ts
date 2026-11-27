@@ -3,10 +3,12 @@ import { promisify } from 'util';
 import { app, BrowserWindow, Notification } from 'electron';
 import {
   BYTES_PER_GB,
+  healthLevel,
   MEMORY_WARNING_DEFAULT_GB,
   type MemoryAlert,
   type MemoryPressure,
   type SystemHealthConfig,
+  type SystemHealthSnapshot,
   type TaskMemory,
 } from '@shared/systemHealth';
 import { DatabaseService } from './DatabaseService';
@@ -25,6 +27,8 @@ const execFileAsync = promisify(execFile);
 
 /** One sample costs a `ps` (~20 ms for 800 processes) and a `sysctl`. */
 export const SAMPLE_MS = 45_000;
+/** While the health popover is open, so its numbers move. */
+export const LIVE_SAMPLE_MS = 5_000;
 /** The first sample after the setting turns on or changes. */
 const FIRST_SAMPLE_MS = 5_000;
 const EXEC_TIMEOUT_MS = 5_000;
@@ -34,6 +38,7 @@ const TOP_TASKS = 3;
 const DASH_ROOT = Symbol('dash');
 
 interface Sample {
+  at: number;
   totalBytes: number;
   pressure: MemoryPressure | null;
   tasks: TaskMemory[];
@@ -79,31 +84,67 @@ async function readPressure(): Promise<MemoryPressure | null> {
  * (`app.getAppMetrics()`), every other process under main (terminals,
  * services), and each task session's process tree under Claude Code's
  * supervisor (the session, its subagents, MCP servers and shells). On macOS it
- * also reads the OS's memory pressure. Crossing the user's threshold, or the
- * OS reporting pressure, sends one `systemHealth:alert` (memoryAlertState
- * decides when), and a desktop notification while Dash is in the background.
+ * also reads the OS's memory pressure.
  *
- * Runs only while the renderer's setting is on (`configure`).
+ * Two consumers, each a renderer setting (`configure`), and it samples only
+ * while one is on:
+ * - the warning: crossing the threshold, or the OS reporting pressure, sends
+ *   one `systemHealth:alert` (memoryAlertState decides when), and a desktop
+ *   notification while Dash is in the background;
+ * - the sidebar's health icon: a `systemHealth:snapshot` after every sample,
+ *   every SAMPLE_MS, or LIVE_SAMPLE_MS while its popover is open (`setLive`).
+ * Both read the same `healthLevel`.
  */
 class SystemHealthServiceImpl {
-  private config: SystemHealthConfig = { enabled: false, thresholdGb: MEMORY_WARNING_DEFAULT_GB };
+  private config: SystemHealthConfig = {
+    alerts: false,
+    indicator: false,
+    thresholdGb: MEMORY_WARNING_DEFAULT_GB,
+  };
+  private live = false;
   private state: AlertState = INITIAL_ALERT_STATE;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private sampling = false;
+  private last: Sample | null = null;
   private loggedSource = false;
 
+  private get active(): boolean {
+    return this.config.alerts || this.config.indicator;
+  }
+
+  private get thresholdBytes(): number {
+    return this.config.thresholdGb * BYTES_PER_GB;
+  }
+
   configure(next: SystemHealthConfig): void {
-    const changed =
-      next.enabled !== this.config.enabled || next.thresholdGb !== this.config.thresholdGb;
+    const prev = this.config;
     this.config = next;
+    // A reloaded renderer, or a new threshold: the icon reads the last sample now.
+    if (next.indicator && this.last) this.sendSnapshot(this.last);
+    const changed =
+      next.alerts !== prev.alerts ||
+      next.indicator !== prev.indicator ||
+      next.thresholdGb !== prev.thresholdGb;
     if (!changed) return;
-    // A new threshold is a fresh question: warn on its first crossing.
-    this.state = INITIAL_ALERT_STATE;
+    // A new threshold, or the warning back on, is a fresh question: warn on its first crossing.
+    if (next.thresholdGb !== prev.thresholdGb || next.alerts !== prev.alerts) {
+      this.state = INITIAL_ALERT_STATE;
+    }
     this.clearTimer();
-    if (next.enabled) this.schedule(FIRST_SAMPLE_MS);
+    if (this.active && !this.sampling) this.schedule(FIRST_SAMPLE_MS);
+  }
+
+  /** The popover is open: sample now, then every LIVE_SAMPLE_MS until it closes. */
+  setLive(live: boolean): void {
+    if (live === this.live) return;
+    this.live = live;
+    if (!live || !this.config.indicator || this.sampling) return;
+    this.clearTimer();
+    this.schedule(0);
   }
 
   stop(): void {
-    this.config = { ...this.config, enabled: false };
+    this.config = { ...this.config, alerts: false, indicator: false };
     this.clearTimer();
   }
 
@@ -119,31 +160,57 @@ class SystemHealthServiceImpl {
 
   private async tick(): Promise<void> {
     this.timer = null;
+    this.sampling = true;
     try {
       const sample = await this.sample();
-      if (!this.config.enabled) return;
-      const thresholdBytes = this.config.thresholdGb * BYTES_PER_GB;
-      const step = stepAlert(this.state, {
-        totalBytes: sample.totalBytes,
-        thresholdBytes,
-        pressure: sample.pressure,
-        now: Date.now(),
-      });
-      this.state = step.state;
-      if (step.alert) {
-        this.alert({
-          reason: step.alert,
-          totalBytes: sample.totalBytes,
-          thresholdBytes,
-          pressure: sample.pressure,
-          topTasks: sample.tasks.slice(0, TOP_TASKS),
-        });
-      }
+      this.last = sample;
+      if (this.config.indicator) this.sendSnapshot(sample);
+      if (this.config.alerts) this.checkAlert(sample);
     } catch (err) {
       console.warn('[SystemHealth] sample failed:', err);
     } finally {
-      if (this.config.enabled && !this.timer) this.schedule(SAMPLE_MS);
+      this.sampling = false;
+      if (this.active && !this.timer) {
+        this.schedule(this.live && this.config.indicator ? LIVE_SAMPLE_MS : SAMPLE_MS);
+      }
     }
+  }
+
+  private checkAlert(sample: Sample): void {
+    const thresholdBytes = this.thresholdBytes;
+    const step = stepAlert(this.state, {
+      totalBytes: sample.totalBytes,
+      thresholdBytes,
+      pressure: sample.pressure,
+      now: sample.at,
+    });
+    this.state = step.state;
+    if (step.alert) {
+      this.alert({
+        reason: step.alert,
+        totalBytes: sample.totalBytes,
+        thresholdBytes,
+        pressure: sample.pressure,
+        topTasks: sample.tasks.slice(0, TOP_TASKS),
+      });
+    }
+  }
+
+  private sendSnapshot(sample: Sample): void {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (!win || win.isDestroyed()) return;
+    const reading = {
+      totalBytes: sample.totalBytes,
+      thresholdBytes: this.thresholdBytes,
+      pressure: sample.pressure,
+    };
+    const snapshot: SystemHealthSnapshot = {
+      ...reading,
+      level: healthLevel(reading),
+      tasks: sample.tasks,
+      sampledAt: sample.at,
+    };
+    win.webContents.send('systemHealth:snapshot', snapshot);
   }
 
   private async sample(): Promise<Sample> {
@@ -187,7 +254,7 @@ class SystemHealthServiceImpl {
           }; now ${(totalBytes / BYTES_PER_GB).toFixed(2)} GB over ${tasks.length} sessions, pressure ${pressure ?? 'n/a'}`,
       );
     }
-    return { totalBytes, pressure, tasks };
+    return { at: Date.now(), totalBytes, pressure, tasks };
   }
 
   private alert(alert: MemoryAlert): void {
