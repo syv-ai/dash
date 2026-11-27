@@ -2,6 +2,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type {
   PrCheck,
+  PrIssue,
   PrReaction,
   PrReactionContent,
   PrReviewComment,
@@ -220,6 +221,25 @@ export function threadPaths(threads: unknown): string[] {
   return [...new Set(paths)];
 }
 
+/** The work items of a `wit/workitems?ids=…&fields=System.Title` answer, as
+ *  the PR's issues, each linked to its page. */
+export function adoIssuesFrom(items: unknown, ctx: AdoRepoContext): PrIssue[] {
+  const org = ctx.organizationUrl.replace(/\/+$/, '');
+  return list<{ id?: number; fields?: { 'System.Title'?: string } }>(
+    (items as { value?: unknown } | null)?.value,
+  ).flatMap((w) =>
+    typeof w.id === 'number'
+      ? [
+          {
+            number: w.id,
+            title: w.fields?.['System.Title'] ?? '',
+            url: `${org}/${encodeURIComponent(ctx.project)}/_workitems/edit/${w.id}`,
+          },
+        ]
+      : [],
+  );
+}
+
 /**
  * The ForgeReview of an ADO pull request: its threads (fetched with
  * `$iteration=N&$baseIteration=0`, so their positions are tracked onto the
@@ -234,6 +254,8 @@ export function adoReviewFrom(
     me: string;
     filesAtHead: ReadonlySet<string>;
     checks: PrCheck[];
+    /** Its linked work items; none when not given. */
+    issues?: PrIssue[];
   },
   ctx: AdoRepoContext,
 ): ForgeReview {
@@ -297,6 +319,7 @@ export function adoReviewFrom(
     headRef: branchName(pr.sourceRefName),
     reviewers: reviewersFrom(pr),
     assignees: [],
+    issues: raw.issues ?? [],
     checks: raw.checks,
   };
 }
@@ -474,6 +497,31 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): PrReviewProvider {
     return commentFrom(posted, threadId, threadUrl(prUrl(repoContext(ado), number), thread));
   };
 
+  /** The PR's linked work items with their titles; none when ADO won't say
+   *  (a token without work-item read), which never fails the load. */
+  const linkedWorkItems = async (
+    ado: NonNullable<PrContext['ado']>,
+    at: string,
+  ): Promise<PrIssue[]> => {
+    try {
+      const refs = (await deps.request(ado, `${at}/workitems`)) as {
+        value?: { id?: string | number }[];
+      } | null;
+      const ids = (refs?.value ?? [])
+        .map((r) => Number(r.id))
+        .filter((n) => Number.isInteger(n) && n > 0)
+        .slice(0, 50);
+      if (ids.length === 0) return [];
+      const items = await deps.request(
+        ado,
+        `${adoProjectSegment(ado)}/_apis/wit/workitems?ids=${ids.join(',')}&fields=System.Title`,
+      );
+      return adoIssuesFrom(items, repoContext(ado));
+    } catch {
+      return [];
+    }
+  };
+
   return {
     async list(ctx, filter) {
       const ado = adoOf(ctx);
@@ -495,15 +543,19 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): PrReviewProvider {
         deps.getMyId(ado).catch(() => ''),
       ]);
       const { id, head, base } = latestIteration(iterations);
-      const [threads, checks] = await Promise.all([
+      const [threads, checks, issues] = await Promise.all([
         deps.request(ado, `${at}/threads?$iteration=${id}&$baseIteration=0`),
         deps.checks(ado, number, (pr as RawPr | null)?.repository?.project?.id),
+        linkedWorkItems(ado, at),
       ]);
       const baseTip = (pr as RawPr | null)?.lastMergeTargetCommit?.commitId || null;
       await deps.ensureCommits(ctx.cwd, [base, head, ...(baseTip ? [baseTip] : [])]);
       const filesAtHead = await deps.filesAtCommit(ctx.cwd, head, threadPaths(threads));
       return {
-        ...adoReviewFrom({ pr, iterations, threads, me, filesAtHead, checks }, repoContext(ado)),
+        ...adoReviewFrom(
+          { pr, iterations, threads, me, filesAtHead, checks, issues },
+          repoContext(ado),
+        ),
         baseTip,
       };
     },

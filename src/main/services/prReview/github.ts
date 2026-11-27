@@ -62,6 +62,7 @@ export const PR_REVIEW_QUERY = `query($owner: String!, $name: String!, $number: 
       latestReviews(first: 100) { nodes { author { login url } state } }
       latestOpinionatedReviews(first: 100) { nodes { author { login url } state } }
       assignees(first: 50) { nodes { login } }
+      closingIssuesReferences(first: 25) { nodes { number title url } }
       commits(last: 1) {
         nodes {
           commit {
@@ -286,6 +287,10 @@ export function githubReviewFrom(
     headRef: str(p.headRefName),
     reviewers: reviewersFrom(p),
     assignees: nodes(p.assignees).map(login).filter(Boolean),
+    issues: nodes(p.closingIssuesReferences).flatMap((i) => {
+      const n = num(i.number);
+      return n === null ? [] : [{ number: n, title: str(i.title), url: str(i.url) }];
+    }),
     checks: checksFrom(p),
   };
 }

@@ -1,6 +1,6 @@
 import { Fragment } from 'react';
 import { ExternalLink } from 'lucide-react';
-import type { PrCheck, PrReview, PrReviewer } from '../../../shared/types';
+import type { PrCheck, PrIssue, PrReview, PrReviewer } from '../../../shared/types';
 import { branchUrl } from '../../../shared/urls';
 import { DetailSection } from '../ui/DetailList';
 import { LineStats } from '../ui/LineStats';
@@ -47,10 +47,30 @@ function Reviewers({ reviewers }: { reviewers: PrReviewer[] }) {
   ));
 }
 
+/** "Issues #12 It breaks, #14 …": the issues the PR closes (GitHub) or its
+ *  work items (ADO), each linked to its page; nothing with none. */
+function Issues({ issues }: { issues: PrIssue[] }) {
+  if (issues.length === 0) return null;
+  return (
+    <li>
+      <span className="type-label">{issues.length === 1 ? 'Issue' : 'Issues'}</span>{' '}
+      {issues.map((issue, i) => (
+        <Fragment key={issue.number}>
+          {i > 0 && ', '}
+          <TextLink href={issue.url} look="quiet" title={`Open #${issue.number} on the forge`}>
+            <span className="tabular-nums">#{issue.number}</span>
+            {issue.title && ` ${issue.title}`}
+          </TextLink>
+        </Fragment>
+      ))}
+    </li>
+  );
+}
+
 /**
  * The Review view's Overview tab, under the PR's header: About (a bulleted list: how far the PR is behind its base, when it was
- * opened and last moved, its files and lines changed, threads, reviewers and
- * assignees), its checks and its description, each a band that folds; the
+ * opened and last moved, its files and lines changed, threads, reviewers,
+ * assignees and linked issues), its checks and its description, each a band that folds; the
  * open ones are remembered for the session. The general conversation lives
  * in the Comments tab.
  */
@@ -95,6 +115,7 @@ export function ReviewOverview({ review, remote }: { review: PrReview; remote: s
             {threads && <li className="tabular-nums">{threads}</li>}
             <Reviewers reviewers={review.reviewers} />
             {review.assignees.length > 0 && <li>Assigned to {review.assignees.join(', ')}</li>}
+            <Issues issues={review.issues} />
           </ul>
         </div>
       </DetailSection>

@@ -314,6 +314,9 @@ function fakeDeps(failOnCall?: number) {
       if (failOnCall !== undefined && calls.length === failOnCall)
         throw new AdoRequestError('Server error', 500);
       if (path.endsWith('/iterations')) return iterations;
+      if (path.endsWith('/workitems')) return { value: [{ id: '42', url: 'x' }] };
+      if (path.includes('/_apis/wit/workitems?'))
+        return { value: [{ id: 42, fields: { 'System.Title': 'Wire it' } }] };
       if (path.includes('/changes')) {
         return path.endsWith('$skip=0')
           ? { changeEntries: [{ changeTrackingId: 3, item: { path: '/src/a.ts' } }], nextSkip: 1 }
@@ -371,6 +374,33 @@ describe('adoProvider', () => {
     expect(calls.map((c) => c.path)).toContain(`${base}/threads?$iteration=11&$baseIteration=0`);
     expect(review.head).toBe('HEAD11');
     expect(review.checks).toEqual(checks);
+  });
+
+  it('lists the linked work items, linked to their pages', async () => {
+    const { deps, calls } = fakeDeps();
+    const review = await makeAdoProvider(deps).load(pctx, 7204);
+    expect(calls.map((c) => c.path)).toContain(
+      'My%20Proj/_apis/wit/workitems?ids=42&fields=System.Title',
+    );
+    expect(review.issues).toEqual([
+      {
+        number: 42,
+        title: 'Wire it',
+        url: 'https://dev.azure.com/org/My%20Proj/_workitems/edit/42',
+      },
+    ]);
+  });
+
+  it('loads without work items when ADO refuses them', async () => {
+    const { deps } = fakeDeps();
+    const refusing: AdoDeps = {
+      ...deps,
+      request: async (config, path, options) => {
+        if (path.endsWith('/workitems')) throw new AdoRequestError('no', 401);
+        return deps.request(config, path, options);
+      },
+    };
+    expect((await makeAdoProvider(refusing).load(pctx, 7204)).issues).toEqual([]);
   });
 
   it('fetches and names the target tip the PR was last merged against', async () => {

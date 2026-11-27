@@ -731,6 +731,13 @@ export interface PrFile {
   blob: string | null;
 }
 
+/** An issue linked to a PR: one it closes (GitHub), or a linked work item (ADO). */
+export interface PrIssue {
+  number: number;
+  title: string;
+  url: string;
+}
+
 /** A PR's review: all its threads and general comments, with the commits its diff spans. */
 export interface PrReview {
   provider: PrProvider;
@@ -774,6 +781,8 @@ export interface PrReview {
   reviewers: PrReviewer[];
   /** [] on ADO, which has none. */
   assignees: string[];
+  /** The issues it closes (GitHub) or its linked work items (ADO). */
+  issues: PrIssue[];
   checks: PrCheck[];
   files: PrFile[];
 }

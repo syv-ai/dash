@@ -147,6 +147,7 @@ describe('githubReviewFrom', () => {
       baseRef: 'main',
       headRef: 'fix/it',
       assignees: ['bo', 'ann'],
+      issues: [{ number: 12, title: 'It breaks', url: 'https://github.com/o/r/issues/12' }],
     });
     // A re-request outranks the review before it; a dismissed review doesn't
     // count; a comment after an approval leaves it approved.

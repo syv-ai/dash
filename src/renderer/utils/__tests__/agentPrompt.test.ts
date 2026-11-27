@@ -162,6 +162,7 @@ const review = (number: number, threads: PrReviewThread[]): PrReview => ({
   behindBase: 0,
   reviewers: [],
   assignees: [],
+  issues: [],
   checks: [],
   files: [],
 });
