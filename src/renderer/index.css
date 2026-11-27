@@ -119,6 +119,10 @@
   /* `animate-breathe`: a StatusDot that wants a look (work, needs,
      unseen); pair with `motion-safe:`. */
   --animate-breathe: breathe 2.4s ease-in-out infinite;
+  /* `animate-fade-in`: content arriving (dialogs, the left sidebar's content
+     and rail as it opens or closes); a theme animation, so `motion-safe:`
+     applies (`fadeIn` below). */
+  --animate-fade-in: fadeIn 200ms ease-out;
   @keyframes breathe {
     50% {
       opacity: 0.35;
@@ -635,10 +639,6 @@
     opacity: 0.3;
     transform: scale(0.85);
   }
-}
-
-.animate-fade-in {
-  animation: fadeIn 200ms ease-out;
 }
 
 /* Height-animated disclosure — expands from 0 to auto without measuring.

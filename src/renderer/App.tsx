@@ -10,7 +10,7 @@ import {
   type PanelImperativeHandle,
 } from './components/ui/Resizable';
 import { expandShellDrawer } from './components/terminal/ShellDrawerWrapper';
-import { LeftSidebar } from './components/leftSidebar/LeftSidebar';
+import { LeftSidebar, LEFT_SIDEBAR_MIN_PX } from './components/leftSidebar/LeftSidebar';
 import { MainContent } from './components/MainContent';
 import { openInIde } from './lib/openInIde';
 import {
@@ -26,6 +26,7 @@ import {
 import { headerModelName } from './lib/modelName';
 import { RightInspector } from './components/rightInspector/RightInspector';
 import { usePlannedMotion } from './lib/usePlannedMotion';
+import type { LeftHold, LeftPanelSize } from './lib/leftHold';
 import { whenFramesSettle } from './lib/framesSettled';
 import { cn } from './lib/cn';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
@@ -94,6 +95,15 @@ const INSPECTOR_MAX_PCT = 85;
 /** The centre (the agent's terminal) at its narrowest, in px: its header's
  *  name, branch and actions still fit, and the TUI reflows to it. */
 const MAIN_MIN_PX = 280;
+/** The left sidebar's content crossing to or from its rail (`LeftHold`):
+ *  it fades in as the panel opens, and out, quicker, as it closes. */
+function leftHoldFade(hold: LeftHold | null): string | undefined {
+  if (!hold) return undefined;
+  return hold.to === 'expanded'
+    ? 'motion-safe:animate-fade-in'
+    : 'opacity-0 transition-opacity duration-150 ease-out motion-reduce:transition-none';
+}
+
 /** The left sidebar collapsed (%): its rail. */
 const SIDEBAR_COLLAPSED_PCT = 3;
 /** The task sidebar collapsed (px): its rail (`TaskRail`), as wide as its
@@ -987,20 +997,35 @@ export function App() {
   // of the shell), given back as the sidebar goes narrow. Null once the user
   // toggles the left sidebar themselves.
   const leftFreedByExpandRef = useRef<number | null>(null);
+  // The left sidebar's body: the motion reads its panel's end layout in px
+  // from the shell's width (the panel's own px is mid-transition).
+  const sidebarBodyRef = useRef<HTMLDivElement>(null);
+  const measureLeft = useCallback((): LeftPanelSize | null => {
+    const panel = sidebarPanelRef.current;
+    const groupPx = sidebarBodyRef.current?.closest(
+      '[data-slot="resizable-panel-group"]',
+    )?.clientWidth;
+    if (!panel || !groupPx) return null;
+    return {
+      px: (panel.getSize().asPercentage / 100) * groupPx,
+      collapsed: panel.isCollapsed(),
+    };
+  }, []);
   // The shell's planned motion, for every way its sidebars move (narrow ⇄
   // expanded, closing the editor, hide ⇄ show, ⌘B); `easeNow` is the slower
   // ease while one runs, so no panel's `animate` flag clears mid-ease.
   const {
     motion: sidebarMotion,
+    leftHold,
     phase: motionPhase,
     run: runMotion,
     stop: stopMotion,
     easeNow,
-  } = usePlannedMotion();
+  } = usePlannedMotion(measureLeft);
   // ⌘B and the left sidebar's own toggle take the planned motion too (D266):
   // the task sidebar's content isn't held (it keeps its width, or reflows
   // as it takes or gives the room); the left sidebar's content follows the
-  // motion's rail rule (`sidebarRail`).
+  // motion's rail rule (`sidebarRail`), held at its width and faded (`leftHold`).
   const toggleSidebar = useCallback(() => {
     if (!sidebarPanelRef.current) return;
     // The user's call now: going narrow leaves the left sidebar as it is.
@@ -1051,6 +1076,8 @@ export function App() {
   const [inspectorMinPx, setInspectorMinPx] = useState<number>();
   // The left sidebar's (px), likewise: dragged narrower, it snaps to its
   // rail (the panel's own collapse) instead of truncating its tabs (T16).
+  // Until its tabs have measured (launched on its rail), its floor: so it
+  // opens straight to the width it keeps, which the motion holds it at.
   const [sidebarMinPx, setSidebarMinPx] = useState<number>();
   // The width before a side-car TUI sized the panel to hug it (below).
   const changesSizeBeforeTui = useRef<number | null>(null);
@@ -1241,11 +1268,10 @@ export function App() {
     if (width === null) {
       stopMotion();
       settleClose();
-      // Narrow behind a collapsed task sidebar: nothing to move with.
-      if (restoreLeft) {
-        setSidebarAnimating(true);
-        left.expand();
-      }
+      // Narrow behind a collapsed task sidebar: the left sidebar comes back
+      // on its own, through the planned motion so its content fades in at
+      // its width (`leftHold`).
+      if (restoreLeft) runMotion({ movesLeft: true, move: () => left.expand() });
       return;
     }
     const targetWidth = width;
@@ -1283,7 +1309,7 @@ export function App() {
       },
       done: settleClose,
     });
-  }, [expanded, runMotion, stopMotion, setSidebarAnimating]);
+  }, [expanded, runMotion, stopMotion]);
   const narrowEditor = useCallback(() => {
     if (activeTask) useEditors.getState().hide(activeTask.path);
   }, [activeTask]);
@@ -1488,7 +1514,7 @@ export function App() {
           panelRef={sidebarPanelRef}
           animate={sidebarAnimating}
           defaultSize={startedCollapsed.sidebar ? '3%' : '18%'}
-          minSize={sidebarMinPx ?? '12%'}
+          minSize={sidebarMinPx ?? LEFT_SIDEBAR_MIN_PX}
           maxSize="28%"
           collapsible
           collapsedSize={`${SIDEBAR_COLLAPSED_PCT}%`}
@@ -1501,54 +1527,70 @@ export function App() {
             setTimeout(() => setSidebarAnimating(false), easeNow());
           }}
         >
-          <ErrorBoundary area="The sidebar">
-            <LeftSidebar
-              projects={projects}
-              activeProjectId={activeProjectId}
-              onSelectProject={(id) => {
-                setActiveProjectId(id);
-                setActiveTaskId(null);
-              }}
-              onOpenFolder={() => {
-                setShowAddProjectModal(true);
-              }}
-              onDeleteProject={handleDeleteProject}
-              onProjectSettings={(id) => {
-                const p = projects.find((proj) => proj.id === id);
-                if (p) setProjectSettingsTarget(p);
-              }}
-              tasksByProject={tasksByProject}
-              activeTaskId={activeTaskId}
-              onSelectTask={handleSelectTask}
-              onNewTask={(id) => void handleNewTask(id)}
-              onDeleteTask={handleDeleteTask}
-              onArchiveTask={(id) => {
-                void handleArchiveTask(id);
-              }}
-              onRestoreTask={(id) => {
-                void handleRestoreTask(id);
-              }}
-              onCloseTask={(id) => void handleCloseTask(id)}
-              onTaskSettings={handleTaskSettings}
-              onOpenSettings={() => {
-                setSettingsInitialTab(undefined);
-                setShowSettings(true);
-              }}
-              onShowCommitGraph={(projectId) => {
-                setActiveProjectId(projectId);
-                setShowCommitGraph(true);
-              }}
-              collapsed={sidebarRail}
-              unseenTaskIds={unseenTaskIds}
-              onReorderProjects={handleReorderProjects}
-              onReorderTasks={handleReorderTasks}
-              onReorderTasksCommit={(projectId, reordered) => {
-                void handleReorderTasksCommit(projectId, reordered);
-              }}
-              contextUsage={contextUsage}
-              onMinWidth={setSidebarMinPx}
-            />
-          </ErrorBoundary>
+          {/* Crossing between its rail and its content in an ease
+              (`leftHold`), the content is held at its expanded width, clipped
+              here, so its fitted rows never pass through the widths between,
+              and fades; the rail fades in as it comes. */}
+          <div className={cn('h-full overflow-clip', sidebarRail && 'motion-safe:animate-fade-in')}>
+            <div
+              ref={sidebarBodyRef}
+              className={cn('h-full', leftHold && 'w-(--held-width)', leftHoldFade(leftHold))}
+              style={
+                leftHold
+                  ? ({ '--held-width': `${leftHold.width}px` } as React.CSSProperties)
+                  : undefined
+              }
+            >
+              <ErrorBoundary area="The sidebar">
+                <LeftSidebar
+                  projects={projects}
+                  activeProjectId={activeProjectId}
+                  onSelectProject={(id) => {
+                    setActiveProjectId(id);
+                    setActiveTaskId(null);
+                  }}
+                  onOpenFolder={() => {
+                    setShowAddProjectModal(true);
+                  }}
+                  onDeleteProject={handleDeleteProject}
+                  onProjectSettings={(id) => {
+                    const p = projects.find((proj) => proj.id === id);
+                    if (p) setProjectSettingsTarget(p);
+                  }}
+                  tasksByProject={tasksByProject}
+                  activeTaskId={activeTaskId}
+                  onSelectTask={handleSelectTask}
+                  onNewTask={(id) => void handleNewTask(id)}
+                  onDeleteTask={handleDeleteTask}
+                  onArchiveTask={(id) => {
+                    void handleArchiveTask(id);
+                  }}
+                  onRestoreTask={(id) => {
+                    void handleRestoreTask(id);
+                  }}
+                  onCloseTask={(id) => void handleCloseTask(id)}
+                  onTaskSettings={handleTaskSettings}
+                  onOpenSettings={() => {
+                    setSettingsInitialTab(undefined);
+                    setShowSettings(true);
+                  }}
+                  onShowCommitGraph={(projectId) => {
+                    setActiveProjectId(projectId);
+                    setShowCommitGraph(true);
+                  }}
+                  collapsed={sidebarRail}
+                  unseenTaskIds={unseenTaskIds}
+                  onReorderProjects={handleReorderProjects}
+                  onReorderTasks={handleReorderTasks}
+                  onReorderTasksCommit={(projectId, reordered) => {
+                    void handleReorderTasksCommit(projectId, reordered);
+                  }}
+                  contextUsage={contextUsage}
+                  onMinWidth={setSidebarMinPx}
+                />
+              </ErrorBoundary>
+            </div>
+          </div>
         </ResizablePanel>
         <ResizableHandle disabled={sidebarCollapsed} />
 

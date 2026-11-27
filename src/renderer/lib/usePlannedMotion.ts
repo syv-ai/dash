@@ -3,6 +3,7 @@ import { EXPAND_EASE_MS, panelEaseMs } from '../components/ui/Resizable';
 import type { SidebarMotion } from '../components/rightInspector/RightInspector';
 import { whenFramesSettle } from './framesSettled';
 import { useUi } from '../stores/uiStore';
+import { leftHoldOf, type LeftHold, type LeftPanelSize } from './leftHold';
 
 /** The most a planned motion's ease waits for its held layout's long frames. */
 const SETTLE_CAP_MS = 250;
@@ -34,11 +35,19 @@ export interface MotionPlan {
  * paints, clipped by the panel), then, once frames settle, every panel eases
  * over EXPAND_EASE_MS with `ease-calm` (`easing`), and the content lets go
  * after. A new motion cancels the one running. `motion`: the task sidebar's
- * hold, if the plan has one; `phase`: where any motion is. `easeNow`: the
- * ease in force, for clearing panels' `animate` flags.
+ * hold, if the plan has one; `leftHold`: the left sidebar's, while it eases
+ * (any plan that `movesLeft`, measured by `measureLeft` around its move);
+ * `phase`: where any motion is. `easeNow`: the ease in force, for clearing
+ * panels' `animate` flags.
  */
-export function usePlannedMotion() {
-  const [state, setState] = useState<{ phase: SidebarMotion['phase']; hold?: Hold } | null>(null);
+export function usePlannedMotion(measureLeft?: () => LeftPanelSize | null) {
+  const [state, setState] = useState<{
+    phase: SidebarMotion['phase'];
+    hold?: Hold;
+    left?: LeftHold;
+  } | null>(null);
+  const measureLeftRef = useRef(measureLeft);
+  measureLeftRef.current = measureLeft;
   const motion = useMemo<SidebarMotion | null>(
     () => (state?.hold ? { ...state.hold, phase: state.phase } : null),
     [state],
@@ -70,9 +79,12 @@ export function usePlannedMotion() {
     const ease = () => {
       ui.setChangesAnimating(true);
       if (plan.movesLeft) ui.setSidebarAnimating(true);
+      const leftBefore = plan.movesLeft ? measureLeftRef.current?.() : null;
       const width = plan.move();
+      const leftAfter = leftBefore && measureLeftRef.current?.();
+      const left = leftBefore && leftAfter ? leftHoldOf(leftBefore, leftAfter) : undefined;
       const hold = plan.hold && { ...plan.hold, width: width ?? plan.hold.width };
-      setState({ phase: 'easing', hold });
+      setState({ phase: 'easing', hold, left });
       timer = setTimeout(() => {
         runningRef.current = false;
         cancelRef.current = () => {};
@@ -100,5 +112,5 @@ export function usePlannedMotion() {
     return cancel;
   }, []);
 
-  return { motion, phase: state?.phase ?? null, run, stop, easeNow };
+  return { motion, leftHold: state?.left ?? null, phase: state?.phase ?? null, run, stop, easeNow };
 }
