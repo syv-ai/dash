@@ -16,6 +16,7 @@ import {
   ContextMenuContent,
   ContextMenuItems,
   ContextMenuTrigger,
+  type ContextMenuAction,
 } from '../ui/ContextMenu';
 import { CountBadge } from '../ui/CountBadge';
 import { HoverSwapSlot } from '../ui/HoverSwapSlot';
@@ -273,8 +274,24 @@ function CopyPathAction({ path }: { path: string }) {
   );
 }
 
-/** A file's right-click menu. Mounted only while open, so the rows don't each
- *  subscribe to the IDE setting. */
+/** "Open in Cursor" (or the chosen IDE's name) for a file or folder at `abs`,
+ *  as the task header and task menus name it. With no IDE known it still reads
+ *  "Open in IDE", and main says why it can't. The menus that use it mount only
+ *  while open, so the rows don't each subscribe to the IDE setting. */
+function useOpenInIdeItem(abs: string): ContextMenuAction {
+  const { ideId, openLabel } = usePreferredIde();
+  return {
+    label: openLabel,
+    icon: (
+      <span className="inline-flex size-3.5 items-center justify-center">
+        <IdeIcon ideId={ideId} size={14} />
+      </span>
+    ),
+    onSelect: () => void openInIde(abs),
+  };
+}
+
+/** A file's right-click menu. */
 function FileMenu({
   cwd,
   path,
@@ -286,8 +303,8 @@ function FileMenu({
   canOpenToSide: boolean;
   onOpen: (opts?: OpenOptions) => void;
 }) {
-  const { ideId, openLabel } = usePreferredIde();
   const abs = absolutePath(cwd, path);
+  const openInIdeItem = useOpenInIdeItem(abs);
   return (
     <ContextMenuItems
       items={[
@@ -311,15 +328,7 @@ function FileMenu({
           icon: FolderOpen,
           onSelect: () => window.electronAPI.showItemInFolder(abs),
         },
-        {
-          label: openLabel,
-          icon: (
-            <span className="inline-flex size-3.5 items-center justify-center">
-              <IdeIcon ideId={ideId} size={14} />
-            </span>
-          ),
-          onSelect: () => void openInIde(abs),
-        },
+        openInIdeItem,
       ]}
     />
   );
@@ -337,6 +346,7 @@ function FolderMenu({
   onToggle: () => void;
 }) {
   const abs = absolutePath(cwd, path);
+  const openInIdeItem = useOpenInIdeItem(abs);
   return (
     <ContextMenuItems
       items={[
@@ -356,6 +366,7 @@ function FolderMenu({
           icon: FolderOpen,
           onSelect: () => window.electronAPI.showItemInFolder(abs),
         },
+        openInIdeItem,
       ]}
     />
   );
