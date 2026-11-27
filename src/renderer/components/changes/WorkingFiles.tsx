@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { EyeOff, FileDiff, Minus, Plus, Undo2 } from 'lucide-react';
 import { toast } from '../ui/toast';
 import { EmptyState } from '../ui/EmptyState';
@@ -233,7 +233,7 @@ function ChangedFiles({
         canOpenToSide={canOpenToSide}
         badges={badges}
         onOpenComment={onOpenComment}
-        actions={(row) => <ChangeActions row={row} files={files} />}
+        actions={(row) => changeActions(row, files)}
         spaceAction={(row) => stageToggle(row, files)}
         gapAbove={!tally}
       />
@@ -288,7 +288,7 @@ function AllFiles({
         canOpenToSide={canOpenToSide}
         badgeCounts={badges}
         onOpenComment={repo.openComment}
-        actions={working ? (row) => <ChangeActions row={row} files={files} /> : undefined}
+        actions={working ? (row) => changeActions(row, files) : undefined}
         spaceAction={working ? (row) => stageToggle(row, files) : undefined}
         tally={tally}
       />
@@ -325,8 +325,10 @@ function StageButton({ action, folder }: { action: StageAction; folder: boolean 
 
 /** A change's hover actions: stage or unstage it, .gitignore an untracked
  *  file or folder, discard unstaged changes (a folder's after a confirm).
- *  None: the tree's default. */
-function ChangeActions({ row, files }: { row: ItemRow; files: readonly FileChange[] }) {
+ *  None (null) leaves the tree's default actions in place, so this is called
+ *  as a function: an element that renders nothing would still count as
+ *  actions and hide the default. */
+function changeActions(row: ItemRow, files: readonly FileChange[]): ReactNode {
   const stage = stageAction(row, files);
   const stageButton = stage && <StageButton action={stage} folder={row.kind === 'folder'} />;
   if (row.kind === 'file') {
