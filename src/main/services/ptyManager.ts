@@ -176,24 +176,12 @@ export function setCommitAttribution(value: string | undefined): void {
   refreshActivePtyHooks();
 }
 
-export interface RefreshFailure {
-  settingsPath: string;
-  error: string;
-}
-
-export interface RefreshResult {
-  failures: RefreshFailure[];
-}
-
 /**
  * Rewrite settings.local.json for every task with a live session. Claude Code
  * re-reads settings per tool call, so this flips hooks live — also for a
- * session nobody is attached to right now. Returns per-task write failures so
- * callers (RTK toggle, attribution change) can surface a "saved, but N tasks
- * didn't pick it up" message instead of silently returning success.
+ * session nobody is attached to right now. A failed write toasts on its own.
  */
-export function refreshActivePtyHooks(): RefreshResult {
-  const failures: RefreshFailure[] = [];
+export function refreshActivePtyHooks(): void {
   const targets = new Map<string, string>();
   for (const [id, rec] of ptys) {
     // Shell PTYs (terminal drawer) share cwd with the task PTY but don't run
@@ -212,13 +200,7 @@ export function refreshActivePtyHooks(): RefreshResult {
   } catch (err) {
     console.error('[refreshActivePtyHooks] task lookup failed:', err);
   }
-  for (const [taskId, cwd] of targets) {
-    const result = writeHookSettings(cwd, taskId);
-    if (!result.ok) {
-      failures.push({ settingsPath: result.settingsPath, error: result.error });
-    }
-  }
-  return { failures };
+  for (const [taskId, cwd] of targets) writeHookSettings(cwd, taskId);
 }
 
 export function setDesktopNotification(opts: { enabled: boolean }): void {

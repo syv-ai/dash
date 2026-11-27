@@ -11,7 +11,6 @@ vi.mock('../HookServer', () => ({
   hookServer: { port: 1234 },
   getHookPortFilePath: () => '/tmp/dash-hook-port',
 }));
-vi.mock('../RtkService', () => ({ RtkService: { isEnabled: () => false } }));
 vi.mock('../DatabaseService', () => ({ DatabaseService: { getTask: () => undefined } }));
 
 import { writeHookSettings } from '../ptyHookSettings';

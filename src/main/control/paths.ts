@@ -4,8 +4,7 @@ import * as path from 'path';
  * Every control-API file location under a userData dir. Pure (node built-ins
  * only, no electron), so tests build it for a temp dir.
  *
- * All of it lives under `<userData>/control/`, not `<userData>/bin`, which
- * claudeEnv prepends to every agent's PATH for RTK.
+ * All of it lives under `<userData>/control/`.
  */
 export interface ControlPaths {
   dir: string;

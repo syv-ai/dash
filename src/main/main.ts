@@ -211,13 +211,6 @@ void app.whenReady().then(async () => {
     AutoUpdateService.initialize(mainWindow);
   }
 
-  // Resolve rtk synchronously at startup; getHookCommand() is called on PTY spawn.
-  const { RtkService } = await import('./services/RtkService');
-  RtkService.setSender(mainWindow.webContents);
-  await RtkService.warmUp().catch((err) => {
-    console.error('[RtkService.warmUp]', err);
-  });
-
   // TUI feature IPC needs the main window for feature broadcasts (e.g.
   // ports:restart-task); register here (not in registerAllIpc) since that
   // path doesn't have a window yet.
@@ -237,6 +230,17 @@ void app.whenReady().then(async () => {
       persistAllMirrors();
     });
   }, 60_000);
+
+  // Remove what RTK left; rewrite live sessions' hooks so its hook goes too.
+  try {
+    const { removeLegacyRtk } = await import('./services/legacyRtkCleanup');
+    if (removeLegacyRtk()) {
+      const { refreshActivePtyHooks } = await import('./services/ptyManager');
+      refreshActivePtyHooks();
+    }
+  } catch (err) {
+    console.error('[removeLegacyRtk]', err);
+  }
 
   // Remove the worktree pool's leftovers from before 0.17 (background, non-blocking)
   setTimeout(() => {
@@ -343,8 +347,6 @@ app.on('activate', () => {
       supervisorService.setSender(mainWindow.webContents);
       const { remoteControlService } = await import('./services/remoteControlService');
       remoteControlService.setSender(mainWindow.webContents);
-      const { RtkService } = await import('./services/RtkService');
-      RtkService.setSender(mainWindow.webContents);
       const { contextUsageService } = await import('./services/ContextUsageService');
       contextUsageService.setSender(mainWindow.webContents);
       const { tokenStatsService } = await import('./services/TokenStatsService');

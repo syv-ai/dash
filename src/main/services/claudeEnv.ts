@@ -1,5 +1,4 @@
 import * as os from 'os';
-import { RtkService } from './RtkService';
 import { stripHostTerminalEnv } from './hostTerminalEnv';
 import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
 
@@ -58,19 +57,6 @@ export function isUltracode(): boolean {
 }
 
 /**
- * Prepend `dir` to a path-like string, but only if it isn't already there
- * (case-sensitive on Unix, case-sensitive on Windows is wrong but matches
- * what users actually do). Used when injecting Dash-managed binary
- * directories into the spawned process's PATH.
- */
-function prependUnique(dir: string, basePath: string, sep: string): string {
-  if (!basePath) return dir;
-  const parts = basePath.split(sep);
-  if (parts.includes(dir)) return basePath;
-  return `${dir}${sep}${basePath}`;
-}
-
-/**
  * The env a task's session itself needs: the user's env vars from settings,
  * then the task's port vars (FRONTEND_PORT=…) so commands resolve the host
  * port the ports panel shows; ports after user vars so a project never
@@ -105,18 +91,11 @@ export function buildClaudeEnv(isDark: boolean, cwd?: string): Record<string, st
       )
     : {};
 
-  // rtk's rewrite output invokes the bare name `rtk`; when the binary is
-  // Dash-managed (userData/bin), prepend that dir so the rewrite resolves.
-  const rtkBinDir = RtkService.getManagedBinDirForPath();
-  const pathSep = isWin ? ';' : ':';
-  const basePath = process.env.PATH || '';
-  const mergedPath = rtkBinDir ? prependUnique(rtkBinDir, basePath, pathSep) : basePath;
-
   const env: Record<string, string> = {
     ...base,
     TERM_PROGRAM: 'dash',
     HOME: os.homedir(),
-    PATH: mergedPath,
+    PATH: process.env.PATH || '',
     // Tell CLI apps about terminal background (rxvt convention)
     // Format: "fg;bg" where higher values = lighter colors
     COLORFGBG: isDark ? '15;0' : '0;15',

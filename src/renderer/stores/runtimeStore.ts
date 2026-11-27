@@ -7,8 +7,6 @@ import type {
   ClaudeUpdateMode,
   ClaudeUpdateState,
   RemoteControlState,
-  RtkStatus,
-  RtkDownloadProgress,
   SupervisorSession,
   Task,
 } from '../../shared/types';
@@ -30,8 +28,6 @@ export interface RuntimeState {
   /** Memories written since each project's memory last showed (the Agent tab), by project id. */
   newMemoryCounts: Record<string, number>;
   globalTokenStats: TokenStatsRollup;
-  rtkStatus: RtkStatus | null;
-  rtkDownloadProgress: RtkDownloadProgress | null;
   /** Startup `claude --version` probe; null until it answers. MainContent gates
    *  the task terminal on `supported`. */
   claudeCli: ClaudeCliInfo | null;
@@ -60,8 +56,6 @@ export interface RuntimeActions {
   removeSession: (jobId: string) => Promise<void>;
   /** Turn a foreign session into a task under `projectId`; resolves with the task. */
   adoptSession: (projectId: string, jobId: string) => Promise<Task | null>;
-  enableRtk: (enabled: boolean) => Promise<void>;
-  downloadRtk: () => Promise<void>;
   /** Ask main to look for an update now (bypasses the background cooldown). */
   checkForUpdates: () => Promise<void>;
   /** Restart into a downloaded update. */
@@ -82,8 +76,6 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
   projectTokenStats: {},
   newMemoryCounts: {},
   globalTokenStats: { totalTokens: 0, totalCostUsd: 0, taskCount: 0 },
-  rtkStatus: null,
-  rtkDownloadProgress: null,
   claudeCli: null,
   supervisorSessions: [],
   updateStatus: null,
@@ -173,33 +165,6 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
     set((s) => ({ newMemoryCounts: { ...s.newMemoryCounts, [projectId]: 0 } }));
     const resp = await window.electronAPI.memoryMarkSeen({ projectId });
     if (!resp.success) console.warn('[memoryMarkSeen] failed:', resp.error);
-  },
-
-  enableRtk: async (enabled) => {
-    // Optimistic update only applies to the installed arm — the type forbids
-    // `enabled` on { installed: false }.
-    set((s) => ({
-      rtkStatus: s.rtkStatus?.installed ? { ...s.rtkStatus, enabled } : s.rtkStatus,
-    }));
-    const resp = await window.electronAPI.rtkSetEnabled(enabled);
-    if (!resp.success) {
-      toast.error(resp.error ?? 'Failed to toggle RTK');
-      const s = await window.electronAPI.rtkGetStatus();
-      if (s.success && s.data) set({ rtkStatus: s.data });
-      else console.error('[rtk:getStatus after setEnabled failure]', s.error);
-      return;
-    }
-    if (resp.data?.warning) toast.warning(resp.data.warning);
-  },
-
-  downloadRtk: async () => {
-    set({ rtkDownloadProgress: { phase: 'downloading', percent: 0 } });
-    const resp = await window.electronAPI.rtkDownload();
-    if (!resp.success) {
-      set({ rtkDownloadProgress: { phase: 'error', error: resp.error ?? 'download failed' } });
-      return;
-    }
-    if (resp.data?.warning) toast.warning(resp.data.warning);
   },
 
   init: () => {
@@ -295,34 +260,6 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
       void get()
         .refreshNewMemoryCounts()
         .catch((err) => console.warn('[memoryNewCounts] failed:', err));
-    }
-
-    // ── RTK status + download progress ─────────────────────
-    {
-      let cancelled = false;
-      // Retry once on transient failure — a single startup flake otherwise leaves
-      // rtkStatus null forever and the Settings card stays stuck on "loading…".
-      const tryFetch = (attempt: number): void => {
-        void window.electronAPI.rtkGetStatus().then((resp) => {
-          if (cancelled) return;
-          if (resp.success && resp.data) set({ rtkStatus: resp.data });
-          else if (attempt < 1) setTimeout(() => tryFetch(attempt + 1), 500);
-          else set({ rtkStatus: { installed: false, downloadable: false } });
-        });
-      };
-      tryFetch(0);
-      const unsub = window.electronAPI.onRtkDownloadProgress((progress) => {
-        set({ rtkDownloadProgress: progress });
-        if (progress.phase === 'done') {
-          void window.electronAPI.rtkGetStatus().then((resp) => {
-            if (resp.success && resp.data) set({ rtkStatus: resp.data });
-          });
-        }
-      });
-      cleanups.push(() => {
-        cancelled = true;
-        unsub();
-      });
     }
 
     // ── Auto-update ────────────────────────────────────────

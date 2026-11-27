@@ -10,7 +10,6 @@ import type { GithubApi } from './electron-api/github';
 import type { AdoApi } from './electron-api/ado';
 import type { PrReviewApi } from './electron-api/prReview';
 import type { EditorApi } from './electron-api/editor';
-import type { RtkApi } from './electron-api/rtk';
 import type { SessionApi } from './electron-api/session';
 import type { TelemetryApi } from './electron-api/telemetry';
 import type { AutoUpdateApi } from './electron-api/autoUpdate';
@@ -46,7 +45,6 @@ export interface ElectronAPI
     AdoApi,
     PrReviewApi,
     EditorApi,
-    RtkApi,
     SessionApi,
     TelemetryApi,
     AutoUpdateApi,

@@ -447,14 +447,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   diffCommentsPruneForTask: (args: { taskId: string; existingFilePaths: string[] }) =>
     ipcRenderer.invoke('diffComments:pruneForTask', args),
 
-  // RTK (Rust Token Killer)
-  rtkGetStatus: () => ipcRenderer.invoke('rtk:getStatus'),
-  rtkSetEnabled: (enabled: boolean) => ipcRenderer.invoke('rtk:setEnabled', enabled),
-  rtkDownload: () => ipcRenderer.invoke('rtk:download'),
-  rtkTest: () => ipcRenderer.invoke('rtk:test'),
-  onRtkDownloadProgress:
-    listen<import('@shared/types').RtkDownloadProgress>('rtk:downloadProgress'),
-
   // Sessions under Claude Code's supervisor
   sessionList: (args?: { refresh?: boolean }) => ipcRenderer.invoke('session:list', args),
   onSessionList: listen<unknown>('session:list'),

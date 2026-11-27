@@ -7,7 +7,7 @@ import { useRuntime } from '../stores/runtimeStore';
  * Wires the store-level live subscriptions + reactive bootstrap effects that used
  * to live inline in App.tsx. Call once from the App root.
  *
- * - runtimeStore.init(): activity monitor, remote-control, token-stats writeback, RTK.
+ * - runtimeStore.init(): activity monitor, remote-control, token-stats writeback.
  * - token rollups: re-fetched whenever the project list changes.
  * - gitStore watcher/poll + PR detection: re-wired on active-task / project / branch change.
  *
@@ -20,7 +20,7 @@ export function useAppBootstrap() {
   const activeProject = useProjects(selectActiveProject);
   const gitBranch = useGit((s) => s.gitStatus?.branch ?? null);
 
-  // Runtime IPC subscriptions (activity, remote control, token writeback, RTK).
+  // Runtime IPC subscriptions (activity, remote control, token writeback).
   useEffect(() => useRuntime.getState().init(), []);
 
   // Token rollups re-fetch when the project list changes (initial load + add/remove).

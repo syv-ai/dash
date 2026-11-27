@@ -2,12 +2,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { toastRenderer } from '../utils/toast';
 import { hookServer, getHookPortFilePath } from './HookServer';
-import { RtkService } from './RtkService';
 import { DatabaseService } from './DatabaseService';
 import { writeFileAtomic } from '../utils/atomicWrite';
 import { ownSessionGuard } from './hookSessionGuard';
 import {
-  type Hook,
   type HookEntry,
   type CommandHook,
   type DashHookEndpoint,
@@ -87,27 +85,6 @@ function tagDash<T extends CommandHook>(hook: T): T & { __dash: true } {
   return { ...hook, __dash: true };
 }
 
-/**
- * Build the PreToolUse hook entries. `*` matcher always points at our
- * tool-start endpoint; when RTK is enabled, also add a `Bash`-matcher
- * entry that runs RTK's hook command to rewrite verbose Bash output
- * before Claude consumes it.
- */
-function buildPreToolUseHooks(
-  dashCmd: (endpoint: DashHookEndpoint, async?: boolean) => Hook,
-  guard: string,
-): HookEntry[] {
-  const entries: HookEntry[] = [{ matcher: '*', hooks: [dashCmd('tool-start', true)] }];
-  const rtkCmd = RtkService.isEnabled() ? RtkService.getHookCommand() : null;
-  if (rtkCmd) {
-    entries.push({
-      matcher: 'Bash',
-      hooks: [tagDash({ type: 'command', command: guard + rtkCmd })],
-    });
-  }
-  return entries;
-}
-
 /** One toast for hook-write trouble, however many tasks hit it at once. */
 const HOOKS_TOAST_KEY = 'hooks:settings.local.json';
 
@@ -125,8 +102,8 @@ export type HookWriteResult = { ok: true } | { ok: false; settingsPath: string; 
  * URL-shape detector, so users can have their own hooks under managed
  * events without losing them on every rewrite.
  *
- * Returns a result so refreshActivePtyHooks can aggregate failures across
- * tasks; toasts and console.error are still emitted inline regardless.
+ * Toasts and logs a failed write itself; the result is for callers that
+ * need to know.
  */
 export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
   const port = hookServer.port;
@@ -214,7 +191,7 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
       matcher,
       hooks: [dashCmd('notification')],
     })),
-    PreToolUse: buildPreToolUseHooks(dashCmd, guard),
+    PreToolUse: [{ matcher: '*', hooks: [dashCmd('tool-start', true)] }],
     PostToolUse: [{ matcher: '*', hooks: [dashCmd('tool-end', true)] }],
     PreCompact: [{ matcher: '*', hooks: [dashCmd('compact-start', true)] }],
     // PostCompact (2.1.76) and StopFailure (2.1.78) used to be gated on the

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
-vi.mock('../RtkService', () => ({ RtkService: { getManagedBinDirForPath: () => null } }));
 vi.mock('../WorkspacePortsRuntime', () => ({
   WorkspacePortsRuntime: {
     getEnvForWorktree: (cwd: string) =>
