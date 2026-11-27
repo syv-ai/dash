@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countBucket, durationBucket, minutesBucket } from '../telemetryBuckets';
+import { countBucket, durationBucket, memoryBucket, minutesBucket } from '../telemetryBuckets';
 
 describe('durationBucket', () => {
   it.each([
@@ -51,5 +51,20 @@ describe('minutesBucket', () => {
     [480, 'gt_8h'],
   ])('%i min → %s', (m, bucket) => {
     expect(minutesBucket(m)).toBe(bucket);
+  });
+});
+
+describe('memoryBucket', () => {
+  const GB = 1024 ** 3;
+  it.each([
+    [0, 'lt_2gb'],
+    [1.9 * GB, 'lt_2gb'],
+    [2 * GB, '2_4gb'],
+    [7.9 * GB, '4_8gb'],
+    [8 * GB, '8_16gb'],
+    [20 * GB, '16_32gb'],
+    [40 * GB, 'gt_32gb'],
+  ])('%i bytes → %s', (b, bucket) => {
+    expect(memoryBucket(b)).toBe(bucket);
   });
 });

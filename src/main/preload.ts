@@ -182,6 +182,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // App lifecycle
   onBeforeQuit: listen('app:beforeQuit'),
   onFocusTask: listen<{ taskId: string; projectId?: string }>('app:focusTask'),
+  onPresentFile: listen<{ taskId: string; path: string }>('app:presentFile'),
   onOrchestratorAccessRequest: (callback: (request: { id: string; open: boolean }) => void) => {
     const opened = (_event: unknown, r: { id: string }) => callback({ id: r.id, open: true });
     const ended = (_event: unknown, r: { id: string }) => callback({ id: r.id, open: false });
@@ -480,6 +481,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('claudeUpdate:restart', mode),
   claudeUpdateCancel: () => ipcRenderer.invoke('claudeUpdate:cancel'),
   onClaudeUpdateState: listen<import('@shared/types').ClaudeUpdateState>('claudeUpdate:state'),
+
+  // System health
+  systemHealthConfigure: (config: import('@shared/systemHealth').SystemHealthConfig) =>
+    ipcRenderer.send('systemHealth:configure', config),
+  onMemoryAlert: listen<import('@shared/systemHealth').MemoryAlert>('systemHealth:alert'),
 
   // Workspace ports
   portsList: (taskId: string) => ipcRenderer.invoke('ports:list', taskId),

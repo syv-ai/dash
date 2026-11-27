@@ -116,6 +116,13 @@ Dash doesn't open PRs itself (the agent or the user does, with `gh` or on the fo
 
 Not added: onboarding steps (Dash has no onboarding flow; the new-project wizard is one step), memory panel use, services (ports) runs, remote control.
 
+### System health
+
+| Event                  | When                                                                                                                                                                           | Properties                                                                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `memory_warning_shown` | Dash's memory (its processes plus every task session's process tree) crosses the user's threshold, or macOS reports memory pressure; once per crossing (`SystemHealthService`) | `reason` (`threshold`, `pressure`), `memory_bucket` (`lt_2gb`, `2_4gb`, `4_8gb`, `8_16gb`, `16_32gb`, `gt_32gb`), `live_session_count` |
+| `memory_warning_acted` | the warning's "Sleep idle tasks" is picked (renderer)                                                                                                                          | `task_count` (tasks put to sleep)                                                                                                      |
+
 ### Claude Code
 
 | Event                             | When                                                                                            | Properties                                                                     |

@@ -416,6 +416,8 @@ app.on('before-quit', (event) => {
     try {
       const { supervisorService } = await import('./services/SupervisorService');
       supervisorService.stopPolling();
+      const { systemHealthService } = await import('./services/SystemHealthService');
+      systemHealthService.stop();
     } catch {
       // Best effort
     }

@@ -35,3 +35,14 @@ export function minutesBucket(minutes: number): string {
   if (minutes < 480) return '4h_8h';
   return 'gt_8h';
 }
+
+/** Memory in bytes, in GB bands. */
+export function memoryBucket(bytes: number): string {
+  const gb = bytes / 1024 ** 3;
+  if (!(gb >= 2)) return 'lt_2gb';
+  if (gb < 4) return '2_4gb';
+  if (gb < 8) return '4_8gb';
+  if (gb < 16) return '8_16gb';
+  if (gb < 32) return '16_32gb';
+  return 'gt_32gb';
+}

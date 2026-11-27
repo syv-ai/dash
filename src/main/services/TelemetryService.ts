@@ -100,6 +100,10 @@ const ALLOWED_EVENTS = new Set([
   'dashctl_called',
   'lsp_failed',
 
+  // System health (SystemHealthService; the action from the renderer)
+  'memory_warning_shown',
+  'memory_warning_acted',
+
   // Errors ($exception goes through captureException, not this list)
   'ipc_failed',
 
@@ -154,6 +158,7 @@ const ALLOWED_PROPERTIES = new Set([
   'stage',
   'command',
   'language_id',
+  'memory_bucket',
 ]);
 
 // ── Persisted State ───────────────────────────────────────────
