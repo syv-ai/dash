@@ -180,4 +180,19 @@ describe('listAgents', () => {
       { name: 'writer', description: 'Writes', source: 'user' },
     ]);
   });
+
+  it("lists a --plugin-dir plugin's agents under its manifest name, relative to the project", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-agents-'));
+    dirs.push(root);
+    process.env.CLAUDE_CONFIG_DIR = path.join(root, 'user');
+    process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR = path.join(root, 'plugins');
+    const repo = path.join(root, 'repo');
+    write(path.join(root, 'teamwork/.claude-plugin/plugin.json'), JSON.stringify({ name: 'tw' }));
+    write(path.join(root, 'teamwork/agents/lead.md'), agent('lead', 'Leads'));
+    write(path.join(root, 'nameless/agents/x.md'), agent('x', 'No manifest'));
+
+    expect(await listAgents(repo, ['../teamwork', path.join(root, 'nameless')])).toEqual([
+      { name: 'tw:lead', description: 'Leads', source: 'plugin' },
+    ]);
+  });
 });

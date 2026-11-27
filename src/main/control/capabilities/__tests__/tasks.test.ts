@@ -393,6 +393,20 @@ describe('tasks.create', () => {
     expect(deps.createTask).not.toHaveBeenCalled();
   });
 
+  it("checks the agent against the task's --plugin-dir plugins too, or the project default's", async () => {
+    deps.listAgents.mockImplementation(async (_path: string, dirs: string[]) =>
+      dirs.includes('/tw') ? [{ name: 'tw:lead', description: '', source: 'plugin' }] : [],
+    );
+    const create = (input: object) =>
+      registry.call(orch, 'tasks.create', { projectId: 'pA', name: 'x', ...input });
+    await create({ agent: 'tw:lead', extraArgs: '--plugin-dir /tw' });
+    expect(deps.listAgents).toHaveBeenLastCalledWith('/repos/pA', ['/tw']);
+    deps.taskDefaults.mockReturnValue({ extraArgs: '--plugin-dir=/tw' });
+    await create({ agent: 'tw:lead' });
+    expect(deps.createTask).toHaveBeenCalledTimes(2);
+    expect(await status(create({ agent: 'tw:lead', extraArgs: '' }))).toBe(400);
+  });
+
   it('refuses a task caller creating in another project', async () => {
     expect(
       await status(registry.call(asTask('me'), 'tasks.create', { projectId: 'pB', name: 'x' })),

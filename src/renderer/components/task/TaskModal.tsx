@@ -602,7 +602,12 @@ function TaskModalBody({
                 }}
               />
               <EffortPicker width="sm" value={effort} onChange={setEffort} />
-              <AgentPicker projectPath={projectPath} value={agent} onChange={setAgent} />
+              <AgentPicker
+                projectPath={projectPath}
+                extraArgs={taskDefaults?.extraArgs}
+                value={agent}
+                onChange={setAgent}
+              />
               {controlSupported && (
                 <SwitchField
                   label="Dash access"

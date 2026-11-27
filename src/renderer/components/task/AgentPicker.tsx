@@ -7,20 +7,21 @@ import { Select, type SelectOption } from '../ui/Select';
 const NONE = '';
 
 const HINT =
-  "Run the session as one of your custom agents (claude --agent): its prompt replaces Claude Code's default one, and its tools and model apply. From .claude/agents in the project or your home, or an enabled plugin. Fixed once the task is made.";
+  "Run the session as one of your custom agents (claude --agent): its prompt replaces Claude Code's default one, and its tools and model apply. From .claude/agents in the project or your home, an enabled plugin, or a plugin the project's extra arguments load with --plugin-dir. Fixed once the task is made.";
 
-/** The custom agents a session in `projectPath` can run as; [] until read or on error. */
-export function useAgents(projectPath: string): AgentDefinition[] {
+/** The custom agents a session in `projectPath` can run as, the plugins of
+ *  `extraArgs`' `--plugin-dir` folders included; [] until read or on error. */
+export function useAgents(projectPath: string, extraArgs?: string): AgentDefinition[] {
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
   useEffect(() => {
     let live = true;
-    void window.electronAPI.agentsList({ projectPath }).then((resp) => {
+    void window.electronAPI.agentsList({ projectPath, extraArgs }).then((resp) => {
       if (live) setAgents(resp.success && resp.data ? resp.data : []);
     });
     return () => {
       live = false;
     };
-  }, [projectPath]);
+  }, [projectPath, extraArgs]);
   return agents;
 }
 
@@ -30,14 +31,17 @@ export function useAgents(projectPath: string): AgentDefinition[] {
  */
 export function AgentPicker({
   projectPath,
+  extraArgs,
   value,
   onChange,
 }: {
   projectPath: string;
+  /** The project's default extra arguments: their `--plugin-dir` plugins' agents are listed too. */
+  extraArgs?: string;
   value: string | null;
   onChange: (agent: string | null) => void;
 }) {
-  const agents = useAgents(projectPath);
+  const agents = useAgents(projectPath, extraArgs);
   const options: SelectOption<string>[] = [
     { value: NONE, label: 'None' },
     ...agents.map((a) => ({ value: a.name, label: a.name })),

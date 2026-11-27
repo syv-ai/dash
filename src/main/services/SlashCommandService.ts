@@ -340,18 +340,45 @@ async function pluginAgents(plugin: string, root: string): Promise<AgentDefiniti
 }
 
 /**
+ * The plugins a session loads with `--plugin-dir`, as `[plugin name, root]`:
+ * a relative folder is the project's (no `~`: extra arguments aren't
+ * expanded, so validateExtraArgs refuses it bare). The name is
+ * the manifest's (`.claude-plugin/plugin.json` `name`); a folder without one
+ * is left out.
+ */
+async function pluginDirRoots(
+  projectPath: string,
+  pluginDirs: readonly string[],
+): Promise<[string, string][]> {
+  const roots = await Promise.all(
+    pluginDirs.map(async (dir): Promise<[string, string] | null> => {
+      const root = path.resolve(projectPath, dir);
+      const manifest = await readJson(path.join(root, '.claude-plugin', 'plugin.json'));
+      const name = (manifest as { name?: unknown } | undefined)?.name;
+      return typeof name === 'string' && name.trim() ? [name.trim(), root] : null;
+    }),
+  );
+  return roots.filter((r): r is [string, string] => r !== null);
+}
+
+/**
  * The custom agents a session in `projectPath` can run as (`--agent`), by
  * name. On a clash the project's wins over the user's, and both over a
  * plugin's (the docs' priority; managed and `--agents` ones aren't listed).
- * Built-in agents aren't listed either.
+ * Built-in agents aren't listed either. `pluginDirs` are the session's
+ * `--plugin-dir` folders (pluginDirsOf), listed as plugins too.
  */
-export async function listAgents(projectPath: string): Promise<AgentDefinition[]> {
+export async function listAgents(
+  projectPath: string,
+  pluginDirs: readonly string[] = [],
+): Promise<AgentDefinition[]> {
+  const pluginLists = async (roots: [string, string][]) =>
+    (await Promise.all(roots.map(([name, root]) => pluginAgents(name, root)))).flat();
   const lists = await Promise.all([
     agentsIn(path.join(projectPath, '.claude', 'agents'), 'project'),
     agentsIn(path.join(claudeConfigDir(), 'agents'), 'user'),
-    pluginRootsFor(projectPath).then(async (roots) =>
-      (await Promise.all(roots.map(([name, root]) => pluginAgents(name, root)))).flat(),
-    ),
+    pluginRootsFor(projectPath).then(pluginLists),
+    pluginDirRoots(projectPath, pluginDirs).then(pluginLists),
   ]);
   const byName = new Map<string, AgentDefinition>();
   for (const agent of lists.flat()) if (!byName.has(agent.name)) byName.set(agent.name, agent);

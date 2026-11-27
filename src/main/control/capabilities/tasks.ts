@@ -18,6 +18,7 @@ import { TASK_EFFORTS, type TaskEffort } from '../../../shared/effort';
 import { launchOptionsProblem } from '../../../shared/launchOptions';
 import { flagNoteText, validateExtraArgs } from '../../../shared/extraArgs';
 import { normalizeAddDirs } from '../../../shared/addDirs';
+import { pluginDirsOf } from '../../../shared/pluginDirs';
 import type { AgentDefinition } from '../../../shared/slashCommands';
 import { githubSlug } from '../../../shared/urls';
 import type { WorkspaceTaskDefaults } from '../../services/WorkspaceConfigService';
@@ -99,8 +100,9 @@ export interface TaskCapabilityDeps {
   deleteTask(id: string, opts: DeleteTaskOptions): Promise<void>;
   /** Save a task's launch options (the keys given), as Task settings does. */
   setLaunchOptions(id: string, patch: Partial<TaskLaunchOptions>): Task;
-  /** The custom agents a session in the project can run as (`--agent`). */
-  listAgents(projectPath: string): Promise<AgentDefinition[]>;
+  /** The custom agents a session in the project can run as (`--agent`),
+   *  with the plugins of its `--plugin-dir` folders. */
+  listAgents(projectPath: string, pluginDirs: string[]): Promise<AgentDefinition[]>;
   /** Re-dispatch the session and start it again, as one session start
    *  (ptyManager.restartAndStartTaskSession), so an open pane re-attaches. */
   restartSession(id: string): Promise<{ jobId: string } | { needsTrust: string }>;
@@ -442,7 +444,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         agent: agentNameSchema
           .optional()
           .describe(
-            'Run the session as this custom agent (claude --agent), one of the project, the user or an enabled plugin; fixed for the task',
+            'Run the session as this custom agent (claude --agent), one of the project, the user, an enabled plugin or a plugin the task loads with --plugin-dir in --extra-args (named <plugin>:<agent>, the plugin name from its .claude-plugin/plugin.json); fixed for the task',
           ),
         ...launchInputs,
         ...linkInputs,
@@ -458,7 +460,10 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         const kind = input.kind ?? (project.isGitRepo ? 'new-branch' : 'in-place');
         assertLaunchOptions(ctx.caller, { extraArgs: input.extraArgs, addDirs: input.addDir });
         if (input.agent) {
-          const known = (await deps.listAgents(project.path)).map((a) => a.name);
+          // The task's own --plugin-dir plugins count: its extra arguments, or
+          // the project's default when it gives none (as TaskService resolves them).
+          const pluginDirs = pluginDirsOf(input.extraArgs ?? defaults?.extraArgs);
+          const known = (await deps.listAgents(project.path, pluginDirs)).map((a) => a.name);
           if (!known.includes(input.agent)) {
             throw new ControlError(
               400,
