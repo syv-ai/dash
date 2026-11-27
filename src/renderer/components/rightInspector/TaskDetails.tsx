@@ -12,7 +12,8 @@ import { Markdown } from '../ui/Markdown';
 import { PrRow } from '../ui/PrBadge';
 import { TextLink } from '../ui/TextLink';
 import { SyncStatus, type SyncLinks } from '../changes/SyncStatus';
-import { CommitHoverCard } from '../commits/CommitHoverCard';
+import { CommitHash, CommitHoverCard } from '../commits/CommitHoverCard';
+import { useCommitLinks } from '../commits/useCommitLinks';
 import { taskDetailSections, type DetailRow } from './taskDetailRows';
 
 interface TaskDetailsProps {
@@ -170,22 +171,7 @@ export function TaskDetails({
           )}
           {lastCommit && (
             <DetailItem label="Last commit" copy={lastCommit.shortHash}>
-              <CommitHoverCard
-                commit={lastCommit}
-                cwd={task.path}
-                side="left"
-                trigger={(hover) => (
-                  <span {...hover}>
-                    <TextLink look="quiet" onClick={() => onOpenCommit(lastCommit.hash)}>
-                      {lastCommit.subject || '(no subject)'}
-                    </TextLink>
-                  </span>
-                )}
-              />
-              <span className="ml-1.5 tabular-nums text-ink-3">
-                {lastCommit.shortHash} ·{' '}
-                {formatRelativeTime(lastCommit.authorDate, Date.now() / 1000)}
-              </span>
+              <LastCommit commit={lastCommit} cwd={task.path} onOpen={onOpenCommit} />
             </DetailItem>
           )}
           {task.useWorktree && (
@@ -217,13 +203,7 @@ export function TaskDetails({
                   label={<span className="tabular-nums">#{item.id}</span>}
                   title={item.title}
                 >
-                  {url ? (
-                    <TextLink look="quiet" href={url}>
-                      {item.title}
-                    </TextLink>
-                  ) : (
-                    item.title
-                  )}
+                  {url ? <TextLink href={url}>{item.title}</TextLink> : item.title}
                 </DetailItem>
               );
             })}
@@ -268,7 +248,10 @@ function UpstreamRows({
     <>
       <DetailItem label="Upstream" title={name} copy={name}>
         {repo ? (
-          <TextLink look="quiet" href={forgeBranchUrl(repo, upstream.branch)}>
+          <TextLink
+            href={forgeBranchUrl(repo, upstream.branch)}
+            title={`Open ${name} on the forge`}
+          >
             {name}
           </TextLink>
         ) : (
@@ -279,5 +262,43 @@ function UpstreamRows({
         <SyncStatus status={status} links={links} />
       </DetailItem>
     </>
+  );
+}
+
+/**
+ * The branch's newest commit: its subject (opens it in History; hovering
+ * shows the shared commit card, body and all), then its hash, linked to the
+ * forge once pushed, and its age. Links take the `link` colour (D191).
+ */
+function LastCommit({
+  commit,
+  cwd,
+  onOpen,
+}: {
+  commit: EditorCommitListItem;
+  cwd: string;
+  onOpen: (hash: string) => void;
+}) {
+  const links = useCommitLinks(cwd, commit.hash, true);
+  // The subject gives way to the hash and age, which always show.
+  return (
+    <span className="flex min-w-0 items-baseline gap-1.5">
+      <CommitHoverCard
+        commit={commit}
+        cwd={cwd}
+        side="left"
+        trigger={(hover) => (
+          <span {...hover} className="min-w-0 truncate">
+            <TextLink onClick={() => onOpen(commit.hash)}>
+              {commit.subject || '(no subject)'}
+            </TextLink>
+          </span>
+        )}
+      />
+      <span className="type-caption shrink-0 tabular-nums">
+        <CommitHash hash={commit.shortHash} url={links.commitUrl} look="prose" /> ·{' '}
+        {formatRelativeTime(commit.authorDate, Date.now() / 1000)}
+      </span>
+    </span>
   );
 }

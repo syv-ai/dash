@@ -1,7 +1,7 @@
 import type { ActivityState, PermissionMode, Task, TaskModel } from '../../../shared/types';
 import { formatTimeAgo } from '../../../shared/relativeTime';
 import { tildePath } from '../../lib/displayPath';
-import { formatCost, formatTokens } from '../../utils/format';
+import { formatCost, formatTokensPrecise } from '../../utils/format';
 
 /** One key/value line in the Details tab. */
 export interface DetailRow {
@@ -159,7 +159,7 @@ export function taskDetailSections(input: TaskDetailsInput): TaskDetailSections 
     usage: present([
       task.totalTokens > 0 && {
         label: 'Tokens',
-        value: formatTokens(task.totalTokens),
+        value: formatTokensPrecise(task.totalTokens),
         title: `${task.totalTokens.toLocaleString()} tokens`,
       },
       input.showCost &&
