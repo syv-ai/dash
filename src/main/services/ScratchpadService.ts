@@ -44,20 +44,27 @@ function changed(taskId: string): void {
   broadcast(CHANGED, { taskId });
 }
 
-/** The task's scratch folder (see above); null when it has had no session. */
-export function taskScratchpadDir(taskId: string): string | null {
+/** The task's scratch folder (see above) and the job whose it is; null when it has had no session. */
+function resolve(taskId: string): { dir: string; jobId: string | null } | null {
   const task = DatabaseService.getTask(taskId);
   const job = task?.jobId ? jobScratchDir(claudeConfigDir(), task.jobId) : null;
-  if (job && fs.existsSync(path.dirname(job))) return job;
+  if (task?.jobId && job && fs.existsSync(path.dirname(job)))
+    return { dir: job, jobId: task.jobId };
   const known = named.get(taskId);
-  if (known) return known;
+  if (known) return { dir: known, jobId: null };
   if (!task?.sessionId) return null;
-  return deriveScratchpadDir(task.path, task.sessionId, {
+  const derived = deriveScratchpadDir(task.path, task.sessionId, {
     platform: process.platform,
     uid: process.getuid?.(),
     tmpOverride: process.env.CLAUDE_CODE_TMPDIR,
     osTmp: os.tmpdir(),
   });
+  return derived ? { dir: derived, jobId: null } : null;
+}
+
+/** The task's scratch folder (see above); null when it has had no session. */
+export function taskScratchpadDir(taskId: string): string | null {
+  return resolve(taskId)?.dir ?? null;
 }
 
 /** Point the task's watch at `dir`; true when that moved it. */
@@ -91,11 +98,15 @@ export function noteScratchpad(taskId: string, payload: Record<string, unknown>)
 
 /** The task's scratchpad and its files; null when it has had no session. */
 export async function readTaskScratchpad(taskId: string): Promise<TaskScratchpad | null> {
-  const dir = taskScratchpadDir(taskId);
-  follow(taskId, dir);
-  if (!dir) return null;
-  const exists = fs.existsSync(dir);
-  return { dir, exists, listing: exists ? await listPlainFolder(dir) : { files: [], dirs: [] } };
+  const at = resolve(taskId);
+  follow(taskId, at?.dir ?? null);
+  if (!at) return null;
+  const exists = fs.existsSync(at.dir);
+  return {
+    ...at,
+    exists,
+    listing: exists ? await listPlainFolder(at.dir) : { files: [], dirs: [] },
+  };
 }
 
 function arm(taskId: string, dir: string | null): () => void {

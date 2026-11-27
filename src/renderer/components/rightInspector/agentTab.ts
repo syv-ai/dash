@@ -7,11 +7,44 @@
  */
 
 import { MEMORY_TYPES } from '../../../shared/types';
-import type { MemoryEntry, MemoryType } from '../../../shared/types';
+import type { MemoryEntry, MemoryType, Task } from '../../../shared/types';
+import type { TaskScratchpad } from '../../../shared/agent';
+import { tildePath } from '../../lib/displayPath';
 import { treeOrder } from '../fileTree/treeOrder';
 
 /** The Agent tab's panes. */
 export type AgentPane = 'scratchpad' | 'memory';
+
+/**
+ * The Scratchpad pane's first line and its tooltip: whose folder it is and
+ * when it goes, true to where main found it. A job's `tmp/` goes with the job
+ * (`claude rm`): when the task is deleted (a main-checkout task's checkout
+ * stays) or its session restarts as a new job. The session's own scratchpad,
+ * used only while the task has no job, lives in the system temp folder.
+ * Either way it is this session's folder only: a file Claude was told to save
+ * elsewhere, another job's folder included, doesn't show.
+ */
+export function scratchpadScope(
+  task: Pick<Task, 'name' | 'useWorktree'>,
+  scratchpad: Pick<TaskScratchpad, 'dir' | 'jobId'>,
+  home: string,
+): { text: string; tooltip: string } {
+  const dir = tildePath(scratchpad.dir, home);
+  const elsewhere = "Files Claude saves anywhere else, even in another job's folder, don't show.";
+  if (scratchpad.jobId) {
+    const deleted = task.useWorktree
+      ? 'when the task is deleted'
+      : 'when the task is deleted (the main checkout stays)';
+    return {
+      text: `Goes with the session · job ${scratchpad.jobId}`,
+      tooltip: `Claude Code's scratch folder for ${task.name}'s session, ${dir}. It stays while the task sleeps and goes with job ${scratchpad.jobId}: ${deleted}, or when its session restarts as a new job. ${elsewhere}`,
+    };
+  }
+  return {
+    text: `In the system temp folder · ${task.name}'s session`,
+    tooltip: `Claude Code's scratchpad for ${task.name}'s last session, ${dir}. ${task.name} has no background job now, so this is the session's own folder, kept in the system temp folder rather than with the task. ${elsewhere}`,
+  };
+}
 
 /** One type's memories, as the Memory pane lists them. */
 export interface MemoryGroup {

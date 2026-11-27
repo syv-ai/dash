@@ -48,12 +48,13 @@ describe('ScratchpadService', () => {
     noteScratchpad('t3', { session_id: 'q', scratchpad_dir: '/nowhere/q/scratchpad' });
     expect(await readTaskScratchpad('t3')).toEqual({
       dir: '/nowhere/q/scratchpad',
+      jobId: null,
       exists: false,
       listing: { files: [], dirs: [] },
     });
   });
 
-  it("prefers the background job's tmp folder while the job exists", () => {
+  it("prefers the background job's tmp folder while the job exists, and names the job", async () => {
     const config = mkdtempSync(path.join(tmpdir(), 'cfg-'));
     const was = process.env.CLAUDE_CONFIG_DIR;
     process.env.CLAUDE_CONFIG_DIR = config;
@@ -66,6 +67,11 @@ describe('ScratchpadService', () => {
       noteScratchpad('t4', { session_id: 's4', scratchpad_dir: '/t/s4/scratchpad' });
       expect(taskScratchpadDir('t4')).toBe(path.join(config, 'jobs/job4/tmp'));
       expect(sent).toEqual([['agent:scratchpadChanged', { taskId: 't4' }]]);
+      expect(await readTaskScratchpad('t4')).toMatchObject({
+        dir: path.join(config, 'jobs/job4/tmp'),
+        jobId: 'job4',
+        exists: false,
+      });
     } finally {
       process.env.CLAUDE_CONFIG_DIR = was;
       rmSync(config, { recursive: true, force: true });

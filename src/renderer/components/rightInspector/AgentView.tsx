@@ -62,7 +62,8 @@ import { Tooltip } from '../ui/Tooltip';
 import { ViewPanel, ViewTabs, type ViewTabsOption } from '../ui/ViewTabs';
 import { formatRelativeTime } from '../../../shared/relativeTime';
 import { useSectionOpen } from '../../lib/useSectionOpen';
-import { instructionFiles, memoryGroups, type AgentPane } from './agentTab';
+import { tildePath } from '../../lib/displayPath';
+import { instructionFiles, memoryGroups, scratchpadScope, type AgentPane } from './agentTab';
 
 /**
  * The task sidebar's Agent tab (A1): what Claude Code keeps beside the code,
@@ -152,10 +153,7 @@ export function AgentView({
       >
         {pane === 'scratchpad' ? (
           <>
-            <PaneScope
-              text={`Deleted with the task · ${task.name}'s session`}
-              tooltip={`Claude Code's scratch folder for ${task.name}'s session. It stays while the task sleeps and goes with the session: when the task is deleted or its session restarted.`}
-            />
+            {scratchpad && <PaneScope {...scratchpadScope(task, scratchpad, HOME)} />}
             <ScratchpadPane
               scratchpad={scratchpad}
               activePath={activePath}
@@ -195,6 +193,8 @@ export function AgentView({
     </div>
   );
 }
+
+const HOME = window.electronAPI.getHomeDir();
 
 /** The panes, in order: the tabs' and the panel's slide. */
 const AGENT_PANES: readonly AgentPane[] = ['scratchpad', 'memory'];
@@ -336,7 +336,7 @@ function ScratchpadPane({
       <EmptyState
         illustration={FolderOpen}
         title="The scratchpad is empty"
-        description="Files Claude saves to its scratchpad show here."
+        description={`Files Claude saves to ${tildePath(scratchpad.dir, HOME)} show here.`}
       />
     );
   }
