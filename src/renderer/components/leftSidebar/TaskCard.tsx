@@ -34,6 +34,9 @@ interface TaskCardProps {
   /** Set the percent column apart from the name and its marks (the Tasks
    *  view, whose rows lead with the name; T28). */
   spacedEnd?: boolean;
+  /** Keep a two-digit percent's room on every row, sleeping ones too, so no
+   *  name moves as a percent comes or changes (the Projects view). */
+  reservePercent?: boolean;
   onSelect: () => void;
   onOpenIde: () => void;
   onClose: () => void;
@@ -74,6 +77,7 @@ export function TaskCard({
   indentStep,
   drag,
   spacedEnd = false,
+  reservePercent = false,
   onSelect,
   onOpenIde,
   onClose,
@@ -147,12 +151,13 @@ export function TaskCard({
                 keyboard focus. It is as wide as the wider of the two, so the
                 name keeps its width (T24) and a short percent leaves no slack
                 before it (T26); right-aligned, the column lines up down the
-                list. */}
-            {state !== 'asleep' && (
+                list. `reservePercent` keeps it on every row, at least a
+                two-digit percent wide. */}
+            {(state !== 'asleep' || reservePercent) && (
               <span className={cn('flex', spacedEnd && 'pl-2')}>
                 <HoverSwapSlot
                   reserve
-                  rest={<ContextLevel usage={usage} />}
+                  rest={<ContextLevel usage={usage} reserve={reservePercent} />}
                   actions={
                     <SleepTaskButton
                       activityState={activityInfo?.state}
