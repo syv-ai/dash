@@ -21,11 +21,18 @@ export const pillVariants = cva(
       size: { sm: 'h-6 text-sm', md: 'h-7 text-sm' },
       fullWidth: { true: 'flex-1', false: '' },
       tight: { true: 'gap-1 px-1.5', false: 'gap-1.5 px-2.5' },
-      selected: { true: 'bg-select text-ink', false: 'text-ink-2 hover:text-ink' },
+      selected: { true: 'text-ink', false: 'text-ink-2 hover:text-ink' },
+      // The selected tint is a `TabIndicator` (`pillIndicator`) the row
+      // slides under its pills, not the pill's own.
+      indicated: { true: '', false: '' },
     },
-    defaultVariants: { fullWidth: false, tight: false, selected: false },
+    compoundVariants: [{ selected: true, indicated: false, className: 'bg-select' }],
+    defaultVariants: { fullWidth: false, tight: false, selected: false, indicated: false },
   },
 );
+
+/** The selected pill's tint as a sliding `TabIndicator`. */
+export const pillIndicator = 'rounded-md bg-select';
 
 /**
  * How a row of segments gives way as it narrows, in order: it drops the

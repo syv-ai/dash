@@ -29,7 +29,7 @@ import { IconButton } from '../ui/IconButton';
 import { cn } from '../../lib/cn';
 import { track } from '../../lib/telemetry';
 import { useSettledTrack } from '../../lib/useSettledTrack';
-import { ViewTabs } from '../ui/ViewTabs';
+import { ViewPanel, ViewTabs, type ViewTabsOption } from '../ui/ViewTabs';
 import { MovableSlot, useMovable } from '../ui/Movable';
 import { folderSheet, folderStripSlot } from '../ui/FolderTab';
 import { CountBadge } from '../ui/CountBadge';
@@ -558,6 +558,36 @@ export function RightInspector({
     });
   }
 
+  // The views' tabs, in order (Details is the row's end button, not a tab).
+  const viewTabs: ViewTabsOption<Segment>[] = reviewing
+    ? [
+        { value: 'overview', label: 'Overview' },
+        {
+          value: 'files',
+          label: 'Files',
+          count: review.review?.files.length || undefined,
+          countLabel: 'Changed files',
+        },
+        {
+          value: 'comments',
+          label: 'Comments',
+          count: tally?.comments || undefined,
+          countLabel: 'Unresolved',
+        },
+        { value: 'history', label: 'History' },
+        { value: 'agent', label: 'Agent' },
+      ]
+    : [
+        {
+          value: 'files',
+          label: 'Files',
+          count: files.length || undefined,
+          countLabel: 'Changed files',
+        },
+        { value: 'history', label: 'History' },
+        { value: 'agent', label: 'Agent' },
+      ];
+
   // The commit actions are Files' footer (`CommitBar`), not the row's.
   const header = (
     <ViewRow
@@ -572,36 +602,7 @@ export function RightInspector({
           onChange={(next) => next !== 'details' && onPickSegment(next, false)}
           onReselect={(next) => next !== 'details' && onPickSegment(next, true)}
           onMinWidth={setTabsMinPx}
-          options={
-            reviewing
-              ? [
-                  { value: 'overview', label: 'Overview' },
-                  {
-                    value: 'files',
-                    label: 'Files',
-                    count: review.review?.files.length || undefined,
-                    countLabel: 'Changed files',
-                  },
-                  {
-                    value: 'comments',
-                    label: 'Comments',
-                    count: tally?.comments || undefined,
-                    countLabel: 'Unresolved',
-                  },
-                  { value: 'history', label: 'History' },
-                  { value: 'agent', label: 'Agent' },
-                ]
-              : [
-                  {
-                    value: 'files',
-                    label: 'Files',
-                    count: files.length || undefined,
-                    countLabel: 'Changed files',
-                  },
-                  { value: 'history', label: 'History' },
-                  { value: 'agent', label: 'Agent' },
-                ]
-          }
+          options={viewTabs}
         />
       }
       end={
@@ -742,7 +743,13 @@ export function RightInspector({
   // tab, over Files' commit actions.
   const onSheet = (content: ReactNode) => (
     <div className={cn('flex h-full flex-col', folderSheet)}>
-      <div className="flex min-h-0 flex-1 flex-col">{content}</div>
+      <ViewPanel
+        value={segment}
+        order={viewTabs.map((t) => t.value)}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        {content}
+      </ViewPanel>
       {commitBar}
     </div>
   );

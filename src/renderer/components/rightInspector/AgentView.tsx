@@ -50,7 +50,7 @@ import { IconButton } from '../ui/IconButton';
 import { Input } from '../ui/Input';
 import { ListRow } from '../ui/ListRow';
 import { Notice } from '../ui/Notice';
-import { Segmented } from '../ui/Segmented';
+import { ViewPanel, ViewTabs } from '../ui/ViewTabs';
 import { formatRelativeTime } from '../../../shared/relativeTime';
 import { useSectionOpen } from '../review/useSectionOpen';
 import { instructionFiles, memoryGroups, type AgentPane } from './agentTab';
@@ -124,44 +124,49 @@ export function AgentView({
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <FilesTopRow
         start={
-          <Segmented<AgentPane>
+          <ViewTabs<AgentPane>
+            variant="pill"
             aria-label="Scratchpad or memory"
-            size="sm"
-            fullWidth={false}
             value={pane}
             onChange={onPane}
-            options={[
-              { value: 'scratchpad', label: 'Scratchpad' },
-              { value: 'memory', label: 'Memory' },
-            ]}
+            options={AGENT_PANE_TABS}
           />
         }
         end={end || undefined}
       />
-      {pane === 'scratchpad' ? (
-        <ScratchpadPane scratchpad={scratchpad} activePath={activePath} onOpenFile={onOpenFile} />
-      ) : error ? (
-        <EmptyState illustration={Brain} title="Could not read memory" description={error} />
-      ) : (
-        memory &&
-        project && (
-          <MemoryPane
-            task={task}
-            projectId={project.id}
-            projectPath={project.path}
-            dir={memory.dir}
-            hasIndex={memory.hasIndex}
-            entries={memory.entries}
-            notices={memoryNotices(memory)}
-            repoPaths={repoPaths}
-            activePath={activePath}
-            onOpenFile={onOpenFile}
-          />
-        )
-      )}
+      <ViewPanel value={pane} order={AGENT_PANES} className="flex min-h-0 flex-1 flex-col">
+        {pane === 'scratchpad' ? (
+          <ScratchpadPane scratchpad={scratchpad} activePath={activePath} onOpenFile={onOpenFile} />
+        ) : error ? (
+          <EmptyState illustration={Brain} title="Could not read memory" description={error} />
+        ) : (
+          memory &&
+          project && (
+            <MemoryPane
+              task={task}
+              projectId={project.id}
+              projectPath={project.path}
+              dir={memory.dir}
+              hasIndex={memory.hasIndex}
+              entries={memory.entries}
+              notices={memoryNotices(memory)}
+              repoPaths={repoPaths}
+              activePath={activePath}
+              onOpenFile={onOpenFile}
+            />
+          )
+        )}
+      </ViewPanel>
     </div>
   );
 }
+
+/** The sub-views' tabs, in order. */
+const AGENT_PANE_TABS: { value: AgentPane; label: string }[] = [
+  { value: 'scratchpad', label: 'Scratchpad' },
+  { value: 'memory', label: 'Memory' },
+];
+const AGENT_PANES = AGENT_PANE_TABS.map((t) => t.value);
 
 /** Surface a failed action instead of dropping it. */
 async function attempt(

@@ -3,6 +3,7 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../../lib/cn';
 import { focusRing } from './styles';
 import { Tab, type TabProps } from './Tab';
+import { TabIndicator } from './TabIndicator';
 
 /**
  * The sheet's surface: the terminal palette's background when the host sets
@@ -39,16 +40,28 @@ const folderTabVariants = cva(
       // open bottom laid over the sheet's top edge (the strip overlaps the
       // sheet by 1px). The rest sit behind on the chrome, and lift on hover.
       active: {
-        true: cn('z-10 h-8 border border-b-0 border-line text-ink', sheetSurface),
+        true: 'z-10 h-8 border border-b-0 text-ink',
         false: cn(closedBand, 'text-ink-2 hover:-translate-y-px hover:bg-hover hover:text-ink'),
       },
       // The open folder of a stack that isn't focused: still open, quieter.
       muted: { true: '', false: '' },
+      // The open folder's shape is the strip's sliding `TabIndicator`
+      // (`folderIndicator`); the tab keeps its box (the outline's 1px
+      // included, clear) so it measures the same.
+      indicated: { true: '', false: '' },
     },
-    compoundVariants: [{ active: true, muted: true, className: 'text-ink-2' }],
-    defaultVariants: { active: false, muted: false },
+    compoundVariants: [
+      { active: true, muted: true, className: 'text-ink-2' },
+      { active: true, indicated: false, className: cn('border-line', sheetSurface) },
+      { active: true, indicated: true, className: 'border-transparent' },
+    ],
+    defaultVariants: { active: false, muted: false, indicated: false },
   },
 );
+
+/** The open folder's shape as a sliding `TabIndicator`: on the sheet's
+ *  surface, outlined on three sides, its open bottom over the sheet's edge. */
+export const folderIndicator = cn('rounded-t-lg border border-b-0 border-line', sheetSurface);
 
 export type FolderTabProps = TabProps & VariantProps<typeof folderTabVariants>;
 
@@ -58,15 +71,21 @@ export type FolderTabProps = TabProps & VariantProps<typeof folderTabVariants>;
  * the folders behind. The strip lays them on the sheet's top edge, 1px over.
  */
 export const FolderTab = React.forwardRef<HTMLDivElement, FolderTabProps>(function FolderTab(
-  { active, muted, className, ...props },
+  { active, muted, indicated, className, ...props },
   ref,
 ) {
   return (
     <Tab
       ref={ref}
       active={active}
-      className={cn(folderTabVariants({ active, muted }), className)}
+      className={cn(folderTabVariants({ active, muted, indicated }), className)}
       {...props}
     />
   );
 });
+
+/** A strip of `indicated` folder tabs' open folder, sliding from tab to tab
+ *  (`TabIndicator`; the strip's first child). */
+export function FolderTabIndicator({ active }: { active: unknown }) {
+  return <TabIndicator active={active} className={folderIndicator} />;
+}

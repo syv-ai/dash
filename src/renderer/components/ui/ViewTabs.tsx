@@ -1,9 +1,11 @@
 import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { CountBadge } from './CountBadge';
-import { FolderTab } from './FolderTab';
-import { pillVariants, segmentTip } from './Segmented';
+import { FolderTab, folderIndicator } from './FolderTab';
+import { pillIndicator, pillVariants, segmentTip } from './Segmented';
 import { Tab, type TabProps } from './Tab';
+import { TabIndicator } from './TabIndicator';
+import { useSlideIn } from './tabMotion';
 import { Tooltip } from './Tooltip';
 import { firstFitting, useFittedDensity } from './useFittedDensity';
 import { useReselect } from './useReselect';
@@ -25,6 +27,12 @@ export const fitViewTabs = (available: number, needs: readonly number[]): ViewTa
  */
 export type ViewTabsVariant = 'folder' | 'pill';
 
+/** The selected tab's surface, sliding from tab to tab (`TabIndicator`). */
+const indicator: Record<ViewTabsVariant, string> = {
+  folder: folderIndicator,
+  pill: pillIndicator,
+};
+
 /** Where the tabs sit in the row. */
 const align: Record<ViewTabsVariant, string> = { folder: 'h-full items-end', pill: 'items-center' };
 /** The room before the first tab: the folder's corner inset. */
@@ -37,6 +45,7 @@ const ViewTab = React.forwardRef<HTMLDivElement, TabProps & { variant: ViewTabsV
       <FolderTab
         ref={ref}
         active={active}
+        indicated
         className={cn('max-w-none pr-3', className)}
         {...props}
       />
@@ -45,7 +54,7 @@ const ViewTab = React.forwardRef<HTMLDivElement, TabProps & { variant: ViewTabsV
         ref={ref}
         active={active}
         className={cn(
-          pillVariants({ size: 'sm', selected: !!active }),
+          pillVariants({ size: 'sm', selected: !!active, indicated: true }),
           'shrink-0 select-none',
           className,
         )}
@@ -55,7 +64,8 @@ const ViewTab = React.forwardRef<HTMLDivElement, TabProps & { variant: ViewTabsV
   },
 );
 
-type Option<T> = {
+/** One view of a `ViewTabs`. */
+export type ViewTabsOption<T> = {
   value: T;
   label: string;
   count?: number;
@@ -66,7 +76,7 @@ type Option<T> = {
 };
 
 /** The label, with its count for screen readers while the badge is dropped. */
-function Label<T>({ opt, counted }: { opt: Option<T>; counted: boolean }) {
+function Label<T>({ opt, counted }: { opt: ViewTabsOption<T>; counted: boolean }) {
   return (
     <span className="whitespace-nowrap">
       {opt.label}
@@ -77,7 +87,7 @@ function Label<T>({ opt, counted }: { opt: Option<T>; counted: boolean }) {
 
 /** The count badge, only where there is one to show: an empty indicator would
  *  still take `Tab`'s gap and push the label off centre. */
-function countBadge<T>(opt: Option<T>, counted: boolean) {
+function countBadge<T>(opt: ViewTabsOption<T>, counted: boolean) {
   return counted && opt.count != null ? <CountBadge count={opt.count} /> : undefined;
 }
 
@@ -85,6 +95,10 @@ function countBadge<T>(opt: Option<T>, counted: boolean) {
  * A view switch: the sidebars' (Files | History | Agent; Tasks | Projects).
  * One behaviour in two looks (`variant`). None is selected while `value`
  * names no option; a double click on the selected one is `onReselect`.
+ *
+ * The selected surface slides from tab to tab (`TabIndicator`), and the
+ * view under it slides in from the side of travel when it's wrapped in a
+ * `ViewPanel`.
  *
  * Its labels always read in full. It takes its full width (counts included)
  * when the row has room and shrinks first when it hasn't, dropping the
@@ -103,7 +117,7 @@ export function ViewTabs<T extends string>({
 }: {
   variant: ViewTabsVariant;
   value: T;
-  options: Array<Option<T>>;
+  options: Array<ViewTabsOption<T>>;
   onChange: (v: T) => void;
   /** A double click on the option that was already selected when the
    *  gesture began. */
@@ -136,6 +150,7 @@ export function ViewTabs<T extends string>({
       // from its full width down to its labels'.
       style={{ flexBasis: fullNeed, flexShrink: 1000, flexGrow: 0, minWidth: minNeed }}
     >
+      <TabIndicator active={value} className={indicator[variant]} />
       {options.map((opt) => {
         const tip = segmentTip(opt, counted);
         return (
@@ -178,6 +193,32 @@ export function ViewTabs<T extends string>({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The view a `ViewTabs` shows: when `value` changes to another of `order`
+ * (the tabs' values, in their order), it slides in a short way from the side
+ * of travel and fades in (`useSlideIn`); its content stays mounted. A host
+ * whose views sit in a clipping box (a sheet) clips the slide.
+ */
+export function ViewPanel<T extends string>({
+  value,
+  order,
+  className,
+  children,
+}: {
+  value: T;
+  order: readonly T[];
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  useSlideIn(ref, value, order);
+  return (
+    <div ref={ref} className={className}>
+      {children}
     </div>
   );
 }
