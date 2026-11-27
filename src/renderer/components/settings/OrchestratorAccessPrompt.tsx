@@ -27,7 +27,8 @@ export function OrchestratorAccessPrompt() {
 
   return (
     <ConfirmModal
-      message="An agent outside Dash, such as Holi's vault agent, wants to control Dash: create and drive tasks, read what they show, and run their services. Allow turns on “Let other agents control Dash” in Settings → Claude, where you can turn it off again."
+      title="Let an outside agent control Dash?"
+      message="It could create and drive tasks, read what they show, and run their services. Turn it off again in Settings → Claude."
       confirmLabel="Allow"
       cancelLabel="Deny"
       onConfirm={() => answer(true)}
