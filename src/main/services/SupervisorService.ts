@@ -1,4 +1,3 @@
-import * as fs from 'fs';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -9,6 +8,7 @@ import { findClaudePath } from './claudeCli';
 import { claudeConfigDir } from '../utils/claudePaths';
 import { activityMonitor } from './ActivityMonitor';
 import { DatabaseService } from './DatabaseService';
+import { JobsWatcher } from './jobsWatcher';
 import {
   activityFromSupervisor,
   buildDispatchArgs,
@@ -26,7 +26,8 @@ const execFileAsync = promisify(execFile);
 /** Poll cadence for `claude agents --json --all` (design doc §6.6). */
 export const POLL_FOCUSED_MS = 15_000;
 export const POLL_BLURRED_MS = 60_000;
-const WATCH_DEBOUNCE_MS = 1_000;
+/** How long a jobs-folder change waits, so a burst of them costs one listing. */
+const WATCH_COALESCE_MS = 1_000;
 const DISPATCH_TIMEOUT_MS = 60_000;
 const LIST_TIMEOUT_MS = 15_000;
 
@@ -51,7 +52,7 @@ function reportDispatchOutput(output: string): void {
   reportFindings('dispatch', checkDispatchOutput(output), claudeVersionFor());
 }
 
-/** `<claude config dir>/jobs`: watched as a change trigger only. */
+/** `<claude config dir>/jobs`: watched as a change trigger only (JobsWatcher). */
 function jobsDir(): string {
   return path.join(claudeConfigDir(), 'jobs');
 }
@@ -68,8 +69,8 @@ function jobsDir(): string {
 class SupervisorServiceImpl extends EventEmitter {
   private sender: WebContents | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
-  private watcher: fs.FSWatcher | null = null;
-  private watchDebounce: ReturnType<typeof setTimeout> | null = null;
+  private watcher: JobsWatcher | null = null;
+  private watchPending: ReturnType<typeof setTimeout> | null = null;
   private inflight: Promise<SupervisorSession[]> | null = null;
   private focused = true;
   private running = false;
@@ -259,9 +260,9 @@ class SupervisorServiceImpl extends EventEmitter {
     }
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
-    if (this.watchDebounce) clearTimeout(this.watchDebounce);
-    this.watchDebounce = null;
-    this.watcher?.close();
+    if (this.watchPending) clearTimeout(this.watchPending);
+    this.watchPending = null;
+    this.watcher?.stop();
     this.watcher = null;
   }
 
@@ -284,26 +285,23 @@ class SupervisorServiceImpl extends EventEmitter {
     // by a lifecycle verb afterwards (say, during quit) must not re-arm it. It
     // also keeps unit tests, which never start polling, from putting a live
     // fs.watch on the developer's real ~/.claude/jobs.
-    if (!this.running || this.watcher) return;
-    const dir = jobsDir();
-    if (!fs.existsSync(dir)) return; // retried on every poll
-    try {
-      this.watcher = fs.watch(dir, { recursive: true }, () => {
-        if (this.watchDebounce) clearTimeout(this.watchDebounce);
-        this.watchDebounce = setTimeout(() => {
-          this.watchDebounce = null;
-          void this.refresh('jobs-watch');
-        }, WATCH_DEBOUNCE_MS);
-      });
-      this.watcher.on('error', () => {
-        this.watcher?.close();
-        this.watcher = null;
-      });
-    } catch (err) {
-      console.warn('[Supervisor] fs.watch on jobs dir failed:', err);
-      this.watcher = null;
-    }
+    if (!this.running) return;
+    this.watcher ??= new JobsWatcher(jobsDir(), this.onJobsChange);
+    if (!this.watcher.watching) this.watcher.start(); // a missing dir is retried on every refresh
   }
+
+  /**
+   * A job's session may have changed. The first change arms one listing a
+   * moment later and later ones ride on it: unlike a debounce, a steady stream
+   * of changes can't hold the listing off.
+   */
+  private onJobsChange = (): void => {
+    if (this.watchPending) return;
+    this.watchPending = setTimeout(() => {
+      this.watchPending = null;
+      void this.refresh('jobs-watch');
+    }, WATCH_COALESCE_MS);
+  };
 
   private schedule(): void {
     if (!this.running) return;
