@@ -12,6 +12,8 @@ import { focusRing } from './styles';
  * an overlay that reads on any surface; no rules), a disclosure that folds the
  * rows away. Banded sections stack 4px apart, so two folded bands never fuse.
  * A `summary` follows the title quietly ("Checks · 1 passing").
+ * Rows sit in one `minmax(0, 1fr)` column (`grid-cols-1`), never an `auto`
+ * one, so a truncating row ellipsizes at the pane's edge instead of widening it.
  */
 export function DetailSection({
   title,
@@ -46,7 +48,7 @@ export function DetailSection({
   const id = React.useId();
   if (!collapsible) {
     return (
-      <section className="grid gap-1.5 px-3 pt-5 pb-2">
+      <section className="grid grid-cols-1 gap-1.5 px-3 pt-5 pb-2">
         <div className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1">
           <h3 className="type-heading min-w-0 flex-1">
             {title}
@@ -89,7 +91,7 @@ export function DetailSection({
       <div id={id} className="collapse-grid" data-open={open}>
         {/* The padding sits inside the clipped child, which folds to nothing. */}
         <div>
-          <div className="grid gap-1.5 px-3 py-2.5">{children}</div>
+          <div className="grid grid-cols-1 gap-1.5 px-3 py-2.5">{children}</div>
         </div>
       </div>
     </section>

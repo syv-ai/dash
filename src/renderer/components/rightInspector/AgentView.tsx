@@ -535,11 +535,9 @@ function GroupSection({
   children: ReactNode;
 }) {
   const section = useSectionOpen(id, true);
-  // `min-w-0`: the section's body is a one-column grid, whose `auto` column
-  // would otherwise grow to a row's unwrapped preview, past the pane's edge.
   return (
     <DetailSection title={label} summary={String(count)} collapsible {...section}>
-      <div className="min-w-0">{children}</div>
+      {children}
     </DetailSection>
   );
 }
