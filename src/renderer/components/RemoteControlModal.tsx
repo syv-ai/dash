@@ -68,7 +68,7 @@ function RemoteControlBody({ ptyId, state }: RemoteControlBodyProps) {
     <>
       <DialogHeader
         title="Remote control"
-        description="Continue this session from your phone or another browser."
+        hint="Continue this session from your phone or another browser: scan the code, or open the link."
       />
       <DialogBody className="justify-items-center text-center">
         {enabling && !state?.url ? (
@@ -85,7 +85,6 @@ function RemoteControlBody({ ptyId, state }: RemoteControlBodyProps) {
             ) : (
               <QrSlot />
             )}
-            <p className="type-caption">Scan it with your phone, or open the link.</p>
             <Button variant="secondary" className="w-full" onClick={handleCopy}>
               {copied ? (
                 <Check size={14} strokeWidth={1.8} />
