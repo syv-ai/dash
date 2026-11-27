@@ -105,6 +105,8 @@ export function TaskCard({
       <TreeRow
         ctx={ctx}
         indentStep={indentStep}
+        // Its project's rhythm (`dense`, T25); a second line grows it.
+        size="dense"
         draggable={!!drag}
         {...drag?.handlers}
         className="group/swap"

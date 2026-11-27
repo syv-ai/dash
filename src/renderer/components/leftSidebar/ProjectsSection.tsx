@@ -28,6 +28,7 @@ import {
   type TreeHandle,
   type TreeRowContext,
 } from '../ui/Tree';
+import { LIST_ROW_PX } from '../ui/ListRow';
 import { StatusDot } from '../ui/StatusDot';
 import { EmptyState } from '../ui/EmptyState';
 import { Button } from '../ui/Button';
@@ -305,7 +306,8 @@ export function ProjectsSection({
             {...projectDrag(project)}
             // 32px, the file tree's rhythm: a list of closed projects reads
             // as one block, the name keeps the row's 13px (T25).
-            className="group/swap h-8"
+            size="dense"
+            className="group/swap"
             dragging={draggingId === project.id}
             dimmed={!isActive && isProjectCollapsed && !activityDot}
             strong={isActive}
@@ -517,9 +519,8 @@ export function ProjectsSection({
 function estimate(row: ProjectTreeRow): number {
   switch (row.kind) {
     case 'project':
-      return 32;
     case 'task':
-      return 36;
+      return LIST_ROW_PX.dense;
     case 'gap':
       return 12;
     case 'noProjects':

@@ -6,7 +6,7 @@ import { focusRing } from './styles';
 /** Each size's row height (px), for a list that places rows before it
  *  measures them (`VirtualList`'s `estimateSize`). In step with the `size`
  *  classes below. */
-export const LIST_ROW_PX = { xs: 26, sm: 32, md: 36 } as const;
+export const LIST_ROW_PX = { xs: 26, sm: 32, dense: 32, md: 36 } as const;
 
 const listRowVariants = cva(
   cn(
@@ -15,7 +15,9 @@ const listRowVariants = cva(
   ),
   {
     variants: {
-      size: { xs: 'h-6.5 text-sm', sm: 'h-8 text-sm', md: 'h-9 text-base' },
+      // `dense`: `sm`'s 32px with `md`'s 13px label, the left sidebar's
+      // projects and tasks (the file tree's rhythm, T25).
+      size: { xs: 'h-6.5 text-sm', sm: 'h-8 text-sm', dense: 'h-8 text-base', md: 'h-9 text-base' },
       // A second line: the row grows; leading and trailing centre on both
       // lines (T21).
       twoLine: { true: 'h-auto py-2', false: '' },
