@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { SettingRow } from './Field';
 import { Switch } from './Switch';
+import type { TooltipContent } from './Tooltip';
 
 /**
  * A labelled on/off setting: a `SettingRow` with a `Switch` at its end. The
@@ -18,7 +19,7 @@ export function SwitchField({
 }: {
   label: string;
   /** What it does, behind an ⓘ beside the label. */
-  hint?: React.ReactNode;
+  hint?: TooltipContent;
   /** A short line kept in view under the label: a consequence ("Changing it
    *  restarts the session"). */
   helperText?: React.ReactNode;

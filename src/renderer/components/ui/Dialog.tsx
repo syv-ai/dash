@@ -195,6 +195,7 @@ export function NavDialogLayout<T extends string>({
   onChange,
   heading,
   hint,
+  actions,
   navFooter,
   children,
 }: {
@@ -206,6 +207,8 @@ export function NavDialogLayout<T extends string>({
   heading: React.ReactNode;
   /** What the section holds, behind an ⓘ beside its name. */
   hint?: TooltipContent;
+  /** The section's own actions, before the close button (Reset all). */
+  actions?: React.ReactNode;
   /** Pinned under the nav (a version). */
   navFooter?: React.ReactNode;
   children: React.ReactNode;
@@ -240,7 +243,10 @@ export function NavDialogLayout<T extends string>({
           <div className="min-w-0 flex-1 pt-1">
             <TitleLine title={heading} hint={hint} />
           </div>
-          <DialogClose />
+          <div className="flex shrink-0 items-center gap-1">
+            {actions}
+            <DialogClose />
+          </div>
         </header>
         {/* Keyed so a section change starts at the top and fades in. */}
         <div

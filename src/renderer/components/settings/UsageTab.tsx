@@ -29,15 +29,19 @@ export function UsageTab({ latestRateLimits }: { latestRateLimits?: RateLimits }
 
   return (
     <>
-      <FormSection
-        title="Tokens"
-        hint={`Across ${globalTokenStats.taskCount} ${
-          globalTokenStats.taskCount === 1 ? 'task' : 'tasks'
-        }; cost is worked out from the token counts.`}
-      >
-        <p className="type-title tabular-nums">
-          {formatTokens(globalTokenStats.totalTokens)} · {formatCost(globalTokenStats.totalCostUsd)}
-        </p>
+      <FormSection>
+        <SettingRow
+          label={`Tokens across ${globalTokenStats.taskCount} ${
+            globalTokenStats.taskCount === 1 ? 'task' : 'tasks'
+          }`}
+          hint="Cost is worked out from the token counts."
+          control={
+            <span className="type-heading tabular-nums">
+              {formatTokens(globalTokenStats.totalTokens)} ·{' '}
+              {formatCost(globalTokenStats.totalCostUsd)}
+            </span>
+          }
+        />
       </FormSection>
 
       <FormSection title="Rate limits">
@@ -65,7 +69,7 @@ export function UsageTab({ latestRateLimits }: { latestRateLimits?: RateLimits }
             )}
           </div>
         ) : (
-          <p className="type-caption">Shown after the first reply from the API.</p>
+          <p className="type-caption py-1">Shown after the first reply from the API.</p>
         )}
       </FormSection>
 

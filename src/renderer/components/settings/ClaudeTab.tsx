@@ -32,7 +32,7 @@ export function ClaudeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) 
 
   return (
     <>
-      <FormSection title="Claude Code">
+      <FormSection>
         <CliStatus info={claudeInfo} />
       </FormSection>
 
@@ -40,23 +40,24 @@ export function ClaudeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) 
         <SettingRow
           label="Effort"
           hint="How much Claude reasons. Auto lets the model decide; X-High and Max need a newer model (Opus 4.8 and up), others use their highest level."
-        >
-          <Segmented
-            fullWidth={false}
-            size="sm"
-            aria-label="Effort"
-            value={effortLevel}
-            options={[
-              { value: 'auto', label: 'Auto' },
-              { value: 'low', label: 'Low' },
-              { value: 'medium', label: 'Medium' },
-              { value: 'high', label: 'High' },
-              { value: 'xhigh', label: 'X-High' },
-              { value: 'max', label: 'Max' },
-            ]}
-            onChange={setEffortLevel}
-          />
-        </SettingRow>
+          control={
+            <Segmented
+              fullWidth={false}
+              size="sm"
+              aria-label="Effort"
+              value={effortLevel}
+              options={[
+                { value: 'auto', label: 'Auto' },
+                { value: 'low', label: 'Low' },
+                { value: 'medium', label: 'Medium' },
+                { value: 'high', label: 'High' },
+                { value: 'xhigh', label: 'X-High' },
+                { value: 'max', label: 'Max' },
+              ]}
+              onChange={setEffortLevel}
+            />
+          }
+        />
         <SwitchField
           label="Ultracode"
           hint="New sessions start with X-High reasoning and multi-agent orchestration. Uses more tokens and runs slower, and overrides Effort. Applies when a session next starts."
@@ -93,28 +94,28 @@ export function ClaudeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) 
 
 /** Which Claude Code Dash found, and what to do when it's missing or old. */
 function CliStatus({ info }: { info: ClaudeCliInfo | null }) {
-  if (!info) return <p className="type-caption">Looking for Claude Code…</p>;
-  if (!info.installed) {
-    return (
-      <Notice icon={<AlertCircle size={14} strokeWidth={1.8} />}>
-        Not found. Install it with <Code>npm install -g @anthropic-ai/claude-code</Code>
-      </Notice>
-    );
-  }
+  const installed = !!info?.installed;
   return (
-    <div className="grid gap-2">
-      <div className="grid gap-0.5">
-        <p className="type-body tabular-nums">{cliVersion(info)}</p>
-        <p className="type-caption truncate" title={info.path ?? undefined}>
-          {info.path}
-        </p>
-      </div>
-      {!info.supported && (
+    <SettingRow
+      label="Claude Code"
+      hint={installed ? (info?.path ?? undefined) : undefined}
+      control={
+        <span className="type-body tabular-nums">
+          {!info ? 'Looking…' : installed ? cliVersion(info) : 'Not found'}
+        </span>
+      }
+    >
+      {info && !info.installed && (
+        <Notice icon={<AlertCircle size={14} strokeWidth={1.8} />}>
+          Install it with <Code>npm install -g @anthropic-ai/claude-code</Code>
+        </Notice>
+      )}
+      {info?.installed && !info.supported && (
         <Notice icon={<AlertCircle size={14} strokeWidth={1.8} />}>
           Dash needs {info.minVersion} or newer. Run <Code>claude update</Code>
         </Notice>
       )}
-    </div>
+    </SettingRow>
   );
 }
 

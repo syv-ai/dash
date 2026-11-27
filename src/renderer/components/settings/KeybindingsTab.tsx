@@ -31,10 +31,29 @@ const FIXED = [
   { label: 'Previous active task', keys: ['Ctrl', '⇧', '⇥'] },
 ];
 
+export const KEYBINDINGS_HINT = 'Click a shortcut, then press the new keys. Esc cancels.';
+
+/** Puts every shortcut back; in the section's header. */
+export function ResetAllKeybindings() {
+  const keybindings = useSettings((s) => s.keybindings);
+  const setKeybindings = useSettings((s) => s.setKeybindings);
+  const modified = Object.values(keybindings).some(isModified);
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      disabled={!modified}
+      onClick={() => setKeybindings({ ...DEFAULT_KEYBINDINGS })}
+    >
+      <RotateCcw size={14} strokeWidth={1.8} />
+      Reset all
+    </Button>
+  );
+}
+
 export function KeybindingsTab() {
   const keybindings = useSettings((s) => s.keybindings);
   const setKeybindings = useSettings((s) => s.setKeybindings);
-  const modifiedCount = Object.values(keybindings).filter(isModified).length;
 
   const change = (id: string, updated: KeyBinding) =>
     setKeybindings({ ...keybindings, [id]: updated });
@@ -45,22 +64,6 @@ export function KeybindingsTab() {
 
   return (
     <>
-      <div className="flex items-center gap-3">
-        <p className="type-caption flex-1">
-          Click a shortcut, then press the new keys. Esc cancels.
-          {modifiedCount > 0 && ` ${modifiedCount} changed.`}
-        </p>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={modifiedCount === 0}
-          onClick={() => setKeybindings({ ...DEFAULT_KEYBINDINGS })}
-        >
-          <RotateCcw size={14} strokeWidth={1.8} />
-          Reset all
-        </Button>
-      </div>
-
       {groupByCategory(keybindings).map((group) => (
         <FormSection key={group.category} title={group.category}>
           {group.items.map((binding) => {

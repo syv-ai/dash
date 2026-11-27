@@ -32,19 +32,20 @@ import { Code } from '../ui/Code';
 import { DetailItem, DetailList } from '../ui/DetailList';
 import { Dialog, NavDialogLayout, type NavDialogItem } from '../ui/Dialog';
 import { Dot } from '../ui/Dot';
-import { Field, FormSection, SettingRow } from '../ui/Field';
+import { FormSection, SettingRow } from '../ui/Field';
+import { IconButton } from '../ui/IconButton';
 import { Input } from '../ui/Input';
 import { Meter } from '../ui/Meter';
 import { Notice } from '../ui/Notice';
 import { Segmented } from '../ui/Segmented';
 import { Select } from '../ui/Select';
 import { Slider } from '../ui/Slider';
-import { SwatchOption } from '../ui/Swatch';
+import { SwatchStrip } from '../ui/Swatch';
 import { SwitchField } from '../ui/SwitchField';
 import { TextLink } from '../ui/TextLink';
 import { Textarea } from '../ui/Textarea';
 import { ClaudeTab, cliVersion } from './ClaudeTab';
-import { KeybindingsTab } from './KeybindingsTab';
+import { KEYBINDINGS_HINT, KeybindingsTab, ResetAllKeybindings } from './KeybindingsTab';
 import { UsageTab } from './UsageTab';
 
 const DASH_DEFAULT_ATTRIBUTION =
@@ -68,40 +69,19 @@ const icon = (Icon: React.ComponentType<{ size: number; strokeWidth: number }>) 
   <Icon size={14} strokeWidth={1.8} />
 );
 
-/** Each section: its nav label and icon, and the line under its title. */
-const SECTIONS: Record<SettingsTab, { label: string; description: string; icon: React.ReactNode }> =
-  {
-    appearance: { label: 'Appearance', description: 'Theme and terminals.', icon: icon(Palette) },
-    notifications: {
-      label: 'Notifications',
-      description: 'How Dash tells you a task is done.',
-      icon: icon(Bell),
-    },
-    ide: { label: 'IDE', description: 'The editor a task opens in.', icon: icon(Code2) },
-    attribution: {
-      label: 'Attribution',
-      description: 'How commits Claude makes are signed.',
-      icon: icon(GitCommit),
-    },
-    'claude-code': {
-      label: 'Claude',
-      description: 'Claude Code, its sessions and their environment.',
-      icon: icon(Sparkles),
-    },
-    keybindings: { label: 'Keybindings', description: 'Keyboard shortcuts.', icon: icon(Keyboard) },
-    usage: {
-      label: 'Usage',
-      description: 'Tokens, rate limits and alerts.',
-      icon: icon(Activity),
-    },
-    updates: { label: 'Updates', description: 'Keeping Dash up to date.', icon: icon(Download) },
-    privacy: {
-      label: 'Privacy',
-      description: 'The anonymous data Dash sends.',
-      icon: icon(Shield),
-    },
-    about: { label: 'About', description: 'Versions and links.', icon: icon(Info) },
-  };
+/** Each section's nav label and icon. */
+const SECTIONS: Record<SettingsTab, { label: string; icon: React.ReactNode }> = {
+  appearance: { label: 'Appearance', icon: icon(Palette) },
+  notifications: { label: 'Notifications', icon: icon(Bell) },
+  ide: { label: 'IDE', icon: icon(Code2) },
+  attribution: { label: 'Attribution', icon: icon(GitCommit) },
+  'claude-code': { label: 'Claude', icon: icon(Sparkles) },
+  keybindings: { label: 'Keybindings', icon: icon(Keyboard) },
+  usage: { label: 'Usage', icon: icon(Activity) },
+  updates: { label: 'Updates', icon: icon(Download) },
+  privacy: { label: 'Privacy', icon: icon(Shield) },
+  about: { label: 'About', icon: icon(Info) },
+};
 
 const NAV_GROUPS: Array<{ label: string; ids: SettingsTab[] }> = [
   { label: 'Interface', ids: ['appearance', 'notifications'] },
@@ -161,7 +141,8 @@ export function SettingsModal({
         value={tab}
         onChange={setTab}
         heading={SECTIONS[tab].label}
-        hint={SECTIONS[tab].description}
+        hint={tab === 'keybindings' ? KEYBINDINGS_HINT : undefined}
+        actions={tab === 'keybindings' ? <ResetAllKeybindings /> : undefined}
         navFooter={appVersion ? `Dash ${appVersion}` : null}
       >
         {tab === 'appearance' && <AppearanceTab />}
@@ -202,77 +183,97 @@ function AppearanceTab() {
 
   return (
     <>
-      <FormSection title="Theme">
-        <Segmented
-          aria-label="Theme"
-          fullWidth={false}
-          value={theme}
-          options={[
-            { value: 'light', label: 'Light', icon: icon(Sun) },
-            { value: 'dark', label: 'Dark', icon: icon(Moon) },
-          ]}
-          onChange={setTheme}
+      <FormSection>
+        <SettingRow
+          label="Theme"
+          control={
+            <Segmented
+              aria-label="Theme"
+              fullWidth={false}
+              size="sm"
+              value={theme}
+              options={[
+                { value: 'light', label: 'Light', icon: icon(Sun) },
+                { value: 'dark', label: 'Dark', icon: icon(Moon) },
+              ]}
+              onChange={setTheme}
+            />
+          }
         />
       </FormSection>
 
       <FormSection title="Terminal">
-        <SettingRow label="Palette" hint="The task terminal's colours.">
-          <div role="radiogroup" aria-label="Terminal palette" className="grid grid-cols-3 gap-1">
-            {TERMINAL_THEMES.map((t) => (
-              <SwatchOption
-                key={t.id}
-                label={t.name}
-                meta={t.id === 'default' ? 'Follows theme' : undefined}
-                // 'default' follows the app light/dark; the rest are fixed.
-                background={resolveTheme(t.id, theme === 'dark').background || '#000'}
-                colors={[
-                  t.theme.red || '#f00',
-                  t.theme.green || '#0f0',
-                  t.theme.blue || '#00f',
-                  t.theme.yellow || '#ff0',
-                  t.theme.magenta || '#f0f',
-                  t.theme.cyan || '#0ff',
-                ]}
-                selected={terminalTheme === t.id}
-                onSelect={() => setTerminalTheme(t.id)}
-              />
-            ))}
-          </div>
-        </SettingRow>
+        <SettingRow
+          label="Palette"
+          hint="The task terminal's colours. Default follows the theme."
+          control={
+            <Select
+              aria-label="Terminal palette"
+              className="w-56"
+              value={terminalTheme}
+              onValueChange={setTerminalTheme}
+              options={TERMINAL_THEMES.map((t) => ({ value: t.id, label: t.name }))}
+              renderOption={(opt) => <PaletteOption id={opt.value} label={opt.label} />}
+            />
+          }
+        />
         <SettingRow
           label="Font"
           hint="The task terminal and the shell drawer."
           control={
             <Select
               aria-label="Terminal font"
-              className="w-48"
+              className="w-56"
               value={terminalFontFamily}
               onValueChange={setTerminalFontFamily}
-              options={TERMINAL_FONTS.map((f) => ({ value: f.id, label: f.label }))}
-              renderOption={(opt) => (
-                <span style={{ fontFamily: resolveTerminalFontValue(opt.value) }}>{opt.label}</span>
-              )}
+              options={TERMINAL_FONTS.map((f) => ({
+                value: f.id,
+                label: f.label,
+                fontFamily: resolveTerminalFontValue(f.id),
+              }))}
             />
           }
         />
         <SettingRow
           label="Terminals kept ready"
           hint="Recent task terminals that show instantly. Fewer use less graphics memory, but an older task may flicker while it redraws."
-        >
-          <div className="flex items-center gap-3">
-            <Slider
-              value={webglHeldDraft}
-              onValueChange={setWebglHeldDraft}
-              onValueCommit={setWebglHeldLimit}
-              min={WEBGL_HELD_MIN}
-              max={WEBGL_HELD_MAX}
-              aria-label="Terminals kept ready"
-            />
-            <span className="type-body w-5 text-right tabular-nums">{webglHeldDraft}</span>
-          </div>
-        </SettingRow>
+          control={
+            <span className="flex w-56 items-center gap-3">
+              <Slider
+                value={webglHeldDraft}
+                onValueChange={setWebglHeldDraft}
+                onValueCommit={setWebglHeldLimit}
+                min={WEBGL_HELD_MIN}
+                max={WEBGL_HELD_MAX}
+                aria-label="Terminals kept ready"
+              />
+              <span className="type-body w-5 text-right tabular-nums">{webglHeldDraft}</span>
+            </span>
+          }
+        />
       </FormSection>
     </>
+  );
+}
+
+/** A terminal palette in the picker: its preview strip, then its name. */
+function PaletteOption({ id, label }: { id: string; label: string }) {
+  const dark = useSettings((s) => s.theme) === 'dark';
+  const t = TERMINAL_THEMES.find((x) => x.id === id);
+  if (!t) return <>{label}</>;
+  // 'default' follows the app's light/dark; the rest are fixed.
+  const background = resolveTheme(t.id, dark).background || '#000';
+  return (
+    <span className="flex items-center gap-2">
+      <SwatchStrip
+        size="sm"
+        background={background}
+        colors={[t.theme.red, t.theme.green, t.theme.blue, t.theme.yellow, t.theme.magenta].map(
+          (c) => c || '#888',
+        )}
+      />
+      <span className="truncate">{label}</span>
+    </span>
   );
 }
 
@@ -294,16 +295,19 @@ function NotificationsTab() {
         checked={desktop}
         onCheckedChange={setDesktop}
       />
-      <SettingRow label="Sound" hint="Plays once when picked, so you can hear it.">
-        <Segmented
-          aria-label="Sound"
-          fullWidth={false}
-          size="sm"
-          value={sound}
-          options={NOTIFICATION_SOUNDS.map((s) => ({ value: s, label: SOUND_LABELS[s] }))}
-          onChange={pickSound}
-        />
-      </SettingRow>
+      <SettingRow
+        label="Sound"
+        hint="Plays once when picked, so you can hear it."
+        control={
+          <Select
+            aria-label="Sound"
+            className="w-56"
+            value={sound}
+            onValueChange={pickSound}
+            options={NOTIFICATION_SOUNDS.map((s) => ({ value: s, label: SOUND_LABELS[s] }))}
+          />
+        }
+      />
     </FormSection>
   );
 }
@@ -314,6 +318,7 @@ function IdeTab({ availableIDEs }: { availableIDEs: Array<{ id: string; label: s
   const customIDE = useSettings((s) => s.customIDE);
   const setCustomIDE = useSettings((s) => s.setCustomIDE);
   const pathId = useId();
+  const argsId = useId();
 
   async function browse() {
     const res = await window.electronAPI.pickExecutable();
@@ -324,73 +329,82 @@ function IdeTab({ availableIDEs }: { availableIDEs: Array<{ id: string; label: s
     if (res.data) setCustomIDE({ ...customIDE, path: res.data });
   }
 
+  const ideOptions = [
+    ...(availableIDEs.length > 0
+      ? [
+          { value: 'auto', label: 'Auto' },
+          ...availableIDEs.map((i) => ({ value: i.id, label: i.label })),
+        ]
+      : []),
+    { value: 'custom', label: 'Custom' },
+  ];
+
   return (
     <FormSection>
       <SettingRow
         label="Open tasks in"
-        hint={
+        hint="Used by the task header’s Open button. Only installed IDEs are listed."
+        note={
           availableIDEs.length === 0
-            ? 'No supported IDE found (Cursor, VS Code, Windsurf, Antigravity, Zed). Set up a custom one.'
-            : 'Used by the task header’s Open button. Only installed IDEs are listed.'
+            ? 'No supported IDE found (Cursor, VS Code, Windsurf, Antigravity, Zed).'
+            : undefined
         }
-      >
-        <Segmented
-          aria-label="IDE"
-          fullWidth={false}
-          size="sm"
-          value={preferredIDE}
-          options={[
-            ...(availableIDEs.length > 0
-              ? [
-                  { value: 'auto', label: 'Auto' },
-                  ...availableIDEs.map((i) => ({ value: i.id, label: i.label })),
-                ]
-              : []),
-            { value: 'custom', label: 'Custom' },
-          ]}
-          onChange={setPreferredIDE}
-        />
-      </SettingRow>
+        control={
+          <Select
+            aria-label="IDE"
+            className="w-56"
+            value={preferredIDE}
+            onValueChange={setPreferredIDE}
+            options={ideOptions}
+          />
+        }
+      />
       {preferredIDE === 'custom' && (
-        <div className="grid gap-3 py-3">
-          <Field label="Executable" as="div">
-            <div className="flex gap-2">
-              <Input
-                id={pathId}
-                aria-label="Executable"
-                value={customIDE.path}
-                onChange={(e) => setCustomIDE({ ...customIDE, path: e.target.value })}
-                placeholder="/Applications/MyIDE.app/Contents/MacOS/myide"
-              />
-              <Button variant="secondary" onClick={() => void browse()}>
-                <FolderOpen size={14} strokeWidth={1.8} />
-                Browse
-              </Button>
-            </div>
-          </Field>
-          <Field
-            label="Arguments, one per line"
+        <>
+          <SettingRow
+            label="Executable"
+            htmlFor={pathId}
+            control={
+              <span className="flex w-72 items-center gap-1">
+                <Input
+                  id={pathId}
+                  value={customIDE.path}
+                  onChange={(e) => setCustomIDE({ ...customIDE, path: e.target.value })}
+                  placeholder="/Applications/MyIDE.app/…/myide"
+                />
+                <IconButton title="Browse" onClick={() => void browse()}>
+                  <FolderOpen size={14} strokeWidth={1.8} />
+                </IconButton>
+              </span>
+            }
+          />
+          <SettingRow
+            label="Arguments"
+            htmlFor={argsId}
             hint={
               <>
-                <Code>{'{path}'}</Code> places the folder; without it the folder goes last.
+                One per line. <Code>{'{path}'}</Code> places the folder; without it the folder goes
+                last.
               </>
             }
-          >
-            <Textarea
-              value={customIDE.args.join('\n')}
-              onChange={(e) =>
-                setCustomIDE({
-                  ...customIDE,
-                  args: e.target.value.split('\n').filter((line) => line.length > 0),
-                })
-              }
-              rows={3}
-              placeholder={'--new-window\n{path}'}
-              variant="code"
-              className="resize-none"
-            />
-          </Field>
-        </div>
+            control={
+              <Textarea
+                id={argsId}
+                value={customIDE.args.join('\n')}
+                onChange={(e) =>
+                  setCustomIDE({
+                    ...customIDE,
+                    args: e.target.value.split('\n').filter((line) => line.length > 0),
+                  })
+                }
+                rows={2}
+                placeholder={'--new-window\n{path}'}
+                variant="code"
+                className="w-72 resize-none"
+              />
+            }
+          />
+        </>
       )}
     </FormSection>
   );
@@ -414,12 +428,12 @@ function AttributionTab({ activeProjectPath }: { activeProjectPath?: string }) {
         label="Commit trailer"
         hint={
           isDefault
-            ? 'Added to commits Claude makes for you. Default uses Claude Code’s own.'
+            ? `Added to commits Claude makes for you. Default uses Claude Code’s own: ${(claudeDefault ?? DASH_DEFAULT_ATTRIBUTION).trim()}`
             : 'Added to commits Claude makes for you. Clear it for none.'
         }
         control={
           <Segmented
-            aria-label="Attribution"
+            aria-label="Commit trailer"
             fullWidth={false}
             size="sm"
             value={isDefault ? 'default' : 'custom'}
@@ -429,21 +443,24 @@ function AttributionTab({ activeProjectPath }: { activeProjectPath?: string }) {
             ]}
             onChange={(v) =>
               setAttribution(
-                v === 'default' ? undefined : (attribution ?? DASH_DEFAULT_ATTRIBUTION),
+                v === 'default'
+                  ? undefined
+                  : (attribution ?? claudeDefault ?? DASH_DEFAULT_ATTRIBUTION),
               )
             }
           />
         }
       >
-        <Textarea
-          aria-label="Commit trailer"
-          value={isDefault ? (claudeDefault ?? DASH_DEFAULT_ATTRIBUTION) : attribution}
-          onChange={(e) => setAttribution(e.target.value)}
-          readOnly={isDefault}
-          placeholder="No trailer"
-          rows={3}
-          className="resize-none"
-        />
+        {!isDefault && (
+          <Textarea
+            aria-label="Custom commit trailer"
+            value={attribution}
+            onChange={(e) => setAttribution(e.target.value)}
+            placeholder="No trailer"
+            rows={3}
+            className="resize-none"
+          />
+        )}
       </SettingRow>
     </FormSection>
   );
@@ -464,7 +481,7 @@ function UpdatesTab({ appVersion }: { appVersion: string }) {
       <FormSection>
         <SettingRow
           label={updateHeadline(status)}
-          hint={
+          note={
             <span className="tabular-nums">
               {appVersion ? `Dash ${appVersion}` : 'Loading…'}
               {status?.lastCheckAt ? ` · checked ${formatCheckedAt(status.lastCheckAt)}` : ''}
@@ -495,7 +512,7 @@ function UpdatesTab({ appVersion }: { appVersion: string }) {
             <div className="grid gap-0.5">
               <p className="text-xs text-state-fail">{status.lastError}</p>
               <p className="type-caption">
-                Details are in <Code>logs/updater.log</Code> in Dash&rsquo;s data folder.
+                Details: <Code>logs/updater.log</Code> in Dash&rsquo;s data folder.
               </p>
             </div>
           )}
@@ -544,7 +561,10 @@ function PrivacyTab() {
     <FormSection>
       <SwitchField
         label="Send anonymous usage data"
-        hint="Helps us see how Dash is used, so we can improve it."
+        hint={{
+          title: 'Helps us see how Dash is used',
+          body: 'Sent: app start, close and daily use; counts of projects, tasks, sessions, turns (with rough durations), reviews and file opens; errors with paths removed; where Claude Code behaves differently than Dash expects; the Dash and Claude Code versions, platform and architecture.\n\nNever sent: code, file paths, prompts, IP addresses, device identifiers, or anything personal.',
+        }}
         checked={enabled && !envDisabled}
         disabled={envDisabled}
         onCheckedChange={(next) => {
@@ -558,21 +578,6 @@ function PrivacyTab() {
           </Notice>
         )}
       </SwitchField>
-      <div className="grid gap-3 py-3">
-        <Field label="What is sent" as="div">
-          <p className="type-body">
-            App start, close and daily use; counts of projects, tasks, sessions, turns (with rough
-            durations), reviews and file opens; errors with paths removed; where Claude Code behaves
-            differently than Dash expects; the Dash and Claude Code versions, platform and
-            architecture.
-          </p>
-        </Field>
-        <Field label="What is never sent" as="div">
-          <p className="type-body">
-            Code, file paths, prompts, IP addresses, device identifiers, or anything personal.
-          </p>
-        </Field>
-      </div>
     </FormSection>
   );
 }
