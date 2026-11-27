@@ -39,13 +39,13 @@ interface LeftSidebarProps {
   /** Each live task's session context, from the statusLine (`useStatusLine`). */
   contextUsage?: Record<string, ContextUsage>;
   /** The sidebar's least width (px), once its tabs are measured: the view
-   *  tabs' labels in full and find and create beside them. Narrower, the
+   *  tabs' labels in full and create and find beside them. Narrower, the
    *  sidebar goes to its rail (T16). */
   onMinWidth?: (px: number) => void;
 }
 
 /** The view row's room besides the tabs: its 8px gutters, the three 2px gaps
- *  (tabs, spacer, find, create) and find and create (24px each; create shows
+ *  (tabs, spacer, create, find) and create and find (24px each; create shows
  *  in the Projects view only, but the room holds in both, so the least width
  *  doesn't change with the view). */
 const VIEW_ROW_REST_PX = 16 + 6 + 48;
@@ -58,8 +58,8 @@ const isMac = window.electronAPI.getPlatform() === 'darwin';
 
 /**
  * The app sidebar: Projects | Tasks view tabs (`ViewTabs`' pills; counting
- * projects and live sessions) with find and, in the Projects view, create a
- * project at the row's end (a task is made under its project), over the
+ * projects and live sessions) with, in the Projects view, create a project
+ * (a task is made under its project) and find at the row's end, over the
  * project tree or the state-ordered task list, and settings (with the Claude Code update icon) at the foot.
  * Collapsed, it is a rail of state dots for the tasks with a live session.
  */
@@ -128,7 +128,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
     <div className="flex h-full min-w-0 flex-col bg-ground">
       {/* On macOS the traffic lights sit in this strip; it drags the window. */}
       <div className={isMac ? 'titlebar-drag h-11 shrink-0' : 'h-2 shrink-0'} />
-      {/* The view tabs, then find and create at the row's end. */}
+      {/* The view tabs, then create and find at the row's end. */}
       <div className="flex h-9 shrink-0 items-center gap-0.5 px-2">
         <ViewTabs
           variant="pill"
@@ -139,6 +139,17 @@ export function LeftSidebar(props: LeftSidebarProps) {
           options={viewOptions}
         />
         <div className="min-w-0 flex-1" />
+        {/* Tasks are made under their project, so only the Projects view
+            creates (a project); the Tasks view keeps its slot empty, so the
+            row (the tabs' fit, find) is the same in both views. Create sits
+            before find, so find holds the row's end in both. */}
+        {projectsView ? (
+          <IconButton size="sm" title="Create project" onClick={props.onOpenFolder}>
+            <Plus size={14} strokeWidth={1.8} />
+          </IconButton>
+        ) : (
+          <div aria-hidden className="size-6 shrink-0" />
+        )}
         <IconButton
           size="sm"
           title="Find a task"
@@ -147,16 +158,6 @@ export function LeftSidebar(props: LeftSidebarProps) {
         >
           <Search size={14} strokeWidth={1.8} />
         </IconButton>
-        {/* Tasks are made under their project, so only the Projects view
-            creates (a project); the Tasks view keeps its slot empty, so the
-            row (the tabs' fit, find) is the same in both views. */}
-        {projectsView ? (
-          <IconButton size="sm" title="Create project" onClick={props.onOpenFolder}>
-            <Plus size={14} strokeWidth={1.8} />
-          </IconButton>
-        ) : (
-          <div aria-hidden className="size-6 shrink-0" />
-        )}
       </div>
 
       <ViewPanel
