@@ -59,10 +59,9 @@ import { defaultEffortFrom } from '../shared/effort';
 import type { CreateTaskOptions, TaskModalDefaults } from './components/task/TaskModal';
 import { matchesBinding } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
-import { useTerminalHibernation } from './terminal/useTerminalHibernation';
+import { useKeptTerminals } from './terminal/useKeptTerminals';
 import { resolveTheme } from './terminal/terminalThemes';
 import { resolveTerminalFontValue } from './terminal/terminalFonts';
-import { setWebglHeldLimit } from './terminal/WebglLifecycle';
 import { useSettings } from './stores/settingsStore';
 import { useUi } from './stores/uiStore';
 import { useGit } from './stores/gitStore';
@@ -162,14 +161,13 @@ export function App() {
   const setAutoUpdateEnabled = useSettings((s) => s.setAutoUpdateEnabled);
   const terminalTheme = useSettings((s) => s.terminalTheme);
   const terminalFontFamily = useSettings((s) => s.terminalFontFamily);
-  const webglHeldLimit = useSettings((s) => s.webglHeldLimit);
   const setPreferredIDE = useSettings((s) => s.setPreferredIDE);
   const availableIDEs = useProjects((s) => s.availableIDEs);
 
   // Store-level live subscriptions + reactive bootstrap (runtime init, token rollups,
   // git watcher/poll, PR detection). React schedules WHEN; the stores own HOW.
   useAppBootstrap();
-  useTerminalHibernation();
+  useKeptTerminals();
 
   // One-shot localStorage → SQLite migration for drawer tabs. After upgrading
   // past commit 3, per-task tab state lives in the drawer_tabs table owned by
@@ -731,11 +729,6 @@ export function App() {
     document.documentElement.style.setProperty('--terminal-font', resolved);
     sessionRegistry.setAllTerminalFonts(resolved);
   }, [terminalFontFamily]);
-
-  // Lowering the limit releases the least recent off-screen terminals at once.
-  useEffect(() => {
-    setWebglHeldLimit(webglHeldLimit);
-  }, [webglHeldLimit]);
 
   const cycleTask = useCallback(
     (direction: 1 | -1) => {

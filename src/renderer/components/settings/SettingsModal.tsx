@@ -24,7 +24,7 @@ import { NOTIFICATION_SOUNDS, SOUND_LABELS, playNotificationSound } from '../../
 import type { NotificationSound } from '../../sounds';
 import { TERMINAL_THEMES, resolveTheme } from '../../terminal/terminalThemes';
 import { TERMINAL_FONTS, resolveTerminalFontValue } from '../../terminal/terminalFonts';
-import { WEBGL_HELD_MAX, WEBGL_HELD_MIN } from '../../terminal/WebglLifecycle';
+import { KEPT_READY_MAX, KEPT_READY_MIN } from '../../terminal/keptTerminals';
 import { formatCheckedAt, updateHeadline } from '../../utils/updateStatus';
 import { AUTO_SLEEP_CHOICES, AUTO_SLEEP_LABELS } from '../../lib/autoSleep';
 import { useRuntime } from '../../stores/runtimeStore';
@@ -189,12 +189,12 @@ function AppearanceTab() {
   const setTerminalTheme = useSettings((s) => s.setTerminalTheme);
   const terminalFontFamily = useSettings((s) => s.terminalFontFamily);
   const setTerminalFontFamily = useSettings((s) => s.setTerminalFontFamily);
-  const webglHeldLimit = useSettings((s) => s.webglHeldLimit);
-  const setWebglHeldLimit = useSettings((s) => s.setWebglHeldLimit);
+  const keptReady = useSettings((s) => s.terminalsKeptReady);
+  const setKeptReady = useSettings((s) => s.setTerminalsKeptReady);
   // The number follows the drag; the setting is saved (and applied) only on
-  // release, so dragging 8→2→8 doesn't release six terminals on the way.
-  const [webglHeldDraft, setWebglHeldDraft] = useState(webglHeldLimit);
-  useEffect(() => setWebglHeldDraft(webglHeldLimit), [webglHeldLimit]);
+  // release, so dragging 8→2→8 doesn't close six terminals on the way.
+  const [keptReadyDraft, setKeptReadyDraft] = useState(keptReady);
+  useEffect(() => setKeptReadyDraft(keptReady), [keptReady]);
 
   return (
     <>
@@ -251,18 +251,18 @@ function AppearanceTab() {
         />
         <SettingRow
           label="Terminals kept ready"
-          hint="Recent task terminals that show instantly. Fewer use less graphics memory, but an older task may flicker while it redraws."
+          hint="Recently viewed task terminals that show instantly. An older task reconnects when you open it, taking a moment to redraw. Fewer use less memory."
           control={
             <span className="flex w-56 items-center gap-3">
               <Slider
-                value={webglHeldDraft}
-                onValueChange={setWebglHeldDraft}
-                onValueCommit={setWebglHeldLimit}
-                min={WEBGL_HELD_MIN}
-                max={WEBGL_HELD_MAX}
+                value={keptReadyDraft}
+                onValueChange={setKeptReadyDraft}
+                onValueCommit={setKeptReady}
+                min={KEPT_READY_MIN}
+                max={KEPT_READY_MAX}
                 aria-label="Terminals kept ready"
               />
-              <span className="type-body w-5 text-right tabular-nums">{webglHeldDraft}</span>
+              <span className="type-body w-5 text-right tabular-nums">{keptReadyDraft}</span>
             </span>
           }
         />

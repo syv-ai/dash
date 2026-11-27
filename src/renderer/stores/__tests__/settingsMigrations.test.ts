@@ -22,4 +22,12 @@ describe('runSettingsMigrations', () => {
     runSettingsMigrations(mem);
     expect(mem.getItem('preferredIDE')).toBeNull();
   });
+
+  it('drops the old webglHeldLimit (it counted WebGL contexts, not terminals)', () => {
+    const mem = createMemoryStorage();
+    mem.setItem('webglHeldLimit', '12');
+    runSettingsMigrations(mem);
+    expect(mem.getItem('webglHeldLimit')).toBeNull();
+    expect(mem.getItem('terminalsKeptReady')).toBeNull();
+  });
 });

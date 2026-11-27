@@ -8,4 +8,8 @@ export function runSettingsMigrations(backing: StorageLike): void {
   if (backing.getItem('preferredIDE') === 'code') {
     backing.setItem('preferredIDE', 'vscode');
   }
+  // "Terminals kept ready" counted WebGL contexts (webglHeldLimit, default 8);
+  // it now counts whole terminals, attach clients included (D59), so the old
+  // value doesn't carry over: everyone starts on the new default.
+  backing.removeItem('webglHeldLimit');
 }

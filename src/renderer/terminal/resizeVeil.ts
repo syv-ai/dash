@@ -4,7 +4,8 @@
  * program (Claude Code's TUI) redraws for the new size. A veil covers that,
  * shown as the grid's size starts to change and lifted once it has settled.
  * It also covers an agent pane while a fresh `claude attach` client starts
- * (a woken hibernated terminal, K4), until the client's first paint settles.
+ * (a task reopened after its terminal was let go, K4), until the client's
+ * first paint settles.
  */
 
 /** Lifted this long after the fit that follows the last resize... */

@@ -9,7 +9,7 @@ import {
   stringSet,
   strOrUndefined,
 } from './settingsCodecs';
-import { clampHeldLimit } from '../terminal/WebglLifecycle';
+import { clampKeptReady } from '../terminal/keptTerminals';
 import { TERMINAL_THEME_IDS } from '../terminal/terminalThemes';
 import type { NotificationSound } from '../sounds';
 import type { UsageThresholds } from '@shared/types';
@@ -44,9 +44,10 @@ export interface SettingsState {
   notificationSound: NotificationSound;
   terminalTheme: string;
   terminalFontFamily: string;
-  /** "Terminals kept ready": how many recent terminals keep their WebGL
-   *  renderer (see WebglLifecycle). Clamped to WEBGL_HELD_MIN..MAX. */
-  webglHeldLimit: number;
+  /** "Terminals kept ready": how many recently viewed task terminals stay
+   *  ready, attach client and all (see keptTerminals). Clamped to
+   *  KEPT_READY_MIN..MAX. */
+  terminalsKeptReady: number;
   effortLevel: string;
   customIDE: { path: string; args: string[] };
   customClaudeEnvVars: Record<string, string>;
@@ -129,10 +130,10 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   // A removed palette (e.g. the old 'legacy') falls back to the default.
   entry('terminalTheme', 'terminalTheme', strEnum(TERMINAL_THEME_IDS, 'default')),
   entry('terminalFontFamily', 'terminalFontFamily', str('system')),
-  // parseFloat gives NaN for absent, empty or garbage values; clampHeldLimit
-  // maps NaN to the default.
-  entry('webglHeldLimit', 'webglHeldLimit', {
-    decode: (raw) => clampHeldLimit(parseFloat(raw ?? '')),
+  // parseFloat gives NaN for absent, empty or garbage values; clampKeptReady
+  // maps NaN to the default. Replaces webglHeldLimit (see settingsMigrations).
+  entry('terminalsKeptReady', 'terminalsKeptReady', {
+    decode: (raw) => clampKeptReady(parseFloat(raw ?? '')),
     encode: (v) => String(v),
   }),
   entry('effortLevel', 'claudeEffortLevel', str('auto')),

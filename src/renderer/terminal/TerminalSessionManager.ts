@@ -27,7 +27,6 @@ import { repaintOnCanvasResize } from './webglCanvasRepaint';
 import { MouseModeTracker } from './mouseModeFilter';
 import { macShellKeySequence } from './shellKeys';
 import { TUI_COLS, TUI_ROWS } from '../../shared/tuiProtocol';
-import type { TerminalRest } from './hibernation';
 
 // Heap mark above which a terminal trims its own scrollback to relieve pressure.
 // `performance.memory.usedJSHeapSize` is the WHOLE renderer heap (React, Monaco,
@@ -40,6 +39,17 @@ const MEMORY_LIMIT_BYTES = 600 * 1024 * 1024; // 600MB
 const MEMORY_CHECK_INTERVAL_MS = 5_000;
 // Floor the scrollback never drops below when trimming under pressure.
 const MIN_SCROLLBACK = 10_000;
+// A drawer shell's scrollback while shown. Hidden, it keeps MIN_SCROLLBACK:
+// main's mirror restores only its last 1,000 lines on a reload anyway, so a
+// hidden shell can't hold 100k lines (118 MB of heap at 86 columns,
+// measured) for nobody to see. Lines trimmed while hidden don't come back
+// when it is shown again. [provisional]
+const SHELL_SCROLLBACK = 100_000;
+// An agent pane is a `claude attach` view: the session keeps its own history
+// and repaints on every attach, so the pane needs no deep scrollback (10k
+// lines: 12 MB at 86 columns, against 118 MB for 100k). Claude Code's
+// fullscreen TUI uses the alternate screen, which has none. [provisional]
+const AGENT_SCROLLBACK = MIN_SCROLLBACK;
 
 /** An agent pane whose attach client exited. `reconnecting`: Dash cycled the
  *  session and the pane is re-attaching on its own (no Re-attach needed). */
@@ -77,6 +87,9 @@ export class TerminalSessionManager {
   private onCwdChangeCallback: ((cwd: string) => void) | null = null;
   private onFindKey: (() => void) | null = null;
   private readonly onActivity: ((activity: TerminalActivity) => void) | null;
+  private readonly onShown: (() => void) | null;
+  /** The scrollback while shown; memory pressure lowers it (checkMemory). */
+  private scrollbackCap: number;
   // A trailing 250ms debounce: a panel ease (PANEL_EASE_MS) resizes every
   // frame, so the fit lands once, at the final size; cancels itself when the
   // container hides
@@ -88,8 +101,6 @@ export class TerminalSessionManager {
   private lastPtyRows = 0;
   private lastMemoryCheckAt = 0;
   private savedViewportY: number | null = null;
-  /** When it was last hidden, or created (see hibernation). */
-  private hiddenSince = Date.now();
   // WebGL renderer, kept on the most recently attached terminals (see
   // WebglLifecycle). Null for terminals that always use xterm's DOM renderer
   // (see createGpu).
@@ -141,9 +152,12 @@ export class TerminalSessionManager {
     themeId?: string;
     /** Hears its resizes, fits and output (see `ResizeVeil`). */
     onActivity?: (activity: TerminalActivity) => void;
+    /** Called on every attach to a pane (see keptTerminals). */
+    onShown?: () => void;
   }) {
     this.id = opts.id;
     this.onActivity = opts.onActivity ?? null;
+    this.onShown = opts.onShown ?? null;
     this.cwd = opts.cwd;
     this._currentCwd = opts.cwd;
     this.permissionMode = opts.permissionMode ?? 'default';
@@ -152,10 +166,11 @@ export class TerminalSessionManager {
     this.isTui = opts.isTui ?? false;
     this.pinnedTui = this.isTui && opts.id.startsWith('tui:');
     this.themeId = opts.themeId ?? 'default';
+    this.scrollbackCap = this.shellOnly ? SHELL_SCROLLBACK : AGENT_SCROLLBACK;
     this.gpu = this.createGpu();
 
     this.terminal = new Terminal({
-      scrollback: 100_000,
+      scrollback: this.scrollbackCap,
       // Side-car TUIs render at the same size as a regular terminal.
       ...TERMINAL_BASE_OPTIONS,
       fontFamily: getTerminalFont(),
@@ -416,6 +431,8 @@ export class TerminalSessionManager {
     const gen = ++this.attachGeneration;
     if (this.disposed) return;
     this.currentContainer = container;
+    this.onShown?.();
+    this.terminal.options.scrollback = this.scrollbackCap;
 
     if (!this.opened) {
       // First time: open xterm in this container
@@ -697,8 +714,9 @@ export class TerminalSessionManager {
   }
 
   detach() {
+    // Trimmed first, so the saved viewport line is one that still exists.
+    if (this.isDrawerShell) this.terminal.options.scrollback = MIN_SCROLLBACK;
     this.savedViewportY = this.terminal.buffer.active.viewportY;
-    this.hiddenSince = Date.now();
 
     // Stop timers
     if (this.readyFallbackTimer) {
@@ -721,8 +739,7 @@ export class TerminalSessionManager {
     }
 
     this.currentContainer = null;
-    // Keeps the WebGL addon; the shared pool frees it once more recent
-    // terminals than the "Terminals kept ready" setting hold one.
+    // Keeps the WebGL addon until dispose (see keptTerminals).
     this.gpu?.detach();
     // Terminal element stays in DOM but container will be unmounted by React
   }
@@ -764,15 +781,26 @@ export class TerminalSessionManager {
     return this.ptyStarted && !this.disposed;
   }
 
-  /** How it stands for the hibernation check (remote control is the
-   *  caller's to add). */
-  get rest(): Omit<TerminalRest, 'remoteControl'> {
-    return {
-      taskPane: !this.shellOnly && !this.isTui && !foreignSessionJobId(this.id),
-      shown: this.currentContainer !== null,
-      hiddenAt: this.hiddenSince,
-      busy: this._isRestarting || this.reconnecting,
-    };
+  /** A task's agent pane: not a drawer shell, side-car TUI, service tab or
+   *  foreign session. Only these are kept or disposed by recency. */
+  get isTaskPane(): boolean {
+    return !this.shellOnly && !this.isTui && !foreignSessionJobId(this.id);
+  }
+
+  /** Mounted in a pane now. */
+  get isShown(): boolean {
+    return this.currentContainer !== null;
+  }
+
+  /** A restart or reconnect is in flight. */
+  get isBusy(): boolean {
+    return this._isRestarting || this.reconnecting;
+  }
+
+  /** A drawer shell (not a side-car TUI or service tab, whose output only
+   *  main can replay). */
+  private get isDrawerShell(): boolean {
+    return this.shellOnly && !this.isTui;
   }
 
   get isDetached(): boolean {
@@ -1465,10 +1493,10 @@ export class TerminalSessionManager {
     this.lastMemoryCheckAt = now;
     const mem = (performance as unknown as { memory: { usedJSHeapSize: number } }).memory;
     if (mem.usedJSHeapSize <= MEMORY_LIMIT_BYTES) return;
-    const current = this.terminal.options.scrollback ?? MIN_SCROLLBACK;
-    if (current <= MIN_SCROLLBACK) return; // already at the floor
+    if (this.scrollbackCap <= MIN_SCROLLBACK) return; // already at the floor
     // Halve toward the floor; lowering the cap trims the oldest scrollback lines
     // in place — no clear(), no viewport repaint.
-    this.terminal.options.scrollback = Math.max(MIN_SCROLLBACK, Math.floor(current / 2));
+    this.scrollbackCap = Math.max(MIN_SCROLLBACK, Math.floor(this.scrollbackCap / 2));
+    if (this.isShown) this.terminal.options.scrollback = this.scrollbackCap;
   }
 }

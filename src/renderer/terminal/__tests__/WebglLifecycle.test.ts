@@ -1,13 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import {
-  clampHeldLimit,
-  pickEvictions,
-  recordContextLoss,
-  WebglLifecycle,
-  WebglPool,
-  WEBGL_LOSS_WINDOW_MS,
-  type PoolMember,
-} from '../WebglLifecycle';
+import { recordContextLoss, WebglLifecycle, WEBGL_LOSS_WINDOW_MS } from '../WebglLifecycle';
 
 describe('recordContextLoss', () => {
   it('reloads after a first and second loss', () => {
@@ -55,10 +47,9 @@ class FakeAddon {
   }
 }
 
-/** Terminals sharing one pool; `make()` builds one with its own addon log. */
-function setup(cap = 8) {
+/** `make()` builds a terminal's lifecycle with its own addon log. */
+function setup() {
   let t = 0;
-  const pool = new WebglPool(cap);
   const make = () => {
     const addons: FakeAddon[] = [];
     const order: string[] = [];
@@ -72,7 +63,6 @@ function setup(cap = 8) {
       install: () => {},
       findContext: () => ({ getExtension: () => ({ loseContext }) }),
       now: () => t,
-      pool,
     });
     const last = () => {
       const a = addons[addons.length - 1];
@@ -81,32 +71,10 @@ function setup(cap = 8) {
     };
     return { gpu, addons, order, loseContext, last };
   };
-  return { make, pool, tick: (ms: number) => (t += ms) };
+  return { make, tick: (ms: number) => (t += ms) };
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
-
-describe('pickEvictions', () => {
-  const m = (loaded: boolean, isAttached = false): PoolMember => ({
-    loaded,
-    isAttached,
-    release: () => {},
-  });
-
-  it('picks nothing at or under the cap', () => {
-    expect(pickEvictions([m(true), m(true)], 2)).toEqual([]);
-  });
-
-  it('picks the least recent holders past the cap', () => {
-    const [a, b, c, d] = [m(true), m(true), m(true), m(true)];
-    expect(pickEvictions([a, b, c, d], 2)).toEqual([a, b]);
-  });
-
-  it('skips attached members and members without a context', () => {
-    const [a, b, c, d] = [m(true, true), m(false), m(true), m(true)];
-    expect(pickEvictions([a, b, c, d], 2)).toEqual([c]);
-  });
-});
 
 describe('WebglLifecycle', () => {
   it('loads on attach and once across repeated attaches', async () => {
@@ -126,75 +94,13 @@ describe('WebglLifecycle', () => {
     expect(addons).toHaveLength(1);
   });
 
-  it('releases the least recently attached detached terminal past the cap', async () => {
-    const { make } = setup(2);
-    const a = make();
-    const b = make();
-    const c = make();
-    await a.gpu.attach();
-    a.gpu.detach();
-    await b.gpu.attach();
-    b.gpu.detach();
-    await a.gpu.attach(); // a is now more recent than b
-    a.gpu.detach();
-    await c.gpu.attach();
-    expect(b.gpu.loaded).toBe(false);
-    expect(b.order).toEqual(['dispose', 'loseContext']);
-    expect(a.gpu.loaded).toBe(true);
-    expect(c.gpu.loaded).toBe(true);
-  });
-
-  it('lowering the cap releases the least recent off-screen holders at once', async () => {
-    const { make, pool } = setup(4);
-    const [a, b, c, d] = [make(), make(), make(), make()];
-    for (const t of [a, b, c, d]) {
-      await t.gpu.attach();
-      t.gpu.detach();
-    }
-    await a.gpu.attach(); // on screen, and now the most recent
-    pool.setCap(1);
-    expect(a.gpu.loaded).toBe(true);
-    expect([b, c, d].map((t) => t.gpu.loaded)).toEqual([false, false, false]);
-    expect(b.order).toEqual(['dispose', 'loseContext']);
-  });
-
-  it('a cap below the on-screen count releases nothing on screen', async () => {
-    const { make, pool } = setup(4);
-    const a = make();
-    const b = make();
-    await a.gpu.attach();
-    await b.gpu.attach();
-    pool.setCap(1);
-    expect(a.gpu.loaded).toBe(true);
-    expect(b.gpu.loaded).toBe(true);
-  });
-
-  it('never releases an attached terminal', async () => {
-    const { make } = setup(1);
-    const a = make();
-    const b = make();
-    await a.gpu.attach();
-    await b.gpu.attach();
-    expect(a.gpu.loaded).toBe(true);
-    expect(b.gpu.loaded).toBe(true);
-    a.gpu.detach();
-    b.gpu.detach();
-    await b.gpu.attach(); // over the cap now that a is detached
-    expect(b.gpu.loaded).toBe(true);
-    expect(a.gpu.loaded).toBe(false);
-  });
-
-  it('dispose releases and leaves the pool', async () => {
-    const { make } = setup(1);
-    const a = make();
-    await a.gpu.attach();
-    a.gpu.dispose();
-    expect(a.order).toEqual(['dispose', 'loseContext']);
-    await a.gpu.attach();
-    expect(a.gpu.loaded).toBe(false);
-    const b = make();
-    await b.gpu.attach();
-    expect(b.gpu.loaded).toBe(true);
+  it('dispose frees the context and never loads again', async () => {
+    const { gpu, order } = setup().make();
+    await gpu.attach();
+    gpu.dispose();
+    expect(order).toEqual(['dispose', 'loseContext']);
+    await gpu.attach();
+    expect(gpu.loaded).toBe(false);
   });
 
   it('skips the load when disposed while the addon was being created', async () => {
@@ -228,18 +134,16 @@ describe('WebglLifecycle', () => {
   });
 
   it("ignores a released addon's late loss", async () => {
-    const { make } = setup(1);
-    const a = make();
-    await a.gpu.attach();
-    const stale = a.last().lossCb;
-    a.gpu.detach();
-    await make().gpu.attach(); // pool releases a
-    a.last().lose(stale);
-    await a.gpu.attach();
-    a.gpu.detach();
-    const fresh = a.last();
-    expect(a.addons).toHaveLength(2);
-    expect(fresh.disposed).toBe(false);
+    const { gpu, addons, last } = setup().make();
+    await gpu.attach();
+    const stale = last().lossCb;
+    gpu.detach();
+    last().lose(); // released; the reload waits for the next attach
+    last().lose(stale); // the same addon's late, second event
+    await gpu.attach();
+    expect(addons).toHaveLength(2);
+    expect(last().disposed).toBe(false);
+    expect(gpu.fellBack).toBe(false);
   });
 
   it('stays on the DOM renderer after repeated losses', async () => {
@@ -257,14 +161,5 @@ describe('WebglLifecycle', () => {
     gpu.detach();
     await gpu.attach();
     expect(addons).toHaveLength(3);
-  });
-});
-
-describe('clampHeldLimit', () => {
-  it('clamps to 2..14 and rounds', () => {
-    expect(clampHeldLimit(0)).toBe(2);
-    expect(clampHeldLimit(99)).toBe(14);
-    expect(clampHeldLimit(7.6)).toBe(8);
-    expect(clampHeldLimit(Number.NaN)).toBe(8);
   });
 });

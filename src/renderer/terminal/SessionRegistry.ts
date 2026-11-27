@@ -1,7 +1,7 @@
 import { TerminalSessionManager } from './TerminalSessionManager';
 import type { TerminalActivity } from './resizeVeil';
 import type { PermissionMode } from '../../shared/types';
-import { shouldHibernate } from './hibernation';
+import { clampKeptReady, KEPT_READY_DEFAULT, markViewed, pickEvictions } from './keptTerminals';
 
 interface AttachOptions {
   id: string;
@@ -18,6 +18,10 @@ class SessionRegistryImpl {
   private activityListeners = new Map<string, Set<(activity: TerminalActivity) => void>>();
   private _isDark = true;
   private _themeId = 'default';
+  /** Task panes, most recently viewed first (see keptTerminals). */
+  private recent: string[] = [];
+  private keptReady = KEPT_READY_DEFAULT;
+  private remoteControl: (id: string) => boolean = () => false;
 
   getOrCreate(opts: Omit<AttachOptions, 'container'>): TerminalSessionManager {
     let session = this.sessions.get(opts.id);
@@ -33,6 +37,7 @@ class SessionRegistryImpl {
         onActivity: (activity) => {
           for (const listener of this.activityListeners.get(opts.id) ?? []) listener(activity);
         },
+        onShown: () => this.viewed(opts.id),
       });
       this.sessions.set(opts.id, session);
     }
@@ -75,37 +80,46 @@ class SessionRegistryImpl {
 
   async dispose(id: string): Promise<void> {
     const session = this.sessions.get(id);
-    if (session) {
-      session.dispose();
-      this.sessions.delete(id);
-    }
+    if (session) this.drop(id, session);
   }
 
   /**
-   * Hibernate every task terminal unseen for longer than `afterMs`: dispose
-   * its xterm and close its attach client. The session keeps running; the
-   * next pane mount creates the terminal again and re-attaches. Returns the
-   * ids it hibernated.
+   * How many task terminals stay ready (the "Terminals kept ready" setting),
+   * and which have remote control on (main drops that state with the attach
+   * client, so those are kept). Disposes any now past the count.
    */
-  hibernateIdle(now: number, afterMs: number, remoteControl: (id: string) => boolean): string[] {
-    const out: string[] = [];
-    for (const [id, session] of this.sessions) {
-      if (!shouldHibernate({ ...session.rest, remoteControl: remoteControl(id) }, now, afterMs)) {
-        continue;
-      }
-      session.dispose();
-      this.sessions.delete(id);
-      out.push(id);
-    }
-    return out;
+  setKeptReady(count: number, remoteControl: (id: string) => boolean): void {
+    this.keptReady = clampKeptReady(count);
+    this.remoteControl = remoteControl;
+    this.evictOverflow();
+  }
+
+  /** A task pane was shown: keep it, and dispose the least recent past the
+   *  count (its xterm, WebGL context and attach client). The session keeps
+   *  running; the next pane mount creates the terminal again and re-attaches. */
+  private viewed(id: string): void {
+    if (!this.sessions.get(id)?.isTaskPane) return;
+    this.recent = markViewed(this.recent, id);
+    this.evictOverflow();
+  }
+
+  private evictOverflow(): void {
+    const held = (id: string) => {
+      const s = this.sessions.get(id);
+      return !!s && (s.isShown || s.isBusy || this.remoteControl(id));
+    };
+    for (const id of pickEvictions(this.recent, this.keptReady, held)) void this.dispose(id);
+  }
+
+  private drop(id: string, session: TerminalSessionManager): void {
+    session.dispose();
+    this.sessions.delete(id);
+    this.recent = this.recent.filter((x) => x !== id);
   }
 
   async disposeByPrefix(prefix: string): Promise<void> {
     for (const [id, session] of this.sessions) {
-      if (id.startsWith(prefix)) {
-        session.dispose();
-        this.sessions.delete(id);
-      }
+      if (id.startsWith(prefix)) this.drop(id, session);
     }
   }
 
@@ -160,10 +174,7 @@ class SessionRegistryImpl {
   }
 
   async disposeAll(): Promise<void> {
-    for (const [id, session] of this.sessions) {
-      session.dispose();
-      this.sessions.delete(id);
-    }
+    for (const [id, session] of this.sessions) this.drop(id, session);
   }
 }
 
