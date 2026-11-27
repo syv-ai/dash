@@ -12,8 +12,9 @@ import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
 import { Notice } from '../ui/Notice';
 import { Segmented } from '../ui/Segmented';
+import { Tooltip } from '../ui/Tooltip';
 import { ViewPanelBody } from '../ui/ViewTabs';
-import { finishOffered, unsentNoteCount } from './finishReview';
+import { finishButton, finishOffered, unsentNoteCount } from './finishReview';
 import { FinishReviewSheet } from './FinishReviewSheet';
 import { ThreadsTab } from './ThreadsTab';
 import { NotesTray } from './NotesTray';
@@ -123,6 +124,10 @@ function Review({
     commentsReady &&
     finishOffered({ own: review.viewerIsAuthor, comments, summary: summary?.body ?? '' });
   const onFinish = canFinish ? () => setFinishing(true) : undefined;
+  const button = finishButton(
+    { drafts: comments.length, summary: summary?.body ?? '', own: review.viewerReview },
+    Date.now(),
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -197,9 +202,11 @@ function Review({
           the column scrolls. */}
       {onFinish && (
         <div className="grid shrink-0 border-t border-line px-2.5 py-2">
-          <Button size="sm" variant="primary" onClick={onFinish}>
-            Finish review…
-          </Button>
+          <Tooltip content={button.title && { title: button.title }}>
+            <Button size="sm" variant="primary" onClick={onFinish}>
+              {button.label}
+            </Button>
+          </Tooltip>
         </div>
       )}
       {finishing && (

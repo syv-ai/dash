@@ -137,3 +137,39 @@ export function threadsLineShort(threads: readonly Pick<PrReviewThread, 'resolve
       .join(', ') || 'None'
   );
 }
+
+/** What Finish review's button says: its label, and what the person's last
+ *  review was (its tooltip; null before one). */
+export interface FinishButton {
+  label: string;
+  title: string | null;
+}
+
+/**
+ * The button's words, "where it stands · what it does": drafts waiting lead
+ * ("2 drafts · Finish review…"); without any, the person's last review
+ * ("Approved · Review again…"), or a nudge once commits have landed since it
+ * ("Re-review new commits…"); before any review, "Review…". The summary
+ * counts as a draft. The count is words, not a badge: a badge's tones don't
+ * read on the primary button.
+ */
+export function finishButton(
+  {
+    drafts,
+    summary,
+    own,
+  }: {
+    /** The person's comments and replies for the PR. */
+    drafts: number;
+    summary: string;
+    own: PrViewerReview | null;
+  },
+  now: number,
+): FinishButton {
+  const count = drafts + (summary.trim() ? 1 : 0);
+  const title = own ? `Your review: ${ownReviewLine(own, now)}` : null;
+  if (count > 0) return { label: `${plural(count, 'draft')} · Finish review…`, title };
+  if (own?.stale) return { label: 'Re-review new commits…', title };
+  if (own) return { label: `${OWN_REVIEW_LABELS[own.state]} · Review again…`, title };
+  return { label: 'Review…', title: null };
+}

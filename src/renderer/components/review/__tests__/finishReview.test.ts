@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { DiffComment, PrReviewThread } from '../../../../shared/types';
+import type { DiffComment, PrReviewThread, PrViewerReview } from '../../../../shared/types';
 import {
   canPost,
   draftsLine,
+  finishButton,
   finishOffered,
   ownReviewLine,
   threadsLineShort,
@@ -139,5 +140,43 @@ describe('Finish review metadata', () => {
     expect(threadsLineShort([{ resolved: true }, { resolved: false }, { resolved: true }])).toBe(
       '1 open, 2 resolved',
     );
+  });
+});
+
+describe('finishButton', () => {
+  const now = Date.parse('2026-11-27T12:00:00Z');
+  const approved: PrViewerReview = { state: 'approved', at: '2026-11-23T12:00:00Z', stale: false };
+  const label = (drafts: number, summary: string, own: PrViewerReview | null) =>
+    finishButton({ drafts, summary, own }, now).label;
+
+  it('asks for a first review with nothing drafted', () => {
+    expect(finishButton({ drafts: 0, summary: ' ', own: null }, now)).toEqual({
+      label: 'Review…',
+      title: null,
+    });
+  });
+
+  it('leads with the drafts, the summary among them', () => {
+    expect(label(2, 'LGTM', null)).toBe('3 drafts · Finish review…');
+    expect(finishButton({ drafts: 1, summary: '', own: approved }, now)).toEqual({
+      label: '1 draft · Finish review…',
+      title: 'Your review: Approved 4 days ago',
+    });
+  });
+
+  it('says what the last review was with nothing drafted', () => {
+    expect(label(0, '', approved)).toBe('Approved · Review again…');
+    expect(label(0, '', { ...approved, state: 'changes_requested' })).toBe(
+      'Changes requested · Review again…',
+    );
+  });
+
+  it('nudges a re-review once commits landed since it', () => {
+    expect(
+      finishButton({ drafts: 0, summary: '', own: { ...approved, stale: true } }, now),
+    ).toEqual({
+      label: 'Re-review new commits…',
+      title: 'Your review: Approved 4 days ago · new commits since',
+    });
   });
 });
