@@ -47,8 +47,11 @@ Run \`dashctl help\` for every command, and \`dashctl <namespace> <verb> --help\
 
 ## Tasks and services
 
-- \`dashctl tasks list\` / \`get\` / \`output\` / \`wait\` read tasks, and \`dashctl tasks watch\`, run in the background, prints a JSON line each time a task changes; \`dashctl tasks create <name> --project <project>\` starts one (its own worktree by default). Give its prompt as \`--prompt -\` and the text on stdin; without \`--prompt\`, the task starts with no prompt. \`--issue <number|url>\` or \`--work-item <id>\` links a GitHub issue or Azure DevOps work item and puts it in the task's context; \`dashctl tasks link <task-id>\` does it for an existing task. Message a task you created with \`dashctl tasks message <task-id>\` and the text on stdin (it starts a stopped session); read its answer with \`dashctl tasks reply <task-id> --message-id <id>\`, the id the message returned. Don't send a message twice: each one is a turn the task takes. A message headed \`[Message from … via Dash …]\` that reaches you is answered by your last message of that turn.
-- How a task you created launches: \`dashctl tasks create\` takes \`--effort low|medium|high|xhigh|max|ultracode\`, \`--agent <name>\` (one of the project's custom agents, fixed for the task), \`--add-dir <folder>\` (repeat for more; Claude Code must trust each) and \`--extra-args '<claude flags>'\` (one quoted line; flags Dash sets itself, like permissions and model, are refused, and so are flags that loosen a task's checks, like \`--allowedTools\` or \`--mcp-config\`: only a person sets those). \`dashctl tasks configure <task-id>\` changes the effort, folders or extra arguments later and restarts the task's session, which resumes its conversation; \`dashctl tasks get\` shows them.
+- \`dashctl tasks list\` / \`get\` / \`output\` / \`wait\` read tasks, and \`dashctl tasks watch\`, run in the background, prints a JSON line each time a task changes. A task's view says what it is doing without waking it: \`state\`, the \`tool\` at work or the one a permission prompt waits on (\`name\`, \`label\`, \`input\`: the command or path, cut short), \`permissionMode\`, \`lastActiveAt\`, \`waitingSince\`, \`context\` (\`used\`, \`total\`, \`percentage\`), \`costUsd\` for the current session, and \`totalTokens\` / \`totalCostUsd\` over all of them.
+- \`dashctl tasks create <name> --project <project>\` starts one (its own worktree by default). Give its prompt as \`--prompt -\` and the text on stdin; without \`--prompt\`, the task starts with no prompt. \`--issue <number|url>\` or \`--work-item <id>\` links a GitHub issue or Azure DevOps work item and puts it in the task's context; \`dashctl tasks link <task-id>\` does it for an existing task.
+- How a task you created launches: \`dashctl tasks create\` takes \`--effort low|medium|high|xhigh|max|ultracode\`, \`--agent <name>\` (one of the project's or your custom agents, an enabled plugin's, or one of a plugin the task loads with \`--plugin-dir\` in its extra arguments, as \`<plugin>:<agent>\`; fixed for the task), \`--add-dir <folder>\` (repeat for more; Claude Code must trust each), \`--extra-args '<claude flags>'\` (one quoted line; flags Dash sets itself, like permissions, model and \`--settings\`, are refused, and so are flags that loosen a task's checks, like \`--allowedTools\` or \`--mcp-config\`: only a person sets those), \`--env KEY=VALUE\` (repeat for more; Dash's own keys, \`ANTHROPIC_*\`, \`CLAUDE_CODE_*\` and credentials are refused, and so are keys that make a program run code, like \`NODE_OPTIONS\`, \`LD_*\` or \`GIT_SSH_COMMAND\`), \`--deny-instead-of-prompting\` (a tool call that would wait on a permission prompt is denied and the turn goes on: for a task nobody watches) and \`--protected\` (no agent can archive or delete it; only a person can lift that). \`dashctl tasks configure <task-id>\` changes the effort, folders, extra arguments, env (\`--env\` gives all of them, \`--env ''\` none) or the deny switch later and restarts the task's session, which resumes its conversation; \`--protected\` there needs no restart. \`dashctl tasks get\` shows them all.
+- \`dashctl tasks restart <task-id>\` restarts a session in the same conversation. \`--fresh\` starts a new conversation in the same task, worktree and launch settings, and \`--prompt -\` (text on stdin) is its first message. \`--when-idle\` waits for the task's turn to end and answers \`{"queued": true}\` at once; it is the only way to restart yourself, since a restart now would cut your own call.
+- Talking to another session: prefer Claude Code's own messaging. A session finds another with \`ListAgents\` and writes to it with \`SendMessage\`, by its name (a Dash task's session is named after the task); the receiver's \`crossSessionInbound\` setting can hold or refuse such messages. \`dashctl tasks message <task-id>\` (the text on stdin; it starts a stopped session) and \`dashctl tasks reply <task-id> --message-id <id>\` are for an orchestrator outside your Claude Code config, or a task you created that needs waking: read the answer with \`tasks reply\` and the id the message returned. Don't send a message twice: each one is a turn the task takes. A message headed \`[Message from … via Dash …]\` that reaches you is answered by your last message of that turn.
 - \`dashctl services list\` / \`start <label>\` / \`stop <label>\` / \`output <label>\` run the services from \`.dash/ports.json\` in Dash terminal tabs, on the task's own ports.
 
 \`--project\` is your own project, by name or id (\`dashctl tasks get\` gives your task's \`projectId\`); your checkout's path isn't the project's when it is a worktree.
@@ -58,6 +61,18 @@ dashctl tasks create "Fix the flaky test" --project <project> --prompt - <<'EOF'
 The login test fails one run in five on CI. Find out why and fix it.
 EOF
 dashctl tasks configure <task-id> --effort high --add-dir ../shared-lib --extra-args '--chrome'
+
+# A task that runs unattended, with its own env and a plugin's agent
+dashctl tasks create spec-lead --project <project> --agent teamwork:spec-lead \\
+  --extra-args '--plugin-dir /path/to/teamwork' --env TEAMWORK_SEAT=spec-lead \\
+  --deny-instead-of-prompting --protected --prompt - <<'EOF'
+Resume: read your state.
+EOF
+
+# Start yourself over once this turn ends
+dashctl tasks restart "\${DASH_CALLER#task:}" --fresh --when-idle --prompt - <<'EOF'
+Resume: read your state.
+EOF
 \`\`\`
 
 ## Showing the person a file
