@@ -123,10 +123,10 @@ describe('settings registry', () => {
     expect(e.codec.decode(e.codec.encode(true))).toBe(true);
   });
 
-  it('registers sidebarView, the task list unless the tree was chosen', () => {
+  it('registers sidebarView, the project tree unless the task list was chosen', () => {
     const e = SETTINGS_REGISTRY.find((r) => r.field === 'sidebarView')!;
-    expect(e.codec.decode(null)).toBe('tasks');
-    expect(e.codec.decode('projects')).toBe('projects');
-    expect(e.codec.decode('garbage')).toBe('tasks');
+    expect(e.codec.decode(null)).toBe('projects');
+    expect(e.codec.decode('tasks')).toBe('tasks');
+    expect(e.codec.decode('garbage')).toBe('projects');
   });
 });

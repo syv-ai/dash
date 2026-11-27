@@ -24,7 +24,8 @@ export interface SettingsState {
   showUsageInline: boolean;
   /** Pace beside the limits in the right sidebar's usage row (D33). */
   showPace: boolean;
-  /** The left sidebar's view: the state-ordered task list or the project tree. */
+  /** The left sidebar's view: the project tree (the default) or the
+   *  state-ordered task list. */
   sidebarView: 'tasks' | 'projects';
   /** The Tasks view's "Inactive sessions" group is open. */
   inactiveSessionsOpen: boolean;
@@ -104,7 +105,7 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   // Removed keys (showActiveTasksSection, showContextUsageOnTaskCards,
   // showContextBarOnTaskCards, shellDrawerPosition) are simply no longer read;
   // stored values linger, unused.
-  entry('sidebarView', 'sidebarView', strEnum(['tasks', 'projects'] as const, 'tasks')),
+  entry('sidebarView', 'sidebarView', strEnum(['tasks', 'projects'] as const, 'projects')),
   entry('inactiveSessionsOpen', 'inactiveSessionsOpen', boolDefaultFalse()),
   entry('showProjectTokens', 'showProjectTokens', boolDefaultTrue()),
   entry('desktopNotification', 'desktopNotification', boolDefaultFalse()),

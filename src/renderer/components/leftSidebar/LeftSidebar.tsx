@@ -9,7 +9,7 @@ import { ProjectsSection } from './ProjectsSection';
 import { TaskStateList } from './TaskStateList';
 import { UpdateBanner } from './UpdateBanner';
 import { useTaskStateList } from './useTaskStateList';
-import { STATE_LABELS, liveRows, newTaskProjectId } from './taskStates';
+import { STATE_LABELS, liveRows } from './taskStates';
 import { useSettings } from '../../stores/settingsStore';
 import { useUi } from '../../stores/uiStore';
 
@@ -45,7 +45,9 @@ interface LeftSidebarProps {
 }
 
 /** The view row's room besides the tabs: its 8px gutters, the three 2px gaps
- *  (tabs, spacer, find, create) and find and create (24px each). */
+ *  (tabs, spacer, find, create) and find and create (24px each; create shows
+ *  in the Projects view only, but the room holds in both, so the least width
+ *  doesn't change with the view). */
 const VIEW_ROW_REST_PX = 16 + 6 + 48;
 
 /** The sidebar's least width (px) whatever its view row needs: room for a
@@ -55,10 +57,10 @@ const LEFT_SIDEBAR_MIN_PX = 240;
 const isMac = window.electronAPI.getPlatform() === 'darwin';
 
 /**
- * The app sidebar: Tasks | Projects view tabs (`ViewTabs`' pills; counting
- * live sessions and projects) with find and create (a task or a project,
- * after the view) at the row's end, over the state-ordered task list or the
- * project tree, and settings (with the Claude Code update icon) at the foot.
+ * The app sidebar: Projects | Tasks view tabs (`ViewTabs`' pills; counting
+ * projects and live sessions) with find and, in the Projects view, create a
+ * project at the row's end (a task is made under its project), over the
+ * project tree or the state-ordered task list, and settings (with the Claude Code update icon) at the foot.
  * Collapsed, it is a rail of state dots for the tasks with a live session.
  */
 export function LeftSidebar(props: LeftSidebarProps) {
@@ -105,16 +107,6 @@ export function LeftSidebar(props: LeftSidebarProps) {
     );
   }
 
-  const newTask = () => {
-    const projectId = newTaskProjectId(
-      activeProjectId,
-      projects,
-      Object.values(tasksByProject).flat(),
-    );
-    if (projectId) props.onNewTask(projectId);
-    else props.onOpenFolder();
-  };
-
   const projectsView = view === 'projects';
 
   return (
@@ -131,16 +123,16 @@ export function LeftSidebar(props: LeftSidebarProps) {
           onMinWidth={setTabsMinPx}
           options={[
             {
-              value: 'tasks',
-              label: 'Tasks',
-              count: liveRows(rows).length,
-              countLabel: 'Live sessions',
-            },
-            {
               value: 'projects',
               label: 'Projects',
               count: projects.length,
               countLabel: 'Projects',
+            },
+            {
+              value: 'tasks',
+              label: 'Tasks',
+              count: liveRows(rows).length,
+              countLabel: 'Live sessions',
             },
           ]}
         />
@@ -153,12 +145,10 @@ export function LeftSidebar(props: LeftSidebarProps) {
         >
           <Search size={14} strokeWidth={1.8} />
         </IconButton>
-        {projectsView ? (
+        {/* Tasks are made under their project, so only the Projects view
+            creates (a project). */}
+        {projectsView && (
           <IconButton size="sm" title="Create project" onClick={props.onOpenFolder}>
-            <Plus size={14} strokeWidth={1.8} />
-          </IconButton>
-        ) : (
-          <IconButton size="sm" title="New task" shortcut={keybindings.newTask} onClick={newTask}>
             <Plus size={14} strokeWidth={1.8} />
           </IconButton>
         )}
