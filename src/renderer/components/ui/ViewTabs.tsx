@@ -9,6 +9,7 @@ import { useSlideIn } from './tabMotion';
 import { Tooltip } from './Tooltip';
 import { firstFitting, useFittedDensity } from './useFittedDensity';
 import { useReselect } from './useReselect';
+import { stepTab, useWheelTabSwitch } from './useWheelTabSwitch';
 
 /** How the row gives way as it narrows: it drops the counts (they move into
  *  the tooltip). Its labels never truncate; the host keeps it at least as
@@ -98,7 +99,8 @@ function countBadge<T>(opt: ViewTabsOption<T>, counted: boolean) {
  *
  * The selected surface slides from tab to tab (`TabIndicator`), and the
  * view under it slides in from the side of travel when it's wrapped in a
- * `ViewPanel`.
+ * `ViewPanel`. A sideways scroll over the tabs steps to the next or previous
+ * view, one per gesture (`useWheelTabSwitch`).
  *
  * Its labels always read in full. It takes its full width (counts included)
  * when the row has room and shrinks first when it hasn't, dropping the
@@ -139,6 +141,14 @@ export function ViewTabs<T extends string>({
     if (minNeed !== undefined) onMinWidth?.(minNeed);
   }, [minNeed, onMinWidth]);
   const reselect = useReselect(value, onReselect);
+  useWheelTabSwitch(rootRef, (step) => {
+    const next = stepTab(
+      options.map((o) => o.value),
+      value,
+      step,
+    );
+    if (next !== undefined) onChange(next);
+  });
 
   return (
     <div

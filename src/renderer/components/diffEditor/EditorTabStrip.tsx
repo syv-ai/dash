@@ -1,6 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { Pin, X } from 'lucide-react';
 import { FolderTab, FolderTabIndicator, folderStripSlot } from '../ui/FolderTab';
+import { stepTab, useWheelTabSwitch } from '../ui/useWheelTabSwitch';
 import { cn } from '../../lib/cn';
 import {
   ContextMenu,
@@ -41,7 +42,9 @@ function basename(path: string): string {
  *  into it), with a dirty dot on unsaved ones and the preview tab in italics;
  *  right-click for keep/close commands. The strip overlaps the sheet by 1px so the
  *  active tab covers the sheet's top edge where they join. The open folder's
- *  shape slides from tab to tab (`TabIndicator`). */
+ *  shape slides from tab to tab (`TabIndicator`); a sideways scroll over a
+ *  strip whose tabs all fit steps to the next or previous file (one that
+ *  overflows scrolls instead). */
 export function EditorTabStrip({
   cwd,
   tabs,
@@ -64,6 +67,11 @@ export function EditorTabStrip({
       ?.querySelector<HTMLElement>('[aria-selected="true"]')
       ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [active]);
+
+  useWheelTabSwitch(trackRef, (step) => {
+    const next = active === null ? undefined : stepTab(tabs, active, step);
+    if (next !== undefined) onSelect(next);
+  });
 
   return (
     <div className="@container/strip relative z-10 -mb-px flex h-9 shrink-0 items-center gap-0.5 pr-1">

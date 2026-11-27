@@ -5,6 +5,7 @@ import { Tooltip } from '../ui/Tooltip';
 import { IconButton } from '../ui/IconButton';
 import { PillTab, PillTabIndicator } from '../ui/PillTab';
 import { useSlideIn } from '../ui/tabMotion';
+import { stepTab, useWheelTabSwitch } from '../ui/useWheelTabSwitch';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -106,6 +107,7 @@ export function TerminalTabs({
   onTuiActiveChange,
 }: TerminalTabsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const stripRef = useRef<HTMLDivElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);
   const shellId = `shell:${taskId}`;
   const [tabs, setTabs] = useState<Tab[]>([]);
@@ -448,10 +450,15 @@ export function TerminalTabs({
   // The tabs in the strip's order (shells and services, then TUIs): a switch
   // slides the active tab's tint along them and the terminal in from the side
   // of travel (only its place moves: the session stays attached, and a
-  // translate changes neither its size nor its device-pixel box).
+  // translate changes neither its size nor its device-pixel box), and a
+  // sideways scroll over the strip steps along them.
   const order = [...stripTabs, ...tabs.filter((t) => t.kind === 'tui')].map((t) => t.id);
   const activeTone = toneOf(tabs.find((t) => t.id === activeTabId)?.kind);
   useSlideIn(paneRef, activeTabId, order);
+  useWheelTabSwitch(stripRef, (step) => {
+    const next = activeTabId === null ? undefined : stepTab(order, activeTabId, step);
+    if (next !== undefined) handleSelectTab(next);
+  });
 
   return (
     <div className="h-full flex flex-col">
@@ -477,7 +484,7 @@ export function TerminalTabs({
           <ChevronUp size={14} strokeWidth={1.8} className="ml-auto text-icon" />
         </button>
       ) : (
-        <div className="relative flex items-center gap-0.5 h-9 shrink-0 pl-1.5">
+        <div ref={stripRef} className="relative flex items-center gap-0.5 h-9 shrink-0 pl-1.5">
           {/* The active tab's tint, sliding from tab to tab. */}
           <PillTabIndicator active={activeTabId} tone={activeTone} />
           {/* Hidden measuring row — lays out every shell/service tab off-screen
