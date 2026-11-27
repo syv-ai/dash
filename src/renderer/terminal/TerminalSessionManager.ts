@@ -534,13 +534,8 @@ export class TerminalSessionManager {
         }
         if (gen !== this.attachGeneration) return;
 
-        const dims = this.proposeDims();
-        let shellResp = await window.electronAPI.ptyStart({
-          id: this.id,
-          cwd: this.cwd,
-          cols: this.ptyCols(dims?.cols ?? 120),
-          rows: dims?.rows ?? 30,
-        });
+        const size = this.spawnSize();
+        let shellResp = await window.electronAPI.ptyStart({ id: this.id, cwd: this.cwd, ...size });
         if (gen !== this.attachGeneration) return;
         reattached = shellResp.data?.reattached ?? false;
 
@@ -557,12 +552,7 @@ export class TerminalSessionManager {
           window.electronAPI.ptyKill(this.id);
           existingSnapshot = null;
           await new Promise((r) => setTimeout(r, 50));
-          shellResp = await window.electronAPI.ptyStart({
-            id: this.id,
-            cwd: this.cwd,
-            cols: this.ptyCols(dims?.cols ?? 120),
-            rows: dims?.rows ?? 30,
-          });
+          shellResp = await window.electronAPI.ptyStart({ id: this.id, cwd: this.cwd, ...size });
           if (gen !== this.attachGeneration) return;
           reattached = shellResp.data?.reattached ?? false;
         }
@@ -872,13 +862,7 @@ export class TerminalSessionManager {
       // then waits for the child to exit, so the respawn below spawns fresh.
       await window.electronAPI.ptyKillAwait(this.id);
       this.ptyStarted = false;
-      const dims = this.proposeDims();
-      await window.electronAPI.ptyStart({
-        id: this.id,
-        cwd: this.cwd,
-        cols: this.ptyCols(dims?.cols ?? 120),
-        rows: dims?.rows ?? 30,
-      });
+      await window.electronAPI.ptyStart({ id: this.id, cwd: this.cwd, ...this.spawnSize() });
       this.ptyStarted = true;
     } else {
       // Agent pane: a restart is a re-dispatch. Main kills the attach client,
@@ -1128,6 +1112,22 @@ export class TerminalSessionManager {
   }
 
   /**
+   * The size to spawn a PTY at: the pane's measured grid, or, while the pane
+   * has no size yet (a collapsed drawer, a hidden sidebar), the grid xterm
+   * holds. Never a guess of its own: a PTY wider than xterm's grid makes the
+   * shell's first output wrap — zsh's PROMPT_SP mark (`%` padded to the PTY's
+   * width) spills onto a second row and stays above the prompt. The fit that
+   * runs once the pane is shown resizes both together.
+   */
+  private spawnSize(): { cols: number; rows: number } {
+    const dims = this.proposeDims();
+    return {
+      cols: this.ptyCols(dims?.cols ?? this.terminal.cols),
+      rows: dims?.rows ?? this.terminal.rows,
+    };
+  }
+
+  /**
    * Size the xterm grid to the container and sync the PTY — the single place
    * both attach() and the resize observer route through. FitAddon already
    * subtracts the `.xterm` padding (the gutter) when proposing columns, so the
@@ -1187,9 +1187,7 @@ export class TerminalSessionManager {
     reattached: boolean;
     isDirectSpawn: boolean;
   }> {
-    const dims = this.proposeDims();
-    const cols = this.ptyCols(dims?.cols ?? 120);
-    const rows = dims?.rows ?? 30;
+    const { cols, rows } = this.spawnSize();
 
     // A foreign session (started outside Dash) is attached by job id; a task
     // pane is started by task id and main resolves the job.
@@ -1381,14 +1379,8 @@ export class TerminalSessionManager {
       // Show xterm's real cursor for the shell fallback
       this.terminal.write('\x1b[?25h');
 
-      const dims = this.proposeDims();
       void window.electronAPI
-        .ptyStart({
-          id: this.id,
-          cwd: this.cwd,
-          cols: this.ptyCols(dims?.cols ?? 120),
-          rows: dims?.rows ?? 30,
-        })
+        .ptyStart({ id: this.id, cwd: this.cwd, ...this.spawnSize() })
         .then(() => {
           this.connectPtyListeners();
         });
