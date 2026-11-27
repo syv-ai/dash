@@ -18,8 +18,8 @@ import { ConnectionConfigService } from './ConnectionConfigService';
 import { TelemetryService } from './TelemetryService';
 import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
 import { loadWorkspaceConfig, type WorkspaceTaskDefaults } from './WorkspaceConfigService';
-import { flagNoteText, validateExtraArgs } from '@shared/extraArgs';
-import { addDirProblem, normalizeAddDirs } from '@shared/addDirs';
+import { normalizeAddDirs } from '@shared/addDirs';
+import { launchOptionsProblem } from '@shared/launchOptions';
 import {
   ensureWatching as ensurePortsConfigWatch,
   stop as stopPortsConfigWatch,
@@ -76,14 +76,8 @@ export class TaskService {
     const projectDefaults = readTaskDefaults(project.path);
     const extraArgs = input.extraArgs ?? projectDefaults?.extraArgs;
     const addDirs = normalizeAddDirs(input.addDirs ?? projectDefaults?.addDirs);
-    const dirProblem = addDirs.map(addDirProblem).find(Boolean);
-    if (dirProblem) throw new Error(`Folders: ${dirProblem}`);
-    const extraCheck = validateExtraArgs(extraArgs);
-    if (!extraCheck.ok) {
-      throw new Error(
-        `Extra arguments: ${extraCheck.error ?? extraCheck.blocked.map(flagNoteText).join(' ')}`,
-      );
-    }
+    const problem = launchOptionsProblem({ extraArgs: extraArgs ?? null, addDirs });
+    if (problem) throw new Error(problem);
 
     // saveTask enforces one active in-place task per project folder; check it
     // before the checkout too, or a refused task would still switch the

@@ -43,6 +43,8 @@ beforeEach(() => {
   deps = {
     getProjects: () => projects,
     taskDefaults: () => undefined,
+    sessionConfig: () => undefined,
+    configure: vi.fn(async () => {}),
     detectGit: vi.fn(async () => ({
       isGitRepo: true,
       remote: 'git@github.com:o/r.git',
@@ -83,6 +85,9 @@ describe('projects.add', () => {
         path: folder,
         defaultBaseRef: null,
         dashAccessDefault: false,
+        appendSystemPrompt: null,
+        extraArgsDefault: null,
+        addDirsDefault: [],
       },
       added: true,
     });

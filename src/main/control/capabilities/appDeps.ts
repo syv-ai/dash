@@ -4,7 +4,14 @@ import { TaskService } from '../../services/TaskService';
 import { activityMonitor, activityEvents } from '../../services/ActivityMonitor';
 import { supervisorService } from '../../services/SupervisorService';
 import { worktreeService } from '../../services/WorktreeService';
-import { loadWorkspaceConfig } from '../../services/WorkspaceConfigService';
+import {
+  loadLocalTaskDefaults,
+  loadSharedWorkspaceConfig,
+  loadWorkspaceConfig,
+  writeLocalTaskDefaults,
+  writeWorkspaceConfig,
+} from '../../services/WorkspaceConfigService';
+import { LOCAL_CONFIG_EXCLUDE_ENTRY } from '../../services/gitExclude';
 import { taskEvents } from '../../services/taskEvents';
 import { broadcastProjectsChanged } from '../../services/projectEvents';
 import { TelemetryService } from '../../services/TelemetryService';
@@ -17,6 +24,7 @@ import {
   startTaskSession,
 } from '../../services/ptyManager';
 import { readLiveSessions, sessionTranscriptPath } from '../../services/claudeSessionRegistry';
+import { listAgents } from '../../services/SlashCommandService';
 import { writeHookSettings } from '../../services/ptyHookSettings';
 import { dropTaskInbox, getTaskInbox, postToInbox } from '../../services/taskInbox';
 import { GitService } from '../../services/GitService';
@@ -57,6 +65,32 @@ export function projectDeps(): ProjectCapabilityDeps {
   return {
     getProjects: () => DatabaseService.getProjects(),
     taskDefaults,
+    sessionConfig: (projectPath) => {
+      try {
+        return loadWorkspaceConfig(projectPath)?.session;
+      } catch {
+        return undefined;
+      }
+    },
+    configure: async (projectPath, patch) => {
+      if (patch.appendSystemPrompt !== undefined) {
+        // As Project settings saves config.json: its own keys kept, session replaced.
+        const shared = loadSharedWorkspaceConfig(projectPath) ?? {};
+        const text = patch.appendSystemPrompt.trim();
+        writeWorkspaceConfig(projectPath, {
+          taskDefaults: shared.taskDefaults,
+          session: text ? { ...shared.session, appendSystemPrompt: text } : undefined,
+        });
+      }
+      if (patch.extraArgs !== undefined || patch.addDirs !== undefined) {
+        const own = loadLocalTaskDefaults(projectPath);
+        writeLocalTaskDefaults(projectPath, {
+          extraArgs: patch.extraArgs ?? own.extraArgs,
+          addDirs: patch.addDirs ?? own.addDirs,
+        });
+        await GitService.ensureExcluded(projectPath, LOCAL_CONFIG_EXCLUDE_ENTRY).catch(() => {});
+      }
+    },
     detectGit: (folderPath) => GitService.detectRepo(folderPath),
     mainCheckout,
     addProject: (input) => {
@@ -94,6 +128,13 @@ export function taskDeps(): TaskCapabilityDeps {
     archiveTask: (id) => TaskService.archive(id),
     restoreTask: (id) => TaskService.restore(id),
     deleteTask: (id, opts) => TaskService.delete(id, opts),
+    setLaunchOptions: (id, patch) => {
+      DatabaseService.setTaskLaunchOptions(id, patch);
+      const task = DatabaseService.getTask(id)!;
+      taskEvents.emitChanged(task.projectId);
+      return task;
+    },
+    listAgents,
     restartSession: restartAndStartTaskSession,
     startSession: (id) => startTaskSession(id),
     readLogs: (jobId) => supervisorService.logs(jobId),

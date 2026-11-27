@@ -48,6 +48,7 @@ Run \`dashctl help\` for every command, and \`dashctl <namespace> <verb> --help\
 ## Tasks and services
 
 - \`dashctl tasks list\` / \`get\` / \`output\` / \`wait\` read tasks, and \`dashctl tasks watch\`, run in the background, prints a JSON line each time a task changes; \`dashctl tasks create <name> --project <project>\` starts one (its own worktree by default). Give its prompt as \`--prompt -\` and the text on stdin; without \`--prompt\`, the task starts with no prompt. \`--issue <number|url>\` or \`--work-item <id>\` links a GitHub issue or Azure DevOps work item and puts it in the task's context; \`dashctl tasks link <task-id>\` does it for an existing task. Message a task you created with \`dashctl tasks message <task-id>\` and the text on stdin (it starts a stopped session); read its answer with \`dashctl tasks reply <task-id> --message-id <id>\`, the id the message returned. Don't send a message twice: each one is a turn the task takes. A message headed \`[Message from … via Dash …]\` that reaches you is answered by your last message of that turn.
+- How a task you created launches: \`dashctl tasks create\` takes \`--effort low|medium|high|xhigh|max|ultracode\`, \`--agent <name>\` (one of the project's custom agents, fixed for the task), \`--add-dir <folder>\` (repeat for more; Claude Code must trust each) and \`--extra-args '<claude flags>'\` (one quoted line; flags Dash sets itself, like permissions and model, are refused). \`dashctl tasks configure <task-id>\` changes the effort, folders or extra arguments later and restarts the task's session, which resumes its conversation; \`dashctl tasks get\` shows them.
 - \`dashctl services list\` / \`start <label>\` / \`stop <label>\` / \`output <label>\` run the services from \`.dash/ports.json\` in Dash terminal tabs, on the task's own ports.
 
 \`--project\` is your own project, by name or id (\`dashctl tasks get\` gives your task's \`projectId\`); your checkout's path isn't the project's when it is a worktree.
@@ -56,6 +57,7 @@ Run \`dashctl help\` for every command, and \`dashctl <namespace> <verb> --help\
 dashctl tasks create "Fix the flaky test" --project <project> --prompt - <<'EOF'
 The login test fails one run in five on CI. Find out why and fix it.
 EOF
+dashctl tasks configure <task-id> --effort high --add-dir ../shared-lib --extra-args '--chrome'
 \`\`\`
 
 ## Showing the person a file

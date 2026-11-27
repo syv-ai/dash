@@ -75,6 +75,35 @@ describe('dashctl argv', () => {
     });
   });
 
+  it('takes a list flag once per value, paths made absolute, and a flag-like value', () => {
+    const configure = (argv: string[]) =>
+      resolveArgv(argv, commands, null, projects, '/repos/dash');
+    expect(
+      configure([
+        'tasks',
+        'configure',
+        't1',
+        '--add-dir',
+        'lib',
+        '--add-dir=/opt/docs',
+        '--extra-args',
+        '--chrome --verbose',
+      ]),
+    ).toEqual({
+      kind: 'call',
+      name: 'tasks.configure',
+      input: {
+        taskId: 't1',
+        addDir: ['/repos/dash/lib', '/opt/docs'],
+        extraArgs: '--chrome --verbose',
+      },
+    });
+    expect(configure(['tasks', 'configure', 't1', '--add-dir', ''])).toMatchObject({
+      input: { addDir: [''] },
+    });
+    expect(configure(['tasks', 'configure', 't1', '--add-dir'])).toMatchObject({ kind: 'usage' });
+  });
+
   it('takes a command with no namespace, its path made absolute', () => {
     const show = (argv: string[]) => resolveArgv(argv, commands, null, projects, '/repos/dash');
     expect(show(['show', 'src/app.ts', '--lines', '10-20'])).toEqual({

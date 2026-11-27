@@ -2,7 +2,19 @@ import fs from 'fs';
 import path from 'path';
 import { z } from 'zod';
 import type { Project } from '../../../shared/types';
-import type { WorkspaceTaskDefaults } from '../../services/WorkspaceConfigService';
+import type {
+  WorkspaceSessionConfig,
+  WorkspaceTaskDefaults,
+} from '../../services/WorkspaceConfigService';
+import { launchOptionsProblem } from '../../../shared/launchOptions';
+import { normalizeAddDirs } from '../../../shared/addDirs';
+
+/** projects.configure's changes; undefined keys stay as they are, '' / [] clear. */
+export interface ProjectConfigPatch {
+  appendSystemPrompt?: string;
+  extraArgs?: string;
+  addDirs?: string[];
+}
 import type { GitDetection } from '../../services/GitService';
 import { ControlError, defineCapability, type Registry } from '../registry';
 import { projectAtPath, realPath } from '../projectPaths';
@@ -11,6 +23,11 @@ export interface ProjectCapabilityDeps {
   getProjects(): Project[];
   /** The project's `.dash` task defaults (shared + local overlay), if any. */
   taskDefaults(projectPath: string): WorkspaceTaskDefaults | undefined;
+  /** The project's session config (`.dash/config.json` session), if any. */
+  sessionConfig(projectPath: string): WorkspaceSessionConfig | undefined;
+  /** Change what is given, as Project settings does: the appended system
+   *  prompt in config.json, the personal defaults in config.local.json. */
+  configure(projectPath: string, patch: ProjectConfigPatch): Promise<void>;
   /** A folder's git, as the New Project wizard detects it. */
   detectGit(folderPath: string): Promise<GitDetection>;
   /** The main checkout of the repository `dir` is in, or null (projectPaths.ts). */
@@ -42,6 +59,9 @@ function projectEntry(p: Project, deps: ProjectCapabilityDeps) {
     path: p.path,
     defaultBaseRef: defaultBaseRef(p, defaults),
     dashAccessDefault: defaults?.dashAccess ?? false,
+    appendSystemPrompt: deps.sessionConfig(p.path)?.appendSystemPrompt ?? null,
+    extraArgsDefault: defaults?.extraArgs ?? null,
+    addDirsDefault: defaults?.addDirs ?? [],
   };
 }
 
@@ -118,6 +138,58 @@ export function registerProjectCapabilities(registry: Registry, deps: ProjectCap
           gitBranch: git.branch,
         });
         return { project: projectEntry(project, deps), added: true };
+      },
+    }),
+  );
+
+  registry.register(
+    defineCapability({
+      name: 'projects.configure',
+      summary:
+        "Change a project's session settings, as Project settings does: the text appended to every task's system prompt (.dash/config.json, shared), and your own defaults for new tasks' folders and extra arguments (.dash/config.local.json, kept out of git). Only what is given changes; '' clears. Returns the project as projects list gives it. Running sessions take a new appended prompt when they restart, and a resumed conversation only after it compacts.",
+      input: z.object({
+        projectId: z.string().describe('From `dashctl projects list`'),
+        appendSystemPrompt: z
+          .string()
+          .optional()
+          .describe(
+            "Added to the end of every task's system prompt (claude --append-system-prompt)",
+          ),
+        addDir: z
+          .array(z.string())
+          .optional()
+          .describe("New tasks' default folders (claude --add-dir): repeat for more, '' for none"),
+        extraArgs: z
+          .string()
+          .optional()
+          .describe("New tasks' default extra claude flags, one shell-quoted line; '' for none"),
+      }),
+      callers: ['orchestrator'],
+      readOnly: false,
+      cli: { args: [], paths: ['addDir'] },
+      target: { projectId: 'projectId' },
+      handler: async (_ctx, input) => {
+        const project = deps.getProjects().find((p) => p.id === input.projectId);
+        if (!project) throw new ControlError(404, 'project not found');
+        const patch: ProjectConfigPatch = {};
+        if (input.appendSystemPrompt !== undefined) {
+          patch.appendSystemPrompt = input.appendSystemPrompt;
+        }
+        if (input.addDir !== undefined) patch.addDirs = normalizeAddDirs(input.addDir);
+        if (input.extraArgs !== undefined) patch.extraArgs = input.extraArgs;
+        if (Object.keys(patch).length === 0) {
+          throw new ControlError(
+            400,
+            'nothing to change: give --append-system-prompt, --add-dir or --extra-args',
+          );
+        }
+        const problem = launchOptionsProblem({
+          extraArgs: patch.extraArgs,
+          addDirs: patch.addDirs,
+        });
+        if (problem) throw new ControlError(400, problem);
+        await deps.configure(project.path, patch);
+        return projectEntry(project, deps);
       },
     }),
   );

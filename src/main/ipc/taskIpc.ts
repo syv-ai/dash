@@ -14,8 +14,7 @@ import type {
   SetTaskFavoriteInput,
   SetTaskLaunchOptionsInput,
 } from '@shared/types';
-import { validateExtraArgs, flagNoteText } from '@shared/extraArgs';
-import { addDirProblem } from '@shared/addDirs';
+import { launchOptionsProblem } from '@shared/launchOptions';
 
 const launchOptionsInputSchema = z.looseObject({
   taskId: z.string(),
@@ -23,18 +22,6 @@ const launchOptionsInputSchema = z.looseObject({
   addDirs: z.array(z.string()).optional(),
   effort: taskEffortSchema.nullable().optional(),
 });
-
-/** Refuse extra arguments a dispatch would refuse, saying why. */
-function assertExtraArgs(value: string | null): void {
-  const check = validateExtraArgs(value);
-  if (!check.ok) throw new Error(check.error ?? check.blocked.map(flagNoteText).join(' '));
-}
-
-/** Refuse folders a dispatch couldn't pass (not a full path). */
-function assertAddDirs(folders: string[]): void {
-  const problem = folders.map(addDirProblem).find(Boolean);
-  if (problem) throw new Error(problem);
-}
 
 /** Task lifecycle from the task dialog and sidebar; TaskService does the work. */
 export function registerTaskIpc(): void {
@@ -107,8 +94,8 @@ export function registerTaskIpc(): void {
       parseArgs('task:setLaunchOptions', launchOptionsInputSchema, input);
       const task = DatabaseService.getTask(input.taskId);
       if (!task) throw new Error(`Task not found: ${input.taskId}`);
-      if (input.extraArgs !== undefined) assertExtraArgs(input.extraArgs);
-      if (input.addDirs !== undefined) assertAddDirs(input.addDirs);
+      const problem = launchOptionsProblem(input);
+      if (problem) throw new Error(problem);
       DatabaseService.setTaskLaunchOptions(input.taskId, input);
       taskEvents.emitChanged(task.projectId);
       return { success: true, data: DatabaseService.getTask(input.taskId) };

@@ -112,6 +112,17 @@ beforeEach(() => {
       state: 'New',
     })),
     linkItems: vi.fn(async (taskId: string) => tasks.find((t) => t.id === taskId)!),
+    setLaunchOptions: vi.fn((id: string, patch: Partial<Task>) => {
+      const task = tasks.find((t) => t.id === id)!;
+      Object.assign(task, patch);
+      return task;
+    }),
+    listAgents: vi.fn(async () => [
+      { name: 'reviewer', description: 'Reviews', source: 'project' as const },
+    ]),
+    // Project capabilities share this deps object.
+    sessionConfig: vi.fn(() => undefined),
+    configure: vi.fn(async () => {}),
   } as never;
   registry = createRegistry(fakeLookups(projects, tasks));
   registerProjectCapabilities(registry, deps as never);
@@ -121,6 +132,17 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
 });
+
+/** A ControlError's status and message, or a failure when the call succeeds. */
+async function refusalOf(p: Promise<unknown>): Promise<{ status: number; message: string }> {
+  try {
+    await p;
+  } catch (err) {
+    if (err instanceof ControlError) return { status: err.status, message: err.message };
+    throw err;
+  }
+  throw new Error('expected a refusal');
+}
 
 async function status(p: Promise<unknown>): Promise<number> {
   try {
@@ -316,6 +338,8 @@ describe('tasks.create', () => {
         initialPrompt: 'write a README',
         contextPrompt: undefined,
         dashAccess: undefined,
+        effort: null,
+        agent: null,
         parentTaskId: 'me',
       },
       { startSession: true, source: 'api' },
@@ -330,6 +354,43 @@ describe('tasks.create', () => {
       contextPrompt: 'Use pnpm.',
       initialPrompt: 'go',
     });
+  });
+
+  it('passes the launch options, leaving folders and flags to the project default when not given', async () => {
+    await registry.call(orch, 'tasks.create', {
+      projectId: 'pA',
+      name: 'x',
+      effort: 'ultracode',
+      agent: 'reviewer',
+      addDir: ['/lib'],
+      extraArgs: '--chrome',
+    });
+    expect(deps.createTask.mock.calls[0]![0]).toMatchObject({
+      effort: 'ultracode',
+      agent: 'reviewer',
+      addDirs: ['/lib'],
+      extraArgs: '--chrome',
+    });
+    await registry.call(orch, 'tasks.create', { projectId: 'pA', name: 'y' });
+    expect(deps.createTask.mock.calls[1]![0]).toMatchObject({
+      addDirs: undefined,
+      extraArgs: undefined,
+    });
+  });
+
+  it('refuses a flag Dash owns, a relative folder and an agent the project lacks', async () => {
+    const create = (input: object) =>
+      registry.call(orch, 'tasks.create', { projectId: 'pA', name: 'x', ...input });
+    expect(await refusalOf(create({ extraArgs: '--dangerously-skip-permissions' }))).toEqual({
+      status: 400,
+      message:
+        "Extra arguments: --dangerously-skip-permissions is set by the task's Permissions picker; use that instead.",
+    });
+    expect((await refusalOf(create({ addDir: ['lib'] }))).message).toMatch(/^Folders: lib/);
+    expect((await refusalOf(create({ agent: 'ghost' }))).message).toBe(
+      'no agent "ghost" in pA: its agents are reviewer',
+    );
+    expect(deps.createTask).not.toHaveBeenCalled();
   });
 
   it('refuses a task caller creating in another project', async () => {
@@ -850,5 +911,77 @@ describe('tasks.watch', () => {
     expect(await refused(orch, { taskId: 'child', projectId: 'pA' })).toBe(400);
     expect(await status(registry.call(orch, 'tasks.watch', {}))).toBe(406);
     expect(listeners).toHaveLength(0);
+  });
+});
+
+describe('tasks.configure', () => {
+  it('saves only what is given and restarts a task that has a session', async () => {
+    tasks.find((t) => t.id === 'child')!.jobId = 'job-c';
+    const result = await registry.call(orch, 'tasks.configure', {
+      taskId: 'child',
+      effort: 'high',
+      addDir: ['/lib', ''],
+    });
+    expect(deps.setLaunchOptions).toHaveBeenCalledWith('child', {
+      effort: 'high',
+      addDirs: ['/lib'],
+    });
+    expect(deps.restartSession).toHaveBeenCalledWith('child');
+    expect(result).toMatchObject({ restarted: true, task: { effort: 'high', addDirs: ['/lib'] } });
+  });
+
+  it("clears with default and '', and saves without a restart when there is no session", async () => {
+    const result = await registry.call(orch, 'tasks.configure', {
+      taskId: 'sibling',
+      effort: 'default',
+      extraArgs: '  ',
+    });
+    expect(deps.setLaunchOptions).toHaveBeenCalledWith('sibling', {
+      effort: null,
+      extraArgs: null,
+    });
+    expect(deps.restartSession).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ restarted: false });
+  });
+
+  it('refuses blocked flags, an empty change, and a task configuring itself', async () => {
+    expect(
+      await refusalOf(
+        registry.call(orch, 'tasks.configure', { taskId: 'child', extraArgs: '--settings x' }),
+      ),
+    ).toMatchObject({
+      status: 400,
+      message: expect.stringMatching(/^Extra arguments: --settings/),
+    });
+    expect(
+      (await refusalOf(registry.call(orch, 'tasks.configure', { taskId: 'child' }))).status,
+    ).toBe(400);
+    expect(
+      await status(registry.call(asTask('me'), 'tasks.configure', { taskId: 'me', effort: 'low' })),
+    ).toBe(403);
+    expect(deps.setLaunchOptions).not.toHaveBeenCalled();
+  });
+});
+
+describe('projects.configure', () => {
+  it('writes what is given, checked like a task, and gives the project back', async () => {
+    const result = await registry.call(orch, 'projects.configure', {
+      projectId: 'pA',
+      appendSystemPrompt: 'Use pnpm.',
+      addDir: ['/lib'],
+    });
+    const projectDeps = deps as unknown as { configure: Mock };
+    expect(projectDeps.configure).toHaveBeenCalledWith(projects[0]!.path, {
+      appendSystemPrompt: 'Use pnpm.',
+      addDirs: ['/lib'],
+    });
+    expect(result).toMatchObject({ id: 'pA' });
+    expect(
+      (
+        await refusalOf(
+          registry.call(orch, 'projects.configure', { projectId: 'pA', extraArgs: '-p' }),
+        )
+      ).message,
+    ).toMatch(/^Extra arguments: -p works only with --print/);
   });
 });

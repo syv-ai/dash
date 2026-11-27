@@ -61,6 +61,7 @@ const flagFor = (prop: string) => (prop === 'projectId' ? 'project' : kebab(prop
 
 function placeholder(prop: string, schema: PropSchema): string {
   if (schema.enum) return schema.enum.join('|');
+  if (schema.type === 'array') return `<${flagFor(prop)}>…`;
   if (schema.type === 'boolean') return '';
   return `<${flagFor(prop)}>`;
 }
@@ -204,6 +205,8 @@ export function resolveArgv(
     }
     const input: Record<string, unknown> = {};
     const raw: Record<string, string | true> = {};
+    // A list input is its flag given once per value (`--add-dir a --add-dir b`).
+    const lists: Record<string, string[]> = {};
     const positional: string[] = [];
     for (let i = 0; i < rest.length; i++) {
       const word = rest[i]!;
@@ -222,6 +225,12 @@ export function resolveArgv(
       const flag = word.slice(2, eq < 0 ? undefined : eq);
       const prop = byFlag.get(flag);
       if (!prop) throw new UsageError(`unknown flag --${flag}`);
+      if (props[prop]!.type === 'array') {
+        const value = eq >= 0 ? word.slice(eq + 1) : i + 1 < rest.length ? rest[++i]! : null;
+        if (value === null) throw new UsageError(`--${flagFor(prop)} needs a value`);
+        (lists[prop] ??= []).push(value);
+        continue;
+      }
       if (prop in raw) throw new UsageError(`--${flagFor(prop)} given twice`);
       if (eq >= 0) raw[prop] = word.slice(eq + 1);
       else if (props[prop]!.type === 'boolean') {
@@ -259,9 +268,13 @@ export function resolveArgv(
       }
       if (text !== '') input[fromStdin!] = text;
     }
+    Object.assign(input, lists);
     for (const prop of c.cli?.paths ?? []) {
       const value = input[prop];
       if (typeof value === 'string' && value !== '') input[prop] = resolveFrom(cwd, value);
+      if (Array.isArray(value)) {
+        input[prop] = value.map((v: string) => (v === '' ? v : resolveFrom(cwd, v)));
+      }
     }
     if (typeof input.projectId === 'string') {
       const project = findProject(projects, input.projectId, cwd);

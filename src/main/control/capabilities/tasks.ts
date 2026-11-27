@@ -12,12 +12,22 @@ import type {
   PermissionMode,
   Project,
   Task,
+  TaskLaunchOptions,
 } from '../../../shared/types';
+import { TASK_EFFORTS, type TaskEffort } from '../../../shared/effort';
+import { launchOptionsProblem } from '../../../shared/launchOptions';
+import { normalizeAddDirs } from '../../../shared/addDirs';
+import type { AgentDefinition } from '../../../shared/slashCommands';
 import { githubSlug } from '../../../shared/urls';
 import type { WorkspaceTaskDefaults } from '../../services/WorkspaceConfigService';
 import { messageAddress, type LiveSession } from '../../services/claudeSessionRegistry';
 import { TerminalMirror } from '../../services/TerminalMirror';
-import { permissionModeSchema, taskModelSchema } from '../../ipc/schemas';
+import {
+  agentNameSchema,
+  permissionModeSchema,
+  taskEffortSchema,
+  taskModelSchema,
+} from '../../ipc/schemas';
 import { ControlError, defineCapability, type Registry } from '../registry';
 import { defaultBaseRef } from './projects';
 import {
@@ -50,6 +60,11 @@ export interface TaskView {
   /** `needs-approval`: the task runs in bypassPermissions, so a message from a
    *  session that prompts waits for a person to deliver it in Dash. */
   messaging: 'direct' | 'needs-approval';
+  /** How the session launches (tasks.configure changes the first three). */
+  effort: TaskEffort | null;
+  addDirs: string[];
+  extraArgs: string | null;
+  agent: string | null;
 }
 
 /** Everything the task capabilities touch outside `control/`; index.ts wires the real services. */
@@ -80,6 +95,10 @@ export interface TaskCapabilityDeps {
   archiveTask(id: string): Promise<void>;
   restoreTask(id: string): Promise<void>;
   deleteTask(id: string, opts: DeleteTaskOptions): Promise<void>;
+  /** Save a task's launch options (the keys given), as Task settings does. */
+  setLaunchOptions(id: string, patch: Partial<TaskLaunchOptions>): Task;
+  /** The custom agents a session in the project can run as (`--agent`). */
+  listAgents(projectPath: string): Promise<AgentDefinition[]>;
   /** Re-dispatch the session and start it again, as one session start
    *  (ptyManager.restartAndStartTaskSession), so an open pane re-attaches. */
   restartSession(id: string): Promise<{ jobId: string } | { needsTrust: string }>;
@@ -148,6 +167,10 @@ export function toTaskView(
     createdAt: task.createdAt,
     messageAddress: address,
     messaging: task.permissionMode === 'bypassPermissions' ? 'needs-approval' : 'direct',
+    effort: task.effort,
+    addDirs: task.addDirs,
+    extraArgs: task.extraArgs,
+    agent: task.agent,
   };
   if (detail) view.detail = detail;
   return view;
@@ -161,6 +184,28 @@ function withoutBypass(
 }
 
 const taskIdInput = z.object({ taskId: z.string().describe('The task id') });
+
+/** The launch inputs tasks.create and tasks.configure share (`--add-dir` repeats). */
+const launchInputs = {
+  addDir: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'A folder the session may also read and edit (claude --add-dir); repeat for more. Claude Code must trust it',
+    ),
+  extraArgs: z
+    .string()
+    .optional()
+    .describe(
+      "Your own claude flags, as one shell-quoted line (e.g. '--chrome'). Flags Dash sets itself (permissions, model, effort, agent, settings, …) are refused",
+    ),
+};
+
+/** 400 with the reason when the launch options can't be saved. */
+function assertLaunchOptions(opts: { extraArgs?: string | null; addDirs?: string[] }): void {
+  const problem = launchOptionsProblem(opts);
+  if (problem) throw new ControlError(400, problem);
+}
 
 /** The one refusal for acting on an archived task (wake, open, restart, services). */
 export function assertNotArchived(task: Task): void {
@@ -374,10 +419,19 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           .boolean()
           .optional()
           .describe("Let the new task's agent use Dash too (default: the project's setting)"),
+        effort: taskEffortSchema
+          .optional()
+          .describe("claude --effort for the session (default: Dash's Settings → Claude)"),
+        agent: agentNameSchema
+          .optional()
+          .describe(
+            'Run the session as this custom agent (claude --agent), one of the project, the user or an enabled plugin; fixed for the task',
+          ),
+        ...launchInputs,
         ...linkInputs,
       }),
       callers: ['orchestrator', 'task'],
-      cli: { args: ['name'], stdin: 'prompt' },
+      cli: { args: ['name'], stdin: 'prompt', paths: ['addDir'] },
       readOnly: false,
       target: { projectId: 'projectId' },
       handler: async (ctx, input) => {
@@ -385,6 +439,16 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         if (!project) throw new ControlError(404, 'project not found');
         const defaults = deps.taskDefaults(project.path);
         const kind = input.kind ?? (project.isGitRepo ? 'new-branch' : 'in-place');
+        assertLaunchOptions({ extraArgs: input.extraArgs, addDirs: input.addDir });
+        if (input.agent) {
+          const known = (await deps.listAgents(project.path)).map((a) => a.name);
+          if (!known.includes(input.agent)) {
+            throw new ControlError(
+              400,
+              `no agent ${JSON.stringify(input.agent)} in ${project.name}: ${known.length > 0 ? `its agents are ${known.join(', ')}` : 'it has none'}`,
+            );
+          }
+        }
 
         const base = {
           projectId: project.id,
@@ -399,6 +463,11 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           initialPrompt: input.prompt,
           contextPrompt: defaults?.contextPrompt,
           dashAccess: input.dashAccess,
+          // undefined → the project's own defaults (config.local.json), as in the dialog.
+          extraArgs: input.extraArgs,
+          addDirs: input.addDir,
+          effort: input.effort ?? null,
+          agent: input.agent ?? null,
           parentTaskId: ctx.caller.kind === 'task' ? ctx.caller.taskId : null,
         } as const;
 
@@ -901,6 +970,52 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         assertNotArchived(taskOrThrow(input.taskId));
         await deps.restartSession(input.taskId);
         return view(taskOrThrow(input.taskId));
+      },
+    }),
+  );
+  registry.register(
+    defineCapability({
+      name: 'tasks.configure',
+      summary:
+        "Change how a task's Claude Code session launches, as Task settings does: its effort, extra folders (--add-dir) and extra arguments. Only what is given changes. A task with a session restarts it to resume the same conversation with them. Returns the task and whether it restarted. A task cannot configure itself.",
+      input: z.object({
+        taskId: z.string().describe('The task id'),
+        effort: z
+          .enum([...TASK_EFFORTS, 'default'])
+          .optional()
+          .describe("claude --effort; default goes back to Dash's Settings → Claude"),
+        addDir: launchInputs.addDir.describe(
+          "The task's folders (claude --add-dir), all of them: repeat for more, --add-dir '' for none",
+        ),
+        extraArgs: launchInputs.extraArgs.describe(
+          "The task's own claude flags, as one shell-quoted line; '' for none. Flags Dash sets itself are refused",
+        ),
+      }),
+      callers: ['orchestrator', 'task'],
+      cli: { args: ['taskId'], paths: ['addDir'] },
+      readOnly: false,
+      target: { taskId: 'taskId' },
+      allowSelf: false,
+      handler: async (_ctx, input) => {
+        const task = taskOrThrow(input.taskId);
+        assertNotArchived(task);
+        const patch: Partial<TaskLaunchOptions> = {};
+        if (input.effort !== undefined)
+          patch.effort = input.effort === 'default' ? null : input.effort;
+        if (input.addDir !== undefined) patch.addDirs = normalizeAddDirs(input.addDir);
+        if (input.extraArgs !== undefined) patch.extraArgs = input.extraArgs.trim() || null;
+        assertLaunchOptions({ extraArgs: patch.extraArgs, addDirs: patch.addDirs });
+        if (Object.keys(patch).length === 0) {
+          throw new ControlError(
+            400,
+            'nothing to change: give --effort, --add-dir or --extra-args',
+          );
+        }
+        deps.setLaunchOptions(task.id, patch);
+        // Like Task settings: a session (live or parked) holds the old flags.
+        const restarted = task.jobId !== null;
+        if (restarted) await deps.restartSession(task.id);
+        return { task: view(taskOrThrow(task.id)), restarted };
       },
     }),
   );
