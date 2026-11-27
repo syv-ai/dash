@@ -15,7 +15,17 @@ import { DatabaseService } from './DatabaseService';
 import { supervisorService } from './SupervisorService';
 import { TelemetryService } from './TelemetryService';
 import { countBucket, memoryBucket } from './telemetryBuckets';
-import { parsePs, subtreeBytes, type ProcRow, type TreeRoot } from './processTree';
+import {
+  FOOTPRINT_PERL,
+  footprintOrRss,
+  parseFootprints,
+  parsePs,
+  rssBytes,
+  subtreeBytes,
+  subtreePids,
+  type ProcRow,
+  type TreeRoot,
+} from './processTree';
 import {
   INITIAL_ALERT_STATE,
   parsePressureLevel,
@@ -25,10 +35,15 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-/** One sample costs a `ps` (~20 ms for 800 processes) and a `sysctl`. */
+/** One sample costs a `ps` (~25 ms of CPU for 800 processes), on macOS a
+ *  footprint read of Dash's own trees (~5 ms) and a `sysctl` (~2 ms). */
 export const SAMPLE_MS = 45_000;
 /** While the health popover is open, so its numbers move. */
 export const LIVE_SAMPLE_MS = 5_000;
+/** While no Dash window is on screen: the icon can't be seen, so only the
+ *  warning (a desktop notification then) needs a reading. Focusing a window
+ *  samples at once when the last reading is stale. */
+export const HIDDEN_SAMPLE_MS = 5 * 60_000;
 /** The first sample after the setting turns on or changes. */
 const FIRST_SAMPLE_MS = 5_000;
 const EXEC_TIMEOUT_MS = 5_000;
@@ -37,8 +52,17 @@ const TOP_TASKS = 3;
 /** The key of Dash's main process in the tree walk (task keys are task ids). */
 const DASH_ROOT = Symbol('dash');
 
+/**
+ * What a byte count means, sent with the warning's telemetry so dashboards
+ * split across the switch from RSS: `footprint` (macOS physical footprint,
+ * Activity Monitor's Memory), `rss` (Linux, or macOS when the footprint read
+ * fails), `working_set` (Windows, Electron's own processes only).
+ */
+type MemoryMetric = 'footprint' | 'rss' | 'working_set';
+
 interface Sample {
   at: number;
+  metric: MemoryMetric;
   totalBytes: number;
   pressure: MemoryPressure | null;
   tasks: TaskMemory[];
@@ -57,6 +81,34 @@ async function listProcesses(): Promise<ProcRow[]> {
     console.warn('[SystemHealth] ps failed:', err);
     return [];
   }
+}
+
+let footprintFailed = false;
+
+/** Physical footprint per pid (macOS), or null when it can't be read (no
+ *  Perl, say): the sample then falls back to RSS, and says so once. */
+async function readFootprints(pids: Iterable<number>): Promise<Map<number, number> | null> {
+  try {
+    const { stdout } = await execFileAsync(
+      'perl',
+      ['-e', FOOTPRINT_PERL, ...[...pids].map(String)],
+      {
+        timeout: EXEC_TIMEOUT_MS,
+        maxBuffer: 1024 * 1024,
+      },
+    );
+    const footprints = parseFootprints(String(stdout));
+    return footprints.size > 0 ? footprints : null;
+  } catch (err) {
+    if (!footprintFailed) console.warn('[SystemHealth] footprint read failed, using RSS:', err);
+    footprintFailed = true;
+    return null;
+  }
+}
+
+/** Some Dash window is on screen (not hidden, not minimised). */
+function onScreen(): boolean {
+  return BrowserWindow.getAllWindows().some((w) => w.isVisible() && !w.isMinimized());
 }
 
 /**
@@ -80,11 +132,12 @@ async function readPressure(): Promise<MemoryPressure | null> {
 }
 
 /**
- * Watches how much memory Dash holds: its Electron processes
- * (`app.getAppMetrics()`), every other process under main (terminals,
- * services), and each task session's process tree under Claude Code's
- * supervisor (the session, its subagents, MCP servers and shells). On macOS it
- * also reads the OS's memory pressure.
+ * Watches how much memory Dash holds: its Electron processes, every other
+ * process under main (terminals, services), and each task session's process
+ * tree under Claude Code's supervisor (the session, its subagents, MCP servers
+ * and shells). One `ps` gives the tree. The memory is the physical footprint
+ * on macOS (FOOTPRINT_PERL), RSS on Linux, and Electron's working set on
+ * Windows, which has no `ps`. On macOS it also reads the OS's memory pressure.
  *
  * Two consumers, each a renderer setting (`configure`), and it samples only
  * while one is on:
@@ -92,7 +145,8 @@ async function readPressure(): Promise<MemoryPressure | null> {
  *   one `systemHealth:alert` (memoryAlertState decides when), and a desktop
  *   notification while Dash is in the background;
  * - the sidebar's health icon: a `systemHealth:snapshot` after every sample,
- *   every SAMPLE_MS, or LIVE_SAMPLE_MS while its popover is open (`setLive`).
+ *   every SAMPLE_MS, or LIVE_SAMPLE_MS while its popover is open (`setLive`),
+ *   or HIDDEN_SAMPLE_MS while no window is on screen.
  * Both read the same `healthLevel`.
  */
 class SystemHealthServiceImpl {
@@ -107,6 +161,7 @@ class SystemHealthServiceImpl {
   private sampling = false;
   private last: Sample | null = null;
   private loggedSource = false;
+  private watchingFocus = false;
 
   private get active(): boolean {
     return this.config.alerts || this.config.indicator;
@@ -132,6 +187,20 @@ class SystemHealthServiceImpl {
     }
     this.clearTimer();
     if (this.active && !this.sampling) this.schedule(FIRST_SAMPLE_MS);
+    this.watchFocus();
+  }
+
+  /** A window back on screen takes focus: a reading left stale by the hidden
+   *  cadence (older than SAMPLE_MS) is replaced at once. */
+  private watchFocus(): void {
+    if (this.watchingFocus) return;
+    this.watchingFocus = true;
+    app.on('browser-window-focus', () => {
+      if (!this.active || this.sampling || !this.timer) return;
+      if (this.last && Date.now() - this.last.at < SAMPLE_MS) return;
+      this.clearTimer();
+      this.schedule(0);
+    });
   }
 
   /** The popover is open: sample now, then every LIVE_SAMPLE_MS until it closes. */
@@ -170,10 +239,13 @@ class SystemHealthServiceImpl {
       console.warn('[SystemHealth] sample failed:', err);
     } finally {
       this.sampling = false;
-      if (this.active && !this.timer) {
-        this.schedule(this.live && this.config.indicator ? LIVE_SAMPLE_MS : SAMPLE_MS);
-      }
+      if (this.active && !this.timer) this.schedule(this.nextDelay());
     }
+  }
+
+  private nextDelay(): number {
+    if (!onScreen()) return HIDDEN_SAMPLE_MS;
+    return this.live && this.config.indicator ? LIVE_SAMPLE_MS : SAMPLE_MS;
   }
 
   private checkAlert(sample: Sample): void {
@@ -186,7 +258,7 @@ class SystemHealthServiceImpl {
     });
     this.state = step.state;
     if (step.alert) {
-      this.alert({
+      this.alert(sample.metric, {
         reason: step.alert,
         totalBytes: sample.totalBytes,
         thresholdBytes,
@@ -214,11 +286,8 @@ class SystemHealthServiceImpl {
   }
 
   private async sample(): Promise<Sample> {
+    const startedAt = performance.now();
     const metrics = app.getAppMetrics();
-    const electronPids = new Set(metrics.map((m) => m.pid));
-    // workingSetSize is in KiB.
-    const electronBytes = metrics.reduce((n, m) => n + m.memory.workingSetSize * 1024, 0);
-
     const [rows, pressure] = await Promise.all([listProcesses(), readPressure()]);
 
     const pidByJob = new Map<string, number>();
@@ -233,11 +302,15 @@ class SystemHealthServiceImpl {
       names.set(task.id, task.name);
       roots.push({ key: task.id, pid });
     }
-    // Last, so a session that runs under main still counts as its task.
+    // Last, so a session that runs under main still counts as its task. Then
+    // Electron's own processes, for any outside main's tree (all of them on
+    // Windows, where there is no tree).
     roots.push({ key: DASH_ROOT, pid: process.pid });
+    for (const m of metrics) roots.push({ key: DASH_ROOT, pid: m.pid });
 
-    const bytes = subtreeBytes(rows, roots, electronPids);
-    let totalBytes = electronBytes;
+    const { metric, bytesByPid } = await this.readMemory(rows, roots, metrics);
+    const bytes = subtreeBytes(rows, roots, bytesByPid);
+    let totalBytes = 0;
     const tasks: TaskMemory[] = [];
     for (const [key, b] of bytes) {
       totalBytes += b;
@@ -248,16 +321,40 @@ class SystemHealthServiceImpl {
     if (!this.loggedSource) {
       this.loggedSource = true;
       console.log(
-        `[SystemHealth] sampling every ${SAMPLE_MS / 1000}s: app metrics, ` +
+        `[SystemHealth] sampling every ${SAMPLE_MS / 1000}s: ${metric}, ` +
           `${rows.length ? 'ps tree' : 'no ps'}, pressure ${
             process.platform === 'darwin' ? 'sysctl kern.memorystatus_vm_pressure_level' : 'none'
-          }; now ${(totalBytes / BYTES_PER_GB).toFixed(2)} GB over ${tasks.length} sessions, pressure ${pressure ?? 'n/a'}`,
+          }; now ${(totalBytes / BYTES_PER_GB).toFixed(2)} GB over ${tasks.length} sessions, pressure ${pressure ?? 'n/a'}, in ${Math.round(performance.now() - startedAt)} ms`,
       );
     }
-    return { at: Date.now(), totalBytes, pressure, tasks };
+    return { at: Date.now(), metric, totalBytes, pressure, tasks };
   }
 
-  private alert(alert: MemoryAlert): void {
+  /** Each process's memory: the footprint of Dash's trees on macOS, RSS from
+   *  the same `ps` elsewhere (or when the footprint read fails), Electron's
+   *  working set where there is no `ps`. */
+  private async readMemory(
+    rows: readonly ProcRow[],
+    roots: readonly TreeRoot<unknown>[],
+    metrics: Electron.ProcessMetric[],
+  ): Promise<{ metric: MemoryMetric; bytesByPid: Map<number, number> }> {
+    if (rows.length === 0) {
+      // workingSetSize is in KiB.
+      const bytesByPid = new Map(metrics.map((m) => [m.pid, m.memory.workingSetSize * 1024]));
+      return { metric: 'working_set', bytesByPid };
+    }
+    if (process.platform === 'darwin') {
+      const pids = subtreePids(
+        rows,
+        roots.map((r) => r.pid),
+      );
+      const footprints = await readFootprints(pids);
+      if (footprints) return { metric: 'footprint', bytesByPid: footprintOrRss(rows, footprints) };
+    }
+    return { metric: 'rss', bytesByPid: rssBytes(rows) };
+  }
+
+  private alert(metric: MemoryMetric, alert: MemoryAlert): void {
     const win = BrowserWindow.getAllWindows()[0];
     if (!win || win.isDestroyed()) return;
     const background = !win.isFocused();
@@ -270,6 +367,7 @@ class SystemHealthServiceImpl {
     TelemetryService.capture('memory_warning_shown', {
       reason: alert.reason,
       memory_bucket: memoryBucket(alert.totalBytes),
+      memory_metric: metric,
       live_session_count: countBucket(supervisorService.getSessions().filter((s) => s.pid).length),
     });
   }

@@ -8,7 +8,10 @@
 /** The OS's own verdict on memory (macOS `kern.memorystatus_vm_pressure_level`). */
 export type MemoryPressure = 'normal' | 'warn' | 'critical';
 
-export const MEMORY_WARNING_DEFAULT_GB = 8;
+/** Memory is the physical footprint on macOS (Activity Monitor's Memory),
+ *  which runs ~0.65 of the RSS this was first tuned on (8 GB): 6 keeps the
+ *  warning near where it fired. [provisional, 2026-11-28] */
+export const MEMORY_WARNING_DEFAULT_GB = 6;
 export const MEMORY_WARNING_MIN_GB = 0.5;
 export const MEMORY_WARNING_MAX_GB = 256;
 
