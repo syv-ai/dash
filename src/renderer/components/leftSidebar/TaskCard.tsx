@@ -154,7 +154,11 @@ export function TaskCard({
                   reserve
                   rest={<ContextLevel usage={usage} />}
                   actions={
-                    <SleepTaskButton activityState={activityInfo?.state} onClose={onClose} />
+                    <SleepTaskButton
+                      activityState={activityInfo?.state}
+                      onClose={onClose}
+                      variant="ink"
+                    />
                   }
                 />
               </span>

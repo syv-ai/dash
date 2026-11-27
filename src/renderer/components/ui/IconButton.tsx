@@ -11,8 +11,10 @@ interface IconButtonProps extends Omit<React.ComponentProps<'button'>, 'title'> 
   shortcut?: KeyBinding;
   /** A line under the title in the tooltip (a path, what it acts on). */
   description?: React.ReactNode;
-  /** default and muted: icon at rest, ink on hover; destructive: fail on hover. */
-  variant?: 'default' | 'destructive' | 'muted';
+  /** default and muted: icon at rest, ink on hover; destructive: fail on hover;
+   *  ink: ink at rest too, for an action that shows only on its row's hover
+   *  and should read at once (the task card's sleep button). */
+  variant?: 'default' | 'destructive' | 'muted' | 'ink';
   /** md = a 30px square (`Button size="icon"`), sm = 24px for dense rows. */
   size?: 'sm' | 'md';
   /**
@@ -31,6 +33,7 @@ const variantStyles = {
   default: 'text-icon hover:bg-hover hover:text-ink',
   muted: 'text-icon hover:bg-hover hover:text-ink',
   destructive: 'text-icon hover:bg-state-fail/12 hover:text-state-fail',
+  ink: 'text-ink hover:bg-hover hover:text-ink',
 } as const;
 
 /** Rest state with the hover feedback removed, for `disabled`. */

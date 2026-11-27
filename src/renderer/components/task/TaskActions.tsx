@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'react';
 import { Power, MoreHorizontal } from 'lucide-react';
 import type { ActivityState } from '../../../shared/types';
 import { IconButton } from '../ui/IconButton';
@@ -37,7 +38,11 @@ export function hasLiveSession(state: ActivityState | undefined): boolean {
 export function SleepTaskButton({
   activityState,
   onClose,
-}: Pick<TaskActionsProps, 'activityState' | 'onClose'>) {
+  variant,
+}: Pick<TaskActionsProps, 'activityState' | 'onClose'> & {
+  /** `IconButton`'s; the task card's reads in ink. */
+  variant?: ComponentProps<typeof IconButton>['variant'];
+}) {
   if (!hasLiveSession(activityState)) return null;
   return (
     <IconButton
@@ -47,6 +52,7 @@ export function SleepTaskButton({
       }}
       title="Put to sleep"
       size="sm"
+      variant={variant}
     >
       <Power size={12} strokeWidth={1.8} />
     </IconButton>
