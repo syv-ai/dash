@@ -36,10 +36,12 @@ export function diffJobDirs(
  * Tells its owner when a background session may have changed, from
  * `<claude config dir>/jobs`: a job folder appearing or going, or a job's
  * `state.json` being rewritten. Every watch is non-recursive, so the writes a
- * session makes in its `tmp/` never reach JS (on macOS libuv drops FSEvents
- * from below a non-recursive watch's folder; Linux and Windows never report
- * them). A recursive watch here would, on Linux, also put an inotify watch on
- * every folder of every job's `tmp/`.
+ * session makes deep in its `tmp/` never reach JS: macOS libuv drops FSEvents
+ * from below a non-recursive watch's folder, and Linux reports only direct
+ * children. Windows reports a direct child folder's own change too (the root
+ * watch sees `<job>` on each state.json rewrite, a job watch sees `tmp` when
+ * its entries change); the filters drop those. A recursive watch here would,
+ * on Linux, also put an inotify watch on every folder of every job's `tmp/`.
  */
 export class JobsWatcher {
   private root: fs.FSWatcher | null = null;

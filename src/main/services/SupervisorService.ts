@@ -320,6 +320,8 @@ class SupervisorServiceImpl extends EventEmitter {
 
   private pollInterval(): number {
     if (this.focused) return POLL_FOCUSED_MS;
+    // Wayland can't report minimize and some X11 window managers call a window
+    // on another workspace visible, so there this stays at the blurred rate.
     const onScreen = BrowserWindow.getAllWindows().some((w) => w.isVisible() && !w.isMinimized());
     return onScreen ? POLL_BLURRED_MS : POLL_HIDDEN_MS;
   }
