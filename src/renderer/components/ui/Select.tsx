@@ -64,7 +64,7 @@ export function Select<T extends string>({
           sideOffset={4}
           className={cn(
             menuSurface,
-            'max-h-80 min-w-(--radix-dropdown-menu-trigger-width) overflow-y-auto',
+            'scrollbar-thin-hover max-h-80 min-w-(--radix-dropdown-menu-trigger-width) overflow-y-auto',
             contentClassName,
           )}
         >

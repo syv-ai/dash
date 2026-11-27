@@ -72,7 +72,12 @@ export function Textarea({
   return (
     <textarea
       ref={setRef}
-      className={cn(variants[variant], grows ? 'resize-none' : 'min-h-16 resize-y', className)}
+      className={cn(
+        'scrollbar-thin-hover',
+        variants[variant],
+        grows ? 'resize-none' : 'min-h-16 resize-y',
+        className,
+      )}
       onInput={(e) => {
         if (grows) fitToContent(e.currentTarget, { minRows, maxRows });
         onInput?.(e);

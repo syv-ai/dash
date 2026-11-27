@@ -136,7 +136,7 @@ export function TaskDetails({
   const linked = task.linkedItems ?? [];
 
   return (
-    <div className="scrollbar-gutter-stable min-h-0 flex-1 overflow-y-auto pb-3 animate-fade-in">
+    <div className="scrollbar-thin-hover min-h-0 flex-1 overflow-y-auto pb-3 animate-fade-in">
       <p className="type-caption px-2.5 pt-3">
         Edit task settings <TextLink onClick={onEditSettings}>here</TextLink>
       </p>

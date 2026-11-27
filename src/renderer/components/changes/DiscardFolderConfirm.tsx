@@ -50,7 +50,7 @@ export function DiscardFolderConfirm({
           {folderName}/ · {count} {count === 1 ? 'file' : 'files'}
         </p>
       </div>
-      <div className="flex max-h-40 flex-col overflow-y-auto rounded-md bg-well p-1.5">
+      <div className="scrollbar-thin-hover flex max-h-40 flex-col overflow-y-auto rounded-md bg-well p-1.5">
         {items.map((item) => (
           <div key={item.rel} className="type-body truncate px-1.5 py-0.5" title={item.rel}>
             {item.dir && <span className="text-ink-3">{item.dir}</span>}

@@ -115,7 +115,7 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
           itself governs the section's height (drag to resize, collapse to the
           bar above), matching the terminal drawer. */}
       {!collapsed && (
-        <div className="flex-1 min-h-0 overflow-y-auto" style={{ scrollbarGutter: 'stable' }}>
+        <div className="scrollbar-thin-hover flex-1 min-h-0 overflow-y-auto">
           <PortsPanel
             taskId={taskId}
             ports={state.ports}

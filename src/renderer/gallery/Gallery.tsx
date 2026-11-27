@@ -112,7 +112,7 @@ export function Gallery() {
   }, [theme]);
 
   return (
-    <div className="h-screen overflow-y-auto bg-ground text-ink">
+    <div className="scrollbar-thin-hover h-screen overflow-y-auto bg-ground text-ink">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 p-6">
         <header className="flex items-center gap-4">
           <h1 className="type-title flex-1">Primitives</h1>

@@ -42,7 +42,7 @@ export function CommitRunView({
           {skipped ? <span className="text-muted-foreground">{skipped} skipped</span> : null}
         </div>
       ) : null}
-      <div className="flex-1 overflow-y-auto px-1.5 py-2 flex flex-col gap-0.5">
+      <div className="scrollbar-thin-hover flex-1 overflow-y-auto px-1.5 py-2 flex flex-col gap-0.5">
         {state.hooks.map((h, i) => (
           <HookItem key={`${h.name}-${i}`} hook={h} />
         ))}
@@ -172,7 +172,7 @@ function HookItem({ hook }: { hook: HookRecord }) {
         )}
       </button>
       {open && expandable && (
-        <div className="bg-[hsl(var(--surface-0))] border-t border-border/40 px-3.5 py-2.5 max-h-60 overflow-y-auto text-xs font-mono leading-relaxed whitespace-pre-wrap text-fg-fade-85">
+        <div className="bg-[hsl(var(--surface-0))] border-t border-border/40 px-3.5 py-2.5 max-h-60 scrollbar-thin-hover overflow-y-auto text-xs font-mono leading-relaxed whitespace-pre-wrap text-fg-fade-85">
           {hook.modifiedFiles && (
             <div className="text-[hsl(var(--warn))] mb-1">files were modified by this hook</div>
           )}

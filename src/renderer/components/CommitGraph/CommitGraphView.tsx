@@ -166,7 +166,7 @@ export function CommitGraphView({
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">
       {/* Graph + commit list */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto min-w-0">
+      <div ref={scrollRef} className="scrollbar-thin-hover flex-1 overflow-y-auto min-w-0">
         <div className="flex">
           {/* SVG graph column */}
           <div className="shrink-0 sticky left-0 z-10 bg-card">

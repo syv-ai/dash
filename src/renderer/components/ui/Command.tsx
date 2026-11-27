@@ -49,7 +49,7 @@ export function CommandList({
   return (
     <CommandPrimitive.List
       className={cn(
-        'overflow-y-auto overflow-x-hidden p-1.5',
+        'scrollbar-thin-hover overflow-y-auto overflow-x-hidden p-1.5',
         palette ? 'max-h-[calc(70vh-(--spacing(10)))]' : 'max-h-65',
         className,
       )}

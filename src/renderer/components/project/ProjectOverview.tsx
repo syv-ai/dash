@@ -243,7 +243,7 @@ export function ProjectOverview({
       </div>
 
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto px-14 py-6">
+      <div className="scrollbar-thin-hover flex-1 overflow-y-auto px-14 py-6">
         <div className="w-full">
           {tasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">

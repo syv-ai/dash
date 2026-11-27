@@ -33,7 +33,7 @@ export function CommentsMenu({ taskId, unsent, onNavigate }: Props) {
         side="top"
         align="end"
         sideOffset={8}
-        className="max-h-130 w-115 overflow-y-auto"
+        className="scrollbar-thin-hover max-h-130 w-115 overflow-y-auto"
       >
         <div className="py-2">
           <NotesTray
