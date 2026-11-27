@@ -46,6 +46,7 @@ export function Dialog({
   canClose,
   elevated,
   overflow,
+  anchor,
   children,
 }: {
   size?: DialogSize;
@@ -53,6 +54,8 @@ export function Dialog({
   canClose?: () => boolean | Promise<boolean>;
   elevated?: boolean;
   overflow?: 'hidden' | 'visible';
+  /** `top` for a dialog that grows as you fill it in (see `Modal`). */
+  anchor?: 'center' | 'top';
   children: React.ReactNode;
 }) {
   return (
@@ -61,6 +64,7 @@ export function Dialog({
       canClose={canClose}
       elevated={elevated}
       overflow={overflow}
+      anchor={anchor}
       size={cn('max-h-[86vh] max-w-[94vw]', SIZES[size])}
     >
       {children}

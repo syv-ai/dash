@@ -44,6 +44,10 @@ interface ModalProps {
    *  another already-open modal (e.g. the commit graph opened from the diff
    *  editor's blame card). */
   elevated?: boolean;
+  /** Where the card sits. `center` (default) centres it; `top` pins its top a
+   *  fixed offset down and grows it downward, so a card that grows as you
+   *  type (rows appearing under an input) never moves the input. */
+  anchor?: 'center' | 'top';
   children: React.ReactNode;
 }
 
@@ -58,6 +62,7 @@ export function Modal({
   overflow = 'hidden',
   cardStyle,
   elevated = false,
+  anchor = 'center',
   children,
 }: ModalProps) {
   const [closing, setClosing] = useState(false);
@@ -114,7 +119,9 @@ export function Modal({
       {/* The scrim token dims the app behind; it is dark ink in the light theme. */}
       <div
         className={cn(
-          'fixed inset-0 flex items-center justify-center bg-scrim',
+          'fixed inset-0 flex justify-center bg-scrim',
+          // Top: 10vh down, which with a dialog's 86vh cap still fits the window.
+          anchor === 'top' ? 'items-start pt-[10vh]' : 'items-center',
           elevated ? 'z-[60]' : 'z-50',
           closing ? 'animate-fade-out' : 'animate-fade-in',
         )}

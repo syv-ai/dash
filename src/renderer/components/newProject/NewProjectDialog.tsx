@@ -34,7 +34,9 @@ interface NewProjectDialogProps {
  */
 export function NewProjectDialog({ onClose, onCreated }: NewProjectDialogProps) {
   return (
-    <Dialog size="lg" onClose={onClose}>
+    // Anchored to the top: the options under the input come and go as you
+    // type, and a centred card would move the input with them.
+    <Dialog size="lg" anchor="top" onClose={onClose}>
       <NewProjectBody onCreated={onCreated} />
     </Dialog>
   );
