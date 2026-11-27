@@ -53,6 +53,7 @@ import { toast } from './components/ui/toast';
 import { getBillionToastContent } from './utils/billionToast';
 import { useStatusLine } from './hooks/useStatusLine';
 import { useThresholdAlerts } from './hooks/useThresholdAlerts';
+import { useMemoryWarning } from './hooks/useMemoryWarning';
 import type { Task, WorktreeMigrationProject, WorktreeMigrationResult } from '../shared/types';
 import type { CreateTaskOptions, TaskModalDefaults } from './components/task/TaskModal';
 import { matchesBinding } from './keybindings';
@@ -609,6 +610,7 @@ export function App() {
 
   // Threshold alerts — fires toast notifications when usage exceeds thresholds
   useThresholdAlerts(statusLineData, latestRateLimits, usageThresholds, taskNames);
+  useMemoryWarning();
 
   // Persist usage thresholds
 

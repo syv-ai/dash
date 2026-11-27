@@ -27,6 +27,11 @@ import { WEBGL_HELD_MAX, WEBGL_HELD_MIN } from '../../terminal/WebglLifecycle';
 import { formatCheckedAt, updateHeadline } from '../../utils/updateStatus';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useSettings } from '../../stores/settingsStore';
+import {
+  MEMORY_WARNING_MAX_GB,
+  MEMORY_WARNING_MIN_GB,
+  clampMemoryWarningGb,
+} from '../../../shared/systemHealth';
 import { Button } from '../ui/Button';
 import { Code } from '../ui/Code';
 import { DetailItem, DetailList } from '../ui/DetailList';
@@ -293,24 +298,83 @@ function NotificationsTab() {
   };
 
   return (
-    <FormSection title="When a task finishes">
+    <>
+      <FormSection title="When a task finishes">
+        <SwitchField
+          label="Desktop notification"
+          hint="Names the task. Only while Dash isn't focused."
+          checked={desktop}
+          onCheckedChange={setDesktop}
+        />
+        <SettingRow
+          label="Sound"
+          hint="Plays once when picked, so you can hear it."
+          control={
+            <Select
+              aria-label="Sound"
+              className="w-56"
+              value={sound}
+              onValueChange={pickSound}
+              options={NOTIFICATION_SOUNDS.map((s) => ({ value: s, label: SOUND_LABELS[s] }))}
+            />
+          }
+        />
+      </FormSection>
+      <MemoryWarningSection />
+    </>
+  );
+}
+
+/** The memory warning (SystemHealthService): its switch and its threshold. */
+function MemoryWarningSection() {
+  const enabled = useSettings((s) => s.memoryWarning);
+  const setEnabled = useSettings((s) => s.setMemoryWarning);
+  const gb = useSettings((s) => s.memoryWarningGb);
+  const setGb = useSettings((s) => s.setMemoryWarningGb);
+  // A draft while typing, so "0.5" isn't clamped at its "0"; kept on blur or Enter.
+  const [draft, setDraft] = useState(String(gb));
+  useEffect(() => setDraft(String(gb)), [gb]);
+  const commit = () => {
+    const next = clampMemoryWarningGb(parseFloat(draft));
+    setDraft(String(next));
+    if (next !== gb) setGb(next);
+  };
+  const id = useId();
+
+  return (
+    <FormSection title="When Dash uses a lot of memory">
       <SwitchField
-        label="Desktop notification"
-        hint="Names the task. Only while Dash isn't focused."
-        checked={desktop}
-        onCheckedChange={setDesktop}
+        label="Memory warning"
+        hint={{
+          title: 'Dash and its sessions',
+          body: 'Counts Dash and every task session with its subagents, MCP servers and shells. Warns once when they pass the limit, or when macOS reports memory pressure, and offers to put idle tasks to sleep. A desktop notification while Dash is in the background.',
+        }}
+        checked={enabled}
+        onCheckedChange={setEnabled}
       />
       <SettingRow
-        label="Sound"
-        hint="Plays once when picked, so you can hear it."
+        label="Warn above"
+        htmlFor={id}
+        disabled={!enabled}
         control={
-          <Select
-            aria-label="Sound"
-            className="w-56"
-            value={sound}
-            onValueChange={pickSound}
-            options={NOTIFICATION_SOUNDS.map((s) => ({ value: s, label: SOUND_LABELS[s] }))}
-          />
+          <span className="flex items-center gap-1.5">
+            <Input
+              id={id}
+              type="number"
+              min={MEMORY_WARNING_MIN_GB}
+              max={MEMORY_WARNING_MAX_GB}
+              step={0.5}
+              value={draft}
+              disabled={!enabled}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commit();
+              }}
+              className="w-16 text-right"
+            />
+            <span className="type-caption">GB</span>
+          </span>
         }
       />
     </FormSection>

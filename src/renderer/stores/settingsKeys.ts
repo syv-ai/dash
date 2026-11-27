@@ -13,6 +13,7 @@ import { clampHeldLimit } from '../terminal/WebglLifecycle';
 import { TERMINAL_THEME_IDS } from '../terminal/terminalThemes';
 import type { NotificationSound } from '../sounds';
 import type { UsageThresholds } from '@shared/types';
+import { clampMemoryWarningGb } from '@shared/systemHealth';
 import { parseKeybindings, type KeyBindingMap } from '../keybindings';
 
 /** The slice of settings managed by settingsStore. Grows as fields migrate. */
@@ -62,6 +63,11 @@ export interface SettingsState {
   autoUpdateEnabled: boolean;
   updateNotificationsEnabled: boolean;
   lastSeenReleaseNotesVersion: string | undefined;
+  /** Warn when Dash and its sessions use more memory than `memoryWarningGb`,
+   *  or the OS reports memory pressure (SystemHealthService). */
+  memoryWarning: boolean;
+  /** The memory warning's threshold in GB (clampMemoryWarningGb). */
+  memoryWarningGb: number;
 }
 
 /** One entry per managed setting: the store field, its existing localStorage
@@ -153,6 +159,12 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('autoUpdateEnabled', 'autoUpdateEnabled', boolDefaultTrue()),
   entry('updateNotificationsEnabled', 'updateNotificationsEnabled', boolDefaultTrue()),
   entry('lastSeenReleaseNotesVersion', 'lastSeenReleaseNotesVersion', strOrUndefined()),
+  entry('memoryWarning', 'memoryWarning', boolDefaultTrue()),
+  // parseFloat gives NaN for absent or garbage values; the clamp maps NaN to the default.
+  entry('memoryWarningGb', 'memoryWarningGb', {
+    decode: (raw) => clampMemoryWarningGb(parseFloat(raw ?? '')),
+    encode: (v) => String(v),
+  }),
 ];
 
 /** Initial state = every field decoded from an absent key (its default). */
