@@ -1,7 +1,7 @@
 import React from 'react';
-import { X, GitBranch } from 'lucide-react';
 import { CommitGraphView } from './CommitGraphView';
-import { Modal, useModalClose } from '../ui/Modal';
+import { DialogHeader } from '../ui/Dialog';
+import { Modal } from '../ui/Modal';
 
 export interface TaskBranchInfo {
   id: string;
@@ -52,25 +52,9 @@ function CommitGraphBody({
   onSelectTask,
   focusHash,
 }: CommitGraphBodyProps) {
-  const close = useModalClose();
-
   return (
     <>
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 h-12 border-b border-border/40 shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
-          <GitBranch size={14} className="text-icon shrink-0" strokeWidth={1.8} />
-          <span className="text-base font-medium text-foreground truncate">Commit History</span>
-          <span className="text-xs text-muted-foreground truncate">{projectName}</span>
-        </div>
-
-        <button
-          onClick={close}
-          className="p-1.5 rounded-lg hover:bg-accent text-icon hover:text-foreground transition-all duration-150"
-        >
-          <X size={14} strokeWidth={2} />
-        </button>
-      </div>
+      <DialogHeader title="Commit history" description={projectName} divided />
 
       {/* Content */}
       <CommitGraphView
