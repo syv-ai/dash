@@ -95,21 +95,37 @@ export function useWheelTabSwitch(
   React.useLayoutEffect(() => {
     onStepRef.current = onStep;
   });
+  // The strip can unmount and remount under the same ref (the drawer's tabs
+  // render only while it's open), so re-check the element after every render
+  // and move the listener when it changed, rather than binding once on mount.
+  const bound = React.useRef<{ el: HTMLElement; detach: () => void } | null>(null);
   React.useEffect(() => {
     const el = ref.current;
-    if (!el) return;
-    let state = WHEEL_IDLE;
-    const onWheel = (e: WheelEvent) => {
-      const { dx, dy } = pixels(e, el.clientWidth);
-      if (!isSideways(dx, dy)) return;
-      if (scrollsSideways(el)) return;
-      // Ours: no page or ancestor scrolls sideways under it.
-      e.preventDefault();
-      const next = wheelTabStep(state, { dx, dy, t: e.timeStamp });
-      state = next.state;
-      if (next.step !== 0) onStepRef.current(next.step);
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, [ref]);
+    if (bound.current?.el === el) return;
+    bound.current?.detach();
+    bound.current = el ? { el, detach: listen(el, onStepRef) } : null;
+  });
+  React.useEffect(
+    () => () => {
+      bound.current?.detach();
+      bound.current = null;
+    },
+    [],
+  );
+}
+
+function listen(el: HTMLElement, onStepRef: React.RefObject<(step: -1 | 1) => void>): () => void {
+  let state = WHEEL_IDLE;
+  const onWheel = (e: WheelEvent) => {
+    const { dx, dy } = pixels(e, el.clientWidth);
+    if (!isSideways(dx, dy)) return;
+    if (scrollsSideways(el)) return;
+    // Ours: no page or ancestor scrolls sideways under it.
+    e.preventDefault();
+    const next = wheelTabStep(state, { dx, dy, t: e.timeStamp });
+    state = next.state;
+    if (next.step !== 0) onStepRef.current(next.step);
+  };
+  el.addEventListener('wheel', onWheel, { passive: false });
+  return () => el.removeEventListener('wheel', onWheel);
 }

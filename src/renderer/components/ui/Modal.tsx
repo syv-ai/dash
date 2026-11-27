@@ -86,7 +86,8 @@ export function Modal({
         // onEscapeKeyDown will close just the popover. Same for the diff-
         // editor's comment textarea: it handles Esc to cancel the draft, and
         // for a field whose suggestion list is open (`data-owns-escape`).
-        const target = e.target as HTMLElement | null;
+        // A keydown can target `document` (no element focused), which has no `closest`.
+        const target = e.target instanceof Element ? e.target : null;
         if (target?.closest('[data-radix-popper-content-wrapper]')) {
           return;
         }
