@@ -68,5 +68,5 @@ export function ScaffoldTerminal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
-  return <div ref={hostRef} className="h-[220px] w-full rounded-lg overflow-hidden bg-black/40" />;
+  return <div ref={hostRef} className="h-55 w-full rounded-lg overflow-hidden bg-black/40" />;
 }

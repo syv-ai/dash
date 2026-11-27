@@ -1,5 +1,5 @@
 import React from 'react';
-import { type ConfigureValues } from './types';
+import { type ConfigureValues } from './configureValues';
 import { PermissionModePicker } from '../task/PermissionModePicker';
 import { Expandable } from '../ui/Expandable';
 import { Field, FormSection } from '../ui/Field';
@@ -15,8 +15,8 @@ interface ConfigureFormProps {
   showName?: boolean;
 }
 
-/** A project's `.dash/config.json`: its name and the new-task defaults. Sections for a `DialogBody` (the new-project wizard,
- *  project settings). */
+/** A project's `.dash/config.json`: its name and the new-task defaults, as
+ *  sections for Project settings' `DialogBody`. */
 export function ConfigureForm({ value, onChange, showName = true }: ConfigureFormProps) {
   const set = <K extends keyof ConfigureValues>(key: K, v: ConfigureValues[K]) =>
     onChange({ ...value, [key]: v });

@@ -7,8 +7,8 @@ import { Button } from '../ui/Button';
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from '../ui/Dialog';
 import { FormSection } from '../ui/Field';
 import { useModalClose } from '../ui/Modal';
-import { ConfigureForm } from '../newProject/ConfigureForm';
-import { configToValues, valuesToConfig, type ConfigureValues } from '../newProject/types';
+import { ConfigureForm } from './ConfigureForm';
+import { configToValues, valuesToConfig, type ConfigureValues } from './configureValues';
 
 interface ProjectSettingsModalProps {
   project: Project;

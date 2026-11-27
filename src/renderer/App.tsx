@@ -30,7 +30,7 @@ import { whenFramesSettle } from './lib/framesSettled';
 import { cn } from './lib/cn';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
 import { TaskModal } from './components/task/TaskModal';
-import { NewProjectWizard } from './components/newProject/NewProjectWizard';
+import { NewProjectDialog } from './components/newProject/NewProjectDialog';
 import { DeleteTaskModal } from './components/task/DeleteTaskModal';
 import { DeleteProjectModal } from './components/project/DeleteProjectModal';
 import { TaskFinder } from './components/leftSidebar/TaskFinder';
@@ -1697,7 +1697,7 @@ export function App() {
       </ResizablePanelGroup>
 
       {showAddProjectModal && (
-        <NewProjectWizard
+        <NewProjectDialog
           onClose={() => setShowAddProjectModal(false)}
           onCreated={(projectId) => void finishProjectCreation(projectId)}
         />

@@ -1,7 +1,7 @@
 import type { PermissionMode } from '../../../shared/types';
 import type { WorkspaceConfig } from '../../../main/services/WorkspaceConfigService';
 
-/** The editable shape of the Configure step / Project Settings form. */
+/** The editable shape of the Project Settings form. */
 export interface ConfigureValues {
   name: string;
   baseRef: string;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { configToValues, valuesToConfig } from '../types';
+import { configToValues, valuesToConfig } from '../configureValues';
 
 const fallbacks = { name: 'p', baseRef: 'origin/main' };
 

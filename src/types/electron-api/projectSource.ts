@@ -1,4 +1,5 @@
 import type { IpcResponse } from '../../shared/types';
+import type { PathFacts } from '../../shared/pathFacts';
 import type { WorkspaceConfig } from '../../main/services/WorkspaceConfigService';
 
 /** Creating a project's source tree (clone / empty / agent-scaffold) and reading
@@ -16,6 +17,9 @@ export interface ProjectSourceApi {
   }) => Promise<IpcResponse<void>>;
 
   // Project sources (clone / empty / scaffold)
+  /** What a typed path is on disk (`~` expanded), and the project it belongs to, if any. */
+  projectInspectPath: (input: string) => Promise<IpcResponse<PathFacts>>;
+  /** `parentDir` may start with `~`. */
   projectClone: (args: {
     url: string;
     parentDir: string;

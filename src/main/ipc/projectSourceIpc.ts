@@ -7,6 +7,9 @@ import { join } from 'path';
 import { randomBytes } from 'crypto';
 import { parseArgs, parseArgsSafe, errorResponse } from './validate';
 import { buildSourceCommand, getCloneMethod } from '../services/cloneMethods';
+import { broadcast } from '../utils/broadcast';
+import { DatabaseService } from '../services/DatabaseService';
+import { expandUserPath, inspectPath } from '../services/projectSourcePaths';
 import {
   startScaffold,
   writeScaffold,
@@ -22,6 +25,15 @@ function deriveName(url: string): string {
   return urlPath.split('/').pop() || 'project';
 }
 
+/** git's own `fatal:`/`error:` lines, not the whole command line Node prefixes. */
+function gitFailure(e: Error & { stderr?: string }): string {
+  const lines = (e.stderr ?? '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => /^(fatal|error):/.test(l));
+  return lines.length ? lines.join(' ') : e.message;
+}
+
 /** Pick a non-colliding folder name inside parentDir. */
 function uniqueName(parentDir: string, base: string): string {
   if (!existsSync(join(parentDir, base))) return base;
@@ -29,20 +41,32 @@ function uniqueName(parentDir: string, base: string): string {
 }
 
 export function registerProjectSourceIpc(): void {
+  // What a path typed into the New Project dialog is: a repo, a folder, a folder
+  // to create, or part of a project already.
+  ipcMain.handle('project:inspectPath', (_event, input: string) => {
+    try {
+      parseArgs('project:inspectPath', z.string().min(1).max(4096), input);
+      return { success: true, data: inspectPath(input, DatabaseService.getProjects()) };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
   // Non-interactive git clone into a chosen parent dir.
   ipcMain.handle('project:clone', async (_event, args: { url: string; parentDir: string }) => {
     try {
       parseArgs('project:clone', z.looseObject({ url: z.string(), parentDir: z.string() }), args);
-      if (!existsSync(args.parentDir)) mkdirSync(args.parentDir, { recursive: true });
-      const name = uniqueName(args.parentDir, deriveName(args.url));
-      const { command } = buildSourceCommand('git', {
-        url: args.url,
-        parentDir: args.parentDir,
-        name,
-      });
+      const parentDir = expandUserPath(args.parentDir);
+      if (!existsSync(parentDir)) mkdirSync(parentDir, { recursive: true });
+      const name = uniqueName(parentDir, deriveName(args.url));
+      const { command } = buildSourceCommand('git', { url: args.url, parentDir, name });
       const [, ...rest] = command; // command[0] === 'git'
-      await execFileAsync('git', rest, { timeout: 120000, maxBuffer: 10 * 1024 * 1024 });
-      return { success: true, data: { path: join(args.parentDir, name), name } };
+      await execFileAsync('git', rest, { timeout: 120000, maxBuffer: 10 * 1024 * 1024 }).catch(
+        (e: Error & { stderr?: string }) => {
+          throw new Error(gitFailure(e));
+        },
+      );
+      return { success: true, data: { path: join(parentDir, name), name } };
     } catch (error) {
       return errorResponse(error);
     }
@@ -58,9 +82,10 @@ export function registerProjectSourceIpc(): void {
           z.looseObject({ parentDir: z.string(), name: z.string(), initGit: z.boolean() }),
           args,
         );
-        if (!existsSync(args.parentDir)) mkdirSync(args.parentDir, { recursive: true });
-        const name = uniqueName(args.parentDir, args.name.trim() || 'project');
-        const dest = join(args.parentDir, name);
+        const parentDir = expandUserPath(args.parentDir);
+        if (!existsSync(parentDir)) mkdirSync(parentDir, { recursive: true });
+        const name = uniqueName(parentDir, args.name.trim() || 'project');
+        const dest = join(parentDir, name);
         mkdirSync(dest, { recursive: true });
         if (args.initGit) {
           await execFileAsync('git', ['init'], { cwd: dest, timeout: 30000 });
@@ -100,13 +125,16 @@ export function registerProjectSourceIpc(): void {
     ) => {
       const method = getCloneMethod(args.methodId);
       if (!method || !method.interactive) return;
-      if (!existsSync(args.parentDir)) mkdirSync(args.parentDir, { recursive: true });
-      const name = uniqueName(args.parentDir, deriveName(args.url));
-      const built = buildSourceCommand(args.methodId, {
-        url: args.url,
-        parentDir: args.parentDir,
-        name,
-      });
+      let parentDir: string;
+      try {
+        parentDir = expandUserPath(args.parentDir);
+      } catch {
+        broadcast('scaffold:exit', { sessionId: args.sessionId, exitCode: 1, resultPath: null });
+        return;
+      }
+      if (!existsSync(parentDir)) mkdirSync(parentDir, { recursive: true });
+      const name = uniqueName(parentDir, deriveName(args.url));
+      const built = buildSourceCommand(args.methodId, { url: args.url, parentDir, name });
       void startScaffold({
         sessionId: args.sessionId,
         command: built.command,

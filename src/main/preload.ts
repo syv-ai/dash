@@ -330,6 +330,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('slashCommands:list', args),
 
   // Project sources (clone / empty / scaffold)
+  projectInspectPath: (input: string) => ipcRenderer.invoke('project:inspectPath', input),
   projectClone: (args: { url: string; parentDir: string }) =>
     ipcRenderer.invoke('project:clone', args),
   projectCreateEmpty: (args: { parentDir: string; name: string; initGit: boolean }) =>
