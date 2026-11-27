@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { cn } from '../../lib/cn';
+import { MOTION_MS, reducedMotion } from '../../lib/motion';
 
 // Lets nested close buttons (Settings's sidebar X, Skills's header X) trigger the
 // fade-out + scale-out animation instead of calling the parent's onClose directly,
@@ -51,6 +52,11 @@ interface ModalProps {
   children: React.ReactNode;
 }
 
+// The exit runs on `--motion-calm` (`animate-fade-out`/`animate-scale-out`);
+// past it plus a margin the modal closes even if no `animationend` arrives (a
+// window that wasn't painting, an animation cut short).
+const EXIT_FALLBACK_MS = MOTION_MS.calm + 200;
+
 // Topmost modal owns Esc. When a modal opens inside another modal, the inner
 // pushes onto this stack so the outer's keydown handler bows out for Esc.
 const modalCloseStack: Array<() => void> = [];
@@ -66,10 +72,31 @@ export function Modal({
   children,
 }: ModalProps) {
   const [closing, setClosing] = useState(false);
+  // The latest onClose, called once however the exit ends (animation, the
+  // fallback timer, or at once under reduced motion).
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const closed = useRef(false);
+  const finishClose = useCallback(() => {
+    if (closed.current) return;
+    closed.current = true;
+    onCloseRef.current();
+  }, []);
+  const startClose = useCallback(() => {
+    // Reduced motion has no exit to wait for: a 0s animation's end event isn't
+    // guaranteed, and waiting on it once left an invisible backdrop over the app.
+    if (reducedMotion()) finishClose();
+    else setClosing(true);
+  }, [finishClose]);
   const requestClose = useCallback(() => {
-    if (!canClose) return setClosing(true);
-    void Promise.resolve(canClose()).then((ok) => ok && setClosing(true));
-  }, [canClose]);
+    if (!canClose) return startClose();
+    void Promise.resolve(canClose()).then((ok) => ok && startClose());
+  }, [canClose, startClose]);
+  useEffect(() => {
+    if (!closing) return;
+    const timer = setTimeout(finishClose, EXIT_FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, [closing, finishClose]);
   // Backdrop click should ONLY close when both mousedown and mouseup land on
   // the backdrop itself. Without this, a drag that starts on a card child
   // (e.g. a react-resizable-panels handle) and releases outside the card
@@ -134,8 +161,9 @@ export function Modal({
           }
           mouseDownOnBackdrop.current = false;
         }}
-        onAnimationEnd={() => {
-          if (closing) onClose();
+        onAnimationEnd={(e) => {
+          // Only the backdrop's own fade ends the exit, not a child's animation.
+          if (closing && e.target === e.currentTarget) finishClose();
         }}
       >
         {/* no-drag: Electron applies the titlebar's drag region regardless of
