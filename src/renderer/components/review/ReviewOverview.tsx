@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Users } from 'lucide-react';
 import type { PrCheck, PrIssue, PrReview, PrReviewer } from '../../../shared/types';
 import { branchUrl, githubProfileUrl } from '../../../shared/urls';
 import { DetailSection } from '../ui/DetailList';
@@ -8,6 +8,7 @@ import { ListRow } from '../ui/ListRow';
 import { Markdown } from '../ui/Markdown';
 import { TextLink } from '../ui/TextLink';
 import { CheckStateIcon } from '../ui/CheckStateIcon';
+import { Tooltip } from '../ui/Tooltip';
 import {
   CHECK_LABELS,
   diffTotals,
@@ -31,8 +32,10 @@ export function Person({ name, url }: { name: string; url: string | null }) {
   );
 }
 
-/** "Approved by A, B" / "Changes requested by C" / "Review requested from D",
- *  one fact per group (Overview's About, the PRs view's drawers). */
+/** "Approved by A, B" / "Changes requested by C" / "Review requested from D"
+ *  / "Declined to review: E", one fact per group (Overview's About, the PRs
+ *  view's). A required reviewer reads "(required)" after their name, a
+ *  group or team leads with a people icon: quiet marks, in the text's ink. */
 export function Reviewers({ reviewers }: { reviewers: PrReviewer[] }) {
   return reviewerGroups(reviewers).map((g) => (
     <li key={g.lead}>
@@ -40,11 +43,34 @@ export function Reviewers({ reviewers }: { reviewers: PrReviewer[] }) {
       {g.reviewers.map((r, i) => (
         <Fragment key={r.name}>
           {i > 0 && ', '}
-          <Person name={r.name} url={r.url} />
+          <Reviewer reviewer={r} />
         </Fragment>
       ))}
     </li>
   ));
+}
+
+function Reviewer({ reviewer: r }: { reviewer: PrReviewer }) {
+  const person = <Person name={r.name} url={r.url} />;
+  return (
+    <>
+      {r.group ? (
+        <span className="inline-flex items-center gap-1 align-top">
+          <Tooltip content="A group: anyone in it can review">
+            <Users size={14} strokeWidth={1.8} className="shrink-0 text-icon" aria-label="Group" />
+          </Tooltip>
+          {person}
+        </span>
+      ) : (
+        person
+      )}
+      {r.required && (
+        <Tooltip content="Their review is required to merge">
+          <span className="text-ink-3"> (required)</span>
+        </Tooltip>
+      )}
+    </>
+  );
 }
 
 /** "Issues #12 It breaks, #14 …": the issues the PR closes (GitHub) or its

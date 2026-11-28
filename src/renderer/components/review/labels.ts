@@ -65,16 +65,24 @@ const REVIEWER_LEADS: Record<PrReviewer['state'], string> = {
 /** The order the groups read in: the verdicts, then comments, then requests. */
 const REVIEWER_ORDER = Object.keys(REVIEWER_LEADS) as PrReviewer['state'][];
 
+/** Those who declined to review (ADO), whatever their vote: a group of their
+ *  own, read last, after the requests. */
+const DECLINED_LEAD = 'Declined to review:';
+
 /** The PR's reviewers grouped by where they stand, each group led by its
- *  words ("Approved by") and keeping the forge's order of people; groups
- *  without anyone are left out. */
+ *  words ("Approved by") and keeping the forge's order of people; those who
+ *  declined last, apart; groups without anyone are left out. */
 export function reviewerGroups(
   reviewers: readonly PrReviewer[],
 ): { lead: string; reviewers: PrReviewer[] }[] {
-  return REVIEWER_ORDER.map((state) => ({
-    lead: REVIEWER_LEADS[state],
-    reviewers: reviewers.filter((r) => r.state === state),
-  })).filter((g) => g.reviewers.length > 0);
+  const asked = reviewers.filter((r) => !r.declined);
+  return [
+    ...REVIEWER_ORDER.map((state) => ({
+      lead: REVIEWER_LEADS[state],
+      reviewers: asked.filter((r) => r.state === state),
+    })),
+    { lead: DECLINED_LEAD, reviewers: reviewers.filter((r) => r.declined) },
+  ].filter((g) => g.reviewers.length > 0);
 }
 
 export const CHECK_LABELS: Record<PrCheck['state'], string> = {

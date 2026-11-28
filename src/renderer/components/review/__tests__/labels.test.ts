@@ -37,6 +37,18 @@ describe('reviewerGroups', () => {
     ]);
   });
 
+  it('puts those who declined in a group of their own, last, whatever their vote', () => {
+    const groups = reviewerGroups([
+      { ...r('ann', 'pending'), declined: true },
+      r('bo', 'pending'),
+      { ...r('cy', 'approved'), declined: true, required: true },
+    ]);
+    expect(groups.map((g) => [g.lead, g.reviewers.map((x) => x.name)])).toEqual([
+      ['Review requested from', ['bo']],
+      ['Declined to review:', ['ann', 'cy']],
+    ]);
+  });
+
   it('says nothing without reviewers', () => {
     expect(reviewerGroups([])).toEqual([]);
   });
