@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PrReview, RelevantPr } from '../../../../shared/types';
+import type { PrDetails, PrReview, RelevantPr } from '../../../../shared/types';
 import {
   DETAILS_FRESH_MS,
   needsDetails,
@@ -151,8 +151,20 @@ describe('prHead', () => {
     expect(prHead(pr, null, null).authorUrl).toBeNull();
   });
 
-  it('reads the fetched review once there is one', () => {
-    const fetched = { state: 'merged', commits: 4 } as PrReview;
-    expect(prHead(listed(5), fetched, remote)).toBe(fetched);
+  it('reads the fetched review once there is one, its commit count where git counted it', () => {
+    const fetched = {
+      provider: 'github',
+      number: 5,
+      title: 'Five',
+      url: 'u',
+      state: 'merged',
+      author: 'bo',
+      authorUrl: null,
+      baseRef: 'main',
+      headRef: 'feat/x',
+    } as PrDetails;
+    const head = prHead(listed(5), { ...fetched, commits: 4 }, remote);
+    expect(head).toMatchObject({ state: 'merged', title: 'Five', commits: 4 });
+    expect(prHead(listed(5), fetched, remote).commits).toBeNull();
   });
 });

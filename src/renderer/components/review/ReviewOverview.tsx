@@ -20,6 +20,7 @@ import {
 import { ChecksRollupIcon } from './ChecksRollupIcon';
 import { checksRollup, checksSummary } from './outline';
 import { useSectionOpen } from '../../lib/useSectionOpen';
+import type { PrCardReview } from './prList';
 import { Branch } from './ReviewHeader';
 
 /** A person, linked to their page on the forge when it has one. */
@@ -143,8 +144,10 @@ export function ReviewOverview({
  * About's facts, a bulleted list (review mode's Overview, the PRs view's
  * PRs): `lead` first, then how far the PR is behind its base, when it was
  * opened and last moved, its files and lines changed (the count a link to
- * Files, given `onShowFiles`), threads (the count a link to Threads, given
- * `onShowThreads`), reviewers, assignees and linked issues, then `tail`.
+ * Files, given `onShowFiles`; only where git listed them), threads (the count
+ * a link to Threads, given `onShowThreads`), reviewers, assignees and linked
+ * issues, then `tail`. A review read from the forge alone (the project page)
+ * has no files and no distance behind base, so says neither.
  */
 export function PrAbout({
   review,
@@ -155,7 +158,7 @@ export function PrAbout({
   lead,
   tail,
 }: {
-  review: PrReview;
+  review: PrCardReview;
   remote: string | null;
   /** Who "Assigned to" names; the PR's assignees unless given. */
   assignees?: string[];
@@ -166,7 +169,7 @@ export function PrAbout({
   tail?: ReactNode;
 }) {
   const resolved = threadsResolved(review.threads);
-  const totals = diffTotals(review.files);
+  const totals = review.files && diffTotals(review.files);
   const created = prDateTime(review.createdAt);
   const active = prDateTime(review.lastActivityAt);
   return (
@@ -183,13 +186,15 @@ export function PrAbout({
         )}
         {created && <li className="tabular-nums">Created {created}</li>}
         {active && <li className="tabular-nums">Last activity {active}</li>}
-        <li className="tabular-nums">
-          <CountLink title="Show them in Files" onClick={onShowFiles}>
-            {plural(totals.files, 'file')} changed
-          </CountLink>
-          {(totals.additions > 0 || totals.deletions > 0) && ', '}
-          <LineStats add={totals.additions} del={totals.deletions} />
-        </li>
+        {totals && (
+          <li className="tabular-nums">
+            <CountLink title="Show them in Files" onClick={onShowFiles}>
+              {plural(totals.files, 'file')} changed
+            </CountLink>
+            {(totals.additions > 0 || totals.deletions > 0) && ', '}
+            <LineStats add={totals.additions} del={totals.deletions} />
+          </li>
+        )}
         {resolved && (
           <li className="tabular-nums">
             <CountLink title="Show them in Threads" onClick={onShowThreads}>

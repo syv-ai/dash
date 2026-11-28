@@ -1,4 +1,10 @@
-import type { PrReview, RelevantPr, RelevantPrs } from '../../../shared/types';
+import type {
+  PrDetails,
+  PrGitField,
+  PrReview,
+  RelevantPr,
+  RelevantPrs,
+} from '../../../shared/types';
 import { githubProfileUrl } from '../../../shared/urls';
 import { shownPrState } from '../ui/prStatusColors';
 import { OWN_REVIEW_LABELS } from './finishReview';
@@ -12,20 +18,41 @@ export function taskPrList(relevant: RelevantPrs | null): RelevantPr[] {
   return relevant ? [...relevant.from, ...relevant.into] : [];
 }
 
-/** What a PR's head (`ReviewHeader`) says of it: a review has it all; a
- *  listed PR not yet fetched has no commit count. */
+/**
+ * What a PR card (`PrCard`) draws: the PR as its forge tells it, with the
+ * parts only git can tell (its files, commits, merge-base and distance behind
+ * base) where it was read through a checkout. The task's PRs view loads the
+ * full review (`PrReview` is one); the project page reads its forge alone
+ * (`PrDetails`), as it must never fetch into the project's checkout.
+ */
+export type PrCardReview = PrDetails & Partial<Pick<PrReview, PrGitField>>;
+
+/** What a PR's head (`ReviewHeader`) says of it; the commit count only where
+ *  git counted it. */
 export type PrHead = Pick<
   PrReview,
   'provider' | 'number' | 'title' | 'url' | 'state' | 'author' | 'authorUrl' | 'baseRef' | 'headRef'
 > & { commits: number | null };
 
 /**
- * A listed PR's head: its fetched review's once there is one, else the
- * listing's (a draft says draft; the author linked where the forge has
- * profile pages, by `remote`).
+ * A listed PR's head: its fetched review's once there is one (with no commit
+ * count where it was read without git), else the listing's (a draft says
+ * draft; the author linked where the forge has profile pages, by `remote`).
  */
-export function prHead(pr: RelevantPr, review: PrReview | null, remote: string | null): PrHead {
-  if (review) return review;
+export function prHead(pr: RelevantPr, review: PrCardReview | null, remote: string | null): PrHead {
+  if (review)
+    return {
+      provider: review.provider,
+      number: review.number,
+      title: review.title,
+      url: review.url,
+      state: review.state,
+      author: review.author,
+      authorUrl: review.authorUrl,
+      commits: review.commits ?? null,
+      baseRef: review.baseRef,
+      headRef: review.headRef,
+    };
   return {
     provider: pr.provider,
     number: pr.number,
