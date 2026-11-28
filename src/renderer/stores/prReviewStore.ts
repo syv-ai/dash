@@ -145,7 +145,7 @@ interface PrReviewState {
   replyGeneral: (
     projectId: string,
     cwd: string,
-    review: Pick<PrReview, 'provider' | 'number'>,
+    review: Pick<PrReview, 'provider' | 'number' | 'capabilities'>,
     to: PrReviewComment,
     text: string,
   ) => Promise<PrWriteResult>;
@@ -435,7 +435,7 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
         id: `pending:${crypto.randomUUID()}`,
         author: 'You',
         authorUrl: null,
-        body: generalReplyBody(review.provider, to, text),
+        body: generalReplyBody(review.capabilities.generalReply, to, text),
         createdAt: new Date().toISOString(),
         url: '',
         reactions: [],

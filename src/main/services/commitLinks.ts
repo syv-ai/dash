@@ -1,7 +1,7 @@
 import { forgeCommitUrl, parseForgeRepo } from '@shared/urls';
 import type { CommitLinks } from '@shared/types';
 import { GitService } from './GitService';
-import { GithubService } from './GithubService';
+import { forgeForRemote } from './prReview/resolve';
 
 const NONE: CommitLinks = { commitUrl: null, authorUrl: null };
 
@@ -13,7 +13,7 @@ const cache = new Map<string, Promise<CommitLinks>>();
  * Where a commit lives on its forge: its page, only once a remote branch
  * holds it, and its author's profile where the forge knows it (GitHub, which
  * matched the commit's email to a user; else none — never guessed from the
- * email).
+ * email). The forge says which (`ForgeProvider.commitAuthorUrl`).
  */
 export function commitLinks(cwd: string, sha: string): Promise<CommitLinks> {
   const key = `${cwd}\0${sha}`;
@@ -29,9 +29,10 @@ export function commitLinks(cwd: string, sha: string): Promise<CommitLinks> {
 }
 
 async function resolve(cwd: string, sha: string): Promise<CommitLinks> {
-  const repo = parseForgeRepo(await GitService.getOriginUrl(cwd));
+  const remote = await GitService.getOriginUrl(cwd);
+  const repo = parseForgeRepo(remote);
   if (!repo || !(await GitService.isOnRemote(cwd, sha))) return NONE;
-  const authorUrl =
-    repo.kind === 'github' ? await GithubService.commitAuthorUrl(cwd, sha).catch(() => null) : null;
+  const forge = forgeForRemote(remote);
+  const authorUrl = forge ? await forge.commitAuthorUrl(cwd, sha).catch(() => null) : null;
   return { commitUrl: forgeCommitUrl(repo, sha), authorUrl };
 }

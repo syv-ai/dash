@@ -3,10 +3,7 @@ import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
 import { AzureDevOpsService } from '../services/AzureDevOpsService';
 import { ConnectionConfigService } from '../services/ConnectionConfigService';
-import { worktreeService } from '../services/WorktreeService';
-import { GitService } from '../services/GitService';
 import type { AzureDevOpsConfig } from '@shared/types';
-import { parseAdoRemote } from '@shared/urls';
 
 const adoConfigSchema = z.looseObject({
   organizationUrl: z.string(),
@@ -114,80 +111,6 @@ export function registerAzureDevOpsIpc(): void {
       if (!config) return { success: false, error: 'Azure DevOps not configured' };
       const item = await AzureDevOpsService.getWorkItem(config, args.id);
       return { success: true, data: item };
-    } catch (err) {
-      return errorResponse(err);
-    }
-  });
-
-  ipcMain.handle(
-    'ado:get-prs-for-checkout',
-    async (
-      _event,
-      args: { cwd: string; defaultBranch: string; gitRemote: string; projectId?: string },
-    ) => {
-      try {
-        parseArgs(
-          'ado:get-prs-for-checkout',
-          z.looseObject({
-            cwd: z.string(),
-            defaultBranch: z.string(),
-            gitRemote: z.string(),
-            projectId: z.string().optional(),
-          }),
-          args,
-        );
-        const config = ConnectionConfigService.getAdoConfig(args.projectId);
-        if (!config) return { success: false, error: 'Azure DevOps not configured' };
-        const parsed = parseAdoRemote(args.gitRemote);
-        if (!parsed?.repository)
-          return { success: false, error: 'Could not determine repository from remote' };
-        const prs = await AzureDevOpsService.getPullRequestsForCheckout(
-          config,
-          parsed.repository,
-          args.cwd,
-          args.defaultBranch,
-        );
-        return { success: true, data: prs };
-      } catch (err) {
-        return errorResponse(err);
-      }
-    },
-  );
-
-  ipcMain.handle(
-    'ado:list-prs',
-    async (_event, args: { gitRemote: string; projectId?: string }) => {
-      try {
-        parseArgs(
-          'ado:list-prs',
-          z.looseObject({ gitRemote: z.string(), projectId: z.string().optional() }),
-          args,
-        );
-        const config = ConnectionConfigService.getAdoConfig(args.projectId);
-        if (!config) return { success: false, error: 'Azure DevOps not configured' };
-        const parsed = parseAdoRemote(args.gitRemote);
-        if (!parsed?.repository)
-          return { success: false, error: 'Could not determine repository from remote' };
-        const prs = await AzureDevOpsService.listPullRequests(config, parsed.repository);
-        return { success: true, data: prs };
-      } catch (err) {
-        return errorResponse(err);
-      }
-    },
-  );
-
-  ipcMain.handle('ado:prepare-pr-branch', async (_event, args: { cwd: string; branch: string }) => {
-    try {
-      parseArgs(
-        'ado:prepare-pr-branch',
-        z.looseObject({ cwd: z.string(), branch: z.string() }),
-        args,
-      );
-      const branch = await worktreeService.fetchRemoteBranch(args.cwd, args.branch);
-      // The head may already be checked out (a prior task on this PR). The modal
-      // blocks a worktree-existing checkout on it, same as any branch.
-      const checkedOut = (await GitService.getCheckedOutBranches(args.cwd)).has(branch);
-      return { success: true, data: { branch, checkedOut } };
     } catch (err) {
       return errorResponse(err);
     }

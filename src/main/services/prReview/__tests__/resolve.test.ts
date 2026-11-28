@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { AzureDevOpsConfig, Project } from '../../../../shared/types';
-import { prContextFor, type PrContextDeps } from '../resolve';
+import { prContextFor, UnsupportedForgeError, type PrContextDeps } from '../resolve';
 
 const project = (gitRemote: string | null): Project => ({
   id: 'p1',
@@ -25,11 +25,16 @@ const deps = (remote: string | null, config: AzureDevOpsConfig | null = null): P
 });
 
 describe('prContextFor', () => {
-  it('uses GitHub for a GitHub remote, or no remote', () => {
-    for (const remote of ['git@github.com:o/r.git', null]) {
-      const r = prContextFor('p1', '/wt', deps(remote));
-      expect(r.provider).toBe('github');
-      expect(r.ctx).toEqual({ cwd: '/wt', projectId: 'p1', remote });
+  it('uses GitHub for a GitHub remote', () => {
+    const remote = 'git@github.com:o/r.git';
+    const r = prContextFor('p1', '/wt', deps(remote));
+    expect(r.provider).toBe('github');
+    expect(r.ctx).toEqual({ cwd: '/wt', projectId: 'p1', remote });
+  });
+
+  it('refuses a project without a remote, or on a forge without a provider', () => {
+    for (const remote of [null, 'git@gitlab.com:o/r.git']) {
+      expect(() => prContextFor('p1', '/wt', deps(remote))).toThrow(UnsupportedForgeError);
     }
   });
 

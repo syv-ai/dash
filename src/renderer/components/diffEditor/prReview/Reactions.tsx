@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { SmilePlus, ThumbsUp } from 'lucide-react';
-import { REACTIONS, reactionChoices } from '../../../../shared/prReactions';
-import type { PrProvider, PrReactionContent, PrReviewComment } from '../../../../shared/types';
+import { REACTIONS } from '../../../../shared/prReactions';
+import type { PrReactionContent, PrReviewComment } from '../../../../shared/types';
 import { Button } from '../../ui/Button';
 import { IconButton } from '../../ui/IconButton';
 import { Popover, PopoverContent, PopoverTrigger } from '../../ui/Popover';
@@ -44,14 +44,14 @@ export function ReactionChips({
  */
 export function AddReaction({
   comment,
-  provider,
+  choices,
   onReact,
 }: {
   comment: PrReviewComment;
-  provider: PrProvider;
+  /** The forge's reactions (`ForgeCapabilities.reactions`). */
+  choices: readonly PrReactionContent[];
   onReact: (content: PrReactionContent, on: boolean) => void;
 }) {
-  const choices = reactionChoices(provider);
   const mine = (c: PrReactionContent) =>
     comment.reactions.some((r) => r.content === c && r.viewerReacted);
   if (choices.length > 1)

@@ -395,6 +395,7 @@ function fakeDeps(failOnCall?: number) {
     filesAtCommit: async () => filesAtHead,
     showFile: async () => 'one\ntwo\nthree four\n',
     checks: async () => checks,
+    fetchBranch: async () => {},
   };
   return { deps, calls };
 }

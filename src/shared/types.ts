@@ -867,9 +867,24 @@ export interface PrIssue {
   url: string;
 }
 
+/** What a forge offers beyond the shared model, so a caller asks the
+ *  forge's facts instead of naming the forge. The same for every PR on it. */
+export interface ForgeCapabilities {
+  /** The reactions a comment takes, in the forge's order: GitHub's eight, ADO's like. */
+  reactions: readonly PrReactionContent[];
+  /** How a reply to a general comment posts: `quote` where the conversation
+   *  isn't threaded (GitHub: a new comment quoting it), `thread` where each
+   *  general comment is a thread (ADO). */
+  generalReply: 'quote' | 'thread';
+  /** What a task links to: GitHub issues or ADO work items. */
+  linkedItems: 'issues' | 'workItems';
+}
+
 /** A PR's review: all its threads and general comments, with the commits its diff spans. */
 export interface PrReview {
   provider: PrProvider;
+  /** What its forge offers (see ForgeCapabilities). */
+  capabilities: ForgeCapabilities;
   number: number;
   title: string;
   /** The PR's description, in Markdown. */

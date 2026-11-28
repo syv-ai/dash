@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { GITHUB_REACTIONS, reactionChoices, toggleReaction } from '../prReactions';
+import { GITHUB_REACTIONS, toggleReaction } from '../prReactions';
+import { FORGE_CAPABILITIES } from '../forgeCapabilities';
 import type { PrReaction } from '../types';
 
 const r = (content: PrReaction['content'], count: number, viewerReacted = false): PrReaction => ({
@@ -8,11 +9,11 @@ const r = (content: PrReaction['content'], count: number, viewerReacted = false)
   viewerReacted,
 });
 
-describe('reactionChoices', () => {
+describe('reactions a forge offers', () => {
   it("offers GitHub's eight and ADO's like", () => {
-    expect(reactionChoices('github')).toEqual(GITHUB_REACTIONS);
+    expect(FORGE_CAPABILITIES.github.reactions).toEqual(GITHUB_REACTIONS);
     expect(GITHUB_REACTIONS).toHaveLength(8);
-    expect(reactionChoices('ado')).toEqual(['LIKE']);
+    expect(FORGE_CAPABILITIES.ado.reactions).toEqual(['LIKE']);
   });
 });
 

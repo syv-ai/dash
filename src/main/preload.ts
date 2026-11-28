@@ -228,15 +228,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('github:get-issue', { cwd, number }),
   githubPostBranchComment: (cwd: string, issueNumber: number, branch: string) =>
     ipcRenderer.invoke('github:post-branch-comment', { cwd, issueNumber, branch }),
-  githubGetPrsForCheckout: (cwd: string, defaultBranch: string) =>
-    ipcRenderer.invoke('github:get-prs-for-checkout', { cwd, defaultBranch }),
-  githubWriteCiReport: (args: { cwd: string; number: number; url: string; headSha?: string }) =>
-    ipcRenderer.invoke('github:write-ci-report', args),
-  githubListPrs: (cwd: string) => ipcRenderer.invoke('github:list-prs', { cwd }),
-  githubPreparePrBranch: (cwd: string, prNumber: number, headRefName: string) =>
-    ipcRenderer.invoke('github:prepare-pr-branch', { cwd, prNumber, headRefName }),
 
-  // PR review (GitHub or Azure DevOps, picked by main from the project's remote)
+  // PRs and their review (GitHub or Azure DevOps, picked by main from the project's remote)
+  prForCheckout: (args: { projectId: string; cwd: string; defaultBranch: string }) =>
+    ipcRenderer.invoke('pr:forCheckout', args),
+  prListOpen: (args: { projectId: string; cwd: string }) => ipcRenderer.invoke('pr:listOpen', args),
+  prPrepareBranch: (args: {
+    projectId: string;
+    cwd: string;
+    number: number;
+    headRefName: string;
+  }) => ipcRenderer.invoke('pr:prepareBranch', args),
+  prWriteCiReport: (args: {
+    projectId: string;
+    cwd: string;
+    number: number;
+    url: string;
+    headSha?: string;
+  }) => ipcRenderer.invoke('pr:writeCiReport', args),
   prReviewRelevant: (args: { taskId: string }) => ipcRenderer.invoke('prReview:relevant', args),
   prReviewLoad: (args: { projectId: string; cwd: string; number: number }) =>
     ipcRenderer.invoke('prReview:load', args),
@@ -312,16 +321,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('ado:get-work-item', { id, projectId }),
   adoPostBranchComment: (workItemId: number, branch: string, projectId?: string) =>
     ipcRenderer.invoke('ado:post-branch-comment', { workItemId, branch, projectId }),
-  adoGetPrsForCheckout: (args: {
-    cwd: string;
-    defaultBranch: string;
-    gitRemote: string;
-    projectId?: string;
-  }) => ipcRenderer.invoke('ado:get-prs-for-checkout', args),
-  adoListPrs: (gitRemote: string, projectId?: string) =>
-    ipcRenderer.invoke('ado:list-prs', { gitRemote, projectId }),
-  adoPreparePrBranch: (cwd: string, branch: string) =>
-    ipcRenderer.invoke('ado:prepare-pr-branch', { cwd, branch }),
 
   // Git detection
   detectGit: (folderPath: string) => ipcRenderer.invoke('app:detectGit', folderPath),
@@ -497,6 +496,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('systemHealth:configure', config),
   onMemoryAlert: listen<import('@shared/systemHealth').MemoryAlert>('systemHealth:alert'),
   systemHealthSetLive: (live: boolean) => ipcRenderer.send('systemHealth:live', live),
+  systemHealthHistory: () => ipcRenderer.invoke('systemHealth:history'),
   onSystemHealthSnapshot:
     listen<import('@shared/systemHealth').SystemHealthSnapshot>('systemHealth:snapshot'),
 

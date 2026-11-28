@@ -1,3 +1,5 @@
+import type { PrProvider } from './types';
+
 /** Extract the `owner/repo` slug from a GitHub remote URL (SSH or HTTPS), or null. */
 export function githubSlug(remote: string | null): string | null {
   if (!remote) return null;
@@ -198,9 +200,21 @@ export function isAdoRemote(remote: string | null): boolean {
   return parseAdoRemote(remote) !== null;
 }
 
-/** Where a remote's PRs live: ADO for an Azure DevOps remote, else GitHub. */
-export function providerForRemote(remote: string | null): 'github' | 'ado' {
-  return remote && isAdoRemote(remote) ? 'ado' : 'github';
+/** Hosts of forges Dash has no PR provider for: GitLab (gitlab.com or a
+ *  self-managed `gitlab.*`), Bitbucket, Codeberg and SourceHut. */
+const UNSUPPORTED_FORGE_HOST = /^(gitlab\.|bitbucket\.org$|codeberg\.org$|git\.sr\.ht$)/;
+
+/**
+ * Where a remote's PRs live: ADO for an Azure DevOps remote, null without a
+ * remote or on a forge Dash has no provider for (GitLab, Bitbucket, …), else
+ * GitHub. A host Dash can't place stays GitHub: `gh` resolves GitHub
+ * Enterprise hosts and SSH host aliases (`git@github-work:o/r`) itself.
+ */
+export function providerForRemote(remote: string | null): PrProvider | null {
+  if (!remote) return null;
+  if (isAdoRemote(remote)) return 'ado';
+  const host = remoteLocation(remote)?.host.toLowerCase();
+  return host && UNSUPPORTED_FORGE_HOST.test(host) ? null : 'github';
 }
 
 /** Get the display URL for a linked item */

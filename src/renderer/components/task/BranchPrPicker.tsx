@@ -38,10 +38,9 @@ interface BranchPrPickerProps {
   /** Show the ahead/behind badges. Hidden when the task is cut from the fetched
    *  remote ref, since the local branch's state isn't used then. */
   showUpstream: boolean;
-  prProvider: 'github' | 'ado';
   projectPath: string;
+  /** The project, whose forge main asks for its PRs; without one there are none. */
   projectId?: string;
-  gitRemote: string | null;
   /** Fired after the PR head has been fetched into `branch`. `checkedOut` is
    *  true when that branch is already checked out elsewhere. */
   onSelectPr: (branch: string, prTitle: string, checkedOut: boolean) => void;
@@ -64,10 +63,8 @@ export function BranchPrPicker({
   showPrs,
   markInUse,
   showUpstream,
-  prProvider,
   projectPath,
   projectId,
-  gitRemote,
   onSelectPr,
 }: BranchPrPickerProps) {
   const [open, setOpen] = useState(false);
@@ -89,10 +86,11 @@ export function BranchPrPicker({
     setPrLoading(true);
     setPrError(null);
     try {
-      const resp =
-        prProvider === 'ado'
-          ? await window.electronAPI.adoListPrs(gitRemote ?? '', projectId)
-          : await window.electronAPI.githubListPrs(projectPath);
+      if (!projectId) {
+        setPrs([]);
+        return;
+      }
+      const resp = await window.electronAPI.prListOpen({ projectId, cwd: projectPath });
       if (resp.success && resp.data) setPrs(resp.data);
       else setPrError(resp.error || 'Failed to load pull requests');
     } catch (err) {
@@ -100,7 +98,7 @@ export function BranchPrPicker({
     } finally {
       setPrLoading(false);
     }
-  }, [prProvider, projectPath, projectId, gitRemote]);
+  }, [projectPath, projectId]);
 
   // Fetch PRs the first time the popover opens (not gated on the PR tab) so the
   // tab count is populated up front and switching to the PR tab is instant.
@@ -118,10 +116,13 @@ export function BranchPrPicker({
     setPreparingId(pr.number);
     setPrError(null);
     try {
-      const resp =
-        prProvider === 'ado'
-          ? await window.electronAPI.adoPreparePrBranch(projectPath, pr.headRefName)
-          : await window.electronAPI.githubPreparePrBranch(projectPath, pr.number, pr.headRefName);
+      if (!projectId) return;
+      const resp = await window.electronAPI.prPrepareBranch({
+        projectId,
+        cwd: projectPath,
+        number: pr.number,
+        headRefName: pr.headRefName,
+      });
       if (resp.success && resp.data) {
         setPickedPr({ number: pr.number, head: resp.data.branch, state: pr.state });
         onSelectPr(resp.data.branch, pr.title, resp.data.checkedOut);

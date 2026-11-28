@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeElectronApiMock, installWindow, resetWindow } from './helpers/electronApiMock';
 import type { PrProvider, PrReview } from '../../../shared/types';
+import { FORGE_CAPABILITIES } from '../../../shared/forgeCapabilities';
 
 const review = (n: number, provider: PrProvider = 'github'): PrReview => ({
   provider,
+  capabilities: FORGE_CAPABILITIES[provider],
   number: n,
   title: 't',
   body: '',

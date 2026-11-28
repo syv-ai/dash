@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { PrReview, PrReviewThread } from '../../../shared/types';
+import { FORGE_CAPABILITIES } from '../../../shared/forgeCapabilities';
 import { newReviewComments, threadLocation, unresolvedThreads } from '../prReviewNotices';
 
 const thread = (
@@ -27,6 +28,7 @@ const thread = (
 });
 const review = (number: number, threads: PrReviewThread[]): PrReview => ({
   provider: 'github',
+  capabilities: FORGE_CAPABILITIES.github,
   number,
   title: 't',
   body: '',

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { mapGithubPrList, buildPrHeadRefspec, githubPrListArgs } from '../githubPr';
+import {
+  githubBranchPrsFrom,
+  mapGithubPrList,
+  buildPrHeadRefspec,
+  githubPrListArgs,
+} from '../githubPr';
 
 describe('mapGithubPrList', () => {
   it('maps gh pr list JSON to PullRequest[]', () => {
@@ -62,5 +67,46 @@ describe('buildPrHeadRefspec', () => {
 describe('githubPrListArgs', () => {
   it('lists the open PRs', () => {
     expect(githubPrListArgs().slice(0, 4)).toEqual(['pr', 'list', '--state', 'open']);
+  });
+});
+
+describe('githubBranchPrsFrom', () => {
+  it("maps a branch's PRs, with CI on the open ones only", () => {
+    const rollup = [
+      { __typename: 'CheckRun', name: 'ci', status: 'COMPLETED', conclusion: 'FAILURE' },
+    ];
+    expect(
+      githubBranchPrsFrom([
+        {
+          number: 9,
+          title: 'B',
+          url: 'u9',
+          state: 'OPEN',
+          headRefOid: 'h9',
+          statusCheckRollup: rollup,
+        },
+        { number: 4, title: 'A', url: 'u4', state: 'MERGED', statusCheckRollup: rollup },
+      ]),
+    ).toEqual([
+      {
+        number: 9,
+        title: 'B',
+        url: 'u9',
+        state: 'open',
+        provider: 'github',
+        headSha: 'h9',
+        ci: 'failing',
+      },
+      {
+        number: 4,
+        title: 'A',
+        url: 'u4',
+        state: 'merged',
+        provider: 'github',
+        headSha: undefined,
+        ci: null,
+      },
+    ]);
+    expect(githubBranchPrsFrom(null)).toEqual([]);
   });
 });

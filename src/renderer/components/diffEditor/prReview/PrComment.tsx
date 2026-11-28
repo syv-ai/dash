@@ -109,7 +109,11 @@ export function PostedComment({
         // A reply still posting has nothing on the forge to react to yet.
         !isPendingComment(c) && (
           <>
-            <AddReaction comment={c} provider={provider} onReact={react} />
+            <AddReaction
+              comment={c}
+              choices={context.review.capabilities.reactions}
+              onReact={react}
+            />
             {c.url && (
               <IconButton
                 size="sm"

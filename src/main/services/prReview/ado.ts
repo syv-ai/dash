@@ -2,6 +2,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type {
   PrCheck,
+  PullRequestInfo,
   PrIssue,
   PrReaction,
   PrReactionContent,
@@ -19,9 +20,12 @@ import {
   adoProjectSegment,
   adoRequest,
 } from '../AzureDevOpsService';
-import { adoPrListQuery, mapAdoRelevantPrs } from '../adoPr';
-import { ensureCommits, filesAtCommit } from './localCommits';
-import type { ForgeReview, PrContext, PrReviewProvider } from './types';
+import { FORGE_CAPABILITIES } from '@shared/forgeCapabilities';
+import { adoPrListQuery, mapAdoPrList, mapAdoRelevantPrs } from '../adoPr';
+import type { FailedCheck } from '../ciReport';
+import { ciOf } from '../prRelevance';
+import { ensureCommits, filesAtCommit, runGit } from './localCommits';
+import type { ForgeReview, PrContext, ForgeProvider } from './types';
 
 const execFileAsync = promisify(execFile);
 
@@ -80,6 +84,8 @@ interface RawPr {
   repository?: { project?: { id?: string } } | null;
   /** The target branch's tip ADO last merged the PR against. */
   lastMergeTargetCommit?: { commitId?: string } | null;
+  /** The PR's head when ADO last merged it: its last pushed commit. */
+  lastMergeSourceCommit?: { commitId?: string } | null;
 }
 
 export interface AdoRepoContext {
@@ -155,6 +161,27 @@ function stateFrom(pr: RawPr): PrState {
   if (pr.status === 'completed') return 'merged';
   if (pr.status === 'abandoned') return 'closed';
   return pr.isDraft ? 'draft' : 'open';
+}
+
+/** A `git/pullrequests` entry as a branch's PR (see `ForgeProvider.prsFrom`),
+ *  with `ci` the open PR's checks as one state. */
+export function adoBranchPrFrom(
+  raw: unknown,
+  ctx: AdoRepoContext,
+  ci: PullRequestInfo['ci'] = null,
+): PullRequestInfo {
+  const pr = (raw ?? {}) as RawPr;
+  const state = stateFrom(pr);
+  const number = pr.pullRequestId ?? 0;
+  return {
+    number,
+    title: pr.title ?? '',
+    url: prUrl(ctx, number),
+    state: state === 'draft' ? 'open' : state,
+    provider: 'ado',
+    headSha: pr.lastMergeSourceCommit?.commitId,
+    ci: state === 'merged' || state === 'closed' ? null : ci,
+  };
 }
 
 // A reviewer's vote: 10 approved, 5 with suggestions, 0 none yet, -5 waiting, -10 rejected.
@@ -496,6 +523,8 @@ export interface AdoDeps {
     number: number,
     projectId: string | undefined,
   ) => Promise<PrCheck[]>;
+  /** Fetch branch `branch` from origin into the checkout at `cwd`. */
+  fetchBranch: (cwd: string, branch: string) => Promise<void>;
 }
 
 const defaultDeps: AdoDeps = {
@@ -513,6 +542,9 @@ const defaultDeps: AdoDeps = {
     ).stdout,
   checks: (ado, number, projectId) =>
     AzureDevOpsService.getPullRequestChecks(ado, ado.repository, number, projectId),
+  fetchBranch: async (cwd, branch) => {
+    await runGit(cwd, ['fetch', 'origin', branch], 60_000);
+  },
 };
 
 function adoOf(ctx: PrContext): NonNullable<PrContext['ado']> {
@@ -529,11 +561,28 @@ const repoContext = (ado: NonNullable<PrContext['ado']>): AdoRepoContext => ({
 const repoPath = (ado: NonNullable<PrContext['ado']>) =>
   `${adoProjectSegment(ado)}/_apis/git/repositories/${encodeURIComponent(ado.repository)}`;
 
-export function makeAdoProvider(deps: AdoDeps = defaultDeps): PrReviewProvider {
+export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
   const prPath = (ctx: PrContext, n: number) => `${repoPath(adoOf(ctx))}/pullRequests/${n}`;
 
+  /** The PR's failing checks, each linked to where ADO shows it. */
+  const adoFailedChecks = async (ctx: PrContext, number: number): Promise<FailedCheck[]> => {
+    const ado = adoOf(ctx);
+    const pr = (await deps.request(ado, prPath(ctx, number))) as RawPr | null;
+    const checks = await deps.checks(ado, number, pr?.repository?.project?.id);
+    return checks
+      .filter((c) => c.state === 'failing')
+      .map((c) => ({
+        name: c.name,
+        state: 'failed',
+        workflow: '',
+        link: c.url ?? '',
+        description: '',
+        notice: 'Azure DevOps details are not fetched yet; see the link.',
+      }));
+  };
+
   /** A reply under the thread's first comment, posted at once. */
-  const reply: PrReviewProvider['reply'] = async (ctx, number, threadId, body) => {
+  const reply: ForgeProvider['reply'] = async (ctx, number, threadId, body) => {
     const ado = adoOf(ctx);
     const at = `${prPath(ctx, number)}/threads/${threadId}`;
     const thread = (await deps.request(ado, at)) as RawThread;
@@ -570,6 +619,48 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): PrReviewProvider {
   };
 
   return {
+    capabilities: FORGE_CAPABILITIES.ado,
+
+    async prsFrom(ctx, branch) {
+      const ado = adoOf(ctx);
+      const res = await deps.request(
+        ado,
+        `${repoPath(ado)}/pullrequests?searchCriteria.sourceRefName=${encodeURIComponent(
+          `refs/heads/${branch}`,
+        )}&searchCriteria.status=all&$top=10`,
+      );
+      return Promise.all(
+        list<RawPr>(res).map(async (pr) => {
+          const open = pr.status !== 'completed' && pr.status !== 'abandoned';
+          const ci = open
+            ? ciOf(
+                await deps
+                  .checks(ado, pr.pullRequestId ?? 0, pr.repository?.project?.id)
+                  .catch(() => []),
+              )
+            : null;
+          return adoBranchPrFrom(pr, repoContext(ado), ci);
+        }),
+      );
+    },
+
+    async listOpen(ctx) {
+      const ado = adoOf(ctx);
+      const res = await deps.request(ado, `${repoPath(ado)}/pullrequests?${adoPrListQuery()}`);
+      return mapAdoPrList(list(res), repoContext(ado));
+    },
+
+    // A fork PR's source branch isn't on origin; the fetch fails and says so.
+    async prepareBranch(ctx, pr) {
+      await deps.fetchBranch(ctx.cwd, pr.headRefName);
+      return pr.headRefName;
+    },
+
+    failedChecks: async (ctx, number) => adoFailedChecks(ctx, number),
+
+    // ADO doesn't match a commit's author to a profile page.
+    commitAuthorUrl: async () => null,
+
     async list(ctx, filter) {
       const ado = adoOf(ctx);
       const res = (await deps.request(
@@ -711,4 +802,4 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): PrReviewProvider {
   };
 }
 
-export const adoProvider: PrReviewProvider = makeAdoProvider();
+export const adoProvider: ForgeProvider = makeAdoProvider();

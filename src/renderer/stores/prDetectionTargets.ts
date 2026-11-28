@@ -1,25 +1,19 @@
 import type { Project, PullRequestInfo, Task } from '../../shared/types';
-import { providerForRemote } from '../../shared/urls';
 
-/** Where to look up a task's PRs, and through which provider. */
+/** Where to look up a task's PRs; main picks the forge from the project. */
 export interface PrDetectionTarget {
   taskId: string;
-  provider: 'github' | 'ado';
   cwd: string;
   defaultBranch: string;
-  remote: string | null;
   projectId: string;
 }
 
 /** The lookup for a checkout of `project` at `cwd`. */
 export function prTargetFor(project: Project, cwd: string, taskId = ''): PrDetectionTarget {
-  const remote = project.gitRemote ?? null;
   return {
     taskId,
-    provider: providerForRemote(remote),
     cwd,
     defaultBranch: project.baseRef || project.gitBranch || 'main',
-    remote,
     projectId: project.id,
   };
 }
@@ -43,15 +37,11 @@ export interface BranchPrs {
 /** The target's PRs, or null when the lookup failed. */
 export async function fetchPrsFor(t: PrDetectionTarget): Promise<BranchPrs | null> {
   try {
-    const resp =
-      t.provider === 'ado' && t.remote
-        ? await window.electronAPI.adoGetPrsForCheckout({
-            cwd: t.cwd,
-            defaultBranch: t.defaultBranch,
-            gitRemote: t.remote,
-            projectId: t.projectId,
-          })
-        : await window.electronAPI.githubGetPrsForCheckout(t.cwd, t.defaultBranch);
+    const resp = await window.electronAPI.prForCheckout({
+      projectId: t.projectId,
+      cwd: t.cwd,
+      defaultBranch: t.defaultBranch,
+    });
     if (!resp.success) return null;
     const all = resp.data ?? [];
     return { current: all.filter((p) => p.current), all };

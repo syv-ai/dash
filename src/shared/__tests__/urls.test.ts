@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAdoRemote, isAdoRemote, normalizeAdoProject } from '../urls';
+import { parseAdoRemote, isAdoRemote, normalizeAdoProject, providerForRemote } from '../urls';
 
 describe('normalizeAdoProject', () => {
   it('decodes a percent-encoded name saved from a remote (the double-encoding 404)', () => {
@@ -89,5 +89,32 @@ describe('parseAdoRemote', () => {
     expect(isAdoRemote('https://org@dev.azure.com/org/proj/_git/repo')).toBe(true);
     expect(isAdoRemote('https://github.com/owner/repo')).toBe(false);
     expect(isAdoRemote(null)).toBe(false);
+  });
+});
+
+describe('providerForRemote', () => {
+  it('places GitHub and Azure DevOps remotes', () => {
+    expect(providerForRemote('git@github.com:o/r.git')).toBe('github');
+    expect(providerForRemote('https://github.com/o/r')).toBe('github');
+    expect(providerForRemote('git@ssh.dev.azure.com:v3/org/Proj/repo')).toBe('ado');
+    expect(providerForRemote('https://org@dev.azure.com/org/Proj/_git/repo')).toBe('ado');
+  });
+
+  it('has no provider without a remote, or on a forge Dash has none for', () => {
+    expect(providerForRemote(null)).toBeNull();
+    for (const remote of [
+      'git@gitlab.com:o/r.git',
+      'https://gitlab.example.com/o/r',
+      'git@bitbucket.org:o/r.git',
+      'https://codeberg.org/o/r',
+      'https://git.sr.ht/~o/r',
+    ]) {
+      expect(providerForRemote(remote)).toBeNull();
+    }
+  });
+
+  it("keeps a host it can't place on GitHub, which gh resolves (Enterprise, SSH aliases)", () => {
+    expect(providerForRemote('git@github-work:o/r.git')).toBe('github');
+    expect(providerForRemote('https://github.example.com/o/r.git')).toBe('github');
   });
 });

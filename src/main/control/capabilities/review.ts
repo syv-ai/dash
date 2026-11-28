@@ -16,7 +16,8 @@ import type { TaskReviews } from '../../services/prReview/taskReview';
 
 export interface ReviewCapabilityDeps {
   /** Where the project's PRs live (from its remote). */
-  providerFor(projectId: string): PrProvider;
+  /** Null when the project's remote isn't on a forge Dash has a provider for. */
+  providerFor(projectId: string): PrProvider | null;
   getTask(id: string): Task | undefined;
   reviews: TaskReviews;
   /** The PR the task is in review mode for, else its branch's own open PR, else null. */
@@ -134,10 +135,12 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
    *  the task's review-mode PR, else its own. Refuses a provider it isn't on, and no PR at all. */
   const prFor = async (taskId: string, number?: number, asked?: PrProvider): Promise<PrRef> => {
     const task = deps.getTask(taskId)!;
+    const provider = number === undefined ? null : deps.providerFor(task.projectId);
+    if (number !== undefined && !provider) {
+      throw new ControlError(400, "this project's remote isn't on GitHub or Azure DevOps");
+    }
     const pr =
-      number === undefined
-        ? await deps.defaultPr(taskId)
-        : { provider: deps.providerFor(task.projectId), number };
+      number === undefined ? await deps.defaultPr(taskId) : { provider: provider!, number };
     if (!pr) throw new ControlError(400, 'No pull request to review: pass --number');
     if (asked && asked !== pr.provider) {
       throw new ControlError(400, `this PR is on ${pr.provider}`);

@@ -12,11 +12,11 @@ import { isPrDraft } from '@shared/diffComments';
 import { diffCommentsRepo, type AgentDraft, type DiffCommentsRepo } from '../diffCommentsRepo';
 import { prReviewSummariesRepo, type PrReviewSummariesRepo } from '../prReviewSummariesRepo';
 import { emitDiffCommentsChanged } from '../diffCommentEvents';
-import type { PrContext, PrReviewProvider } from './types';
+import type { PrContext, ForgeProvider } from './types';
 
 /** Where a write goes: the PR's adapter and the context to call it with. */
 export interface WriteTarget<K extends 'submit' | 'reply'> {
-  adapter: Pick<PrReviewProvider, K>;
+  adapter: Pick<ForgeProvider, K>;
   ctx: PrContext;
 }
 export type SubmitTarget = WriteTarget<'submit'>;

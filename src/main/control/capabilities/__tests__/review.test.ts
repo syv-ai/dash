@@ -4,6 +4,7 @@ import type { DiffComment, PrRef, PrReview, PrReviewThread } from '../../../../s
 import { ControlError, createRegistry, type Registry } from '../../registry';
 import { fakeLookups, makeProject, makeTask } from '../../__tests__/fixtures';
 import { registerReviewCapabilities } from '../review';
+import { FORGE_CAPABILITIES } from '../../../../shared/forgeCapabilities';
 
 let db: Database.Database;
 vi.mock('../../../db/client', () => ({ getRawDb: () => db }));
@@ -51,6 +52,7 @@ const thread = (over: Partial<PrReviewThread> & { id: string }): PrReviewThread 
 
 const review = (pr: PrRef): PrReview => ({
   ...pr,
+  capabilities: FORGE_CAPABILITIES[pr.provider],
   title: 'Guard sessions',
   body: 'Fixes the crash.',
   url: 'https://github.com/o/r/pull/12',

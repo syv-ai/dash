@@ -14,13 +14,15 @@ export async function fixCi(taskId: string, pr: PullRequestInfo): Promise<void> 
   const task = selectTaskById(state, taskId);
   const cwd = task?.path || projects.find((p) => p.id === task?.projectId)?.path;
   if (!task || !cwd) return;
+  const projectId = task.projectId;
 
   // One toast: the spinner becomes the failure or the "nothing failed" note,
   // or goes away once there is a prompt to type.
   const failed = `Could not fetch the checks of PR #${pr.number}`;
   const report = await toast
     .progress(
-      window.electronAPI.githubWriteCiReport({
+      window.electronAPI.prWriteCiReport({
+        projectId,
         cwd,
         number: pr.number,
         url: pr.url,

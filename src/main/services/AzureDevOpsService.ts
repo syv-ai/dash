@@ -2,16 +2,11 @@ import type {
   AzureDevOpsConfig,
   AzureDevOpsWorkItem,
   AzureDevOpsWorkItemRef,
-  PullRequest,
-  CiState,
   PrCheck,
-  PullRequestInfo,
 } from '@shared/types';
 import { normalizeAdoProject } from '@shared/urls';
-import { adoPrListQuery, mapAdoPrList } from './adoPr';
 import { describeAdoFailure } from './adoErrors';
-import { GitService } from './GitService';
-import { adoChecks, ciOf, relevantPrs } from './prRelevance';
+import { adoChecks } from './prRelevance';
 
 const TIMEOUT_MS = 15_000;
 const API_VERSION = '7.1';
@@ -176,74 +171,6 @@ export class AzureDevOpsService {
   }
 
   /**
-   * The PRs from the branch checked out at `cwd`, newest first, with the
-   * current ones flagged (see relevantPrs) and CI status on open ones. Reads
-   * the live branch; none on the default branch or a detached HEAD.
-   */
-  static async getPullRequestsForCheckout(
-    config: AzureDevOpsConfig,
-    repositoryName: string,
-    cwd: string,
-    defaultBranch: string,
-  ): Promise<PullRequestInfo[]> {
-    const branch = await GitService.getBranch(cwd);
-    if (!branch || branch === defaultBranch) return [];
-    const sourceRef = `refs/heads/${branch}`;
-    const result = (await this.request(
-      config,
-      `${this.proj(config)}/_apis/git/repositories/${encodeURIComponent(repositoryName)}/pullrequests?searchCriteria.sourceRefName=${encodeURIComponent(sourceRef)}&searchCriteria.status=all&$top=10`,
-    )) as {
-      value?: Array<{
-        pullRequestId: number;
-        title: string;
-        status: string;
-        lastMergeSourceCommit?: { commitId?: string };
-        repository?: { project?: { id?: string } };
-      }>;
-    };
-
-    const baseUrl = config.organizationUrl.replace(/\/+$/, '');
-    const stateMap: Record<string, 'open' | 'merged' | 'closed'> = {
-      active: 'open',
-      completed: 'merged',
-      abandoned: 'closed',
-    };
-    const prs = await Promise.all(
-      (result.value ?? []).map(async (pr): Promise<PullRequestInfo> => {
-        const state = stateMap[pr.status] ?? 'open';
-        return {
-          number: pr.pullRequestId,
-          title: pr.title,
-          url: `${baseUrl}/${this.proj(config)}/_git/${repositoryName}/pullrequest/${pr.pullRequestId}`,
-          state,
-          provider: 'ado',
-          headSha: pr.lastMergeSourceCommit?.commitId,
-          ci:
-            state === 'open'
-              ? await this.getPullRequestCi(
-                  config,
-                  repositoryName,
-                  pr.pullRequestId,
-                  pr.repository?.project?.id,
-                )
-              : null,
-        };
-      }),
-    );
-    return relevantPrs(prs, (sha) => GitService.hasMovedPast(cwd, sha));
-  }
-
-  /** A PR's checks as one state (see ciOf); null when it has none, or none can be read. */
-  private static async getPullRequestCi(
-    config: AzureDevOpsConfig,
-    repositoryName: string,
-    prId: number,
-    projectId: string | undefined,
-  ): Promise<CiState | null> {
-    return ciOf(await this.getPullRequestChecks(config, repositoryName, prId, projectId));
-  }
-
-  /**
    * A PR's checks (see adoChecks) from its policy evaluations, which need the
    * project's id, and its statuses. Whatever can't be read is left out.
    */
@@ -277,25 +204,6 @@ export class AzureDevOpsService {
       values(statuses),
       (buildId) => `${projectUrl}/_build/results?buildId=${buildId}`,
     );
-  }
-
-  /** Active (open) PRs for `repositoryName`, most-recent first. */
-  static async listPullRequests(
-    config: AzureDevOpsConfig,
-    repositoryName: string,
-  ): Promise<PullRequest[]> {
-    const result = (await this.request(
-      config,
-      `${this.proj(config)}/_apis/git/repositories/${encodeURIComponent(
-        repositoryName,
-      )}/pullrequests?${adoPrListQuery()}`,
-    )) as { value?: unknown };
-
-    return mapAdoPrList(result.value, {
-      organizationUrl: config.organizationUrl,
-      project: config.project,
-      repository: repositoryName,
-    });
   }
 
   static async postBranchComment(

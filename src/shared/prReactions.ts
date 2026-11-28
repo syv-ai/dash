@@ -1,4 +1,4 @@
-import type { PrProvider, PrReaction, PrReactionContent } from './types';
+import type { PrReaction, PrReactionContent } from './types';
 
 /** Every reaction, in the order a comment lists them: GitHub's eight in
  *  GitHub's order, then ADO's like. */
@@ -31,10 +31,6 @@ export const REACTIONS: Record<PrReactionContent, { emoji: string; name: string 
   EYES: { emoji: '👀', name: 'Eyes' },
   LIKE: { emoji: '👍', name: 'Like' },
 };
-
-/** The reactions a forge offers: GitHub's eight; ADO has only a like. */
-export const reactionChoices = (provider: PrProvider): readonly PrReactionContent[] =>
-  provider === 'github' ? GITHUB_REACTIONS : ['LIKE'];
 
 const ORDER: readonly PrReactionContent[] = PR_REACTIONS;
 

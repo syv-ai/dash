@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
-import { prContextFor } from '../services/prReview/resolve';
+import { prContextFor, UnsupportedForgeError } from '../services/prReview/resolve';
 import {
   appPrContextDeps as appDeps,
   appSetReviewMode,
@@ -10,6 +10,9 @@ import {
 import { loadPrReview } from '../services/prReview/loadReview';
 import { checkoutVsHead } from '../services/prReview/localCommits';
 import { taskReviews } from '../services/prReview/taskReview';
+import { prsForCheckout } from '../services/prReview/checkoutPrs';
+import { writeCiReport } from '../services/prReview/ciReportFile';
+import { GitService } from '../services/GitService';
 import { prViewedFilesRepo } from '../services/prViewedFilesRepo';
 import { PR_REACTIONS } from '@shared/prReactions';
 import type { GeneralReplyTarget } from '@shared/prGeneralReply';
@@ -44,6 +47,82 @@ export function registerPrReviewIpc(): void {
       return errorResponse(err);
     }
   });
+
+  /** The PRs from the branch checked out at `cwd` (see `prsForCheckout`). */
+  ipcMain.handle(
+    'pr:forCheckout',
+    async (_e, args: { projectId: string; cwd: string; defaultBranch: string }) => {
+      try {
+        parseArgs('pr:forCheckout', z.looseObject({ ...where, defaultBranch: z.string() }), args);
+        const { adapter, ctx } = prContextFor(args.projectId, args.cwd, appDeps);
+        return { success: true, data: await prsForCheckout(adapter, ctx, args.defaultBranch) };
+      } catch (err) {
+        // A forge Dash has no provider for has no PRs to show, rather than a failed lookup.
+        if (err instanceof UnsupportedForgeError) return { success: true, data: [] };
+        return errorResponse(err);
+      }
+    },
+  );
+
+  /** The repo's open PRs, to start a task on. */
+  ipcMain.handle('pr:listOpen', async (_e, args: { projectId: string; cwd: string }) => {
+    try {
+      parseArgs('pr:listOpen', z.looseObject(where), args);
+      const { adapter, ctx } = prContextFor(args.projectId, args.cwd, appDeps);
+      return { success: true, data: await adapter.listOpen(ctx) };
+    } catch (err) {
+      return errorResponse(err);
+    }
+  });
+
+  /** Fetch a PR's head into a local branch for a new task's worktree. */
+  ipcMain.handle(
+    'pr:prepareBranch',
+    async (_e, args: { projectId: string; cwd: string; number: number; headRefName: string }) => {
+      try {
+        parseArgs(
+          'pr:prepareBranch',
+          z.looseObject({ ...where, number: z.number(), headRefName: z.string().min(1) }),
+          args,
+        );
+        const { adapter, ctx } = prContextFor(args.projectId, args.cwd, appDeps);
+        const branch = await adapter.prepareBranch(ctx, args);
+        // The head may already be checked out (a prior task on this PR). The
+        // modal blocks a worktree-existing checkout on it, same as any branch.
+        const checkedOut = (await GitService.getCheckedOutBranches(args.cwd)).has(branch);
+        return { success: true, data: { branch, checkedOut } };
+      } catch (err) {
+        return errorResponse(err);
+      }
+    },
+  );
+
+  /** "Fix CI": write the PR's failed checks to a file in the checkout (see `writeCiReport`). */
+  ipcMain.handle(
+    'pr:writeCiReport',
+    async (
+      _e,
+      args: { projectId: string; cwd: string; number: number; url: string; headSha?: string },
+    ) => {
+      try {
+        parseArgs(
+          'pr:writeCiReport',
+          z.looseObject({
+            ...where,
+            number: z.number(),
+            url: z.string(),
+            headSha: z.string().optional(),
+          }),
+          args,
+        );
+        const { adapter, ctx } = prContextFor(args.projectId, args.cwd, appDeps);
+        const { number, url, headSha } = args;
+        return { success: true, data: await writeCiReport(adapter, ctx, { number, url, headSha }) };
+      } catch (err) {
+        return errorResponse(err);
+      }
+    },
+  );
 
   ipcMain.handle(
     'prReview:load',

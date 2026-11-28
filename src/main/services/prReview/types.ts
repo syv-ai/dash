@@ -1,6 +1,9 @@
 import type {
   AzureDevOpsConfig,
+  ForgeCapabilities,
   PrReview,
+  PullRequest,
+  PullRequestInfo,
   PrReviewComment,
   PrListFilter,
   PrReactionContent,
@@ -9,6 +12,7 @@ import type {
   SubmitResult,
 } from '@shared/types';
 import type { GeneralReplyTarget } from '@shared/prGeneralReply';
+import type { FailedCheck } from '../ciReport';
 
 /** Where a PR call runs: the checkout, its project, and (ADO) the credentials. */
 export interface PrContext {
@@ -21,16 +25,33 @@ export interface PrContext {
 /** The part of a PrReview local git provides, the same on every forge (see `loadPrReview`). */
 export type LocalPrFields = 'files' | 'commits' | 'behindBase';
 
-/** What a provider knows of a PR's review: everything but the local-git part. */
-export type ForgeReview = Omit<PrReview, LocalPrFields>;
+/** What a provider knows of a PR's review: everything but the local-git part
+ *  and its forge's capabilities, which `loadPrReview` adds. */
+export type ForgeReview = Omit<PrReview, LocalPrFields | 'capabilities'>;
 
 /** A provider's load: its review, and the base branch's tip now (present in
  *  the checkout), which local git counts how far behind head is against; null
  *  when the forge doesn't say. */
 export type ForgeLoad = ForgeReview & { baseTip: string | null };
 
-/** One provider's PR review operations, behind the shared model. */
-export interface PrReviewProvider {
+/** One forge's PR operations, behind the shared model: everything Dash asks
+ *  of a forge goes through here, so no caller names the forge. */
+export interface ForgeProvider {
+  /** What it offers beyond the shared model; stamped on each review it loads. */
+  capabilities: ForgeCapabilities;
+  /** Every PR from `branch`, in any state, with CI on the open ones (see
+   *  `prsForCheckout`, which reads the branch and flags the current ones). */
+  prsFrom(ctx: PrContext, branch: string): Promise<PullRequestInfo[]>;
+  /** The repo's open PRs, newest first, to start a task on (the new-task PR list). */
+  listOpen(ctx: PrContext): Promise<PullRequest[]>;
+  /** Fetch PR `pr`'s head into a local branch for a worktree; answers the branch's name. */
+  prepareBranch(ctx: PrContext, pr: Pick<PullRequest, 'number' | 'headRefName'>): Promise<string>;
+  /** The PR's failed checks, each with what the forge tells of it (steps,
+   *  annotations, the log up to the failure); a detail it can't read becomes a notice. */
+  failedChecks(ctx: PrContext, number: number): Promise<FailedCheck[]>;
+  /** The forge profile of commit `sha`'s author in the checkout at `cwd`, as
+   *  the forge matched it; null where it matches none (or can't). */
+  commitAuthorUrl(cwd: string, sha: string): Promise<string | null>;
   /** Open PRs, newest first; only those from or into a branch with `filter`. */
   list(ctx: PrContext, filter?: PrListFilter): Promise<RelevantPr[]>;
   /** The PR's review, with its base, head and base tip present in the checkout. */

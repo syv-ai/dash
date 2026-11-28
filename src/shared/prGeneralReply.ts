@@ -1,4 +1,4 @@
-import type { PrProvider, PrReviewComment } from './types';
+import type { ForgeCapabilities, PrReviewComment } from './types';
 
 /** The general comment a reply answers: who wrote it and what. */
 export type GeneralReplyTarget = Pick<PrReviewComment, 'id' | 'author' | 'body'>;
@@ -28,10 +28,11 @@ export function quoteReply(to: Pick<GeneralReplyTarget, 'author' | 'body'>, text
   return quoted.length > 0 ? `${quoted.map((l) => `> ${l}`).join('\n')}\n\n${named}` : named;
 }
 
-/** What a reply to a general comment posts as on `provider`: quoted on
- *  GitHub, the text itself on ADO, whose general comments are threads. */
+/** What a reply to a general comment posts as, by how the forge replies
+ *  (`ForgeCapabilities.generalReply`): quoted where the conversation isn't
+ *  threaded, the text itself where each general comment is a thread. */
 export const generalReplyBody = (
-  provider: PrProvider,
+  style: ForgeCapabilities['generalReply'],
   to: GeneralReplyTarget,
   text: string,
-): string => (provider === 'github' ? quoteReply(to, text) : text.trim());
+): string => (style === 'quote' ? quoteReply(to, text) : text.trim());

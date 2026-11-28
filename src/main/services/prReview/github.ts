@@ -17,9 +17,11 @@ import type {
 } from '@shared/types';
 import { GITHUB_REACTIONS } from '@shared/prReactions';
 import { quoteReply, type GeneralReplyTarget } from '@shared/prGeneralReply';
+import { FORGE_CAPABILITIES } from '@shared/forgeCapabilities';
 import { githubChecks } from '../prRelevance';
+import { GithubService } from '../GithubService';
 import { ensureCommits, runGit } from './localCommits';
-import type { ForgeReview, PrReviewProvider } from './types';
+import type { ForgeReview, ForgeProvider } from './types';
 
 const execFileAsync = promisify(execFile);
 const TIMEOUT_MS = 15_000;
@@ -504,8 +506,21 @@ export const githubReactionRequest = (
 });
 
 /** The GitHub adapter, over a GraphQL transport (the real one runs `gh`). */
-export function makeGithubProvider(gql: Gql = ghGql, rest: Rest = ghRest): PrReviewProvider {
+export function makeGithubProvider(gql: Gql = ghGql, rest: Rest = ghRest): ForgeProvider {
   return {
+    capabilities: FORGE_CAPABILITIES.github,
+
+    prsFrom: (ctx, branch) => GithubService.getPullRequestsFrom(ctx.cwd, branch),
+
+    listOpen: (ctx) => GithubService.listPullRequests(ctx.cwd),
+
+    prepareBranch: (ctx, pr) =>
+      GithubService.fetchPullRequestHead(ctx.cwd, pr.number, pr.headRefName),
+
+    failedChecks: (ctx, number) => GithubService.getFailedChecks(ctx.cwd, number),
+
+    commitAuthorUrl: (cwd, sha) => GithubService.commitAuthorUrl(cwd, sha),
+
     list: async (ctx, filter) =>
       githubRelevantPrsFrom(await gql(ctx.cwd, RELEVANT_PRS_QUERY, listVars(filter))),
 
@@ -603,4 +618,4 @@ export function makeGithubProvider(gql: Gql = ghGql, rest: Rest = ghRest): PrRev
   };
 }
 
-export const githubProvider: PrReviewProvider = makeGithubProvider();
+export const githubProvider: ForgeProvider = makeGithubProvider();

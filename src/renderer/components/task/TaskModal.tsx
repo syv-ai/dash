@@ -10,7 +10,7 @@ import type {
   PermissionMode,
   TaskModel,
 } from '../../../shared/types';
-import { isAdoRemote } from '../../../shared/urls';
+import { forgeCapabilitiesFor } from '../../../shared/forgeCapabilities';
 import { branchSlug } from '../../../shared/slug';
 import { linkedAdoWorkItem, linkedGithubIssue } from '../../../shared/taskContext';
 import { Badge } from '../ui/Badge';
@@ -220,13 +220,13 @@ function TaskModalBody({
     }
     return list[0] ?? null;
   });
-  // Issue/work item selection — show only the provider matching the remote
-  const isAdo = isAdoRemote(gitRemote);
+  // Issue/work item selection: only what the remote's forge links tasks to.
+  const linkedItems = forgeCapabilitiesFor(gitRemote)?.linkedItems;
   const [selectedIssues, setSelectedIssues] = useState<GithubIssue[]>([]);
   const [selectedWorkItems, setSelectedWorkItems] = useState<AzureDevOpsWorkItem[]>([]);
 
-  const showGithub = !isAdo && !!gitRemote && ghAvailable;
-  const showAdo = isAdo && adoConfigured;
+  const showGithub = linkedItems === 'issues' && ghAvailable;
+  const showAdo = linkedItems === 'workItems' && adoConfigured;
 
   // Fall back to fetching here when App couldn't pre-fetch — either the modal
   // opened before App's effect settled, or git was just initialized in this modal.
@@ -520,10 +520,8 @@ function TaskModalBody({
                   showPrs={offersPrs}
                   markInUse={!createNewBranch}
                   showUpstream={directCheckout}
-                  prProvider={showAdo ? 'ado' : 'github'}
                   projectPath={projectPath}
                   projectId={projectId}
-                  gitRemote={gitRemote}
                   onSelectPr={handlePrPrepared}
                 />
 

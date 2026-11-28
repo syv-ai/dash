@@ -1,4 +1,5 @@
-import type { PullRequest, PullRequestState } from '@shared/types';
+import type { PullRequest, PullRequestInfo, PullRequestState } from '@shared/types';
+import { ciFromRollup } from './prRelevance';
 
 /** Raw entry from `gh pr list --json` (`GITHUB_PR_FIELDS`). */
 interface RawGithubPr {
@@ -52,4 +53,21 @@ export function buildPrHeadRefspec(prNumber: number, headRefName: string): strin
 /** `gh pr list`'s arguments for the repo's open PRs (the new-task PR picker). */
 export function githubPrListArgs(): string[] {
   return ['pr', 'list', '--state', 'open', '--json', GITHUB_PR_FIELDS, '--limit', '50'];
+}
+
+/** The PRs of `gh pr list --json number,title,url,state,headRefOid,statusCheckRollup`. */
+export function githubBranchPrsFrom(raw: unknown): PullRequestInfo[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((r: Record<string, unknown>): PullRequestInfo => {
+    const state = r.state === 'MERGED' ? 'merged' : r.state === 'OPEN' ? 'open' : 'closed';
+    return {
+      number: Number(r.number) || 0,
+      title: String(r.title ?? ''),
+      url: String(r.url ?? ''),
+      state,
+      provider: 'github',
+      headSha: typeof r.headRefOid === 'string' ? r.headRefOid : undefined,
+      ci: state === 'open' ? ciFromRollup(r.statusCheckRollup) : null,
+    };
+  });
 }

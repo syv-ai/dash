@@ -1,12 +1,6 @@
-import type {
-  IpcResponse,
-  AzureDevOpsWorkItem,
-  AzureDevOpsConfig,
-  PullRequest,
-  PullRequestInfo,
-} from '../../shared/types';
+import type { IpcResponse, AzureDevOpsWorkItem, AzureDevOpsConfig } from '../../shared/types';
 
-/** Azure DevOps work-item search/linking, config, and PR lookup. */
+/** Azure DevOps work-item search/linking and config. PRs go through `PrReviewApi`. */
 export interface AdoApi {
   adoCheckConfigured: (projectId?: string) => Promise<IpcResponse<boolean>>;
   adoTestConnection: (config: AzureDevOpsConfig) => Promise<IpcResponse<boolean>>;
@@ -23,16 +17,4 @@ export interface AdoApi {
     branch: string,
     projectId?: string,
   ) => Promise<IpcResponse<void>>;
-  /** The PRs from the branch checked out at `cwd`, newest first, current ones flagged. */
-  adoGetPrsForCheckout: (args: {
-    cwd: string;
-    defaultBranch: string;
-    gitRemote: string;
-    projectId?: string;
-  }) => Promise<IpcResponse<PullRequestInfo[]>>;
-  adoListPrs: (gitRemote: string, projectId?: string) => Promise<IpcResponse<PullRequest[]>>;
-  adoPreparePrBranch: (
-    cwd: string,
-    branch: string,
-  ) => Promise<IpcResponse<{ branch: string; checkedOut: boolean }>>;
 }

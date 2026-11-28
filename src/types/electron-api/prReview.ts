@@ -8,13 +8,41 @@ import type {
   PrReviewComment,
   PrReviewSummary,
   PrVerdict,
+  PullRequest,
+  PullRequestInfo,
   SubmitResult,
   TaskPrs,
 } from '../../shared/types';
 import type { GeneralReplyTarget } from '../../shared/prGeneralReply';
 
-/** PR review in the diff editor, on the project's provider (GitHub or Azure DevOps). */
+/** A task's PRs and their review in the diff editor, on the project's provider (GitHub or Azure DevOps). */
 export interface PrReviewApi {
+  /** The PRs from the branch checked out at `cwd`, newest first, current ones flagged. */
+  prForCheckout: (args: {
+    projectId: string;
+    cwd: string;
+    defaultBranch: string;
+  }) => Promise<IpcResponse<PullRequestInfo[]>>;
+  /** The repo's open PRs, newest first, to start a task on. */
+  prListOpen: (args: { projectId: string; cwd: string }) => Promise<IpcResponse<PullRequest[]>>;
+  /** Fetch PR `number`'s head into a local branch for a worktree. */
+  prPrepareBranch: (args: {
+    projectId: string;
+    cwd: string;
+    number: number;
+    headRefName: string;
+  }) => Promise<IpcResponse<{ branch: string; checkedOut: boolean }>>;
+  /**
+   * "Fix CI": write PR `number`'s failed checks to a Markdown file in the
+   * checkout at `cwd`; the prompt pointing at it, or null when none failed.
+   */
+  prWriteCiReport: (args: {
+    projectId: string;
+    cwd: string;
+    number: number;
+    url: string;
+    headSha?: string;
+  }) => Promise<IpcResponse<{ prompt: string; file: string } | null>>;
   /** The open PRs from and into the task's branch (null when the forge
    *  couldn't be asked), and the PR it is in review mode for. */
   prReviewRelevant: (args: { taskId: string }) => Promise<IpcResponse<TaskPrs>>;

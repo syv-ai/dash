@@ -1,16 +1,15 @@
 import { execFile } from 'child_process';
-import { promises as fs } from 'fs';
-import * as path from 'path';
 import { promisify } from 'util';
 import type { GithubIssue, PullRequest, PullRequestInfo } from '@shared/types';
-import { mapGithubPrList, buildPrHeadRefspec, githubPrListArgs } from './githubPr';
-import { GitService } from './GitService';
-import { ciFromRollup, relevantPrs } from './prRelevance';
+import {
+  githubBranchPrsFrom,
+  mapGithubPrList,
+  buildPrHeadRefspec,
+  githubPrListArgs,
+} from './githubPr';
 import {
   actionsJobId,
   annotationsFrom,
-  buildCiReport,
-  ciReportPointer,
   failedChecksFrom,
   failedLogExcerpt,
   failedStepsFrom,
@@ -20,9 +19,6 @@ import {
 const execFileAsync = promisify(execFile);
 
 const TIMEOUT_MS = 15_000;
-
-/** Where "Fix CI" writes its report, relative to the task's checkout. */
-const CI_REPORT_DIR = '.claude/dash';
 
 export class GithubService {
   static async isAvailable(): Promise<boolean> {
@@ -78,18 +74,8 @@ export class GithubService {
     return mapIssue(JSON.parse(stdout));
   }
 
-  /**
-   * The PRs from the branch checked out at `cwd`, newest first, with the
-   * current ones flagged (see relevantPrs) and CI status on open ones. Reads the live branch, so a
-   * session that switched branches gets the new branch's PRs; none on the
-   * default branch or a detached HEAD.
-   */
-  static async getPullRequestsForCheckout(
-    cwd: string,
-    defaultBranch: string,
-  ): Promise<PullRequestInfo[]> {
-    const branch = await GitService.getBranch(cwd);
-    if (!branch || branch === defaultBranch) return [];
+  /** Every PR from `branch`, in any state, with CI status on open ones. */
+  static async getPullRequestsFrom(cwd: string, branch: string): Promise<PullRequestInfo[]> {
     const { stdout } = await execFileAsync(
       'gh',
       [
@@ -106,21 +92,7 @@ export class GithubService {
       ],
       { cwd, timeout: TIMEOUT_MS, env: process.env as Record<string, string> },
     );
-    const raw: unknown = JSON.parse(stdout);
-    if (!Array.isArray(raw)) return [];
-    const prs = raw.map((r: Record<string, unknown>): PullRequestInfo => {
-      const state = r.state === 'MERGED' ? 'merged' : r.state === 'OPEN' ? 'open' : 'closed';
-      return {
-        number: Number(r.number) || 0,
-        title: String(r.title ?? ''),
-        url: String(r.url ?? ''),
-        state,
-        provider: 'github',
-        headSha: typeof r.headRefOid === 'string' ? r.headRefOid : undefined,
-        ci: state === 'open' ? ciFromRollup(r.statusCheckRollup) : null,
-      };
-    });
-    return relevantPrs(prs, (sha) => GitService.hasMovedPast(cwd, sha));
+    return githubBranchPrsFrom(JSON.parse(stdout));
   }
 
   /**
@@ -171,25 +143,6 @@ export class GithubService {
         };
       }),
     );
-  }
-
-  /**
-   * Write PR `pr`'s failed checks to a Markdown file in the checkout at `cwd`
-   * (`.claude/dash/`, kept out of git via `.git/info/exclude`) and return the
-   * one-line prompt pointing at it, or null when no check has failed.
-   */
-  static async writeCiReport(
-    cwd: string,
-    pr: { number: number; url: string; headSha?: string },
-  ): Promise<{ prompt: string; file: string } | null> {
-    const checks = await GithubService.getFailedChecks(cwd, pr.number);
-    if (checks.length === 0) return null;
-    const dir = path.join(cwd, CI_REPORT_DIR);
-    await fs.mkdir(dir, { recursive: true });
-    await GitService.ensureExcluded(cwd, `${CI_REPORT_DIR}/`).catch(() => {});
-    const file = path.join(dir, `ci-pr-${pr.number}.md`);
-    await fs.writeFile(file, buildCiReport(pr, checks), 'utf-8');
-    return { prompt: ciReportPointer(pr.number, file, checks), file };
   }
 
   /** Open PRs for the repo at `cwd`, newest first (gh's default order). */

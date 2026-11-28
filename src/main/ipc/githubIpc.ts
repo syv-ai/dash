@@ -2,7 +2,6 @@ import { ipcMain } from 'electron';
 import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
 import { GithubService } from '../services/GithubService';
-import { GitService } from '../services/GitService';
 
 export function registerGithubIpc(): void {
   ipcMain.handle('github:check-available', async () => {
@@ -37,79 +36,6 @@ export function registerGithubIpc(): void {
       return errorResponse(err);
     }
   });
-
-  ipcMain.handle(
-    'github:get-prs-for-checkout',
-    async (_event, args: { cwd: string; defaultBranch: string }) => {
-      try {
-        parseArgs(
-          'github:get-prs-for-checkout',
-          z.looseObject({ cwd: z.string(), defaultBranch: z.string() }),
-          args,
-        );
-        const prs = await GithubService.getPullRequestsForCheckout(args.cwd, args.defaultBranch);
-        return { success: true, data: prs };
-      } catch (err) {
-        return errorResponse(err);
-      }
-    },
-  );
-
-  ipcMain.handle(
-    'github:write-ci-report',
-    async (_event, args: { cwd: string; number: number; url: string; headSha?: string }) => {
-      try {
-        parseArgs(
-          'github:write-ci-report',
-          z.looseObject({
-            cwd: z.string(),
-            number: z.number(),
-            url: z.string(),
-            headSha: z.string().optional(),
-          }),
-          args,
-        );
-        const { cwd, ...pr } = args;
-        return { success: true, data: await GithubService.writeCiReport(cwd, pr) };
-      } catch (err) {
-        return errorResponse(err);
-      }
-    },
-  );
-
-  ipcMain.handle('github:list-prs', async (_event, args: { cwd: string }) => {
-    try {
-      parseArgs('github:list-prs', z.looseObject({ cwd: z.string() }), args);
-      const prs = await GithubService.listPullRequests(args.cwd);
-      return { success: true, data: prs };
-    } catch (err) {
-      return errorResponse(err);
-    }
-  });
-
-  ipcMain.handle(
-    'github:prepare-pr-branch',
-    async (_event, args: { cwd: string; prNumber: number; headRefName: string }) => {
-      try {
-        parseArgs(
-          'github:prepare-pr-branch',
-          z.looseObject({ cwd: z.string(), prNumber: z.number(), headRefName: z.string() }),
-          args,
-        );
-        const branch = await GithubService.fetchPullRequestHead(
-          args.cwd,
-          args.prNumber,
-          args.headRefName,
-        );
-        // The head may already be checked out (a prior task on this PR). The
-        // modal blocks a worktree-existing checkout on it, same as any branch.
-        const checkedOut = (await GitService.getCheckedOutBranches(args.cwd)).has(branch);
-        return { success: true, data: { branch, checkedOut } };
-      } catch (err) {
-        return errorResponse(err);
-      }
-    },
-  );
 
   ipcMain.handle(
     'github:post-branch-comment',

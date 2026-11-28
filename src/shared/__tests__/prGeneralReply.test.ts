@@ -28,11 +28,11 @@ describe('quoteReply', () => {
 describe('generalReplyBody', () => {
   const to = { id: 'IC_1', author: 'ada', body: 'Hi' };
 
-  it('quotes on GitHub, whose conversation has no threads', () => {
-    expect(generalReplyBody('github', to, 'ok')).toBe('> Hi\n\n@ada ok');
+  it('quotes where the conversation has no threads (GitHub)', () => {
+    expect(generalReplyBody('quote', to, 'ok')).toBe('> Hi\n\n@ada ok');
   });
 
-  it('posts the text itself on ADO, whose general comments are threads', () => {
-    expect(generalReplyBody('ado', { ...to, id: '106:1' }, ' ok ')).toBe('ok');
+  it('posts the text itself where general comments are threads (ADO)', () => {
+    expect(generalReplyBody('thread', { ...to, id: '106:1' }, ' ok ')).toBe('ok');
   });
 });

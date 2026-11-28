@@ -317,10 +317,10 @@ describe('gitStore.detectPr', () => {
   });
 
   it('skips and clears the PRs when on the default branch', async () => {
-    api.githubGetPrsForCheckout = vi.fn();
+    api.prForCheckout = vi.fn();
     const { useGit } = await freshStores();
     useGit.getState().detectPr(proj('p1', { gitBranch: 'main' }), task('t1', 'p1'), 'main');
-    expect(api.githubGetPrsForCheckout).not.toHaveBeenCalled();
+    expect(api.prForCheckout).not.toHaveBeenCalled();
     expect(useGit.getState().prs).toEqual([]);
     expect(useGit.getState().prByTask.t1).toEqual([]);
   });
@@ -346,11 +346,15 @@ describe('gitStore.detectPr', () => {
         current: true,
       },
     ];
-    api.githubGetPrsForCheckout = vi.fn(() => Promise.resolve({ success: true, data: prs }));
+    api.prForCheckout = vi.fn(() => Promise.resolve({ success: true, data: prs }));
     const { useGit } = await freshStores();
     useGit.getState().detectPr(proj('p1', { gitBranch: 'main' }), task('t1', 'p1'), 'feature');
     await vi.runOnlyPendingTimersAsync();
-    expect(api.githubGetPrsForCheckout).toHaveBeenCalledWith('/wt/t1', 'main');
+    expect(api.prForCheckout).toHaveBeenCalledWith({
+      projectId: 'p1',
+      cwd: '/wt/t1',
+      defaultBranch: 'main',
+    });
     expect(useGit.getState().prs).toEqual(prs);
     expect(useGit.getState().prByTask.t1).toEqual(prs);
   });
@@ -372,9 +376,7 @@ describe('gitStore.detectPr', () => {
       provider: 'github',
       current: false,
     };
-    api.githubGetPrsForCheckout = vi.fn(() =>
-      Promise.resolve({ success: true, data: [open, old] }),
-    );
+    api.prForCheckout = vi.fn(() => Promise.resolve({ success: true, data: [open, old] }));
     const { useGit } = await freshStores();
     useGit.getState().detectPr(proj('p1', { gitBranch: 'main' }), task('t1', 'p1'), 'feature');
     await vi.runOnlyPendingTimersAsync();
@@ -386,7 +388,7 @@ describe('gitStore.detectPr', () => {
     const prs = [
       { number: 7, title: 'A', url: 'u7', state: 'open', provider: 'github', current: true },
     ];
-    api.githubGetPrsForCheckout = vi
+    api.prForCheckout = vi
       .fn()
       .mockResolvedValueOnce({ success: true, data: prs })
       .mockResolvedValue({ success: false, error: 'offline' });
@@ -395,38 +397,18 @@ describe('gitStore.detectPr', () => {
     await vi.runOnlyPendingTimersAsync();
     await vi.runOnlyPendingTimersAsync();
     // At least one poll after the first came back failed.
-    expect(vi.mocked(api.githubGetPrsForCheckout).mock.calls.length).toBeGreaterThan(1);
-    expect(useGit.getState().prs).toEqual(prs);
-  });
-
-  it('uses the ADO endpoint for an Azure DevOps remote', async () => {
-    const remote = 'https://dev.azure.com/org/proj/_git/repo';
-    const prs = [
-      { number: 9, title: 'ADO', url: 'u', state: 'open', provider: 'ado', current: true },
-    ];
-    api.adoGetPrsForCheckout = vi.fn(() => Promise.resolve({ success: true, data: prs }));
-    const { useGit } = await freshStores();
-    useGit
-      .getState()
-      .detectPr(proj('p1', { gitBranch: 'main', gitRemote: remote }), task('t1', 'p1'), 'feature');
-    await vi.runOnlyPendingTimersAsync();
-    expect(api.adoGetPrsForCheckout).toHaveBeenCalledWith({
-      cwd: '/wt/t1',
-      defaultBranch: 'main',
-      gitRemote: remote,
-      projectId: 'p1',
-    });
+    expect(vi.mocked(api.prForCheckout).mock.calls.length).toBeGreaterThan(1);
     expect(useGit.getState().prs).toEqual(prs);
   });
 });
 
 describe('gitStore PR re-detection when HEAD moves', () => {
   let api: ReturnType<typeof makeElectronApiMock>;
-  const calls = () => vi.mocked(api.githubGetPrsForCheckout).mock.calls.length;
+  const calls = () => vi.mocked(api.prForCheckout).mock.calls.length;
   beforeEach(() => {
     vi.useFakeTimers();
     api = makeElectronApiMock();
-    api.githubGetPrsForCheckout = vi.fn(() => Promise.resolve({ success: true, data: [] }));
+    api.prForCheckout = vi.fn(() => Promise.resolve({ success: true, data: [] }));
     installWindow(api);
   });
   afterEach(() => {

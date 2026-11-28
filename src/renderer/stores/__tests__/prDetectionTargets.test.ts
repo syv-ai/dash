@@ -44,15 +44,13 @@ function task(p: Partial<Task> = {}): Task {
 }
 
 describe('prDetectionTargets', () => {
-  it('includes a task via the github provider, with the default branch for main to compare', () => {
+  it('includes a task with its project, for main to pick the forge, and the default branch to compare', () => {
     const targets = prDetectionTargets(project(), [task({ id: 'a', branch: 'feature/a' })]);
     expect(targets).toEqual([
       {
         taskId: 'a',
-        provider: 'github',
         cwd: '/repo/../worktrees/task',
         defaultBranch: 'main',
-        remote: 'https://github.com/acme/repo.git',
         projectId: 'proj1',
       },
     ]);
@@ -66,14 +64,6 @@ describe('prDetectionTargets', () => {
     ]);
     expect(targets.map((t) => t.taskId)).toEqual(['a', 'b', 'c']);
     expect(targets[0]?.defaultBranch).toBe('develop');
-  });
-
-  it('uses the ado provider for an Azure DevOps remote', () => {
-    const targets = prDetectionTargets(
-      project({ gitRemote: 'https://dev.azure.com/org/proj/_git/repo' }),
-      [task({ id: 'a', branch: 'feature/a' })],
-    );
-    expect(targets[0]?.provider).toBe('ado');
   });
 
   it('falls back to gitBranch then "main" for the default branch', () => {
