@@ -1,9 +1,10 @@
-import { existsSync, statSync } from 'fs';
+import { statSync } from 'fs';
 import os from 'os';
 import path from 'path';
 import type { PathFacts } from '@shared/pathFacts';
 import type { Project } from '@shared/types';
 import { mainCheckout, projectAtPath, realPath } from '../control/projectPaths';
+import { hasGit } from '../utils/gitPresence';
 
 /**
  * A path from the New Project dialog, made absolute: `~` is the home folder.
@@ -57,7 +58,7 @@ export function inspectPath(
     path: abs,
     exists: stat !== null,
     isDirectory,
-    isGitRepo: isDirectory && existsSync(path.join(abs, '.git')),
+    isGitRepo: isDirectory && hasGit(abs),
     parentExists: statOrNull(path.dirname(abs))?.isDirectory() ?? false,
     project,
   };

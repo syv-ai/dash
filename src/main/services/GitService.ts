@@ -1,7 +1,8 @@
 import { execFile, spawn } from 'child_process';
 import { createParser, type ParserEvent } from './preCommitParser';
 import { withExcludeEntry } from './gitExclude';
-import { existsSync, unlinkSync, promises as fsPromises } from 'fs';
+import { hasGit, NotAGitRepoError, withinGitRepo } from '../utils/gitPresence';
+import { unlinkSync, promises as fsPromises } from 'fs';
 import { isAbsolute, join } from 'path';
 import { promisify } from 'util';
 import type {
@@ -33,7 +34,9 @@ export interface GitDetection {
 const MAX_DIFF_SIZE = 1024 * 1024; // 1MB max diff output
 const NULL_DEVICE = process.platform === 'win32' ? 'NUL' : '/dev/null';
 
+/** Run git in `cwd`; a folder in no repository throws `NotAGitRepoError` with nothing spawned. */
 async function git(cwd: string, args: string[]): Promise<string> {
+  if (!withinGitRepo(cwd)) throw new NotAGitRepoError(cwd);
   const { stdout } = await execFileAsync('git', args, {
     cwd,
     maxBuffer: MAX_DIFF_SIZE * 2,
@@ -521,7 +524,7 @@ export class GitService {
    * a repository when it holds `.git`, with its `origin` URL and current branch.
    */
   static async detectRepo(folderPath: string): Promise<GitDetection> {
-    if (!existsSync(join(folderPath, '.git'))) {
+    if (!hasGit(folderPath)) {
       return { isGitRepo: false, remote: null, branch: null };
     }
     const remote = await git(folderPath, ['remote', 'get-url', 'origin']).then(

@@ -1,5 +1,4 @@
-import { existsSync } from 'fs';
-import { join } from 'path';
+import { hasGit } from '../utils/gitPresence';
 import { getRawDb } from './client';
 
 /**
@@ -207,17 +206,17 @@ export function runMigrations(): void {
     /* already exists */
   }
 
-  // Backfill: sync is_git_repo with actual filesystem state
+  // Sync is_git_repo with the disk on every start (a folder `git init`ed or
+  // stripped of `.git` while Dash was closed); `gitPresenceWatch` follows it live.
   try {
     const allProjects = rawDb.prepare(`SELECT id, path FROM projects`).all() as {
       id: string;
       path: string;
     }[];
     for (const proj of allProjects) {
-      const hasGit = existsSync(join(proj.path, '.git'));
       rawDb
         .prepare(`UPDATE projects SET is_git_repo = ? WHERE id = ?`)
-        .run(hasGit ? 1 : 0, proj.id);
+        .run(hasGit(proj.path) ? 1 : 0, proj.id);
     }
   } catch {
     /* best effort */

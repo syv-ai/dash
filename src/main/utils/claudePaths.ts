@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
+import { withinGitRepo } from './gitPresence';
 
 const execFileAsync = promisify(execFile);
 
@@ -78,6 +79,7 @@ export function claudeStateFile(): string {
 
 /** The main checkout of the repo `dir` is in (a linked worktree's too), else null. */
 export async function mainRepoRoot(dir: string): Promise<string | null> {
+  if (!withinGitRepo(dir)) return null;
   try {
     const { stdout } = await execFileAsync(
       'git',

@@ -3,6 +3,7 @@ import { promisify } from 'util';
 import * as path from 'path';
 import * as fs from 'fs';
 import { worktreeService } from './WorktreeService';
+import { hasGit } from '../utils/gitPresence';
 
 const execFileAsync = promisify(execFile);
 
@@ -31,7 +32,8 @@ export async function removeLegacyReserves(projectPaths: string[]): Promise<void
         }
       }
     }
-    if (!fs.existsSync(projectPath)) continue;
+    // A plain folder (or one gone) has no reserves to clean.
+    if (!hasGit(projectPath)) continue;
 
     try {
       // Drop records of worktrees whose directory is gone first: git refuses
@@ -47,7 +49,7 @@ export async function removeLegacyReserves(projectPaths: string[]): Promise<void
         await execFileAsync('git', ['branch', '-D', branch], { cwd: projectPath }).catch(() => {});
       }
     } catch {
-      // Not a git repo, or git failed: nothing to clean here.
+      // Git failed: nothing to clean here.
     }
   }
 }

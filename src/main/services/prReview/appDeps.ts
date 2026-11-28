@@ -3,6 +3,7 @@ import { DatabaseService } from '../DatabaseService';
 import { TelemetryService } from '../TelemetryService';
 import { ConnectionConfigService } from '../ConnectionConfigService';
 import { GitService } from '../GitService';
+import { hasGit } from '../../utils/gitPresence';
 import { taskReviewModesRepo } from '../taskReviewModesRepo';
 import { prContextFor, type PrContextDeps } from './resolve';
 import { listRelevantPrs } from './relevantPrs';
@@ -15,11 +16,13 @@ export const appPrContextDeps: PrContextDeps = {
 };
 
 /** The open PRs from and into the branch task `taskId`'s checkout is on now
- *  (see `listRelevantPrs`). */
+ *  (see `listRelevantPrs`); none, with no forge asked, for a plain folder. */
 async function appRelevantPrs(taskId: string): Promise<RelevantPrs> {
   const task = DatabaseService.getTask(taskId);
   if (!task) throw new Error('Unknown task');
-  const branch = (await GitService.getBranch(task.path)) ?? task.branch;
+  const branch = hasGit(task.path)
+    ? ((await GitService.getBranch(task.path)) ?? task.branch)
+    : null;
   const { adapter, ctx } = prContextFor(task.projectId, task.path, appPrContextDeps);
   return listRelevantPrs((filter) => adapter.list(ctx, filter), branch);
 }

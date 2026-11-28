@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { broadcast } from '../utils/broadcast';
 import { watchDir } from '../utils/watchDir';
+import { hasGit } from '../utils/gitPresence';
 
 const DEBOUNCE_MS = 500;
 
@@ -31,7 +32,9 @@ const entries = new Map<string, WatcherEntry>();
  * Sends 'git:fileChanged' events to all renderer windows when changes detected.
  */
 export function startWatching(id: string, cwd: string): void {
-  if (entries.has(id)) return;
+  // A plain folder has no git to watch (the project's git presence watch
+  // tells the renderer if it gains one).
+  if (entries.has(id) || !hasGit(cwd)) return;
 
   const { gitDir, commonDir } = resolveGitDirs(cwd);
   const onChange = () => notifyRenderers(id);

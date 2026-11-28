@@ -3,6 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import type { Project } from '../../shared/types';
+import { withinGitRepo } from '../utils/gitPresence';
 
 /*
  * Paths and the projects they belong to, for `--project` (cli.ts) and
@@ -27,6 +28,7 @@ export function resolveFrom(cwd: string, ref: string): string {
 
 /** The main checkout of the git repository `dir` is in (a worktree's too), or null. */
 export function mainCheckout(dir: string): string | null {
+  if (!withinGitRepo(dir)) return null;
   try {
     const common = execFileSync('git', ['-C', dir, 'rev-parse', '--git-common-dir'], {
       encoding: 'utf8',

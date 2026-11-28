@@ -15,6 +15,8 @@ import {
   safeRealpath,
 } from '../services/editorPaths';
 import { unwatchWorkingTree, watchWorkingTree } from '../services/WorkingTreeWatcher';
+import { listPlainFolder } from '../services/plainFolder';
+import { withinGitRepo } from '../utils/gitPresence';
 import type {
   DirEntry,
   EditorBlameResult,
@@ -183,8 +185,9 @@ export async function listWorkingRepoFiles(cwd: string): Promise<RepoListing> {
 }
 
 /** The working tree's files and, beside them, its gitignored ones, read in
- *  parallel. */
+ *  parallel; a plain folder (no repository) walked instead, with no git. */
 async function listWorkingTree(cwd: string): Promise<RepoListing> {
+  if (!withinGitRepo(cwd)) return listPlainFolder(cwd);
   const [listing, ignored] = await Promise.all([
     listWorkingRepoFiles(cwd),
     listIgnoredRepoFiles(cwd),
@@ -356,12 +359,15 @@ export function registerEditorIpc(): void {
           }),
           args,
         );
-        const { abs, plain } = resolveEditorPath(
+        const resolved = resolveEditorPath(
           args.cwd,
           args.filePath,
           path.isAbsolute(args.filePath) ? await outsideRoots(args.cwd) : [],
           'read',
         );
+        const { abs } = resolved;
+        // A file outside the worktree, or in a plain folder (no repository): no git.
+        const plain = resolved.plain || !withinGitRepo(args.cwd);
         let originalContent = '';
         if (!plain) {
           const cwdAbs = path.resolve(args.cwd);
@@ -402,8 +408,8 @@ export function registerEditorIpc(): void {
           // workingContent stays null — file deleted on disk.
         }
 
-        // A plain file (scratchpad, memory) has no HEAD to compare with: the file as it is on
-        // disk is the original, so only unsaved edits show as changes.
+        // A plain file (scratchpad, memory, a plain folder's) has no HEAD to compare with: the
+        // file as it is on disk is the original, so only unsaved edits show as changes.
         if (plain) originalContent = workingContent ?? '';
 
         return {

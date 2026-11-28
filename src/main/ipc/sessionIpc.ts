@@ -12,6 +12,7 @@ import {
 } from '../services/ptyManager';
 import { TelemetryService } from '../services/TelemetryService';
 import { IpcError } from './ipcErrors';
+import { withinGitRepo } from '../utils/gitPresence';
 
 const execFileAsync = promisify(execFile);
 
@@ -101,15 +102,18 @@ export function registerSessionIpc(): void {
         (await execFileAsync('git', gitArgs, { cwd: row.cwd })).stdout.trim();
       let branch = '';
       let useWorktree = false;
-      try {
-        branch = await git(['branch', '--show-current']);
-        const [gitDir, commonDir] = await Promise.all([
-          git(['rev-parse', '--path-format=absolute', '--git-dir']),
-          git(['rev-parse', '--path-format=absolute', '--git-common-dir']),
-        ]);
-        useWorktree = gitDir !== commonDir;
-      } catch {
-        // Not a git checkout — an in-place task with an empty branch label.
+      // A plain folder: an in-place task with no branch, no git spawned.
+      if (withinGitRepo(row.cwd)) {
+        try {
+          branch = await git(['branch', '--show-current']);
+          const [gitDir, commonDir] = await Promise.all([
+            git(['rev-parse', '--path-format=absolute', '--git-dir']),
+            git(['rev-parse', '--path-format=absolute', '--git-common-dir']),
+          ]);
+          useWorktree = gitDir !== commonDir;
+        } catch {
+          // Git failed: in place, with no branch label.
+        }
       }
       await killPtyAwait(`${FOREIGN_SESSION_PTY_PREFIX}${args.jobId}`);
       const task = DatabaseService.saveTask({

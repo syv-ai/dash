@@ -144,7 +144,8 @@ export class TaskService {
         ? input.branch
         : input.kind === 'worktree-new-branch'
           ? input.baseRef
-          : 'main';
+          : // A plain folder has no branch.
+            '';
     const branch = worktreeInfo?.branch ?? fallbackBranch;
 
     const task = DatabaseService.saveTask({

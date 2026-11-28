@@ -2,6 +2,7 @@ import { execFile } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { promisify } from 'util';
+import { withinGitRepo } from '../utils/gitPresence';
 
 const exec = promisify(execFile);
 
@@ -200,6 +201,7 @@ The issue is then posted under the user's GitHub account, so it is theirs to app
 
 /** The git path of a checkout's local excludes (shared by its worktrees). */
 async function excludeFile(cwd: string): Promise<string | null> {
+  if (!withinGitRepo(cwd)) return null;
   try {
     const { stdout } = await exec('git', ['rev-parse', '--git-path', 'info/exclude'], { cwd });
     const p = stdout.trim();
