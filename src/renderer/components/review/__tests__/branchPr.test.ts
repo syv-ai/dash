@@ -18,6 +18,8 @@ const listed = (number: number): RelevantPr => ({
   deletions: null,
   threads: null,
   ci: null,
+  viewer: null,
+  issues: null,
 });
 const detected = (number: number, state: PullRequestInfo['state'] = 'open'): PullRequestInfo => ({
   number,

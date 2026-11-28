@@ -95,6 +95,8 @@ describe('mapAdoRelevantPrs', () => {
         deletions: null,
         threads: null,
         ci: null,
+        viewer: null,
+        issues: null,
       },
     ]);
   });

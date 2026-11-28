@@ -25,6 +25,8 @@ const listed = (number: number): RelevantPr => ({
   deletions: null,
   threads: null,
   ci: null,
+  viewer: null,
+  issues: null,
 });
 
 type Viewer = Parameters<typeof prInvolvement>[0];

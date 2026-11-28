@@ -1,4 +1,5 @@
 {
+  "viewer": { "login": "me" },
   "repository": {
     "pullRequests": {
       "nodes": [
@@ -15,6 +16,20 @@
           "additions": 120,
           "deletions": 14,
           "author": { "login": "alice" },
+          "viewerDidAuthor": false,
+          "assignees": { "nodes": [{ "login": "bo" }, { "login": "me" }] },
+          "reviewRequests": {
+            "nodes": [{ "requestedReviewer": {} }, { "requestedReviewer": { "login": "me" } }]
+          },
+          "closingIssuesReferences": {
+            "nodes": [
+              {
+                "number": 12,
+                "title": "Tabs for review mode",
+                "url": "https://github.com/o/r/issues/12"
+              }
+            ]
+          },
           "reviewThreads": {
             "totalCount": 3,
             "nodes": [{ "isResolved": true }, { "isResolved": false }, { "isResolved": false }]
@@ -34,6 +49,10 @@
           "additions": 0,
           "deletions": 0,
           "author": null,
+          "viewerDidAuthor": true,
+          "assignees": { "nodes": [] },
+          "reviewRequests": { "nodes": [{ "requestedReviewer": {} }] },
+          "closingIssuesReferences": { "nodes": [] },
           "reviewThreads": { "totalCount": 0, "nodes": [] },
           "commits": { "nodes": [{ "commit": { "statusCheckRollup": null } }] }
         }

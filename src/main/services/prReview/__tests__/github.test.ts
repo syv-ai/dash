@@ -427,6 +427,10 @@ describe('githubRelevantPrsFrom', () => {
       deletions: 14,
       threads: { open: 2, total: 3 },
       ci: 'failing',
+      viewer: { isAuthor: false, isAssignee: true, isRequestedReviewer: true },
+      issues: [
+        { number: 12, title: 'Tabs for review mode', url: 'https://github.com/o/r/issues/12' },
+      ],
     });
     expect(draft).toMatchObject({
       state: 'open',
@@ -435,7 +439,15 @@ describe('githubRelevantPrsFrom', () => {
       fromFork: true,
       threads: { open: 0, total: 0 },
       ci: null,
+      // A team's request isn't you.
+      viewer: { isAuthor: true, isAssignee: false, isRequestedReviewer: false },
+      issues: [],
     });
+  });
+
+  it("can't say where you stand when the answer doesn't name you", () => {
+    const anonymous = githubRelevantPrsFrom({ ...relevantFixture, viewer: null });
+    expect(anonymous.map((p) => p.viewer)).toEqual([null, null]);
   });
 
   it('is empty for an answer without the repository', () => {

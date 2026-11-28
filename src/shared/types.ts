@@ -1027,6 +1027,21 @@ export interface RelevantPr extends PullRequest {
   /** Its review threads: unresolved, and all. */
   threads: { open: number; total: number } | null;
   ci: CiState | null;
+  /** Where you stand on it; null when the forge couldn't say who you are. */
+  viewer: PrViewerInvolvement | null;
+  /** The issues it closes (GitHub) or its linked work items (ADO); null
+   *  where the listing didn't ask (ADO, past its newest rows). */
+  issues: PrIssue[] | null;
+}
+
+/** Where you stand on a listed PR. */
+export interface PrViewerInvolvement {
+  isAuthor: boolean;
+  /** Among its assignees; always false on ADO, which has none. */
+  isAssignee: boolean;
+  /** Asked to review it, by name, and not yet reviewed; a team's or group's
+   *  request doesn't count as you. */
+  isRequestedReviewer: boolean;
 }
 
 /** The open PRs that matter to a task's branch: opened from it, or into it.

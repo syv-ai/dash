@@ -8,6 +8,7 @@ import type {
   PrReactionContent,
   PrReviewComment,
   PrReviewer,
+  PrViewerInvolvement,
   PrViewerReview,
   PrReviewThread,
   PrState,
@@ -302,6 +303,20 @@ const isHumanThread = (t: RawThread) =>
   !t.properties?.CodeReviewThreadType &&
   (t.comments ?? []).some((c) => c.commentType !== 'system' && !c.isDeleted);
 
+/** Where `me` (an ADO identity id) stands on a PR: its author, or on its
+ *  reviewer list without a vote (a vote adds you to the list too, so being
+ *  on it alone doesn't mean you were asked); ADO has no assignees. A group's
+ *  request isn't you. Null without an id. */
+export function adoViewerOn(pr: unknown, me: string): PrViewerInvolvement | null {
+  if (!me) return null;
+  const p = (pr ?? {}) as RawPr;
+  return {
+    isAuthor: p.createdBy?.id === me,
+    isAssignee: false,
+    isRequestedReviewer: (p.reviewers ?? []).some((r) => r.id === me && !r.vote),
+  };
+}
+
 /** A listed PR's row facts from its threads (`pullRequests/{id}/threads`):
  *  its people's threads, open and all, and its latest activity, the newest
  *  of its creation and every thread and comment (ADO's own push and vote
@@ -428,6 +443,7 @@ export function adoReviewFrom(
 ): ForgeReview {
   const pr = (raw.pr ?? {}) as RawPr;
   const number = pr.pullRequestId ?? 0;
+  const viewer = adoViewerOn(pr, raw.me);
   const { head, base } = latestIteration(raw.iterations);
   const url = prUrl(ctx, number);
   const threads: PrReviewThread[] = [];
@@ -467,11 +483,8 @@ export function adoReviewFrom(
     title: pr.title ?? '',
     body: pr.description ?? '',
     url,
-    viewerIsAuthor: !!raw.me && pr.createdBy?.id === raw.me,
-    // On the reviewer list and hasn't voted: a vote adds you to the list too,
-    // so being on it alone doesn't mean you were asked.
-    viewerIsRequestedReviewer:
-      !!raw.me && (pr.reviewers ?? []).some((r) => r.id === raw.me && !r.vote),
+    viewerIsAuthor: viewer?.isAuthor ?? false,
+    viewerIsRequestedReviewer: viewer?.isRequestedReviewer ?? false,
     viewerIsAssignee: false,
     viewerName: null,
     viewerCommented:
@@ -665,8 +678,8 @@ const defaultDeps: AdoDeps = {
 };
 
 /** How many of a listing's PRs get their row facts, newest first, and how
- *  many PRs are asked about at once: each costs three calls (threads, policy
- *  evaluations, statuses). */
+ *  many PRs are asked about at once: each costs up to five calls (threads,
+ *  policy evaluations, statuses, work item links and their titles). */
 const ROW_FACTS_LIMIT = 10;
 const ROW_FACTS_CONCURRENCY = 4;
 /** How long a PR's row facts are reused before they're asked again. */
@@ -814,13 +827,32 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
     return changed;
   };
 
+  /** The linked work items of the PR at `at` with their titles; rejects
+   *  when ADO won't say (a token without work-item read). */
+  const workItems = async (ado: NonNullable<PrContext['ado']>, at: string): Promise<PrIssue[]> => {
+    const refs = (await deps.request(ado, `${at}/workitems`)) as {
+      value?: { id?: string | number }[];
+    } | null;
+    const ids = (refs?.value ?? [])
+      .map((r) => Number(r.id))
+      .filter((n) => Number.isInteger(n) && n > 0)
+      .slice(0, 50);
+    if (ids.length === 0) return [];
+    const items = await deps.request(
+      ado,
+      `${adoProjectSegment(ado)}/_apis/wit/workitems?ids=${ids.join(',')}&fields=System.Title`,
+    );
+    return adoIssuesFrom(items, repoContext(ado));
+  };
+
   const rowFactsCache = new Map<string, { at: number; facts: Promise<Partial<RelevantPr>> }>();
 
   /**
    * What ADO's PR list leaves out of a row, a few calls per PR: its threads
-   * and latest activity (`adoRowFacts`), its checks as one state, and its
-   * line counts from local git when its head and target are in the checkout.
-   * Whatever can't be read stays null. Reused for a minute per PR and head.
+   * and latest activity (`adoRowFacts`), its checks as one state, its linked
+   * work items, and its line counts from local git when its head and target
+   * are in the checkout. Whatever can't be read stays null. Reused for a
+   * minute per PR and head.
    */
   const rowFacts = (ctx: PrContext, pr: RawPr): Promise<Partial<RelevantPr>> => {
     const ado = adoOf(ctx);
@@ -830,15 +862,18 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
     const hit = rowFactsCache.get(key);
     if (hit && Date.now() - hit.at < ROW_FACTS_TTL_MS) return hit.facts;
     const facts = (async (): Promise<Partial<RelevantPr>> => {
-      const [threads, checks, lines] = await Promise.allSettled([
-        deps.request(ado, `${repoPath(ado)}/pullRequests/${id}/threads`),
+      const at = `${repoPath(ado)}/pullRequests/${id}`;
+      const [threads, checks, issues, lines] = await Promise.allSettled([
+        deps.request(ado, `${at}/threads`),
         deps.checks(ado, id, pr.repository?.project?.id),
+        workItems(ado, at),
         deps.diffStat(ctx.cwd, pr.lastMergeTargetCommit?.commitId ?? '', head),
       ]);
       const stat = lines.status === 'fulfilled' ? lines.value : null;
       return {
         ...(threads.status === 'fulfilled' ? adoRowFacts(pr, threads.value) : {}),
         ...(checks.status === 'fulfilled' ? { ci: ciOf(checks.value) } : {}),
+        ...(issues.status === 'fulfilled' ? { issues: issues.value } : {}),
         ...(stat ? stat : {}),
       };
     })();
@@ -859,31 +894,6 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
       body: adoReplyBody(body, adoRootCommentId(thread)),
     })) as RawComment;
     return commentFrom(posted, threadId, threadUrl(prUrl(repoContext(ado), number), thread));
-  };
-
-  /** The PR's linked work items with their titles; none when ADO won't say
-   *  (a token without work-item read), which never fails the load. */
-  const linkedWorkItems = async (
-    ado: NonNullable<PrContext['ado']>,
-    at: string,
-  ): Promise<PrIssue[]> => {
-    try {
-      const refs = (await deps.request(ado, `${at}/workitems`)) as {
-        value?: { id?: string | number }[];
-      } | null;
-      const ids = (refs?.value ?? [])
-        .map((r) => Number(r.id))
-        .filter((n) => Number.isInteger(n) && n > 0)
-        .slice(0, 50);
-      if (ids.length === 0) return [];
-      const items = await deps.request(
-        ado,
-        `${adoProjectSegment(ado)}/_apis/wit/workitems?ids=${ids.join(',')}&fields=System.Title`,
-      );
-      return adoIssuesFrom(items, repoContext(ado));
-    } catch {
-      return [];
-    }
   };
 
   return {
@@ -941,14 +951,15 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
      *  `rowFacts`) filled in for its newest PRs. */
     async list(ctx, filter) {
       const ado = adoOf(ctx);
-      const res = (await deps.request(
-        ado,
-        `${repoPath(ado)}/pullrequests?${adoPrListQuery(filter)}`,
-      )) as {
-        value?: unknown;
-      } | null;
+      const [res, me] = await Promise.all([
+        deps.request(ado, `${repoPath(ado)}/pullrequests?${adoPrListQuery(filter)}`),
+        deps.getMyId(ado).catch(() => ''),
+      ]);
       const raw = list<RawPr>(res);
-      const rows = mapAdoRelevantPrs(raw, repoContext(ado));
+      const rows = mapAdoRelevantPrs(raw, repoContext(ado)).map((row, i) => ({
+        ...row,
+        viewer: adoViewerOn(raw[i], me),
+      }));
       const newest = rows
         .map((row, i) => ({ row, raw: raw[i]! }))
         .sort((a, b) => b.row.number - a.row.number)
@@ -974,7 +985,8 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
       const [threads, checks, issues] = await Promise.all([
         deps.request(ado, `${at}/threads?$iteration=${id}&$baseIteration=0`),
         deps.checks(ado, number, (pr as RawPr | null)?.repository?.project?.id),
-        linkedWorkItems(ado, at),
+        // Never fails the load: none when ADO won't say.
+        workItems(ado, at).catch((): PrIssue[] => []),
       ]);
       const baseTip = (pr as RawPr | null)?.lastMergeTargetCommit?.commitId || null;
       // The PR's merge ref holds its head (a fork's too) and the target, should

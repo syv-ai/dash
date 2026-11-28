@@ -3,6 +3,7 @@ import { promisify } from 'util';
 import type {
   CiState,
   PrCheck,
+  PrIssue,
   PrReaction,
   PrReactionContent,
   PrListFilter,
@@ -87,10 +88,12 @@ export const PR_REVIEW_QUERY = `query($owner: String!, $name: String!, $number: 
 
 type Node = Record<string, unknown>;
 
-/** The open PRs from (`$head`) or into (`$base`) a branch, newest first, with
- *  what the PR button shows of each. One call per listing, like `gh pr list`,
- *  which can't count review threads. */
+/** The open PRs from (`$head`) or into (`$base`) a branch, or all of them,
+ *  newest first, with what the PR button and the project's PR list show of
+ *  each: where you stand on it and the issues it closes. One call per
+ *  listing, like `gh pr list`, which can't count review threads. */
 export const RELEVANT_PRS_QUERY = `query($owner: String!, $name: String!, $head: String, $base: String) {
+  viewer { login }
   repository(owner: $owner, name: $name) {
     pullRequests(
       states: OPEN
@@ -103,6 +106,10 @@ export const RELEVANT_PRS_QUERY = `query($owner: String!, $name: String!, $head:
         number title url state isDraft isCrossRepository
         headRefName baseRefName updatedAt additions deletions
         author { login }
+        viewerDidAuthor
+        assignees(first: 20) { nodes { login } }
+        reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } } } }
+        closingIssuesReferences(first: 10) { nodes { number title url } }
         reviewThreads(first: 100) { totalCount nodes { isResolved } }
         commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
       }
@@ -177,8 +184,23 @@ const ROLLUP_CI: Record<string, CiState> = {
   EXPECTED: 'pending',
 };
 
-/** The listed PRs of a RELEVANT_PRS_QUERY answer. */
+/** The issues a PR node's `closingIssuesReferences` names. */
+const issuesFrom = (p: Node): PrIssue[] =>
+  nodes(p.closingIssuesReferences).flatMap((i) => {
+    const n = num(i.number);
+    return n === null ? [] : [{ number: n, title: str(i.title), url: str(i.url) }];
+  });
+
+/** Whether `viewer` is asked by name to review a PR node. A request goes away
+ *  once the person reviews. A team's request isn't matched: that would take
+ *  a lookup of the viewer's teams. */
+const isRequestedOf = (p: Node, viewer: string): boolean =>
+  !!viewer && nodes(p.reviewRequests).some((r) => login(r.requestedReviewer) === viewer);
+
+/** The listed PRs of a RELEVANT_PRS_QUERY answer, with where its `viewer`
+ *  stands on each (null when the answer doesn't name them). */
 export function githubRelevantPrsFrom(data: Node): RelevantPr[] {
+  const viewer = str(pick(data, 'viewer', 'login'));
   return nodes(pick(data, 'repository', 'pullRequests')).map((p) => {
     const threads = nodes(p.reviewThreads);
     const total = num(pick(p, 'reviewThreads', 'totalCount')) ?? threads.length;
@@ -200,6 +222,14 @@ export function githubRelevantPrsFrom(data: Node): RelevantPr[] {
       deletions: num(p.deletions),
       threads: { open: threads.filter((t) => t.isResolved !== true).length, total },
       ci: ROLLUP_CI[str(pick(rollup ?? {}, 'commit', 'statusCheckRollup', 'state'))] ?? null,
+      viewer: viewer
+        ? {
+            isAuthor: p.viewerDidAuthor === true,
+            isAssignee: nodes(p.assignees).some((a) => login(a) === viewer),
+            isRequestedReviewer: isRequestedOf(p, viewer),
+          }
+        : null,
+      issues: issuesFrom(p),
     };
   });
 }
@@ -282,13 +312,7 @@ export function githubReviewFrom(
 ): ForgeReview {
   const p = (pr && typeof pr === 'object' ? pr : {}) as Node;
   const viewerIsAuthor = p.viewerDidAuthor === true;
-  // A request goes away once the person reviews. A team's request isn't
-  // matched: that would take a lookup of the viewer's teams.
-  const viewerIsRequestedReviewer =
-    !!viewer &&
-    nodes(p.reviewRequests).some(
-      (r) => str((r.requestedReviewer as Node | null)?.login) === viewer,
-    );
+  const viewerIsRequestedReviewer = isRequestedOf(p, viewer);
   // A review's summary belongs in the conversation; one without a body (just
   // inline comments) or still pending says nothing there.
   const summaries = nodes(p.reviews).filter((r) => str(r.body).trim() && r.state !== 'PENDING');
@@ -332,10 +356,7 @@ export function githubReviewFrom(
     reviewers: reviewersFrom(p),
     viewerReview: githubViewerReview(p, viewer),
     assignees,
-    issues: nodes(p.closingIssuesReferences).flatMap((i) => {
-      const n = num(i.number);
-      return n === null ? [] : [{ number: n, title: str(i.title), url: str(i.url) }];
-    }),
+    issues: issuesFrom(p),
     checks: checksFrom(p),
   };
 }

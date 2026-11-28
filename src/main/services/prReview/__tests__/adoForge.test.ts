@@ -186,6 +186,8 @@ describe('the ADO forge', () => {
     const { d, asked } = deps(
       {
         '/threads': threads,
+        'wit/workitems?ids=42': { value: [{ id: 42, fields: { 'System.Title': 'Wire it' } }] },
+        '/workitems': { value: [{ id: '42', url: 'x' }] },
         pullrequests: { value: [listed({ creationDate: '2026-11-20T09:00:00Z' })] },
       },
       [{ name: 'Build', state: 'pending', url: null }],
@@ -197,6 +199,9 @@ describe('the ADO forge', () => {
       updatedAt: '2026-11-26T09:00:00Z',
       threads: { open: 1, total: 2 },
       ci: 'pending',
+      issues: [
+        { number: 42, title: 'Wire it', url: 'https://dev.azure.com/org/Proj/_workitems/edit/42' },
+      ],
       additions: 12,
       deletions: 3,
     });
@@ -213,8 +218,42 @@ describe('the ADO forge', () => {
     expect(rows.find((r) => r.number === 1)).toMatchObject({
       threads: null,
       ci: null,
+      issues: null,
       additions: null,
     });
+  });
+
+  it('says where you stand on every row: the author, or asked and not yet voted', async () => {
+    const mine = listed({ pullRequestId: 3, createdBy: { displayName: 'Me', id: 'me' } });
+    const asked = listed({ pullRequestId: 4, reviewers: [{ id: 'me', vote: 0 }, { id: 'g' }] });
+    const voted = listed({ pullRequestId: 5, reviewers: [{ id: 'me', vote: 10 }] });
+    const { d } = deps({ pullrequests: { value: [mine, asked, voted] } });
+    const rows = await makeAdoProvider(d).list(ctx);
+    expect(rows.map((r) => [r.number, r.viewer])).toEqual([
+      [3, { isAuthor: true, isAssignee: false, isRequestedReviewer: false }],
+      [4, { isAuthor: false, isAssignee: false, isRequestedReviewer: true }],
+      [5, { isAuthor: false, isAssignee: false, isRequestedReviewer: false }],
+    ]);
+  });
+
+  it("lists without where you stand when ADO won't say who you are", async () => {
+    const { d } = deps({ pullrequests: { value: [listed()] } });
+    d.getMyId = async () => {
+      throw new Error('401');
+    };
+    const [row] = await makeAdoProvider(d).list(ctx);
+    expect(row?.viewer).toBeNull();
+  });
+
+  it("leaves a row's work items null when ADO won't say", async () => {
+    const { d } = deps({ pullrequests: { value: [listed()] } });
+    const request = d.request;
+    d.request = async (c, path, o) => {
+      if (path.endsWith('/workitems')) throw new Error('403');
+      return request(c, path, o);
+    };
+    const [row] = await makeAdoProvider(d).list(ctx);
+    expect(row?.issues).toBeNull();
   });
 });
 
