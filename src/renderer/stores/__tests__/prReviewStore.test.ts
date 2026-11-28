@@ -410,7 +410,8 @@ describe('prReviewStore summaries', () => {
     // An agent write elsewhere on the task refetches summaries meanwhile.
     await usePrReviews.getState().refreshSummaries('t1');
     expect(usePrReviews.getState().summaries[key]!.body).toBe('Agent rewrote it');
-    // "Use mine" saves the person's text over theirs, unconditionally.
+    // "Use mine" saves the person's text over the version shown: another
+    // agent write since would offer again.
     const [, offer] = vi.mocked(toast.offer).mock.calls[0]!;
     offer.action.onClick();
     expect(usePrReviews.getState().summaries[key]!.body).toBe('Mine');
@@ -420,7 +421,31 @@ describe('prReviewStore summaries', () => {
         provider: 'ado',
         number: 7,
         body: 'Mine',
+        ifUnchangedSince: 'v2',
       }),
+    );
+  });
+
+  it("waits for the person's save in flight, and builds the next on the version it got", async () => {
+    let finish: (v: unknown) => void = () => {};
+    api.prReviewSetSummary = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)))
+      .mockResolvedValue({
+        success: true,
+        data: { body: 'Mine, more', author: 'user', updatedAt: 'v2' },
+      });
+    const { usePrReviews } = await freshStore();
+    usePrReviews.getState().setSummary('t1', 'ado', 7, 'Mine');
+    vi.advanceTimersByTime(500);
+    usePrReviews.getState().setSummary('t1', 'ado', 7, 'Mine, more');
+    vi.advanceTimersByTime(500);
+    // The second save waits for the first, rather than racing it on the old version.
+    expect(api.prReviewSetSummary).toHaveBeenCalledTimes(1);
+    finish({ success: true, data: { body: 'Mine', author: 'user', updatedAt: 'v1' } });
+    await vi.waitFor(() => expect(api.prReviewSetSummary).toHaveBeenCalledTimes(2));
+    expect(api.prReviewSetSummary).toHaveBeenLastCalledWith(
+      expect.objectContaining({ body: 'Mine, more', ifUnchangedSince: 'v1' }),
     );
   });
 });

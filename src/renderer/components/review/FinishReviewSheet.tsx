@@ -6,6 +6,7 @@ import { prScope } from '../../../shared/prScope';
 import { usePrReviews } from '../../stores/prReviewStore';
 import { useTaskReview } from '../diffEditor/prReview/useTaskReview';
 import { usePrThreadContext } from '../diffEditor/prReview/usePrThreadContext';
+import { MovedBadge } from '../diffEditor/prReview/PrComment';
 import { Button } from '../ui/Button';
 import { DetailItem, DetailList } from '../ui/DetailList';
 import { Dialog, DialogFooter, DialogHeader } from '../ui/Dialog';
@@ -22,6 +23,7 @@ import { ChecksRollupIcon } from './ChecksRollupIcon';
 import {
   canPost,
   draftsLine,
+  splitHeldBack,
   offeredVerdict,
   ownReviewLine,
   postingItems,
@@ -94,7 +96,12 @@ function Sheet({
   const { summary, setSummary } = useTaskReview(taskId, review);
   const body = summary?.body ?? '';
   const [error, setError] = useState<{ error: PrWriteError; posted: number } | null>(null);
-  const toPost = { comments: comments.length, summary: body, verdict };
+  // Line comments written on an older head are held back: they don't count.
+  const { posting: postingDrafts, heldBack } = useMemo(
+    () => splitHeldBack(comments, review.head),
+    [comments, review.head],
+  );
+  const toPost = { comments: postingDrafts.length, summary: body, verdict };
   const forge = providerName(review.provider);
   const items = useMemo(() => postingItems(review.threads, comments), [review, comments]);
   const context = usePrThreadContext({
@@ -199,8 +206,16 @@ function Sheet({
               <span className="tabular-nums">{threadsLineShort(review.threads)}</span>
             </DetailItem>
             <DetailItem label="Drafts">
-              <span className="tabular-nums">{draftsLine(comments)}</span>
+              <span className="tabular-nums">{draftsLine(postingDrafts)}</span>
             </DetailItem>
+            {heldBack.length > 0 && (
+              <DetailItem label="Held back">
+                <span className="inline-flex items-center gap-1.5 tabular-nums">
+                  {plural(heldBack.length, 'comment')}
+                  <MovedBadge from={heldBack[0]!.commit!} />
+                </span>
+              </DetailItem>
+            )}
             {noteCount > 0 && (
               <DetailItem label="Notes">
                 <span className="tabular-nums">{noteCount} stay local</span>

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Bot, MessageSquare } from 'lucide-react';
 import type { DiffCommentKind } from '../../../../shared/types';
 import { Badge } from '../../ui/Badge';
-import { DraftBadge } from '../prReview/PrComment';
+import { DraftBadge, MovedBadge } from '../prReview/PrComment';
 
 /** The kind's icon and name, the same in every list (D10). */
 function KindLabel({ kind }: { kind: DiffCommentKind }) {
@@ -55,15 +55,7 @@ export function BubbleHeader({
       {scopeLabel && <Badge size="sm">{scopeLabel}</Badge>}
       {byAgent && <Badge size="sm">Agent</Badge>}
       {sent && <Badge size="sm">Sent</Badge>}
-      {movedFrom && (
-        <Badge
-          size="sm"
-          tone="warn"
-          title={`Written on ${movedFrom.slice(0, 7)}; the PR has changed since, so these lines may be other code now. Posting the review holds it back until you keep it here, edit its lines, or delete it.`}
-        >
-          PR moved
-        </Badge>
-      )}
+      {movedFrom && <MovedBadge from={movedFrom} />}
       {actions && <div className="-mr-1.5 ml-auto flex items-center">{actions}</div>}
     </div>
   );

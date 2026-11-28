@@ -91,7 +91,7 @@ The orchestrator sees every project that isn't archived. Turning the switch off 
 | `review drafts-get <id>`     | One note or draft, as `drafts-list` shows it                                         | yes                 |
 | `review drafts-create`       | Write a note, or draft a review comment on a PR's lines or a reply to a thread       |                     |
 | `review drafts-update <id>`  | Change or move a note or draft, the person's or the agent's (`--body -` reads stdin) |                     |
-| `review drafts-delete <id>…` | Delete notes or drafts by id, or `--all` on the PR                                   |                     |
+| `review drafts-delete <id>…` | Delete notes or drafts by id, or `--all --number <pr>`                               |                     |
 | `review summary-get`         | A task's draft review summary for a PR (its PR-level comment)                        | yes                 |
 | `review summary-set`         | Draft the review summary, posted with the verdict on Submit                          |                     |
 | `review open`                | Bring Dash to the front on the task in review mode for a PR                          |                     |

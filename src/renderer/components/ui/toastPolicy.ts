@@ -19,6 +19,11 @@ export const TOAST_DURATION: Record<ToastVariant, number> = {
   progress: Infinity,
 };
 
+/** A sticky offer holds something the person would lose with it (their text
+ *  in a write conflict, a notice no watch took): it stays until they act on it
+ *  or close it. */
+export const STICKY_OFFER_DURATION = Infinity;
+
 /** For a condition that lasts (duplicate task directories, Q8): long enough
  *  to read and act on, but still transient. */
 export const LASTING_TOAST_DURATION = 20_000;

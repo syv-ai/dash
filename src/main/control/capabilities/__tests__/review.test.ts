@@ -706,6 +706,8 @@ describe('drafts_delete (#238)', () => {
   it('refuses a call that names no drafts, or mixes ids and --all', async () => {
     for (const input of [
       {},
+      // --all never falls back to the default PR: it names the one it clears.
+      { all: true },
       { ids: ['a'], all: true, number: 12 },
       { ids: ['a'], kind: 'note' },
       { ids: ['a', 'b'], ifUnchangedSince: 'v1' },

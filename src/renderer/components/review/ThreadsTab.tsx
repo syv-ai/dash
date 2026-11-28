@@ -139,6 +139,7 @@ export function ThreadItems({
             key={i.draft.id}
             comment={i.draft}
             mentions={context.mentions}
+            prHead={context.review.head}
             onNavigate={onNavigate}
           />
         ),
@@ -184,10 +185,13 @@ function PostedThreadCard({
 function DraftThreadCard({
   comment: c,
   mentions,
+  prHead,
   onNavigate,
 }: {
   comment: DiffComment;
   mentions: readonly string[];
+  /** The PR's head as loaded: a draft written on an older one shows as moved. */
+  prHead: string;
   onNavigate: Navigate;
 }) {
   const place = draftPlace(c);
@@ -196,6 +200,7 @@ function DraftThreadCard({
       <DraftComment
         draft={c}
         mentions={mentions}
+        prHead={prHead}
         place={
           <span className="min-w-0 truncate">
             <TextLink title={c.filePath} onClick={() => onNavigate(c.viewScope, c.filePath, c.id)}>

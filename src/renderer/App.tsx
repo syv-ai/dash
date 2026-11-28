@@ -544,7 +544,8 @@ export function App() {
 
   // A task's notice (`dashctl tasks notify`) that no watch of whoever messaged
   // it took: Dash holds it for their next watch, and shows it here so it isn't
-  // missed. One toast per task, updated in place with the latest and a count.
+  // missed. One toast per task, updated in place with the latest and a count,
+  // until the person closes it or opens the task.
   useEffect(() => {
     const unseen = new Map<string, number>();
     return window.electronAPI.onTaskNoticeHeld(({ taskId, projectId, taskName, text }) => {
@@ -558,12 +559,11 @@ export function App() {
         {
           key: `task-notice-${taskId}`,
           description: text.length > 300 ? `${text.slice(0, 300)}…` : text,
+          sticky: true,
+          onDismiss: forget,
           action: {
             label: 'Open task',
-            onClick: () => {
-              forget();
-              useProjects.getState().selectTask(projectId, taskId);
-            },
+            onClick: () => useProjects.getState().selectTask(projectId, taskId),
           },
         },
       );

@@ -1,4 +1,4 @@
-import { isPrComment } from '../../../shared/diffComments';
+import { isMoved, isPrComment } from '../../../shared/diffComments';
 import { formatTimeAgo } from '../../../shared/relativeTime';
 import type {
   DiffComment,
@@ -31,6 +31,16 @@ export interface ReviewToPost {
   comments: number;
   summary: string;
   verdict: PrVerdict;
+}
+
+/** The comments and replies that post, and the line comments held back:
+ *  written on an older head than `head`, the PR's as loaded. */
+export function splitHeldBack<C extends Pick<DiffComment, 'commit' | 'replyTo'>>(
+  drafts: readonly C[],
+  head: string,
+): { posting: C[]; heldBack: C[] } {
+  const heldBack = drafts.filter((c) => isMoved(c, head));
+  return { posting: drafts.filter((c) => !isMoved(c, head)), heldBack };
 }
 
 /** Something would reach the PR: a comment or reply, a summary, or a verdict

@@ -227,6 +227,8 @@ export const useCommentsStore = create<CommentsStore>((set, get) => {
         : 'This draft was deleted while you were editing it (by the agent, or posted by a submit).',
       {
         key: `draft-conflict-${mine.id}`,
+        // The person's text lives only here until they choose.
+        sticky: true,
         description: mine.text.length > 80 ? `${mine.text.slice(0, 80)}…` : mine.text,
         action: {
           label: current ? 'Use mine' : 'Restore mine',

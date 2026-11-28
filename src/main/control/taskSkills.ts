@@ -148,7 +148,7 @@ A line draft records the PR's head commit it was written on (\`commit\`; give \`
 
 - \`drafts-list\` lists the PR's drafts; \`--all-prs\` lists every PR the task has drafts on, and \`--kind\`, \`--author\` and \`--path\` narrow it. \`drafts-get <id>\` reads one.
 - You can change any draft, the person's too, with \`drafts-update <id>\`: \`--body -\` with the new body on stdin, \`--kind\`, \`--start-line\` (alone, it moves the whole range), \`--end-line\`, or \`--path\` and \`--number\` to move it to another file or PR (it keeps its id and author; a reply can't move). Keep the person's wording unless they ask you to change it.
-- Delete with \`drafts-delete <id>…\` (several at once), or \`drafts-delete --all\` for the PR's drafts, narrowed by \`--kind\` or \`--author\`. \`--number\` with ids refuses any draft not on that PR.
+- Delete with \`drafts-delete <id>…\` (several at once), or \`drafts-delete --all --number <pr>\` for a PR's drafts (\`--all\` always names its PR), narrowed by \`--kind\` or \`--author\`. \`--number\` with ids refuses any draft not on that PR.
 - The person may be editing the same drafts. Each has an \`updatedAt\`: pass the one you read as \`--if-unchanged-since\` to \`drafts-update\`, \`drafts-delete\` (one id) or \`summary-set\`, and a 409 tells you it changed since; read it again before deciding.
 - Write in Markdown; it is rendered in the editor.
 `;

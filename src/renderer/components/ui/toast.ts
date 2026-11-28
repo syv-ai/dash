@@ -14,6 +14,7 @@ import { useSettings } from '../../stores/settingsStore';
 import { ToastView, type ToastViewKind } from './Toaster';
 import {
   LASTING_TOAST_DURATION,
+  STICKY_OFFER_DURATION,
   TOAST_DURATION,
   copiedContent,
   createFocusGate,
@@ -40,6 +41,11 @@ export interface OfferOptions extends Omit<ToastOptions, 'lasting'> {
   icon?: LucideIcon;
   /** `updates` is muted by the "update notifications" setting. */
   topic?: 'updates';
+  /** Stays until acted on or closed (`STICKY_OFFER_DURATION`), for an offer
+   *  that holds something the person would otherwise lose. */
+  sticky?: boolean;
+  /** The toast closed by the person's hand: its ✕, or after its action. */
+  onDismiss?: () => void;
 }
 
 export type ToastResult = { kind: ToastKind; title: string; description?: string };
@@ -50,10 +56,15 @@ interface Shown extends Omit<ToastOptions, 'key' | 'lasting'> {
   title: string;
   duration: number;
   icon?: LucideIcon;
+  onDismiss?: () => void;
 }
 
-function show({ id, kind, title, duration, ...view }: Shown): string {
-  sonner.custom(() => createElement(ToastView, { id, kind, title, ...view }), { id, duration });
+function show({ id, kind, title, duration, onDismiss, ...view }: Shown): string {
+  sonner.custom(() => createElement(ToastView, { id, kind, title, ...view }), {
+    id,
+    duration,
+    onDismiss,
+  });
   return id;
 }
 
@@ -103,12 +114,11 @@ export const toast = {
 
   /** News with one action: waits for focus, keeps its ✕, stays 20 s. */
   offer(title: string, o: OfferOptions): void {
-    const { key, topic, ...view } = o;
+    const { key, topic, sticky, ...view } = o;
     if (topic === 'updates' && !useSettings.getState().updateNotificationsEnabled) return;
     const id = toastId('offer', title, key);
-    offerGate().run(() =>
-      show({ ...view, id, kind: 'offer', title, duration: TOAST_DURATION.offer }),
-    );
+    const duration = sticky ? STICKY_OFFER_DURATION : TOAST_DURATION.offer;
+    offerGate().run(() => show({ ...view, id, kind: 'offer', title, duration }));
   },
 
   /** One toast for work in flight that becomes its result; `success`

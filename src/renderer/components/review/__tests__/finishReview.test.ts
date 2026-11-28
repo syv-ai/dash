@@ -11,6 +11,7 @@ import {
   offeredVerdict,
   postLabel,
   postingItems,
+  splitHeldBack,
   unsentNoteCount,
 } from '../finishReview';
 
@@ -34,6 +35,18 @@ const draft = (id: string, over: Partial<DiffComment>): DiffComment => ({
 });
 
 describe('finishReview', () => {
+  it('holds back line comments written on an older head, not replies or unknown ones', () => {
+    const drafts = [
+      draft('now', { kind: 'comment', commit: 'H2' }),
+      draft('old', { kind: 'comment', commit: 'H1' }),
+      draft('unknown', { kind: 'comment', commit: null }),
+      draft('reply', { kind: 'comment', replyTo: 'T1' }),
+    ];
+    const { posting, heldBack } = splitHeldBack(drafts, 'H2');
+    expect(posting.map((c) => c.id)).toEqual(['now', 'unknown', 'reply']);
+    expect(heldBack.map((c) => c.id)).toEqual(['old']);
+  });
+
   it('posts only when something would reach the PR', () => {
     expect(canPost({ comments: 0, summary: '  ', verdict: 'comment' })).toBe(false);
     expect(canPost({ comments: 1, summary: '', verdict: 'comment' })).toBe(true);

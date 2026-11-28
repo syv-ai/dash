@@ -242,64 +242,90 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
    *  replace it. */
   const unsaved = new Map<string, string>();
 
+  /** Per review, the save in flight: the next waits for it, so it builds on the
+   *  version the person's own save got back, not one it moved past. */
+  const summaryQueues = new Map<string, Promise<void>>();
+  /** Per review, bumped by a conflict: a save queued before it was typed on
+   *  the text the person has just been told was refused, so it is dropped. */
+  const summaryEpochs = new Map<string, number>();
+
   /**
-   * Save the person's summary, built on version `since` (null: regardless). If
-   * the agent rewrote it since, nothing is overwritten: the summary shows the
-   * agent's, as a draft the agent changed does, and one toast per review
-   * offers the person's text back (its ✕ keeps theirs).
+   * Save the person's summary, after any save of it still in flight, built on
+   * `since`: a version, 'base' (the one the last save or load left), or null
+   * (regardless). If the agent rewrote it since, nothing is overwritten: the
+   * summary shows the agent's, as a draft the agent changed does, and one
+   * sticky toast per review offers the person's text back (its ✕ keeps theirs).
    */
-  const saveSummary = async (
+  const saveSummary = (
     taskId: string,
     provider: PrProvider,
     number: number,
     body: string,
-    since: string | null,
-  ) => {
+    since: string | 'base' | null,
+  ): Promise<void> => {
     const key = reviewKey(taskId, provider, number);
+    const epoch = summaryEpochs.get(key) ?? 0;
     const cancelPending = () => {
       clearTimeout(pendingSaves.get(key));
       pendingSaves.delete(key);
     };
-    try {
-      const resp = await window.electronAPI.prReviewSetSummary({
-        taskId,
-        provider,
-        number,
-        body,
-        ...(since === null ? {} : { ifUnchangedSince: since }),
-      });
-      if (resp.success) {
-        summaryBase.set(key, resp.data?.updatedAt ?? '');
-        // Typing since this save was sent is still unsaved.
-        if (unsaved.get(key) === body) unsaved.delete(key);
-        return;
-      }
-      if (resp.code !== 'CONFLICT') return;
-      const theirs = (resp.data as PrReviewSummary | null | undefined) ?? null;
-      const said = theirs?.body ?? '';
-      const mine = unsaved.get(key) ?? body;
-      cancelPending();
-      unsaved.delete(key);
-      putSummary(key, theirs);
-      summaryBase.set(key, theirs?.updatedAt ?? '');
-      toast.offer('The agent rewrote the review summary while you were writing it.', {
-        key: `summary-conflict-${key}`,
-        description: said
-          ? `Theirs: ${said.length > 80 ? `${said.slice(0, 80)}…` : said}`
-          : 'They cleared it.',
-        action: {
-          label: 'Use mine',
-          onClick: () => {
-            cancelPending();
-            unsaved.set(key, mine);
-            putSummary(key, { body: mine, author: 'user' });
-            void saveSummary(taskId, provider, number, mine, null);
+    const write = async () => {
+      if ((summaryEpochs.get(key) ?? 0) !== epoch) return;
+      // Before the stored summary has loaded, build on "none": one the agent
+      // already wrote isn't overwritten unseen.
+      const version = since === 'base' ? (summaryBase.get(key) ?? '') : since;
+      try {
+        const resp = await window.electronAPI.prReviewSetSummary({
+          taskId,
+          provider,
+          number,
+          body,
+          ...(version === null ? {} : { ifUnchangedSince: version }),
+        });
+        if (resp.success) {
+          summaryBase.set(key, resp.data?.updatedAt ?? '');
+          // Typing since this save was sent is still unsaved.
+          if (unsaved.get(key) === body) unsaved.delete(key);
+          return;
+        }
+        if (resp.code !== 'CONFLICT') return;
+        const theirs = (resp.data as PrReviewSummary | null | undefined) ?? null;
+        const said = theirs?.body ?? '';
+        const mine = unsaved.get(key) ?? body;
+        summaryEpochs.set(key, epoch + 1);
+        cancelPending();
+        unsaved.delete(key);
+        putSummary(key, theirs);
+        summaryBase.set(key, theirs?.updatedAt ?? '');
+        toast.offer('The agent rewrote the review summary while you were writing it.', {
+          key: `summary-conflict-${key}`,
+          sticky: true,
+          description: said
+            ? `Theirs: ${said.length > 80 ? `${said.slice(0, 80)}…` : said}`
+            : 'They cleared it.',
+          action: {
+            label: 'Use mine',
+            onClick: () => {
+              cancelPending();
+              unsaved.set(key, mine);
+              putSummary(key, { body: mine, author: 'user' });
+              // Over the version shown: an agent write since offers again.
+              void saveSummary(taskId, provider, number, mine, theirs?.updatedAt ?? '');
+            },
           },
-        },
-      });
-    } catch {
-      /* stays as typed; the next edit saves again */
-    }
+        });
+      } catch {
+        /* stays as typed; the next edit saves again */
+      }
+    };
+    // With nothing in flight for the review, write now; otherwise after the last one.
+    const prev = summaryQueues.get(key);
+    const queued = prev ? prev.then(write) : write();
+    summaryQueues.set(key, queued);
+    void queued.finally(() => {
+      if (summaryQueues.get(key) === queued) summaryQueues.delete(key);
+    });
+    return queued;
   };
 
   const loadSummary = async (taskId: string, provider: PrProvider, number: number) => {
@@ -355,9 +381,7 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
         key,
         setTimeout(() => {
           pendingSaves.delete(key);
-          // Before the stored summary has loaded, build on "none": one the agent
-          // already wrote isn't overwritten unseen.
-          void saveSummary(taskId, provider, number, body, summaryBase.get(key) ?? '');
+          void saveSummary(taskId, provider, number, body, 'base');
         }, 400),
       );
     },

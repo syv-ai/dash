@@ -584,9 +584,14 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
           .array(z.string())
           .optional()
           .describe('From `dashctl review drafts-list`; several may be given'),
-        number: NUMBER.describe(
-          'With --all, the PR to clear (defaults as other commands do); with ids, refuse any draft not on it',
-        ),
+        number: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(
+            'With --all, the PR to clear (required: --all never defaults); with ids, refuse any draft not on it',
+          ),
         provider: PROVIDER,
         all: z.boolean().optional().describe('Every draft on the PR'),
         kind: KIND.optional().describe('With --all, only notes or only comments'),
@@ -605,11 +610,15 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
         const ids = [...new Set(input.ids ?? [])];
         if (input.all === true) {
           if (ids.length > 0) throw new ControlError(400, 'give draft ids or --all, not both');
+          // Destructive: the PR it clears is named, never the default one.
+          if (input.number === undefined) throw new ControlError(400, '--all needs --number');
           if (input.ifUnchangedSince !== undefined) {
             throw new ControlError(400, '--if-unchanged-since takes one draft id, not --all');
           }
         } else {
-          if (ids.length === 0) throw new ControlError(400, 'give draft ids, or --all');
+          if (ids.length === 0) {
+            throw new ControlError(400, 'give draft ids, or --all with --number');
+          }
           if (input.kind || input.author) {
             throw new ControlError(400, '--kind and --author narrow --all; ids name the drafts');
           }
@@ -619,9 +628,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
         }
         // With ids, a PR is a check only when one is named.
         const pr =
-          input.all || input.number !== undefined
-            ? await prFor(taskId, input.number, input.provider)
-            : null;
+          input.number === undefined ? null : await prFor(taskId, input.number, input.provider);
         const targets = input.all
           ? deps.reviews
               .drafts(taskId, pr!)

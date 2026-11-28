@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Bot, ExternalLink, Pencil } from 'lucide-react';
 import { formatTimeAgo } from '../../../../shared/relativeTime';
+import { isMoved, isPrComment } from '../../../../shared/diffComments';
 import type { DiffComment, PrReactionContent, PrReviewComment } from '../../../../shared/types';
 import { isPendingComment, type ReplyPoster } from '../../../stores/prReviewStore';
 import { DraftActions, DraftEditor } from '../../review/DraftActions';
@@ -138,6 +139,20 @@ export function DraftBadge() {
   return <Badge size="sm">Draft</Badge>;
 }
 
+/** "PR moved": a line comment written on `from`, an older head of the PR, so
+ *  its lines may be other code now; posting the review holds it back. */
+export function MovedBadge({ from }: { from: string }) {
+  return (
+    <Badge
+      size="sm"
+      tone="warn"
+      title={`Written on ${from.slice(0, 7)}; the PR has changed since, so these lines may be other code now. Posting the review holds it back until you keep it here, edit its lines, or delete it.`}
+    >
+      PR moved
+    </Badge>
+  );
+}
+
 /**
  * A comment that is only here: the person's or the agent's draft (a reply, a
  * line comment, the review's summary). Its "Draft" badge tells it from a
@@ -150,6 +165,7 @@ export function DraftComment({
   poster = null,
   place,
   mentions,
+  prHead,
 }: {
   draft: DiffComment;
   /** On the own PR, a reply's Post reply / Post & resolve. */
@@ -157,8 +173,11 @@ export function DraftComment({
   /** Where it sits, for a draft listed off the code ("a.ts:3"). */
   place?: ReactNode;
   mentions?: readonly string[];
+  /** The PR's head as loaded: a comment written on an older one is marked moved. */
+  prHead?: string | null;
 }) {
   const [editing, setEditing] = useState(false);
+  const moved = isPrComment(draft) && isMoved(draft, prHead);
   const agent = draft.author === 'agent';
   if (editing) {
     return <DraftEditor comment={draft} mentions={mentions} onDone={() => setEditing(false)} />;
@@ -174,7 +193,12 @@ export function DraftComment({
       <CommentFrame
         avatar={<Avatar name={agent ? 'Agent' : 'You'} icon={agent ? Bot : Pencil} />}
         name={agent ? 'Agent' : 'You'}
-        badge={<DraftBadge />}
+        badge={
+          <>
+            <DraftBadge />
+            {moved && draft.commit && <MovedBadge from={draft.commit} />}
+          </>
+        }
         subtitle={place && own(place)}
         actions={own(<DraftActions comment={draft} onEdit={() => setEditing(true)} />)}
         footer={
