@@ -1,5 +1,14 @@
 import { Fragment, type ReactNode } from 'react';
-import { ExternalLink, Users } from 'lucide-react';
+import {
+  CircleCheck,
+  CircleDashed,
+  CircleX,
+  Clock,
+  ExternalLink,
+  MessageSquare,
+  Users,
+  type LucideIcon,
+} from 'lucide-react';
 import type { PrCheck, PrIssue, PrReview, PrReviewer } from '../../../shared/types';
 import { githubProfileUrl } from '../../../shared/urls';
 import { DetailSection } from '../ui/DetailList';
@@ -14,12 +23,14 @@ import {
   diffTotals,
   plural,
   prDateTime,
-  reviewerGroups,
+  REVIEWER_STATE_WORDS,
+  reviewerRoster,
   threadsResolved,
 } from './labels';
 import { ChecksRollupIcon } from './ChecksRollupIcon';
 import { checksRollup, checksSummary } from './outline';
 import { useSectionOpen } from '../../lib/useSectionOpen';
+import { cn } from '../../lib/cn';
 import type { PrCardReview } from './prList';
 import { Branch } from './ReviewHeader';
 
@@ -34,44 +45,60 @@ function Person({ name, url }: { name: string; url: string | null }) {
   );
 }
 
-/** "Approved by A, B" / "Changes requested by C" / "Review requested from D"
- *  / "Declined to review: E", one fact per group (Overview's About, the PRs
- *  view's). A required reviewer reads "(required)" after their name, a
- *  group or team leads with a people icon: quiet marks, in the text's ink. */
+/** Each reviewer state's mark: neutral, as where a review stands is neither
+ *  the PR's state (D133) nor an agent's; its word is the mark's label. */
+export const REVIEWER_STATE_ICONS: Record<PrReviewer['state'], LucideIcon> = {
+  approved: CircleCheck,
+  approved_with_suggestions: CircleCheck,
+  changes_requested: CircleX,
+  rejected: CircleX,
+  waiting: Clock,
+  commented: MessageSquare,
+  pending: CircleDashed,
+};
+
+/**
+ * "Reviewers ✓ ann, ⊗ cy, ◌ dee (required)": the PR's reviewers as one roster
+ * (`reviewerRoster`), each led by a quiet mark saying where they stand, its
+ * word on hover. A group or team adds a people mark, a required reviewer
+ * "(required)", and one who declined (ADO) reads in faint ink.
+ */
 function Reviewers({ reviewers }: { reviewers: PrReviewer[] }) {
-  return reviewerGroups(reviewers).map((g) => (
-    <li key={g.lead}>
-      <span className="type-label">{g.lead}</span>{' '}
-      {g.reviewers.map((r, i) => (
+  const roster = reviewerRoster(reviewers);
+  if (roster.length === 0) return null;
+  return (
+    <li>
+      <span className="type-label">Reviewers</span>{' '}
+      {roster.map((r, i) => (
         <Fragment key={r.name}>
           {i > 0 && ', '}
           <Reviewer reviewer={r} />
         </Fragment>
       ))}
     </li>
-  ));
+  );
 }
 
 function Reviewer({ reviewer: r }: { reviewer: PrReviewer }) {
-  const person = <Person name={r.name} url={r.url} />;
+  const Mark = REVIEWER_STATE_ICONS[r.state];
+  const word = r.declined ? 'Declined to review' : REVIEWER_STATE_WORDS[r.state];
   return (
-    <>
-      {r.group ? (
-        <span className="inline-flex items-center gap-1 align-top">
-          <Tooltip content="A group: anyone in it can review">
-            <Users size={14} strokeWidth={1.8} className="shrink-0 text-icon" aria-label="Group" />
-          </Tooltip>
-          {person}
-        </span>
-      ) : (
-        person
-      )}
-      {r.required && (
-        <Tooltip content="Their review is required to merge">
-          <span className="text-ink-3"> (required)</span>
+    <span className={cn('inline-flex items-center gap-1 align-top', r.declined && 'text-ink-3')}>
+      <Tooltip content={word}>
+        <Mark size={14} strokeWidth={1.8} className="shrink-0 text-icon" aria-label={word} />
+      </Tooltip>
+      {r.group && (
+        <Tooltip content="A group: anyone in it can review">
+          <Users size={14} strokeWidth={1.8} className="shrink-0 text-icon" aria-label="Group" />
         </Tooltip>
       )}
-    </>
+      <Person name={r.name} url={r.url} />
+      {r.required && (
+        <Tooltip content="Their review is required to merge">
+          <span className="text-ink-3">(required)</span>
+        </Tooltip>
+      )}
+    </span>
   );
 }
 

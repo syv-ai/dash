@@ -27,7 +27,7 @@ export function PrsView({
   );
   const at = { projectId: task.projectId, cwd: task.path };
   return (
-    <div className="scrollbar-thin-hover grid h-full min-h-0 content-start gap-2 overflow-y-auto px-1 pt-2 pb-2">
+    <div className="scrollbar-thin-hover flex h-full min-h-0 flex-col gap-2 overflow-y-auto px-1 pt-2 pb-2">
       {taskPrList(relevant).map((pr, i) => (
         <ListedPr
           key={`${pr.provider}:${pr.number}`}

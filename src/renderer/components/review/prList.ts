@@ -3,7 +3,6 @@ import type {
   PrDetails,
   PrGitField,
   PrReview,
-  PrReviewer,
   PrViewerInvolvement,
   RelevantPr,
   RelevantPrs,
@@ -11,7 +10,6 @@ import type {
 import { forkPrOfBranch } from '../../../shared/prBranch';
 import { githubProfileUrl } from '../../../shared/urls';
 import { shownPrState } from '../ui/prStatusColors';
-import { OWN_REVIEW_LABELS } from './finishReview';
 import { diffTotals } from './labels';
 
 /**
@@ -101,55 +99,35 @@ export function prHead(pr: RelevantPr, review: PrCardReview | null, remote: stri
 export const prsTabShown = (relevant: RelevantPrs | null): boolean =>
   taskPrList(relevant).length > 0;
 
-/** One way the person is part of a PR, as its drawer's "You" row says it. */
-export interface Involvement {
-  key: 'author' | 'assignee' | 'requested' | 'reviewed' | 'commented';
-  label: string;
-  /** What the badge's tooltip adds. */
-  title: string;
-}
+/** How the person stands on a PR, as far as it asks something of them. */
+export type YourPartInput = Pick<
+  PrReview,
+  'viewerIsAuthor' | 'viewerIsAssignee' | 'viewerIsRequestedReviewer' | 'viewerReview'
+>;
+
+/** A review of theirs, named as the thing commits can land after. */
+const OWN_REVIEW_NOUNS: Record<NonNullable<PrReview['viewerReview']>['state'], string> = {
+  approved: 'approval',
+  approved_with_suggestions: 'approval',
+  changes_requested: 'request for changes',
+  commented: 'review',
+  waiting: 'vote',
+  rejected: 'rejection',
+};
 
 /**
- * How the person is part of a PR, in the order the forge's sidebar reads:
- * they opened it, are assigned to it (GitHub only; ADO has no assignees),
- * are asked to review it, reviewed it (their verdict, and whether commits
- * have landed since), or commented on it. A review that was itself a comment
- * says "Commented" once. Empty when they aren't part of it.
+ * The one line a PR card says about the person, only where it asks something
+ * of them: they're asked to review it, commits landed after their review, or
+ * it's assigned to them (and isn't theirs). Null otherwise: being its author
+ * reads in the merge line ("You want to merge"), a current review in the
+ * card's verdict, and a comment asks nothing.
  */
-export function prInvolvement(
-  review: Pick<
-    PrReview,
-    | 'viewerIsAuthor'
-    | 'viewerIsAssignee'
-    | 'viewerIsRequestedReviewer'
-    | 'viewerReview'
-    | 'viewerCommented'
-  >,
-): Involvement[] {
-  const out: Involvement[] = [];
-  if (review.viewerIsAuthor) out.push({ key: 'author', label: 'Author', title: 'You opened it' });
-  if (review.viewerIsAssignee)
-    out.push({ key: 'assignee', label: 'Assigned', title: "You're assigned to it" });
-  if (review.viewerIsRequestedReviewer)
-    out.push({
-      key: 'requested',
-      label: 'Review requested',
-      title: "You're asked to review it and haven't yet",
-    });
-  const own = review.viewerReview;
-  if (own) {
-    const label = OWN_REVIEW_LABELS[own.state];
-    out.push({
-      key: 'reviewed',
-      label: own.stale ? `${label} · new commits since` : label,
-      title: own.stale
-        ? 'Your last review; commits have landed on it since'
-        : 'Your last review, at its head',
-    });
-  }
-  if (review.viewerCommented && own?.state !== 'commented')
-    out.push({ key: 'commented', label: 'Commented', title: "You've commented on it" });
-  return out;
+export function yourPart(v: YourPartInput): string | null {
+  if (v.viewerIsRequestedReviewer) return "You're asked to review it";
+  if (v.viewerReview?.stale)
+    return `New commits since your ${OWN_REVIEW_NOUNS[v.viewerReview.state]}`;
+  if (v.viewerIsAssignee && !v.viewerIsAuthor) return "It's assigned to you";
+  return null;
 }
 
 /** How long a drawer's details stay fresh before opening it fetches them again. */
@@ -186,17 +164,15 @@ export function otherAssignees(
 
 export { reviewVerdict, type ReviewVerdict };
 
-/** How the person is part of a listed PR before its review is fetched: what
- *  the listing says (author, assigned, asked to review), as `prInvolvement`
- *  words it; nothing when the forge couldn't say who they are. */
-export function listedInvolvement(viewer: PrViewerInvolvement | null): Involvement[] {
-  if (!viewer) return [];
-  return prInvolvement({
+/** `yourPart` from the listing, before the PR's review is fetched (which
+ *  adds the person's own review). Null where the forge couldn't say who they are. */
+export function listedYourPart(viewer: PrViewerInvolvement | null): string | null {
+  if (!viewer) return null;
+  return yourPart({
     viewerIsAuthor: viewer.isAuthor,
     viewerIsAssignee: viewer.isAssignee,
     viewerIsRequestedReviewer: viewer.isRequestedReviewer,
     viewerReview: null,
-    viewerCommented: false,
   });
 }
 
@@ -214,7 +190,10 @@ export interface PrCardFacts {
   files: number | null;
   threads: { open: number; total: number } | null;
   verdict: ReviewVerdict | null;
-  involvement: Involvement[];
+  /** `yourPart`: the line the card says about the person, if any. */
+  you: string | null;
+  /** They opened it: the merge line says "You". */
+  yours: boolean;
 }
 
 export function prCardFacts(pr: RelevantPr, review: PrCardReview | null): PrCardFacts {
@@ -225,7 +204,8 @@ export function prCardFacts(pr: RelevantPr, review: PrCardReview | null): PrCard
       files: null,
       threads: pr.threads,
       verdict: pr.verdict,
-      involvement: listedInvolvement(pr.viewer),
+      you: listedYourPart(pr.viewer),
+      yours: pr.viewer?.isAuthor ?? false,
     };
   const totals = review.files ? diffTotals(review.files) : null;
   return {
@@ -237,6 +217,7 @@ export function prCardFacts(pr: RelevantPr, review: PrCardReview | null): PrCard
       total: review.threads.length,
     },
     verdict: reviewVerdict(review.reviewers),
-    involvement: prInvolvement(review),
+    you: yourPart(review),
+    yours: review.viewerIsAuthor,
   };
 }

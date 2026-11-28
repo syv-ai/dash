@@ -116,23 +116,28 @@ export function PrMergeLine({
   review,
   remote,
   onShowCommits,
+  yours = false,
 }: {
   review: PrHead;
   remote: string | null;
   onShowCommits?: () => void;
+  /** The person opened it: "You want to merge". */
+  yours?: boolean;
 }) {
   return (
     // Running prose, not a name: secondary ink, no type role (D162); its
     // links in the link colour (D191).
     <p className="text-sm text-ink-2 wrap-break-word">
-      {review.authorUrl ? (
+      {yours ? (
+        'You'
+      ) : review.authorUrl ? (
         <TextLink href={review.authorUrl} title={`${review.author}'s profile`}>
           {review.author}
         </TextLink>
       ) : (
         review.author
       )}{' '}
-      {mergeVerb(review.state)}{' '}
+      {mergeVerb(review.state, yours)}{' '}
       {review.commits !== null && (
         <>
           <Commits count={review.commits} onShow={onShowCommits} />{' '}

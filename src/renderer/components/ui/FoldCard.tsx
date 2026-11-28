@@ -1,71 +1,67 @@
 import * as React from 'react';
 import { cn } from '../../lib/cn';
+import { Button } from './Button';
 import { DisclosureChevron } from './DisclosureChevron';
-import { IconButton } from './IconButton';
 
 /**
  * A drawer as a card: one item of a list set apart (`Card`'s raised sheet,
- * rounded-xl, hairline) whose `head` always shows and whose body folds away
- * under it with the drawer motion (`.collapse-grid`, `DisclosureChevron`).
- * The fold control leads the head (`fold`, given to the head to place on its
- * first row, so it sits beside the title); a click on the head's bare
- * surface folds too, its links and buttons keeping their own clicks. Keep its
- * open state with `useSectionOpen`.
+ * rounded-xl, hairline). Its `head` always shows, as one aligned column; an
+ * action row closes it, the fold on the left (a chevron and what folding
+ * hides, `summary`) and the card's `actions` on the right. The body folds
+ * open between the head and that row with the drawer motion
+ * (`.collapse-grid`, `DisclosureChevron`). Keep its open state with
+ * `useSectionOpen`.
  */
 export function FoldCard({
   open,
   onOpenChange,
   head,
-  label,
+  summary,
+  actions,
   children,
   className,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The always-shown part; `fold` is the control to place in it. */
-  head: (fold: React.ReactNode) => React.ReactNode;
-  /** What the fold control's tooltip names ("this pull request"). */
-  label: string;
+  /** The always-shown part. */
+  head: React.ReactNode;
+  /** What unfolding shows, as the fold's label ("Reviewers, checks and dates"). */
+  summary: string;
+  /** The card's buttons, at the right of its action row. */
+  actions?: React.ReactNode;
   children: React.ReactNode;
   /** Layout only. */
   className?: string;
 }) {
   const id = React.useId();
-  const fold = (
-    <IconButton
-      size="sm"
-      title={open ? `Fold ${label}` : `Unfold ${label}`}
-      aria-expanded={open}
-      aria-controls={id}
-      onClick={() => onOpenChange(!open)}
-      // The chevron centres on the title's first line.
-      className="-my-0.75 -ml-1"
-    >
-      <DisclosureChevron open={open} />
-    </IconButton>
-  );
   return (
     <article
       className={cn(
-        'min-w-0 overflow-hidden rounded-xl border border-line bg-raised text-ink',
+        // `min-h-min`: clipped to its corners (overflow-hidden), a grid or
+        // flex item would otherwise be free to shrink below its content.
+        'min-h-min min-w-0 shrink-0 overflow-hidden rounded-xl border border-line bg-raised text-ink',
         className,
       )}
     >
-      <div
-        className="grid gap-2 p-3"
-        // The head's bare surface folds it too (a pointer convenience; the
-        // fold control is the keyboard's way).
-        onClick={(e) => {
-          if (!(e.target as HTMLElement).closest('a,button,[role=button],input'))
-            onOpenChange(!open);
-        }}
-      >
-        {head(fold)}
-      </div>
+      <div className="grid gap-3 px-4 pt-3.5 pb-3">{head}</div>
       <div id={id} className="collapse-grid" data-open={open}>
         <div>
           <div className="border-t border-line">{children}</div>
         </div>
+      </div>
+      <div className="flex items-center justify-between gap-2 border-t border-line px-2 py-1.5">
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-expanded={open}
+          aria-controls={id}
+          onClick={() => onOpenChange(!open)}
+          className="min-w-0 gap-1.5"
+        >
+          <DisclosureChevron open={open} />
+          <span className="truncate">{summary}</span>
+        </Button>
+        {actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
       </div>
     </article>
   );

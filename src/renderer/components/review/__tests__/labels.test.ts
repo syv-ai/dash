@@ -6,7 +6,7 @@ import {
   diffTotals,
   mergeVerb,
   prDateTime,
-  reviewerGroups,
+  reviewerRoster,
   threadsResolved,
 } from '../labels';
 
@@ -18,39 +18,31 @@ describe('diffTotals', () => {
   });
 });
 
-describe('reviewerGroups', () => {
+describe('reviewerRoster', () => {
   const r = (name: string, state: PrReviewer['state']): PrReviewer => ({ name, url: null, state });
 
-  it('groups reviewers by where they stand, verdicts first, requests last', () => {
-    const groups = reviewerGroups([
+  it('orders reviewers by where they stand, verdicts first, requests last', () => {
+    const roster = reviewerRoster([
       r('dee', 'pending'),
       r('ann', 'approved'),
       r('cy', 'changes_requested'),
       r('bo', 'approved'),
       r('eve', 'commented'),
     ]);
-    expect(groups.map((g) => [g.lead, g.reviewers.map((x) => x.name)])).toEqual([
-      ['Approved by', ['ann', 'bo']],
-      ['Changes requested by', ['cy']],
-      ['Commented by', ['eve']],
-      ['Review requested from', ['dee']],
-    ]);
+    expect(roster.map((x) => x.name)).toEqual(['ann', 'bo', 'cy', 'eve', 'dee']);
   });
 
-  it('puts those who declined in a group of their own, last, whatever their vote', () => {
-    const groups = reviewerGroups([
+  it('puts those who declined last, whatever their vote', () => {
+    const roster = reviewerRoster([
       { ...r('ann', 'pending'), declined: true },
       r('bo', 'pending'),
       { ...r('cy', 'approved'), declined: true, required: true },
     ]);
-    expect(groups.map((g) => [g.lead, g.reviewers.map((x) => x.name)])).toEqual([
-      ['Review requested from', ['bo']],
-      ['Declined to review:', ['ann', 'cy']],
-    ]);
+    expect(roster.map((x) => x.name)).toEqual(['bo', 'ann', 'cy']);
   });
 
-  it('says nothing without reviewers', () => {
-    expect(reviewerGroups([])).toEqual([]);
+  it('is empty without reviewers', () => {
+    expect(reviewerRoster([])).toEqual([]);
   });
 });
 
@@ -73,6 +65,7 @@ describe('prDateTime', () => {
 describe('mergeVerb', () => {
   it('reads by state', () => {
     expect(mergeVerb('open')).toBe('wants to merge');
+    expect(mergeVerb('open', true)).toBe('want to merge');
     expect(mergeVerb('draft')).toBe('wants to merge');
     expect(mergeVerb('merged')).toBe('merged');
     expect(mergeVerb('closed')).toBe('wanted to merge');
@@ -110,8 +103,8 @@ describe('commentRoleTip', () => {
 
   it('says where a reviewer stands, matching logins case-insensitively', () => {
     expect(commentRoleTip('Reviewer', 'Bob', pr)).toBe('Requested reviewer · approved');
-    expect(commentRoleTip('Reviewer', 'cy', pr)).toBe('Requested reviewer · changes requested');
-    expect(commentRoleTip('Reviewer', 'dee', pr)).toBe('Requested reviewer · pending');
+    expect(commentRoleTip('Reviewer', 'cy', pr)).toBe('Requested reviewer · asked for changes');
+    expect(commentRoleTip('Reviewer', 'dee', pr)).toBe('Requested reviewer · not reviewed yet');
   });
 
   it('leaves the state out when the reviewer is not listed', () => {

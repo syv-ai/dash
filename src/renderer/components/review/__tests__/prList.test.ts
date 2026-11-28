@@ -4,11 +4,11 @@ import {
   DETAILS_FRESH_MS,
   needsDetails,
   headFromFork,
-  listedInvolvement,
+  listedYourPart,
   prHead,
   prOpenByDefault,
   reviewVerdict,
-  prInvolvement,
+  yourPart,
   prsTabShown,
   taskPrList,
   otherAssignees,
@@ -38,20 +38,19 @@ const listed = (number: number): RelevantPr => ({
   headUrl: null,
 });
 
-type Viewer = Parameters<typeof prInvolvement>[0];
+type Viewer = Parameters<typeof yourPart>[0];
 const nobody: Viewer = {
   viewerIsAuthor: false,
   viewerIsAssignee: false,
   viewerIsRequestedReviewer: false,
   viewerReview: null,
-  viewerCommented: false,
 };
 const review = (state: NonNullable<PrReview['viewerReview']>['state'], stale = false) => ({
   state,
   at: '',
   stale,
 });
-const labels = (over: Partial<Viewer>) => prInvolvement({ ...nobody, ...over }).map((i) => i.label);
+const you = (over: Partial<Viewer>) => yourPart({ ...nobody, ...over });
 
 describe('taskPrList', () => {
   it("lists the branch's own PRs first, then those into it, each in the forge's order", () => {
@@ -74,33 +73,29 @@ describe('prsTabShown', () => {
   });
 });
 
-describe('prInvolvement', () => {
-  it('says nothing when the person is no part of the PR', () => {
-    expect(labels({})).toEqual([]);
+describe('yourPart', () => {
+  it('says nothing when the PR asks nothing of the person', () => {
+    expect(you({})).toBeNull();
+    // Theirs reads in the merge line, a current review in the verdict.
+    expect(you({ viewerIsAuthor: true, viewerIsAssignee: true })).toBeNull();
+    expect(you({ viewerReview: review('approved') })).toBeNull();
   });
 
-  it("reads in the forge sidebar's order: author, assigned, requested, reviewed, commented", () => {
+  it('asks them to review first, then flags a review commits landed after, then an assignment', () => {
     expect(
-      labels({
-        viewerIsAuthor: true,
-        viewerIsAssignee: true,
+      you({
         viewerIsRequestedReviewer: true,
-        viewerReview: review('approved'),
-        viewerCommented: true,
+        viewerReview: review('approved', true),
+        viewerIsAssignee: true,
       }),
-    ).toEqual(['Author', 'Assigned', 'Review requested', 'Approved', 'Commented']);
-  });
-
-  it('says when commits have landed since the last review', () => {
-    expect(labels({ viewerReview: review('changes_requested', true) })).toEqual([
-      'Changes requested · new commits since',
-    ]);
-  });
-
-  it('says Commented once when the review was itself a comment', () => {
-    expect(labels({ viewerReview: review('commented'), viewerCommented: true })).toEqual([
-      'Commented',
-    ]);
+    ).toBe("You're asked to review it");
+    expect(you({ viewerReview: review('approved', true), viewerIsAssignee: true })).toBe(
+      'New commits since your approval',
+    );
+    expect(you({ viewerReview: review('changes_requested', true) })).toBe(
+      'New commits since your request for changes',
+    );
+    expect(you({ viewerIsAssignee: true })).toBe("It's assigned to you");
   });
 });
 
@@ -222,14 +217,15 @@ describe('reviewVerdict', () => {
   });
 });
 
-describe('listedInvolvement', () => {
-  it("words the listing's facts as the review's would", () => {
+describe('listedYourPart', () => {
+  it("reads the listing's facts as the review's would, before any review of theirs is known", () => {
+    expect(listedYourPart({ isAuthor: false, isAssignee: true, isRequestedReviewer: false })).toBe(
+      "It's assigned to you",
+    );
     expect(
-      listedInvolvement({ isAuthor: true, isAssignee: true, isRequestedReviewer: false }).map(
-        (i) => i.label,
-      ),
-    ).toEqual(['Author', 'Assigned']);
-    expect(listedInvolvement(null)).toEqual([]);
+      listedYourPart({ isAuthor: true, isAssignee: true, isRequestedReviewer: false }),
+    ).toBeNull();
+    expect(listedYourPart(null)).toBeNull();
   });
 });
 

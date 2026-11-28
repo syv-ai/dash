@@ -24,17 +24,6 @@ export function commentRole(
   return pr.reviewers.some((r) => r.name.toLowerCase() === who) ? 'Reviewer' : null;
 }
 
-/** A reviewer's state in words, for a tooltip after their role. */
-const REVIEWER_STATE_WORDS: Record<PrReviewer['state'], string> = {
-  approved: 'approved',
-  approved_with_suggestions: 'approved with suggestions',
-  changes_requested: 'changes requested',
-  rejected: 'rejected',
-  waiting: 'waiting for the author',
-  commented: 'commented',
-  pending: 'pending',
-};
-
 /** What a role badge's tooltip says: "Author of this pull request", or
  *  "Requested reviewer · approved" with where the reviewer stands. */
 export function commentRoleTip(
@@ -46,43 +35,33 @@ export function commentRoleTip(
   const who = author.toLowerCase();
   const reviewer = pr.reviewers.find((r) => r.name.toLowerCase() === who);
   return reviewer
-    ? `Requested reviewer · ${REVIEWER_STATE_WORDS[reviewer.state]}`
+    ? `Requested reviewer · ${REVIEWER_STATE_WORDS[reviewer.state].toLowerCase()}`
     : 'Requested reviewer';
 }
 
-/** Who stands where on the PR, said as GitHub's sidebar does: "Approved by",
- *  "Changes requested by", "Review requested from"; ADO's votes add theirs. */
-const REVIEWER_LEADS: Record<PrReviewer['state'], string> = {
-  approved: 'Approved by',
-  approved_with_suggestions: 'Approved with suggestions by',
-  changes_requested: 'Changes requested by',
-  rejected: 'Rejected by',
-  waiting: 'Waiting for the author:',
-  commented: 'Commented by',
-  pending: 'Review requested from',
+/** Where a reviewer stands, in words: a roster mark's tooltip and label. */
+export const REVIEWER_STATE_WORDS: Record<PrReviewer['state'], string> = {
+  approved: 'Approved',
+  approved_with_suggestions: 'Approved with suggestions',
+  changes_requested: 'Asked for changes',
+  rejected: 'Rejected',
+  waiting: 'Waiting for the author',
+  commented: 'Commented',
+  pending: 'Not reviewed yet',
 };
 
-/** The order the groups read in: the verdicts, then comments, then requests. */
-const REVIEWER_ORDER = Object.keys(REVIEWER_LEADS) as PrReviewer['state'][];
+/** The order a roster reads in: the verdicts, then comments, then requests. */
+const REVIEWER_ORDER = Object.keys(REVIEWER_STATE_WORDS) as PrReviewer['state'][];
 
-/** Those who declined to review (ADO), whatever their vote: a group of their
- *  own, read last, after the requests. */
-const DECLINED_LEAD = 'Declined to review:';
-
-/** The PR's reviewers grouped by where they stand, each group led by its
- *  words ("Approved by") and keeping the forge's order of people; those who
- *  declined last, apart; groups without anyone are left out. */
-export function reviewerGroups(
-  reviewers: readonly PrReviewer[],
-): { lead: string; reviewers: PrReviewer[] }[] {
+/** The PR's reviewers as one roster: by where they stand (verdicts, then
+ *  comments, then those still asked), keeping the forge's order within each;
+ *  those who declined (ADO) last, whatever their vote. */
+export function reviewerRoster(reviewers: readonly PrReviewer[]): PrReviewer[] {
   const asked = reviewers.filter((r) => !r.declined);
   return [
-    ...REVIEWER_ORDER.map((state) => ({
-      lead: REVIEWER_LEADS[state],
-      reviewers: asked.filter((r) => r.state === state),
-    })),
-    { lead: DECLINED_LEAD, reviewers: reviewers.filter((r) => r.declined) },
-  ].filter((g) => g.reviewers.length > 0);
+    ...REVIEWER_ORDER.flatMap((state) => asked.filter((r) => r.state === state)),
+    ...reviewers.filter((r) => r.declined),
+  ];
 }
 
 export const CHECK_LABELS: Record<PrCheck['state'], string> = {
@@ -127,5 +106,11 @@ export function prDateTime(iso: string, clock?: ClockOptions): string {
 
 /** What the author does with the PR's commits, by its state: "wants to merge"
  *  (open, draft), "merged", or "wanted to merge" (closed). */
-export const mergeVerb = (state: PrState): string =>
-  state === 'merged' ? 'merged' : state === 'closed' ? 'wanted to merge' : 'wants to merge';
+export const mergeVerb = (state: PrState, you = false): string =>
+  state === 'merged'
+    ? 'merged'
+    : state === 'closed'
+      ? 'wanted to merge'
+      : you
+        ? 'want to merge'
+        : 'wants to merge';

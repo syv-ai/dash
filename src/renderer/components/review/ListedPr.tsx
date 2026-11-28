@@ -2,20 +2,20 @@ import { useEffect, useState, type ReactNode } from 'react';
 import {
   CircleCheck,
   CircleDashed,
-  FileDiff,
+  CircleX,
   MessageSquare,
   Pencil,
+  UserRound,
   type LucideIcon,
 } from 'lucide-react';
 import { prScope } from '../../../shared/prScope';
-import type { PrReview, RelevantPr } from '../../../shared/types';
+import type { CiState, PrReview, RelevantPr } from '../../../shared/types';
 import { useSectionOpen } from '../../lib/useSectionOpen';
 import { useUi } from '../../stores/uiStore';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { prKey, usePrReviews } from '../../stores/prReviewStore';
 import { useTaskReview } from '../diffEditor/prReview/useTaskReview';
 import type { ReviewLanding } from '../rightInspector/sidebarState';
-import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { FoldCard } from '../ui/FoldCard';
 import { LineStats } from '../ui/LineStats';
@@ -132,13 +132,20 @@ export function ListedPr({
   );
 }
 
+/** The checks rolled up, in words beside their mark. */
+const CHECKS_WORDS: Record<CiState, string> = {
+  passing: 'Checks pass',
+  failing: 'Checks failing',
+  pending: 'Checks running',
+};
+
 /** The verdict's word and mark: neutral, as a review's standing isn't the
  *  PR's state (D133) nor an agent's. */
 const VERDICTS: Record<ReviewVerdict, { label: string; icon: LucideIcon; title: string }> = {
   approved: { label: 'Approved', icon: CircleCheck, title: 'Its reviewers have approved it' },
   changes_requested: {
     label: 'Changes requested',
-    icon: FileDiff,
+    icon: CircleX,
     title: 'A reviewer asked for changes',
   },
   pending: {
@@ -199,32 +206,43 @@ export function PrCard({
     useUi.getState().setReviewThreadsPane('threads');
     onReview('threads');
   };
+  const checksWord = ci && CHECKS_WORDS[ci];
   return (
     <FoldCard
       {...about}
-      label="this pull request"
-      head={(fold) => (
+      summary="Reviewers, checks and dates"
+      actions={
         <>
-          <PrTitle
-            review={head}
-            lead={fold}
-            action={
-              <div className="flex items-center gap-1.5">
-                {actions}
-                <Tooltip content="Its files, threads and commits, in review mode">
-                  <Button variant="secondary" size="sm" onClick={() => onReview()}>
-                    Review
-                  </Button>
-                </Tooltip>
+          {actions}
+          <Tooltip content="Its files, threads and commits, in review mode">
+            <Button variant="secondary" size="sm" onClick={() => onReview()}>
+              Review
+            </Button>
+          </Tooltip>
+        </>
+      }
+      head={
+        <>
+          <div className="grid gap-1">
+            <PrTitle review={head} />
+            <PrMergeLine
+              review={head}
+              remote={remote}
+              yours={facts.yours}
+              onShowCommits={() => onReview('history')}
+            />
+          </div>
+          {/* Where it stands, then what it changes: each fact a mark and its words. */}
+          <div className="type-body grid gap-1.5 tabular-nums">
+            {(head.state !== 'open' || facts.verdict || checksWord) && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                {head.state !== 'open' && <PrStateBadge state={head.state} />}
+                {facts.verdict && <Verdict verdict={facts.verdict} />}
+                {ci && checksWord && <Fact icon={<ChecksRollupIcon ci={ci} />}>{checksWord}</Fact>}
               </div>
-            }
-          />
-          <PrMergeLine review={head} remote={remote} onShowCommits={() => onReview('history')} />
-          <div className="type-caption flex flex-wrap items-center gap-x-3 gap-y-1.5 tabular-nums">
-            <PrStateBadge state={head.state} />
-            {facts.verdict && <Verdict verdict={facts.verdict} />}
-            {(facts.additions !== null || facts.files !== null) && (
-              <span className="flex items-center gap-1.5">
+            )}
+            {(facts.additions !== null || facts.files !== null || facts.threads) && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
                 {facts.files !== null && (
                   <TextLink title="Show them in Files" onClick={() => onReview('files')}>
                     {plural(facts.files, 'file')}
@@ -233,45 +251,53 @@ export function PrCard({
                 {facts.additions !== null && facts.deletions !== null && (
                   <LineStats add={facts.additions} del={facts.deletions} />
                 )}
-              </span>
+                {facts.threads && facts.threads.total > 0 && (
+                  <Fact
+                    icon={
+                      <MessageSquare
+                        size={14}
+                        strokeWidth={1.8}
+                        className="text-icon"
+                        aria-hidden
+                      />
+                    }
+                  >
+                    <TextLink title="Show them in Threads" onClick={showThreads}>
+                      {threadsWords(facts.threads)}
+                    </TextLink>
+                  </Fact>
+                )}
+              </div>
             )}
-            {facts.threads && facts.threads.total > 0 && (
-              <Tooltip
-                content={`${facts.threads.open} unresolved of ${plural(facts.threads.total, 'thread')}`}
-              >
-                <span>
-                  <TextLink title="Show them in Threads" onClick={showThreads}>
-                    <span className="inline-flex items-center gap-1">
-                      <MessageSquare size={14} strokeWidth={1.8} aria-hidden />
-                      {facts.threads.open} of {facts.threads.total}
-                    </span>
-                  </TextLink>
-                </span>
-              </Tooltip>
-            )}
-            {ci && <ChecksRollupIcon ci={ci} />}
-            {facts.involvement.map((i) => (
-              <Tooltip key={i.key} content={i.title}>
-                <Badge size="sm">{i.label}</Badge>
-              </Tooltip>
-            ))}
           </div>
+          {(facts.you || pending.line) && (
+            // What it asks of the person, and their review not yet posted.
+            <div className="type-body grid gap-1 text-ink-2">
+              {facts.you && (
+                <Fact
+                  icon={<UserRound size={14} strokeWidth={1.8} className="text-icon" aria-hidden />}
+                >
+                  {facts.you}
+                </Fact>
+              )}
+              {pending.line && <PendingReview {...pending} line={pending.line} />}
+            </div>
+          )}
           {review && error && (
             <p className="type-caption wrap-break-word" role="status">
               Could not reload: {error}
             </p>
           )}
         </>
-      )}
+      }
     >
-      <div className="px-3 pt-2.5 pb-2">
+      <div className="px-4 pt-3 pb-2">
         {review ? (
           <PrAbout
             review={review}
             remote={remote}
             counts={false}
             assignees={otherAssignees(review)}
-            tail={pending.line && <PendingReview {...pending} line={pending.line} />}
           />
         ) : (
           <p className="type-caption" role="status">
@@ -284,14 +310,32 @@ export function PrCard({
   );
 }
 
-/** "✓ Approved": the review's verdict, a quiet mark and its word. */
+/** "2 open threads", or "3 threads, all resolved" once none is open. */
+function threadsWords(t: { open: number; total: number }): string {
+  return t.open > 0
+    ? `${t.open} open ${t.open === 1 ? 'thread' : 'threads'}`
+    : `${plural(t.total, 'thread')}, all resolved`;
+}
+
+/** One fact of the card: its mark, then its words. */
+function Fact({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {icon}
+      {children}
+    </span>
+  );
+}
+
+/** "⊗ Changes requested": the review's verdict, a quiet mark and its words. */
 function Verdict({ verdict }: { verdict: ReviewVerdict }) {
   const { label, icon: Icon, title } = VERDICTS[verdict];
   return (
     <Tooltip content={title}>
-      <span className="flex items-center gap-1 text-ink-2">
-        <Icon size={14} strokeWidth={1.8} className="text-icon" aria-hidden />
-        {label}
+      <span>
+        <Fact icon={<Icon size={14} strokeWidth={1.8} className="text-icon" aria-hidden />}>
+          {label}
+        </Fact>
       </span>
     </Tooltip>
   );
@@ -300,22 +344,21 @@ function Verdict({ verdict }: { verdict: ReviewVerdict }) {
 /** "2 drafts, 1 note to send": the task's review of the PR not yet posted. */
 function PendingReview({ drafts, notes, line }: { drafts: number; notes: number; line: string }) {
   return (
-    <li className="tabular-nums">
-      <Tooltip
-        content={{
-          icon: Pencil,
-          title: 'Your review, not posted',
-          rows: [
-            { label: 'Drafts', value: drafts },
-            { label: 'Notes to send', value: notes },
-          ],
-        }}
-      >
-        <span className="inline-flex items-center gap-1.5 align-top">
-          <Pencil size={14} strokeWidth={1.8} className="text-icon" aria-hidden />
+    <Tooltip
+      content={{
+        icon: Pencil,
+        title: 'Your review, not posted',
+        rows: [
+          { label: 'Drafts', value: drafts },
+          { label: 'Notes to send', value: notes },
+        ],
+      }}
+    >
+      <span>
+        <Fact icon={<Pencil size={14} strokeWidth={1.8} className="text-icon" aria-hidden />}>
           {line}
-        </span>
-      </Tooltip>
-    </li>
+        </Fact>
+      </span>
+    </Tooltip>
   );
 }
