@@ -450,6 +450,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   editorWatchTree: (args: { cwd: string }) => ipcRenderer.invoke('editor:watchTree', args),
   editorUnwatchTree: (args: { cwd: string }) => ipcRenderer.invoke('editor:unwatchTree', args),
   onEditorTreeChanged: listen<{ cwd: string }>('editor:treeChanged'),
+  editorReadImages: (args: { cwd: string; paths: string[] }) =>
+    ipcRenderer.invoke('editor:readImages', args),
   editorReadAgainstBase: (args: { cwd: string; filePath: string; base: string }) =>
     ipcRenderer.invoke('editor:readAgainstBase', args),
   editorBlame: (args: { cwd: string; filePath: string; ref: string | null }) =>

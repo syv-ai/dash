@@ -1,4 +1,5 @@
 import { marked } from 'marked';
+import { imageSources, inlineImages, type ImageShown } from './previewImages';
 
 /*
  * The documents the editor's rendered preview shows (`PreviewFrame`): a
@@ -27,7 +28,8 @@ export function previewKind(filePath: string): PreviewKind | null {
 
 /**
  * No network at all (remote images would be tracking pixels; relative assets
- * have no origin to resolve against in a sandboxed srcdoc), no scripts (the
+ * have no origin to resolve against in a sandboxed srcdoc, so main reads
+ * them and they come inlined, `previewImages`), no scripts (the
  * sandbox drops them too), inline styles only, and no `<base href>` or form
  * target to redirect what the head sets.
  */
@@ -116,18 +118,35 @@ function markdownStyles(c: PreviewPalette): string {
     th, td { border: 1px solid ${c.line}; padding: 6px 13px; }
     th { font-weight: 600; }
     img { max-width: 100%; }
+    span.dash-image-alt { color: ${c.muted}; }
     hr { border: 0; border-top: 1px solid ${c.line}; margin: 1.6em 0; }
   `;
 }
 
+/** The HTML a file's text previews as, before its head and images. */
+function previewBody(kind: PreviewKind, text: string): string {
+  return kind === 'html' ? text : (marked.parse(text) as string);
+}
+
+/** Every `<img src>` the preview of `text` names: what it may want read. */
+export function previewImageSources(kind: PreviewKind, text: string): string[] {
+  return imageSources(previewBody(kind, text));
+}
+
 /**
- * The document the preview iframe shows for a file's text. Markdown's raw
- * HTML passes through `marked` unsanitized: the head's CSP and the iframe's
- * sandbox contain it, as they do an HTML file.
+ * The document the preview iframe shows for a file's text, each `<img>` as
+ * `images` says (inlined, or its alt text; as written when it says nothing).
+ * Markdown's raw HTML passes through `marked` unsanitized: the head's CSP
+ * and the iframe's sandbox contain it, as they do an HTML file.
  */
-export function previewDocument(kind: PreviewKind, text: string, palette: PreviewPalette): string {
-  if (kind === 'html') return withSafeHead(text);
-  const body = marked.parse(text) as string;
+export function previewDocument(
+  kind: PreviewKind,
+  text: string,
+  palette: PreviewPalette,
+  images: (src: string) => ImageShown | null = () => null,
+): string {
+  const body = inlineImages(previewBody(kind, text), images);
+  if (kind === 'html') return withSafeHead(body);
   return withSafeHead(`<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>${markdownStyles(palette)}</style></head><body>${body}</body></html>`);

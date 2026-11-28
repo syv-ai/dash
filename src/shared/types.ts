@@ -1121,6 +1121,13 @@ export interface EditorReadWorkingResult {
   language: string; // Monaco language id; '' fallback
 }
 
+/** A preview's image (`editor:readImages`), inlined as a `data:` URI, or why
+ *  not: outside the editor's root (or a link out of it), not an image type by
+ *  its name and bytes, over the cap, or not there. */
+export type PreviewImage =
+  | { dataUri: string }
+  | { refused: 'outside' | 'type' | 'size' | 'missing' };
+
 /** Commit read: parent (original) vs commit (modified). No disk metadata; read-only. */
 export interface EditorReadCommitResult {
   originalContent: string; // parent commit's content; '' for root commit / added files

@@ -94,13 +94,15 @@ function namedInside(dir: string, p: string): boolean {
  * task's own Claude Code folders (`outsideRoots`), as a plain file. The path
  * as named and its real path must both stay in that one folder, or this
  * throws. A read in the worktree may follow a symlink out of it
- * (`resolveReadableInsideCwd`); an outside folder's never may.
+ * (`resolveReadableInsideCwd`); an outside folder's never may. An `embed` (a
+ * file a document pulls in by name, such as a preview's image, which nobody
+ * picked) is a read held to the write's rule: no link out of either.
  */
 export function resolveEditorPath(
   cwd: string,
   filePath: string,
   outside: readonly string[],
-  access: 'read' | 'write',
+  access: 'read' | 'write' | 'embed',
 ): { abs: string; plain: boolean } {
   if (!path.isAbsolute(filePath) || namedInside(cwd, filePath)) {
     const abs =

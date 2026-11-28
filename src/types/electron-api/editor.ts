@@ -3,6 +3,7 @@ import type {
   RepoListing,
   IpcResponse,
   EditorReadWorkingResult,
+  PreviewImage,
   EditorReadCommitResult,
   EditorReadBranchResult,
   EditorWriteResult,
@@ -58,6 +59,13 @@ export interface EditorApi {
   editorUnwatchTree: (args: { cwd: string }) => Promise<IpcResponse<void>>;
   /** A file or folder under a watched `cwd` came, went or was renamed. */
   onEditorTreeChanged: (callback: (event: { cwd: string }) => void) => () => void;
+  /** The images a rendered preview names, each `paths` entry resolved from the
+   *  document's folder (repo-relative, or absolute in a task's outside
+   *  folder), as `data:` URIs or refusals, in order (`previewImages.ts`). */
+  editorReadImages: (args: {
+    cwd: string;
+    paths: string[];
+  }) => Promise<IpcResponse<PreviewImage[]>>;
   /** A file's text at `base` (left) and on disk (right): a live PR view. */
   editorReadAgainstBase: (args: {
     cwd: string;

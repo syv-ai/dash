@@ -7,6 +7,7 @@ import { promisify } from 'util';
 import { parseArgs, errorResponse, IpcError } from './validate';
 import { parseBlameIncremental } from '../services/blameParser';
 import { outsideRoots } from '../services/editorRoots';
+import { readPreviewImages } from '../services/previewImages';
 import {
   resolveEditorPath,
   resolveInsideCwd,
@@ -25,6 +26,7 @@ import type {
   FileChange,
   FileChangeStatus,
   IpcResponse,
+  PreviewImage,
   RepoListing,
   WorkingRef,
 } from '@shared/types';
@@ -745,6 +747,30 @@ export function registerEditorIpc(): void {
             ? await listWorkingTree(args.cwd)
             : await listCommitRepoFiles(args.cwd, args.source.hash);
         return { success: true, data: listing };
+      } catch (err) {
+        return errorResponse(err);
+      }
+    },
+  );
+
+  // ── editor:readImages ─────────────────────────────────────────
+  // A rendered preview's local images, for it to inline (`previewImages.ts`).
+  ipcMain.handle(
+    'editor:readImages',
+    async (
+      _event,
+      args: { cwd: string; paths: string[] },
+    ): Promise<IpcResponse<PreviewImage[]>> => {
+      try {
+        parseArgs(
+          'editor:readImages',
+          z.looseObject({ cwd: z.string(), paths: z.array(z.string()) }),
+          args,
+        );
+        const outside = args.paths.some((p) => path.isAbsolute(p))
+          ? await outsideRoots(args.cwd)
+          : [];
+        return { success: true, data: await readPreviewImages(args.cwd, args.paths, outside) };
       } catch (err) {
         return errorResponse(err);
       }

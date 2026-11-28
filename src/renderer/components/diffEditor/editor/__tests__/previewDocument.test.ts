@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PREVIEW_CSP,
   previewDocument,
+  previewImageSources,
   previewKind,
   withSafeHead,
   type PreviewPalette,
@@ -36,6 +37,12 @@ describe('PREVIEW_CSP', () => {
     expect(PREVIEW_CSP).not.toMatch(/script-src|connect-src|https?:/);
     expect(PREVIEW_CSP).toContain("form-action 'none'");
     expect(PREVIEW_CSP).toContain("base-uri 'none'");
+  });
+
+  it('still lets images in only as data: URIs (local ones come inlined)', () => {
+    expect(PREVIEW_CSP).toBe(
+      "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:; form-action 'none'; base-uri 'none'",
+    );
   });
 });
 
@@ -78,6 +85,18 @@ describe('previewDocument', () => {
     expect(doc).toMatch(/code \{[^}]*color: #e5a3c0;/);
     expect(doc).toMatch(/body \{[^}]*background: #101112;/);
     expect(doc).toContain('color-scheme: dark');
+  });
+
+  it('inlines images behind the same head, and finds those the text names', () => {
+    const md = '![Dash screenshot](docs/screenshot.png)\n\n<img src="logo.svg">';
+    expect(previewImageSources('markdown', md)).toEqual(['docs/screenshot.png', 'logo.svg']);
+    const uri = 'data:image/png;base64,AA==';
+    const doc = previewDocument('markdown', md, palette, () => ({ kind: 'data', uri }));
+    expect(doc.startsWith('<!doctype html>' + CSP_META)).toBe(true);
+    expect(doc).toContain(`<img src="${uri}" alt="Dash screenshot">`);
+    expect(
+      previewDocument('html', '<img src="a.png">', palette, () => ({ kind: 'data', uri })),
+    ).toBe(withSafeHead(`<img src="${uri}">`));
   });
 
   it("keeps Markdown's raw HTML inside the same head", () => {

@@ -686,6 +686,8 @@ export function EditorPane({
             <div className="absolute inset-0 z-30">
               <PreviewFrame
                 kind={kind}
+                cwd={cwd}
+                filePath={filePath}
                 text={draft}
                 isDark={isDark}
                 background={terminalTheme.background}

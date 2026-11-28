@@ -2,9 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '../../../lib/cn';
 import { roleColor } from '../monacoTheme';
 import { previewDocument, type PreviewKind, type PreviewPalette } from './previewDocument';
+import { usePreviewImages } from './usePreviewImages';
 
 interface PreviewFrameProps {
   kind: PreviewKind;
+  /** The editor's root and the file's path in it: its relative images
+   *  resolve from the file's folder (`usePreviewImages`). */
+  cwd: string;
+  filePath: string;
   /** The file's text (the live buffer, so unsaved edits show). */
   text: string;
   isDark: boolean;
@@ -38,13 +43,15 @@ function palette(isDark: boolean, background: string | undefined): PreviewPalett
  * and no `allow-forms`. `allow-popups` only lets a link's click become a
  * window-open request, which main sends to the browser (http(s) only) and
  * denies; main also stops the frame navigating anywhere (`window.ts`). The
- * document's own CSP blocks the network (`previewDocument`). HTML shows as
+ * document's own CSP blocks the network (`previewDocument`): a relative
+ * image comes inlined, read through main (`usePreviewImages`). HTML shows as
  * authored on a neutral white page, as a browser shows it.
  */
-export function PreviewFrame({ kind, text, isDark, background }: PreviewFrameProps) {
+export function PreviewFrame({ kind, cwd, filePath, text, isDark, background }: PreviewFrameProps) {
+  const images = usePreviewImages(cwd, filePath, kind, text);
   const doc = useMemo(
-    () => previewDocument(kind, text, palette(isDark, background)),
-    [kind, text, isDark, background],
+    () => previewDocument(kind, text, palette(isDark, background), images),
+    [kind, text, isDark, background, images],
   );
   // The frame mounts only while it has a size: one made out of sight (the
   // narrow sidebar keeps the editor mounted, hidden) never painted once shown.
