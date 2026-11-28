@@ -108,3 +108,26 @@ describe('DatabaseService tasks: the folder rule', () => {
     );
   });
 });
+
+describe('DatabaseService tasks: sessions', () => {
+  const inPlace = { projectId: 'p1', path: '/repo', useWorktree: false, branch: '' };
+
+  it("keeps every session a task ran, its current one and the hooks', once each", () => {
+    const a = DatabaseService.saveTask({ ...inPlace, name: 'a' });
+    DatabaseService.setTaskSession(a.id, { jobId: 'j1', sessionId: 's1' });
+    DatabaseService.noteTaskSession(a.id, 's2');
+    DatabaseService.noteTaskSession(a.id, 's2');
+    DatabaseService.setTaskSession(a.id, { jobId: null, sessionId: null });
+    expect(DatabaseService.getTaskSessionIds(a.id).sort()).toEqual(['s1', 's2']);
+  });
+
+  it('tells a folder other tasks share, archived ones included, from a task of its own', () => {
+    const a = DatabaseService.saveTask({ ...inPlace, name: 'a' });
+    const wt = DatabaseService.saveTask({ ...base, name: 'wt' });
+    expect(DatabaseService.sharesTranscriptDir(a)).toBe(false);
+    const b = DatabaseService.saveTask({ ...inPlace, name: 'b' });
+    DatabaseService.archiveTask(b.id);
+    expect(DatabaseService.sharesTranscriptDir(a)).toBe(true);
+    expect(DatabaseService.sharesTranscriptDir(wt)).toBe(false);
+  });
+});

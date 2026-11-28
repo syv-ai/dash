@@ -40,6 +40,7 @@ vi.mock('../DatabaseService', () => ({
     getProjects: () => [],
     getTask: (id: string) => tasks.get(id),
     setTaskSession: (id: string, s: unknown) => sessions.push([id, s]),
+    sharesTranscriptDir: () => false,
     getTasksWithSessions: () => [],
   },
 }));

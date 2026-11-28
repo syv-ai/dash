@@ -409,8 +409,13 @@ async function ensureTaskSession(opts: {
   }
   // After a restart that found no transcript to resume, start fresh: the
   // newest transcript in the folder is another conversation (another task's,
-  // or the person's own in the main checkout).
-  if (!resumeSessionId && !freshStarts.has(opts.id)) {
+  // or the person's own in the main checkout). A folder other tasks share
+  // never guesses: its newest transcript may be theirs.
+  if (
+    !resumeSessionId &&
+    !freshStarts.has(opts.id) &&
+    !DatabaseService.sharesTranscriptDir({ id: opts.id, path: opts.cwd })
+  ) {
     resumeSessionId = findLatestSessionId(opts.cwd, opts.previousPath);
   }
   const prompt = consumeInitialPrompt(opts.id);

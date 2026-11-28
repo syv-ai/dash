@@ -284,3 +284,18 @@ export const prViewedFiles = sqliteTable(
     pk: primaryKey({ columns: [table.taskId, table.provider, table.number, table.path] }),
   }),
 );
+
+// Every Claude Code session a task ran (its transcript is
+// `<session id>.jsonl` in the folder's transcript dir): the current one and
+// those before a /clear or a fresh restart. Tasks with no branch share a
+// folder, and so its transcripts; their token totals count only their own.
+export const taskSessions = sqliteTable(
+  'task_sessions',
+  {
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    sessionId: text('session_id').notNull(),
+  },
+  (table) => ({ pk: primaryKey({ columns: [table.taskId, table.sessionId] }) }),
+);

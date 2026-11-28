@@ -24,6 +24,7 @@ import {
 } from './hookPayload';
 import { logLimitEvent } from './limitEventLog';
 import { setTaskInbox } from './taskInbox';
+import { noteHookSession } from './taskSessions';
 import { usageLimitService } from './UsageLimitService';
 import { limitNotice } from './usageLimitState';
 import { toastRenderer } from '../utils/toast';
@@ -365,6 +366,7 @@ class HookServerImpl {
               usageLimitService.noteLimitOver();
               if (over) this.showDesktopNotification(ptyId);
               // A turn just ended, so the transcript has new usage to total.
+              noteHookSession(ptyId, payload);
               void tokenStatsService.recomputeForTask(ptyId);
               res.writeHead(200);
               res.end();
@@ -593,8 +595,10 @@ class HookServerImpl {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
               const inbox = inboxFromHeaders(req.headers, payload);
               if (inbox) setTaskInbox(ptyId, inbox);
-              // The first payload of a session to name its scratchpad.
+              // The first payload of a session to name its scratchpad, and
+              // its id (each SessionStart, a /clear's new session too).
               noteScratchpad(ptyId, payload);
+              noteHookSession(ptyId, payload);
               res.writeHead(200);
               res.end();
             });

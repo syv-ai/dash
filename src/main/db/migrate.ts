@@ -512,5 +512,17 @@ export function runMigrations(): void {
     );
   `);
 
+  // Every session a task ran (schema.taskSessions), seeded with each task's
+  // current one.
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS task_sessions (
+      task_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      session_id TEXT NOT NULL,
+      PRIMARY KEY (task_id, session_id)
+    );
+    INSERT OR IGNORE INTO task_sessions (task_id, session_id)
+      SELECT id, session_id FROM tasks WHERE session_id IS NOT NULL;
+  `);
+
   rawDb.pragma('foreign_keys = ON');
 }

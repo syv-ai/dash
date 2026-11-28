@@ -43,8 +43,11 @@ vi.mock('../DatabaseService', () => ({
     },
     markTaskSessionStopped: () => {},
     getTasksWithSessions: () => [],
+    sharesTranscriptDir: () => folder.shared,
   },
 }));
+/** Whether another task works in t1's folder. */
+const folder = vi.hoisted(() => ({ shared: false }));
 vi.mock('../ptyHookSettings', () => ({
   writeHookSettings: () => ({ ok: true }),
   setCommitAttributionValue: () => {},
@@ -237,6 +240,24 @@ describe('stopping or restarting the session under an open pane', () => {
     expect(sup.dispatch).toHaveBeenLastCalledWith(
       expect.objectContaining({ resumeSessionId: null }),
     );
+    latestSession.value = null;
+  });
+
+  it("resumes the folder's newest conversation for a task with none recorded, unless the folder is shared", async () => {
+    latestSession.value = 'newest-in-folder';
+    Object.assign(tasks.get('t1')!, { jobId: null, sessionId: null });
+    await startDirectPty({ id: 't1', cols: 80, rows: 24, sender: fakeOwner() as never });
+    expect(sup.dispatch).toHaveBeenLastCalledWith(
+      expect.objectContaining({ resumeSessionId: 'newest-in-folder' }),
+    );
+    __testReset();
+    folder.shared = true;
+    Object.assign(tasks.get('t1')!, { jobId: null, sessionId: null });
+    await startDirectPty({ id: 't1', cols: 80, rows: 24, sender: fakeOwner() as never });
+    expect(sup.dispatch).toHaveBeenLastCalledWith(
+      expect.objectContaining({ resumeSessionId: null }),
+    );
+    folder.shared = false;
     latestSession.value = null;
   });
 

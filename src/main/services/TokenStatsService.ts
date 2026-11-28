@@ -25,7 +25,11 @@ class TokenStatsServiceImpl {
     try {
       const task = DatabaseService.getTask(taskId);
       if (!task) return;
-      const stats = await aggregateTokenStatsForTaskPath([task.path, task.previousPath]);
+      // In a folder other tasks share, only this task's own sessions count.
+      const sessions = DatabaseService.sharesTranscriptDir(task)
+        ? new Set(DatabaseService.getTaskSessionIds(taskId))
+        : undefined;
+      const stats = await aggregateTokenStatsForTaskPath([task.path, task.previousPath], sessions);
       DatabaseService.updateTaskTokenStats(taskId, stats);
       this.broadcast({ taskId, ...stats });
     } catch (err) {

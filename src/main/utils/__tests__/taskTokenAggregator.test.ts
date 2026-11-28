@@ -153,6 +153,30 @@ describe('aggregateTokenStatsForTaskPath', () => {
     expect(result.totalTokens).toBe(10500);
   });
 
+  it("counts only the given sessions in a folder several tasks share, each task's own", async () => {
+    const plain = '/tmp/test-task-shared';
+    writeSession(plain, 'sess-a', [
+      asstLine({ uuid: 'a', requestId: 'ra', input: 100, output: 0 }),
+    ]);
+    writeSession(plain, 'sess-a/subagents/agent-x', [
+      asstLine({ uuid: 'x', requestId: 'rx', input: 10, output: 0 }),
+    ]);
+    writeSession(plain, 'sess-b', [
+      asstLine({ uuid: 'b', requestId: 'rb', input: 2000, output: 0 }),
+    ]);
+    writeSession(plain, 'sess-c', [
+      asstLine({ uuid: 'c', requestId: 'rc', input: 30000, output: 0 }),
+    ]);
+    const agg = new TokenStatsAggregator();
+
+    expect((await agg.aggregate(plain, new Set(['sess-a']))).totalTokens).toBe(110);
+    expect((await agg.aggregate(plain, new Set(['sess-b']))).totalTokens).toBe(2000);
+    expect((await agg.aggregate(plain, new Set(['sess-c', 'gone']))).totalTokens).toBe(30000);
+    expect(await agg.aggregate(plain, new Set())).toEqual({ totalTokens: 0, totalCostUsd: 0 });
+    // The whole folder without a filter, after the filtered reads kept every tally.
+    expect((await agg.aggregate(plain)).totalTokens).toBe(32110);
+  });
+
   it('skips non-jsonl files in the project dir', async () => {
     const taskPath = '/tmp/test-task-d';
     writeSession(taskPath, 'session-1', [

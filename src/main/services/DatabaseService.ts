@@ -2,7 +2,14 @@ import { eq, desc, and, isNull, ne, asc, sql, isNotNull } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { initDb, getDb } from '../db/client';
 import { runMigrations } from '../db/migrate';
-import { projects, tasks, conversations, taskPorts, featureDismissals } from '../db/schema';
+import {
+  projects,
+  tasks,
+  conversations,
+  taskPorts,
+  featureDismissals,
+  taskSessions,
+} from '../db/schema';
 import type {
   Project,
   Task,
@@ -427,6 +434,22 @@ export class DatabaseService {
       })
       .where(eq(tasks.id, id))
       .run();
+    if (session?.sessionId) this.noteTaskSession(id, session.sessionId);
+  }
+
+  /** Record that `sessionId` is one of the task's sessions (schema.taskSessions). */
+  static noteTaskSession(taskId: string, sessionId: string): void {
+    getDb().insert(taskSessions).values({ taskId, sessionId }).onConflictDoNothing().run();
+  }
+
+  /** Every session the task ran, as far as Dash saw them. */
+  static getTaskSessionIds(taskId: string): string[] {
+    return getDb()
+      .select({ sessionId: taskSessions.sessionId })
+      .from(taskSessions)
+      .where(eq(taskSessions.taskId, taskId))
+      .all()
+      .map((row) => row.sessionId);
   }
 
   static markTaskSessionStopped(id: string): void {
@@ -721,6 +744,12 @@ export class DatabaseService {
   static getTasksByPath(path: string): Task[] {
     const db = getDb();
     return db.select().from(tasks).where(eq(tasks.path, path)).all().map(DatabaseService.mapTask);
+  }
+
+  /** Whether another task, archived or not, works in `task`'s folder: Claude
+   *  Code keeps one transcript dir per folder, so theirs sit beside its own. */
+  static sharesTranscriptDir(task: Pick<Task, 'id' | 'path'>): boolean {
+    return this.getTasksByPath(task.path).some((t) => t.id !== task.id);
   }
 
   // ── Mappers ──────────────────────────────────────────────

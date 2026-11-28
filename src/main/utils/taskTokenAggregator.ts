@@ -66,14 +66,22 @@ export class TokenStatsAggregator {
    * after the 0.16 worktree move): Claude keys transcript dirs by the cwd a
    * session started in, so a moved task's history is split across two encoded
    * dirs. Messages are deduplicated by requestId across all of them.
+   * `sessions`, when given, limits the count to those sessions' transcripts
+   * (a folder several tasks share holds all of theirs).
    */
-  aggregate(taskPath: string | Array<string | null | undefined>): Promise<TaskTokenStats> {
-    const run = this.queue.then(() => this.run(taskPath));
+  aggregate(
+    taskPath: string | Array<string | null | undefined>,
+    sessions?: ReadonlySet<string>,
+  ): Promise<TaskTokenStats> {
+    const run = this.queue.then(() => this.run(taskPath, sessions));
     this.queue = run.catch(() => {});
     return run;
   }
 
-  private async run(taskPath: string | Array<string | null | undefined>): Promise<TaskTokenStats> {
+  private async run(
+    taskPath: string | Array<string | null | undefined>,
+    sessions: ReadonlySet<string> | undefined,
+  ): Promise<TaskTokenStats> {
     const paths = (Array.isArray(taskPath) ? taskPath : [taskPath]).filter(
       (p): p is string => typeof p === 'string' && p.length > 0,
     );
@@ -96,6 +104,12 @@ export class TokenStatsAggregator {
       for (const entry of entries) {
         if (!entry.endsWith('.jsonl')) continue;
         const full = path.join(projectDir, entry);
+        if (sessions && !sessions.has(transcriptSession(entry))) {
+          // Another task's: not counted, but its tally is kept for that task.
+          const other = known.get(full);
+          if (other) seen.set(full, other);
+          continue;
+        }
         const tally = await this.read(full, known.get(full));
         if (!tally) continue;
         seen.set(full, tally);
@@ -195,6 +209,15 @@ export class TokenStatsAggregator {
   }
 }
 
+/**
+ * The session a transcript belongs to, from its path in the transcript dir:
+ * `<session>.jsonl`, or a subagent's under `<session>/subagents/`.
+ */
+export function transcriptSession(entry: string): string {
+  const first = entry.split(/[\\/]/)[0]!;
+  return first.endsWith('.jsonl') ? first.slice(0, -'.jsonl'.length) : first;
+}
+
 /** Whether the file still holds, at its start and just before `offset`, the bytes the tally read there. */
 async function unchanged(handle: fs.promises.FileHandle, tally: Tally): Promise<boolean> {
   const holds = async (expected: Buffer, at: number) => {
@@ -244,6 +267,7 @@ const aggregator = new TokenStatsAggregator();
 /** Sum tokens + cost over every transcript Claude wrote for a task (see TokenStatsAggregator). */
 export function aggregateTokenStatsForTaskPath(
   taskPath: string | Array<string | null | undefined>,
+  sessions?: ReadonlySet<string>,
 ): Promise<TaskTokenStats> {
-  return aggregator.aggregate(taskPath);
+  return aggregator.aggregate(taskPath, sessions);
 }
