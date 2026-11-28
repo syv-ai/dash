@@ -537,7 +537,7 @@ export function makeGithubProvider(gql: Gql = ghGql, rest: Rest = ghRest): Forge
       if (!pr) throw new Error(`PR #${number} not found`);
       const head = str(pr.headRefOid);
       const baseTip = str(pr.baseRefOid);
-      await ensureCommits(ctx.cwd, [baseTip, head]);
+      await ensureCommits(ctx.cwd, [baseTip, head], undefined, [`refs/pull/${number}/head`]);
       const base = (await runGit(ctx.cwd, ['merge-base', baseTip, head], TIMEOUT_MS)).trim();
       const viewer = str(pick(data, 'viewer', 'login'));
       return { ...githubReviewFrom(pr, { number, base, head, viewer }), baseTip };

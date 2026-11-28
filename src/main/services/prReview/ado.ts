@@ -964,7 +964,11 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
         linkedWorkItems(ado, at),
       ]);
       const baseTip = (pr as RawPr | null)?.lastMergeTargetCommit?.commitId || null;
-      await deps.ensureCommits(ctx.cwd, [base, head, ...(baseTip ? [baseTip] : [])]);
+      // The PR's merge ref holds its head (a fork's too) and the target, should
+      // Azure Repos refuse a fetch by sha.
+      await deps.ensureCommits(ctx.cwd, [base, head, ...(baseTip ? [baseTip] : [])], undefined, [
+        `refs/pull/${number}/merge`,
+      ]);
       const [filesAtHead, changedSince] = await Promise.all([
         deps.filesAtCommit(ctx.cwd, head, threadPaths(threads)),
         changedThreads(ctx.cwd, adoThreadOrigins(threads, iterations, id), head),

@@ -18,22 +18,32 @@ const has = (cwd: string, sha: string, run: RunGit) =>
 
 /**
  * Make each of `shas` present in the checkout at `cwd`, fetching the missing
- * ones from origin by sha in one go. Both GitHub and Azure Repos serve a
- * reachable commit by its sha.
+ * ones from origin by sha in one go, then, for any still missing,
+ * `fallbackRefs` (a PR's own ref, which holds its head even from a fork).
+ * GitHub serves any reachable commit by its sha; whether Azure Repos does
+ * isn't documented, so its PR ref is the fallback there.
  */
 export async function ensureCommits(
   cwd: string,
   shas: string[],
   run: RunGit = runGit,
+  fallbackRefs: readonly string[] = [],
 ): Promise<void> {
   const wanted = [...new Set(shas.filter(Boolean))];
-  const missing: string[] = [];
-  for (const sha of wanted) if (!(await has(cwd, sha, run))) missing.push(sha);
+  const absent = async (list: string[]) => {
+    const out: string[] = [];
+    for (const sha of list) if (!(await has(cwd, sha, run))) out.push(sha);
+    return out;
+  };
+  let missing = await absent(wanted);
   if (missing.length === 0) return;
   await run(cwd, ['fetch', '--no-tags', 'origin', ...missing], 60_000).catch(() => '');
-  for (const sha of missing) {
-    if (!(await has(cwd, sha, run))) throw new Error(`Could not fetch ${sha} from origin`);
+  missing = await absent(missing);
+  if (missing.length > 0 && fallbackRefs.length > 0) {
+    await run(cwd, ['fetch', '--no-tags', 'origin', ...fallbackRefs], 60_000).catch(() => '');
+    missing = await absent(missing);
   }
+  if (missing.length > 0) throw new Error(`Could not fetch ${missing[0]} from origin`);
 }
 
 /**

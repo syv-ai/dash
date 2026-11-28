@@ -59,6 +59,44 @@ describe('ensureCommits', () => {
   });
 });
 
+describe('ensureCommits, falling back to a PR ref', () => {
+  /** A checkout where `sha` arrives only with `ref`'s fetch. */
+  function forge(sha: string, ref: string): { run: RunGit; fetches: string[][] } {
+    let present = false;
+    const fetches: string[][] = [];
+    return {
+      fetches,
+      run: async (_cwd, args) => {
+        if (args[0] === 'cat-file') {
+          if (present) return '';
+          throw new Error('missing');
+        }
+        if (args[0] === 'fetch') {
+          fetches.push(args.slice(3));
+          if (args.includes(ref)) present = true;
+          else throw new Error('not our ref');
+        }
+        return '';
+      },
+    };
+  }
+
+  it("fetches the PR's ref when the forge won't serve the sha itself", async () => {
+    const sha = 'a'.repeat(40);
+    const { run, fetches } = forge(sha, 'refs/pull/7/merge');
+    await ensureCommits('/wt', [sha], run, ['refs/pull/7/merge']);
+    expect(fetches).toEqual([[sha], ['refs/pull/7/merge']]);
+  });
+
+  it('still says so when neither holds it', async () => {
+    const sha = 'b'.repeat(40);
+    const { run } = forge(sha, 'refs/pull/9/merge');
+    await expect(ensureCommits('/wt', [sha], run, ['refs/pull/7/merge'])).rejects.toThrow(
+      `Could not fetch ${sha} from origin`,
+    );
+  });
+});
+
 describe('checkoutVsHead', () => {
   it('says whether HEAD is the PR head, and counts the commits either side lacks', async () => {
     expect(await checkoutVsHead(repo, head)).toEqual({ atHead: true, ahead: 0, behind: 0 });
