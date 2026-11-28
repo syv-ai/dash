@@ -18,6 +18,7 @@ import type { Project, Task } from '../../../shared/types';
 import type { TaskFromPr } from '../task/TaskModal';
 import { useProjectPrList } from '../../hooks/useProjectPrs';
 import { usePrReviews } from '../../stores/prReviewStore';
+import { selectProjectHasGit, useProjects } from '../../stores/projectsStore';
 import { ViewPanel, ViewTabs } from '../ui/ViewTabs';
 import { ProjectPrs, type ProjectPrActions } from './ProjectPrs';
 import { ActivityDot } from './ActivityDot';
@@ -92,7 +93,11 @@ export function ProjectOverview({
   const detectProjectPrs = useGit((s) => s.detectProjectPrs);
   const projectTokens = useRuntime((s) => s.projectTokenStats[project.id]);
   const [showArchived, setShowArchived] = useState(false);
-  const [view, setView] = useState<ProjectView>('tasks');
+  // A plain folder has no PRs: its page is its tasks, with no switch
+  // (as its tasks' sidebars have no git views, `normalViews`).
+  const hasGit = useProjects((s) => selectProjectHasGit(s, project.id));
+  const [picked, setView] = useState<ProjectView>('tasks');
+  const view: ProjectView = hasGit ? picked : 'tasks';
   const prCount = useProjectPrList(project.id).listing?.prs?.length;
   const prActions: ProjectPrActions = {
     goToTask: onSelectTask,
@@ -221,22 +226,24 @@ export function ProjectOverview({
             </div>
           )}
 
-          <ViewTabs<ProjectView>
-            variant="pill"
-            aria-label="Project view"
-            className="mt-4 ml-12"
-            value={view}
-            onChange={setView}
-            options={[
-              { value: 'tasks', label: 'Tasks', count: tasks.length, countLabel: 'Tasks' },
-              {
-                value: 'prs',
-                label: 'Pull requests',
-                count: prCount,
-                countLabel: 'Open pull requests',
-              },
-            ]}
-          />
+          {hasGit && (
+            <ViewTabs<ProjectView>
+              variant="pill"
+              aria-label="Project view"
+              className="mt-4 ml-12"
+              value={view}
+              onChange={setView}
+              options={[
+                { value: 'tasks', label: 'Tasks', count: tasks.length, countLabel: 'Tasks' },
+                {
+                  value: 'prs',
+                  label: 'Pull requests',
+                  count: prCount,
+                  countLabel: 'Open pull requests',
+                },
+              ]}
+            />
+          )}
         </div>
       </div>
 

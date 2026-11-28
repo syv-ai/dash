@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { PrDetails, RelevantPr } from '@shared/types';
 import { groupProjectPrs, type ProjectPrGroups } from '@shared/projectPrs';
-import { useProjects } from '../stores/projectsStore';
+import { selectProjectHasGit, useProjects } from '../stores/projectsStore';
 import { prDetailsOf, useProjectPrs, type ProjectPrListing } from '../stores/projectPrsStore';
 
 /**
@@ -9,6 +9,7 @@ import { prDetailsOf, useProjectPrs, type ProjectPrListing } from '../stores/pro
  * you stand on them, each with the task on its head branch (see
  * `groupProjectPrs`). `groups` is null until first listed and on a forge
  * Dash has no provider for (`listing.prs` null); `reload` lists them again.
+ * A plain folder (`selectProjectHasGit`) has no PRs: nothing is asked.
  */
 export function useProjectPrList(projectId: string): {
   listing: ProjectPrListing | undefined;
@@ -18,9 +19,10 @@ export function useProjectPrList(projectId: string): {
   const listing = useProjectPrs((s) => s.lists[projectId]);
   const loadList = useProjectPrs((s) => s.loadList);
   const tasks = useProjects((s) => s.tasksByProject[projectId]);
+  const hasGit = useProjects((s) => selectProjectHasGit(s, projectId));
   useEffect(() => {
-    void loadList(projectId);
-  }, [projectId, loadList]);
+    if (hasGit) void loadList(projectId);
+  }, [projectId, hasGit, loadList]);
   const groups = useMemo(
     () => (listing?.prs ? groupProjectPrs(listing.prs, tasks ?? []) : null),
     [listing, tasks],
