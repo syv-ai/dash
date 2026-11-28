@@ -9,9 +9,12 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [] },
 }));
 
-const tasks = vi.hoisted(() => ({ byPath: new Map<string, { archivedAt: string | null }>() }));
+const tasks = vi.hoisted(() => ({ byPath: new Map<string, { archivedAt: string | null }[]>() }));
 vi.mock('../../services/DatabaseService', () => ({
-  DatabaseService: { getTaskByPath: (p: string) => tasks.byPath.get(p), getProjects: () => [] },
+  DatabaseService: {
+    getTasksByPath: (p: string) => tasks.byPath.get(p) ?? [],
+    getProjects: () => [],
+  },
 }));
 
 const manager = vi.hoisted(() => ({
@@ -57,7 +60,7 @@ describe('lsp IPC', () => {
     worktree = path.join(tmp, 'wt');
     fs.mkdirSync(path.join(worktree, 'src'), { recursive: true });
     fileUri = URI.file(path.join(worktree, 'src', 'a.ts')).toString();
-    tasks.byPath = new Map([[worktree, { archivedAt: null }]]);
+    tasks.byPath = new Map([[worktree, [{ archivedAt: null }]]]);
     vi.spyOn(console, 'error').mockImplementation(() => {});
     for (const fn of Object.values(manager)) fn.mockClear();
   });
@@ -94,9 +97,14 @@ describe('lsp IPC', () => {
     expect(await open({ uri: viaLink })).toMatchObject({ success: false, code: 'VALIDATION' });
 
     expect(await open({ worktree: tmp })).toMatchObject({ success: false, code: 'VALIDATION' });
-    tasks.byPath.set(worktree, { archivedAt: '2026-11-24' });
+    tasks.byPath.set(worktree, [{ archivedAt: '2026-11-24' }]);
     expect(await open()).toMatchObject({ success: false, code: 'VALIDATION' });
     expect(manager.open).not.toHaveBeenCalled();
+  });
+
+  it('opens a file in a folder whose first task is archived but another is live', async () => {
+    tasks.byPath.set(worktree, [{ archivedAt: '2026-11-24' }, { archivedAt: null }]);
+    expect(await open()).toEqual({ success: true, data: { serverId: 'typescript' } });
   });
 
   it('allows only the listed request methods', async () => {

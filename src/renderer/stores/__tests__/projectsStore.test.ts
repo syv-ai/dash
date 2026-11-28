@@ -108,6 +108,22 @@ describe('projectsStore state + selectors', () => {
     expect(store.selectTaskById({ tasksByProject: s.tasksByProject }, 't1')?.id).toBe('t1');
   });
 
+  it('selectTaskByPath picks the preferred task of several sharing a folder', async () => {
+    const useProjects = await freshStore();
+    const shared = { path: '/plain', branch: '', useWorktree: false };
+    useProjects.setState({
+      tasksByProject: {
+        p: [task('a', 'p', shared), task('b', 'p', shared), task('w', 'p')],
+      },
+    });
+    const s = useProjects.getState();
+    expect(store.selectTaskByPath(s, '/plain')?.id).toBe('a');
+    expect(store.selectTaskByPath(s, '/plain', 'b')?.id).toBe('b');
+    // A preferred task elsewhere doesn't stand in for the folder's.
+    expect(store.selectTaskByPath(s, '/plain', 'w')?.id).toBe('a');
+    expect(store.selectTaskByPath(s, '/plain', null)?.id).toBe('a');
+  });
+
   it("selectProjectHasGit reads the project's isGitRepo; an unknown project counts as git", async () => {
     const useProjects = await freshStore();
     useProjects.setState({ projects: [proj('git'), proj('plain', { isGitRepo: false })] });

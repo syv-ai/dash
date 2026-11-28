@@ -64,8 +64,8 @@ export const lspStatusSchema = z.object({ worktree });
 
 /** `worktree` must be a live (unarchived) task's folder, and `uri` a file inside it. */
 function assertInsideTask(channel: string, args: { worktree: string; uri: string }): void {
-  const task = DatabaseService.getTaskByPath(args.worktree);
-  if (!task || task.archivedAt) {
+  // Any live task there: tasks with no branch share a folder.
+  if (!DatabaseService.getTasksByPath(args.worktree).some((t) => !t.archivedAt)) {
     throw new IpcError(
       `Invalid IPC arguments for ${channel}: not a live task's worktree`,
       'VALIDATION',

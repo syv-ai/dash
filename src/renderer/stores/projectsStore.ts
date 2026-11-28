@@ -485,9 +485,19 @@ function findTask(s: TaskLookupState, match: (t: Task) => boolean): Task | undef
 export const selectTaskById = (s: TaskLookupState, id: string): Task | undefined =>
   findTask(s, (t) => t.id === id);
 
-/** The task whose worktree is at `path`, in any project (archived included). */
-export const selectTaskByPath = (s: TaskLookupState, path: string): Task | undefined =>
-  findTask(s, (t) => t.path === path);
+/**
+ * The task whose worktree is at `path`, in any project (archived included).
+ * Tasks with no branch share a folder (folderSharing): of several there,
+ * `preferId`'s when it is one of them.
+ */
+export const selectTaskByPath = (
+  s: TaskLookupState,
+  path: string,
+  preferId?: string | null,
+): Task | undefined => {
+  const preferred = preferId ? selectTaskById(s, preferId) : undefined;
+  return preferred?.path === path ? preferred : findTask(s, (t) => t.path === path);
+};
 
 export const selectActiveTask = (s: ProjectsState): Task | null =>
   s.activeTaskId ? (selectTaskById(s, s.activeTaskId) ?? null) : null;

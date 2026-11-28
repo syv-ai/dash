@@ -114,9 +114,9 @@ export function useEditorWorkspace({
   // Git belongs to a task's worktree, and the task's comments to the active
   // task's. A tab outside the worktree (A10) is plain: see EditorGroups; so is
   // a plain folder's task (no git).
-  const worktreeTaskId = useProjects((s) => selectTaskByPath(s, cwd)?.id ?? null);
+  const worktreeTaskId = useProjects((s) => selectTaskByPath(s, cwd, openTaskId)?.id ?? null);
   const git = useProjects((s) => {
-    const task = selectTaskByPath(s, cwd);
+    const task = selectTaskByPath(s, cwd, openTaskId);
     return !!task && selectProjectHasGit(s, task.projectId);
   });
   const activeTaskId = worktreeTaskId === openTaskId ? openTaskId : null;
