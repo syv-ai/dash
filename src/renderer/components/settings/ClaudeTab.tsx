@@ -14,7 +14,7 @@ import { SwitchField } from '../ui/SwitchField';
 import { TextLink } from '../ui/TextLink';
 
 /** `claude --version` says "2.1.332 (Claude Code)"; the number alone. */
-export function cliVersion(info: ClaudeCliInfo): string | null {
+function cliVersion(info: ClaudeCliInfo): string | null {
   return info.version?.replace(/\s*\(Claude Code\)\s*$/, '') ?? null;
 }
 

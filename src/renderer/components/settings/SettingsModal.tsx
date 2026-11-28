@@ -53,7 +53,7 @@ import { SwatchStrip } from '../ui/Swatch';
 import { SwitchField } from '../ui/SwitchField';
 import { TextLink } from '../ui/TextLink';
 import { Textarea } from '../ui/Textarea';
-import { ClaudeTab, cliVersion } from './ClaudeTab';
+import { ClaudeTab } from './ClaudeTab';
 import { KEYBINDINGS_HINT, KeybindingsTab, ResetAllKeybindings } from './KeybindingsTab';
 import { UsageTab } from './UsageTab';
 
@@ -174,7 +174,6 @@ export function SettingsModal({
         {tab === 'about' && (
           <AboutTab
             appVersion={appVersion}
-            claudeInfo={claudeInfo}
             updateStatus={updateStatus}
             onShowUpdates={() => setTab('updates')}
           />
@@ -734,21 +733,13 @@ function TelemetryTab() {
 
 function AboutTab({
   appVersion,
-  claudeInfo,
   updateStatus,
   onShowUpdates,
 }: {
   appVersion: string;
-  claudeInfo: ClaudeCliInfo | null;
   updateStatus: AutoUpdateStatus | null;
   onShowUpdates: () => void;
 }) {
-  const claudeVersion = !claudeInfo
-    ? 'Checking…'
-    : claudeInfo.installed
-      ? (cliVersion(claudeInfo) ?? 'Unknown')
-      : 'Not found';
-
   return (
     <>
       <div className="flex items-center gap-4">
@@ -762,9 +753,6 @@ function AboutTab({
       <DetailList>
         <DetailItem label="Version" copy={appVersion || undefined}>
           <span className="tabular-nums">{appVersion || '…'}</span>
-        </DetailItem>
-        <DetailItem label="Claude Code" copy={claudeInfo?.installed ? claudeVersion : undefined}>
-          <span className="tabular-nums">{claudeVersion}</span>
         </DetailItem>
         <DetailItem label="Updates">
           <TextLink onClick={onShowUpdates}>{updateHeadline(updateStatus)}</TextLink>
