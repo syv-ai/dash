@@ -1,7 +1,7 @@
-import { Fragment } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { ExternalLink, Users } from 'lucide-react';
 import type { PrCheck, PrIssue, PrReview, PrReviewer } from '../../../shared/types';
-import { branchUrl, githubProfileUrl } from '../../../shared/urls';
+import { githubProfileUrl } from '../../../shared/urls';
 import { DetailSection } from '../ui/DetailList';
 import { LineStats } from '../ui/LineStats';
 import { ListRow } from '../ui/ListRow';
@@ -20,9 +20,10 @@ import {
 import { ChecksRollupIcon } from './ChecksRollupIcon';
 import { checksRollup, checksSummary } from './outline';
 import { useSectionOpen } from '../../lib/useSectionOpen';
+import { Branch } from './ReviewHeader';
 
 /** A person, linked to their page on the forge when it has one. */
-export function Person({ name, url }: { name: string; url: string | null }) {
+function Person({ name, url }: { name: string; url: string | null }) {
   return url ? (
     <TextLink href={url} title={`${name}'s profile`}>
       {name}
@@ -36,7 +37,7 @@ export function Person({ name, url }: { name: string; url: string | null }) {
  *  / "Declined to review: E", one fact per group (Overview's About, the PRs
  *  view's). A required reviewer reads "(required)" after their name, a
  *  group or team leads with a people icon: quiet marks, in the text's ink. */
-export function Reviewers({ reviewers }: { reviewers: PrReviewer[] }) {
+function Reviewers({ reviewers }: { reviewers: PrReviewer[] }) {
   return reviewerGroups(reviewers).map((g) => (
     <li key={g.lead}>
       <span className="type-label">{g.lead}</span>{' '}
@@ -94,12 +95,10 @@ function Issues({ issues }: { issues: PrIssue[] }) {
 }
 
 /**
- * The Review view's Overview tab, under the PR's header: About (a bulleted list: how far the PR is behind its base, when it was
- * opened and last moved, its files and lines changed (the count a link to
- * Files), threads (the count a link to Threads), reviewers,
- * assignees and linked issues), its checks and its description, each a band that folds; the
- * open ones are remembered for the session. The general conversation lives
- * in the Threads tab.
+ * The Review view's Overview tab, under the PR's header: About (`PrAbout`),
+ * its checks and its description, each a band that folds; the open ones are
+ * remembered for the session. The general conversation lives in the Threads
+ * tab.
  */
 export function ReviewOverview({
   review,
@@ -116,62 +115,15 @@ export function ReviewOverview({
 }) {
   const about = useSectionOpen('overview.about', true);
   const description = useSectionOpen('overview.description', true);
-  const baseHref = remote ? branchUrl(remote, review.baseRef) : null;
-  const resolved = threadsResolved(review.threads);
-  const totals = diffTotals(review.files);
-  const created = prDateTime(review.createdAt);
-  const active = prDateTime(review.lastActivityAt);
   return (
     <div className="pt-2 pb-2">
       <DetailSection title="About" collapsible {...about}>
-        {/* Plain facts, one bullet each; values wrap rather than truncate (the
-            column can be narrow, D85). */}
-        <div className="pt-0.5">
-          <ul className="type-body grid list-disc gap-1 pl-4 wrap-break-word marker:text-ink-3">
-            {!!review.behindBase && (
-              <li>
-                <span className="tabular-nums">{review.behindBase}</span> behind{' '}
-                {baseHref ? (
-                  <TextLink href={baseHref} title={`Open ${review.baseRef} on the forge`}>
-                    <span className="wrap-anywhere">{review.baseRef}</span>
-                  </TextLink>
-                ) : (
-                  <span className="wrap-anywhere">{review.baseRef}</span>
-                )}
-              </li>
-            )}
-            {created && <li className="tabular-nums">Created {created}</li>}
-            {active && <li className="tabular-nums">Last activity {active}</li>}
-            <li className="tabular-nums">
-              <TextLink title="Show them in Files" onClick={onShowFiles}>
-                {plural(totals.files, 'file')} changed
-              </TextLink>
-              {(totals.additions > 0 || totals.deletions > 0) && ', '}
-              <LineStats add={totals.additions} del={totals.deletions} />
-            </li>
-            {resolved && (
-              <li className="tabular-nums">
-                <TextLink title="Show them in Threads" onClick={onShowThreads}>
-                  {plural(review.threads.length, 'thread')}
-                </TextLink>{' '}
-                {resolved}
-              </li>
-            )}
-            <Reviewers reviewers={review.reviewers} />
-            {review.assignees.length > 0 && (
-              <li>
-                Assigned to{' '}
-                {review.assignees.map((a, i) => (
-                  <Fragment key={a}>
-                    {i > 0 && ', '}
-                    <Person name={a} url={githubProfileUrl(remote, a)} />
-                  </Fragment>
-                ))}
-              </li>
-            )}
-            <Issues issues={review.issues} />
-          </ul>
-        </div>
+        <PrAbout
+          review={review}
+          remote={remote}
+          onShowFiles={onShowFiles}
+          onShowThreads={onShowThreads}
+        />
       </DetailSection>
       <Checks checks={review.checks} />
       <DetailSection title="Description" collapsible {...description}>
@@ -187,8 +139,114 @@ export function ReviewOverview({
   );
 }
 
-function Checks({ checks }: { checks: PrCheck[] }) {
-  const section = useSectionOpen('overview.checks', false);
+/**
+ * About's facts, a bulleted list (review mode's Overview, the PRs view's
+ * PRs): `lead` first, then how far the PR is behind its base, when it was
+ * opened and last moved, its files and lines changed (the count a link to
+ * Files, given `onShowFiles`), threads (the count a link to Threads, given
+ * `onShowThreads`), reviewers, assignees and linked issues, then `tail`.
+ */
+export function PrAbout({
+  review,
+  remote,
+  assignees = review.assignees,
+  onShowFiles,
+  onShowThreads,
+  lead,
+  tail,
+}: {
+  review: PrReview;
+  remote: string | null;
+  /** Who "Assigned to" names; the PR's assignees unless given. */
+  assignees?: string[];
+  onShowFiles?: () => void;
+  onShowThreads?: () => void;
+  /** Bullets before the PR's facts, and after them. */
+  lead?: ReactNode;
+  tail?: ReactNode;
+}) {
+  const resolved = threadsResolved(review.threads);
+  const totals = diffTotals(review.files);
+  const created = prDateTime(review.createdAt);
+  const active = prDateTime(review.lastActivityAt);
+  return (
+    // Plain facts, one bullet each; values wrap rather than truncate (the
+    // column can be narrow, D85).
+    <div className="pt-0.5">
+      <ul className="type-body grid list-disc gap-1 pl-4 wrap-break-word marker:text-ink-3">
+        {lead}
+        {!!review.behindBase && (
+          <li>
+            <span className="tabular-nums">{review.behindBase}</span> behind{' '}
+            <Branch remote={remote} name={review.baseRef} />
+          </li>
+        )}
+        {created && <li className="tabular-nums">Created {created}</li>}
+        {active && <li className="tabular-nums">Last activity {active}</li>}
+        <li className="tabular-nums">
+          <CountLink title="Show them in Files" onClick={onShowFiles}>
+            {plural(totals.files, 'file')} changed
+          </CountLink>
+          {(totals.additions > 0 || totals.deletions > 0) && ', '}
+          <LineStats add={totals.additions} del={totals.deletions} />
+        </li>
+        {resolved && (
+          <li className="tabular-nums">
+            <CountLink title="Show them in Threads" onClick={onShowThreads}>
+              {plural(review.threads.length, 'thread')}
+            </CountLink>{' '}
+            {resolved}
+          </li>
+        )}
+        <Reviewers reviewers={review.reviewers} />
+        {assignees.length > 0 && (
+          <li>
+            Assigned to{' '}
+            {assignees.map((a, i) => (
+              <Fragment key={a}>
+                {i > 0 && ', '}
+                <Person name={a} url={githubProfileUrl(remote, a)} />
+              </Fragment>
+            ))}
+          </li>
+        )}
+        <Issues issues={review.issues} />
+        {tail}
+      </ul>
+    </div>
+  );
+}
+
+/** A count that links to the view listing what it counts, where one can. */
+function CountLink({
+  title,
+  onClick,
+  children,
+}: {
+  title: string;
+  onClick?: () => void;
+  children: ReactNode;
+}) {
+  return onClick ? (
+    <TextLink title={title} onClick={onClick}>
+      {children}
+    </TextLink>
+  ) : (
+    <>{children}</>
+  );
+}
+
+/** The PR's checks as a band that folds, each a row opening its run; folded,
+ *  their rollup (Overview's, and each PR's in the PRs view, by `sectionId`). */
+export function Checks({
+  checks,
+  sectionId = 'overview.checks',
+}: {
+  checks: PrCheck[];
+  /** Where its fold is kept (`useSectionOpen`). */
+  sectionId?: string;
+}) {
+  const section = useSectionOpen(sectionId, false);
   const ci = checksRollup(checks);
   if (!ci) return null;
   return (

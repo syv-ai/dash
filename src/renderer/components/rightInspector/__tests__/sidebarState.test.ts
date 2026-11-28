@@ -148,6 +148,15 @@ describe('segmentOnMode', () => {
     expect(on('details', false, true)).toBe('overview');
   });
 
+  it('shows the view review mode was entered on, only as it starts', () => {
+    const land = (was: boolean | undefined, landOn: 'files' | 'threads' | 'history') =>
+      segmentOnMode({ segment: 'prs', was, now: true, landOn });
+    expect(land(false, 'files')).toBe('files');
+    expect(land(false, 'threads')).toBe('threads');
+    expect(land(false, 'history')).toBe('history');
+    expect(land(true, 'files')).toBe('overview');
+  });
+
   it('keeps the view while the mode holds, or before it is known', () => {
     expect(on('files', true, true)).toBe('files');
     expect(on('files', undefined, undefined)).toBe('files');

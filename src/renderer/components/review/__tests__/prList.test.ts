@@ -3,6 +3,7 @@ import type { PrReview, RelevantPr } from '../../../../shared/types';
 import {
   DETAILS_FRESH_MS,
   needsDetails,
+  prHead,
   prInvolvement,
   prsTabShown,
   taskPrList,
@@ -47,11 +48,7 @@ const labels = (over: Partial<Viewer>) => prInvolvement({ ...nobody, ...over }).
 describe('taskPrList', () => {
   it("lists the branch's own PRs first, then those into it, each in the forge's order", () => {
     const relevant = { branch: 'feat', from: [listed(9), listed(4)], into: [listed(7)] };
-    expect(taskPrList(relevant).map((p) => [p.pr.number, p.side])).toEqual([
-      [9, 'from'],
-      [4, 'from'],
-      [7, 'into'],
-    ]);
+    expect(taskPrList(relevant).map((p) => p.number)).toEqual([9, 4, 7]);
   });
 
   it('is empty until listed', () => {
@@ -131,5 +128,31 @@ describe('otherAssignees', () => {
     expect(
       otherAssignees({ assignees: ['cy'], viewerIsAssignee: false, viewerName: null }),
     ).toEqual(['cy']);
+  });
+});
+
+describe('prHead', () => {
+  const remote = 'https://github.com/acme/app.git';
+
+  it("reads a listed PR before its review is fetched: a draft says draft, no commit count, the author's profile by the remote", () => {
+    const pr = { ...listed(5), draft: true, author: 'bo', headRefName: 'feat/x' };
+    expect(prHead(pr, null, remote)).toEqual({
+      provider: 'github',
+      number: 5,
+      title: 'PR 5',
+      url: '',
+      state: 'draft',
+      author: 'bo',
+      authorUrl: 'https://github.com/bo',
+      commits: null,
+      baseRef: 'main',
+      headRef: 'feat/x',
+    });
+    expect(prHead(pr, null, null).authorUrl).toBeNull();
+  });
+
+  it('reads the fetched review once there is one', () => {
+    const fetched = { state: 'merged', commits: 4 } as PrReview;
+    expect(prHead(listed(5), fetched, remote)).toBe(fetched);
   });
 });

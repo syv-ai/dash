@@ -112,22 +112,31 @@ export function firstChangedTreeFile(paths: readonly string[]): string | null {
   return first(paths, treeOrder);
 }
 
+/** A view review mode can be entered on (the PRs view's links: a PR's files,
+ *  threads or commits); Overview otherwise. */
+export type ReviewLanding = 'overview' | 'files' | 'threads' | 'history';
+
 /**
  * The view to show as review mode becomes known, starts or ends (each
  * `undefined` until main has said): a task found in review mode, opened or
- * just entered, shows Overview (D118); Overview and Threads are the mode's
+ * just entered, shows Overview (D118), or the view it was entered on
+ * (`landOn`); Overview and Threads are the mode's
  * alone, so ending it on either shows Files; Agent and PRs are normal mode's
  * alone, so reaching either in review mode shows Overview.
  */
-export function segmentOnMode<S extends CodeSegment | 'details'>({
+export function segmentOnMode<S extends CodeSegment | 'details', L extends ReviewLanding = never>({
   segment,
   was,
   now,
+  landOn = null,
 }: {
   segment: S;
   was: boolean | undefined;
   now: boolean | undefined;
-}): S | 'overview' | 'files' {
+  /** The view review mode was just entered on, if any. */
+  landOn?: L | null;
+}): S | 'overview' | 'files' | L {
+  if (now && !was && landOn) return landOn;
   if (now && (!was || segment === 'agent' || segment === 'prs')) return 'overview';
   const reviewOnly = segment === 'overview' || segment === 'threads';
   return reviewOnly && !now ? 'files' : segment;

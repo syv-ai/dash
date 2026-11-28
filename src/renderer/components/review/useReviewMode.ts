@@ -16,6 +16,7 @@ import {
   viewForMode,
   viewOnSegment,
   type CodeSegment,
+  type ReviewLanding,
 } from '../rightInspector/sidebarState';
 import { branchPr, type BranchPr } from './branchPr';
 import { firstOpenThread, threadRange } from './outline';
@@ -49,7 +50,8 @@ export interface ReviewMode {
   historyPr: PrEntry | null;
   /** In review mode, History's commits: the PR's. Null in normal mode. */
   commits: { commits: CommitSummary[]; loading: boolean } | null;
-  enter: (pr: PrRef) => void;
+  /** Enter review mode for `pr`, on Overview or the view given. */
+  enter: (pr: PrRef, on?: ReviewLanding) => void;
   exit: () => void;
   /** Open a file of the PR in the PR's view. */
   openFile: (path: string, opts?: OpenOptions) => void;
@@ -122,20 +124,26 @@ export function useReviewMode(
     afterExit.current = null;
     then?.();
   }, [follow, modeKey, review?.head]);
-  // A task found in review mode, or entering it, shows Overview; Overview
+  // A task found in review mode, or entering it, shows Overview (or the view
+  // it was entered on); Overview
   // and Threads are the mode's alone, so ending the mode leaves them for
   // Files. Read off the mode before (the sidebar starts on `initialSegment`'s).
   const known = taskPrs.mode === undefined ? undefined : reviewing;
   const knownBefore = useRef(known);
+  // The view `enter` was asked to land on, until the mode starts.
+  const landOn = useRef<ReviewLanding | null>(null);
   useEffect(() => {
     const was = knownBefore.current;
     knownBefore.current = known;
-    const next = segmentOnMode({ segment, was, now: known });
+    const next = segmentOnMode({ segment, was, now: known, landOn: landOn.current });
+    if (known && !was) landOn.current = null;
     if (next !== segment && next !== 'details') showSegment(next);
   }, [segment, known, showSegment]);
 
-  const enter = (pr: PrRef) =>
+  const enter = (pr: PrRef, on?: ReviewLanding) => {
+    landOn.current = on ?? null;
     usePrReviews.getState().setMode(task.id, { provider: pr.provider, number: pr.number });
+  };
   // Ending it is all an exit does: the follow effect moves the editor.
   const exit = () => usePrReviews.getState().setMode(task.id, null);
   const openFile = (path: string, opts?: OpenOptions) => {

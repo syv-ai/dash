@@ -15,7 +15,7 @@ import { buttonVariants } from './Button';
 import { menuItem, menuLabel } from './styles';
 import { cn } from '../../lib/cn';
 import { fixCi } from '../../utils/fixCi';
-import type { PrState, PullRequestInfo, PullRequestState } from '../../../shared/types';
+import type { PullRequestInfo, PullRequestState } from '../../../shared/types';
 
 interface PrBadgeProps {
   /** The PRs standing for the branch now, newest first (see relevantPrs). */
@@ -217,23 +217,6 @@ export function PrNumberBadge({ number, state }: { number: number; state: PullRe
   return (
     <span className={cn(badgeVariants({ tone: 'neutral', size: 'sm' }), prStatusTint(state))}>
       PR #{number}
-    </span>
-  );
-}
-
-const STATE_WORDS: Record<PrState, string> = {
-  open: 'Open',
-  draft: 'Draft',
-  merged: 'Merged',
-  closed: 'Closed',
-};
-
-/** A PR's state in words on its state's tint (D133), not clickable: the PRs
- *  view's drawers. */
-export function PrStateBadge({ state }: { state: PrState }) {
-  return (
-    <span className={cn(badgeVariants({ tone: 'neutral', size: 'sm' }), prStatusTint(state))}>
-      {STATE_WORDS[state]}
     </span>
   );
 }
