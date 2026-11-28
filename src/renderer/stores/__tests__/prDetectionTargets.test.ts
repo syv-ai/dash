@@ -76,6 +76,12 @@ describe('prDetectionTargets', () => {
     ).toBe('main');
   });
 
+  it("looks up none of a plain folder's tasks: no branches, no PRs", () => {
+    expect(prDetectionTargets(project({ isGitRepo: false }), [task(), task({ id: 't2' })])).toEqual(
+      [],
+    );
+  });
+
   it('falls back to the project path when the task has no path', () => {
     const targets = prDetectionTargets(project(), [task({ id: 'a', path: '' })]);
     expect(targets[0]?.cwd).toBe('/repo');

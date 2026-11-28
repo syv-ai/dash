@@ -9,6 +9,8 @@
  * PRs while the branch has PRs from or into it (`prsTabShown`). Files
  * is one tree scoped by its "All files" switch (`filesScope`): the
  * changes (Staged / Unstaged, the commit footer) or the whole repo with them.
+ * A plain folder's task (no git) has Files, on all files alone, and Agent
+ * (`normalViews`).
  *
  * Review mode (spec Revision 4) has its own views, each scoped to a PR:
  * Overview, Files (the PR's changed files, or all of them at its head),
@@ -142,13 +144,32 @@ export function segmentOnMode<S extends CodeSegment | 'details', L extends Revie
   return reviewOnly && !now ? 'files' : segment;
 }
 
-/** The view to show once the PRs tab goes (the branch's last PR from or
- *  into it merged or closed): Files; any other view stays. */
-export function segmentWithoutPrs<S extends CodeSegment | 'details'>(
+/** What the task has views for: git (a plain folder has none: no History,
+ *  no PRs, Files on all files alone), and PRs from or into its branch. */
+export interface ViewsAvailable {
+  git: boolean;
+  prs: boolean;
+}
+
+/** The views normal mode can show. */
+export type NormalView = Extract<CodeSegment, 'files' | 'history' | 'agent' | 'prs'>;
+
+/** Normal mode's views, in order: Files, History, Agent, then PRs while
+ *  the branch has any; a plain folder's task has Files and Agent. */
+export function normalViews({ git, prs }: ViewsAvailable): NormalView[] {
+  if (!git) return ['files', 'agent'];
+  return prs ? ['files', 'history', 'agent', 'prs'] : ['files', 'history', 'agent'];
+}
+
+/** The view to show once the one shown goes (PRs once the branch's last PR
+ *  from or into it merged or closed; History and PRs once the folder has no
+ *  git): Files. Any other view stays. */
+export function segmentAvailable<S extends CodeSegment | 'details'>(
   segment: S,
-  prsShown: boolean,
+  has: ViewsAvailable,
 ): S | 'files' {
-  return segment === 'prs' && !prsShown ? 'files' : segment;
+  const gone = (segment === 'prs' && !(has.git && has.prs)) || (segment === 'history' && !has.git);
+  return gone ? 'files' : segment;
 }
 
 /**

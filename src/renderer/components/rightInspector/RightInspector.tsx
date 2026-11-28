@@ -50,8 +50,10 @@ import {
   firstListedChange,
   firstTreeFile,
   pickSegment,
-  segmentWithoutPrs,
+  normalViews,
+  segmentAvailable,
   type CodeSegment,
+  type NormalView,
   type SidebarView,
 } from './sidebarState';
 import { defaultFilesScope, loadFilesScope, saveFilesScope, type FilesScope } from './filesScope';
@@ -73,6 +75,7 @@ import { firstOpenThread } from '../review/outline';
 import { useUnpushedCommits } from './useUnpushedCommits';
 import type { SyncLinks } from '../changes/SyncStatus';
 import { useGit } from '../../stores/gitStore';
+import { selectProjectHasGit, useProjects } from '../../stores/projectsStore';
 import type { DiffFileTarget } from '../../stores/editorsStore';
 import { useSettings } from '../../stores/settingsStore';
 import { useUi } from '../../stores/uiStore';
@@ -262,7 +265,9 @@ export function RightInspector({
   const [pickedScope, setPickedScope] = useState(() => loadFilesScope(task.id));
   const [firstScope, setFirstScope] = useState<FilesScope | null>(null);
   if (firstScope === null && ownCount !== null) setFirstScope(defaultFilesScope(ownCount));
-  const scope: FilesScope = pickedScope ?? firstScope ?? 'changed';
+  // A plain folder (no git) has no changes: Files lists all its files.
+  const hasGit = useProjects((s) => selectProjectHasGit(s, task.projectId));
+  const scope: FilesScope = hasGit ? (pickedScope ?? firstScope ?? 'changed') : 'all';
   const pickScope = (next: FilesScope) => {
     setPickedScope(next);
     saveFilesScope(task.id, next);
@@ -553,14 +558,29 @@ export function RightInspector({
   }, [listMinPx, onMinWidth]);
 
   // PRs: normal mode's tab while the branch has PRs from or into it; once
-  // the last goes, its view leaves for Files.
+  // the last goes, its view leaves for Files, as History's does once the
+  // folder has no git.
   const prCount = taskPrList(review.relevant).length;
   const prsShown = prsTabShown(review.relevant);
+  const available = useMemo(() => ({ git: hasGit, prs: prsShown }), [hasGit, prsShown]);
   useEffect(() => {
-    if (segmentWithoutPrs(segment, prsShown) !== segment) showSegment('files');
-  }, [segment, prsShown, showSegment]);
+    if (segmentAvailable(segment, available) !== segment) showSegment('files');
+  }, [segment, available, showSegment]);
   // The rail's PRs item; normal mode only.
   const railPrs = reviewing || !prsShown ? null : { count: prCount, own: review.own };
+
+  // Normal mode's tabs, by view (`normalViews` picks and orders them).
+  const normalTabs: Record<NormalView, ViewTabsOption<Segment>> = {
+    files: {
+      value: 'files',
+      label: 'Files',
+      count: files.length || undefined,
+      countLabel: 'Changed files',
+    },
+    history: { value: 'history', label: 'History' },
+    agent: { value: 'agent', label: 'Agent' },
+    prs: { value: 'prs', label: 'PRs', count: prCount, countLabel: 'Pull requests' },
+  };
 
   // The views' tabs, in order (Details is the row's end button, not a tab).
   // Review mode has no Agent: the PR is the subject, not the session.
@@ -581,19 +601,7 @@ export function RightInspector({
         },
         { value: 'history', label: 'History' },
       ]
-    : [
-        {
-          value: 'files',
-          label: 'Files',
-          count: files.length || undefined,
-          countLabel: 'Changed files',
-        },
-        { value: 'history', label: 'History' },
-        { value: 'agent', label: 'Agent' },
-        ...(prsShown
-          ? [{ value: 'prs' as const, label: 'PRs', count: prCount, countLabel: 'Pull requests' }]
-          : []),
-      ];
+    : normalViews(available).map((value) => normalTabs[value]);
 
   // The commit actions are Files' footer (`CommitBar`), not the row's.
   const header = (

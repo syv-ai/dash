@@ -457,6 +457,17 @@ export const useProjects = create<ProjectsStore>((set, get) => ({
 export const selectActiveProject = (s: ProjectsState): Project | null =>
   s.projects.find((p) => p.id === s.activeProjectId) ?? null;
 
+/**
+ * Whether the project is a git checkout (`project.isGitRepo`, which main
+ * keeps in step with its folder's `.git`): the one test of whether its tasks
+ * get git's views (branch, changes, History, PRs, review) and git's polling.
+ * A project not (yet) loaded counts as git, as Dash did before it knew.
+ */
+export const selectProjectHasGit = (
+  s: Pick<ProjectsState, 'projects'>,
+  projectId: string | null | undefined,
+): boolean => s.projects.find((p) => p.id === projectId)?.isGitRepo ?? true;
+
 type TaskLookupState = Pick<ProjectsState, 'tasksByProject'>;
 
 function findTask(s: TaskLookupState, match: (t: Task) => boolean): Task | undefined {

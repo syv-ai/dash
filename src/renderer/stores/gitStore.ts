@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { GitStatus, PullRequestInfo, Project, Task } from '../../shared/types';
 import { fetchPrsFor, prDetectionTargets, prTargetFor, type BranchPrs } from './prDetectionTargets';
-import { useProjects, selectActiveTask } from './projectsStore';
+import { useProjects, selectActiveTask, selectProjectHasGit } from './projectsStore';
 import { focusedInterval } from '../lib/focusedInterval';
 import { replaceEqualDeep } from '../lib/replaceEqualDeep';
 
@@ -278,7 +278,7 @@ export const useGit = create<GitStore>((set, get) => ({
     prLast = task && { taskId: task.id, branch };
 
     const defaultBranch = project?.baseRef || project?.gitBranch || 'main';
-    if (!branch || !project || branch === defaultBranch) {
+    if (!branch || !project?.isGitRepo || branch === defaultBranch) {
       if (task) {
         setTaskPrs({ [task.id]: { current: [], all: [] } });
       }
@@ -350,7 +350,10 @@ function setTaskPrs(found: Record<string, BranchPrs>): void {
   }));
 }
 
-/** The branch `task` is on now, falling back to the one it was created on until it is read. */
-export function useTaskBranch(task: Pick<Task, 'id' | 'branch'>): string {
-  return useGit((s) => s.branchByTask[task.id]) ?? task.branch;
+/** The branch `task` is on now, falling back to the one it was created on
+ *  until it is read; none for a task of a plain folder. */
+export function useTaskBranch(task: Pick<Task, 'id' | 'branch' | 'projectId'>): string {
+  const hasGit = useProjects((s) => selectProjectHasGit(s, task.projectId));
+  const live = useGit((s) => s.branchByTask[task.id]);
+  return hasGit ? (live ?? task.branch) : '';
 }

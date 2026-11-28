@@ -108,6 +108,16 @@ describe('projectsStore state + selectors', () => {
     expect(store.selectTaskById({ tasksByProject: s.tasksByProject }, 't1')?.id).toBe('t1');
   });
 
+  it("selectProjectHasGit reads the project's isGitRepo; an unknown project counts as git", async () => {
+    const useProjects = await freshStore();
+    useProjects.setState({ projects: [proj('git'), proj('plain', { isGitRepo: false })] });
+    const s = useProjects.getState();
+    expect(store.selectProjectHasGit(s, 'git')).toBe(true);
+    expect(store.selectProjectHasGit(s, 'plain')).toBe(false);
+    expect(store.selectProjectHasGit(s, 'unknown')).toBe(true);
+    expect(store.selectProjectHasGit(s, undefined)).toBe(true);
+  });
+
   // App subscribes via useProjects(useShallow(selectActiveProjectTasks)). The raw selector
   // filters → a fresh array every call (a !== b), which alone would loop useSyncExternalStore;
   // useShallow only rescues it because successive outputs are SHALLOW-equal. If a future change

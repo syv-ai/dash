@@ -3,9 +3,10 @@ import {
   firstChangedTreeFile,
   firstListedChange,
   firstTreeFile,
+  normalViews,
   pickSegment,
+  segmentAvailable,
   segmentOnMode,
-  segmentWithoutPrs,
   viewForMode,
   viewOnExit,
   viewOnSegment,
@@ -184,12 +185,33 @@ describe('segmentOnMode', () => {
   });
 });
 
-describe('segmentWithoutPrs', () => {
+describe('normalViews', () => {
+  it('lists PRs only while the branch has any', () => {
+    expect(normalViews({ git: true, prs: false })).toEqual(['files', 'history', 'agent']);
+    expect(normalViews({ git: true, prs: true })).toEqual(['files', 'history', 'agent', 'prs']);
+  });
+
+  it("gives a plain folder's task Files and Agent alone", () => {
+    expect(normalViews({ git: false, prs: false })).toEqual(['files', 'agent']);
+    expect(normalViews({ git: false, prs: true })).toEqual(['files', 'agent']);
+  });
+});
+
+describe('segmentAvailable', () => {
+  const git = { git: true, prs: true };
   it('leaves PRs for Files once the tab goes, and keeps any other view', () => {
-    expect(segmentWithoutPrs('prs', false)).toBe('files');
-    expect(segmentWithoutPrs('prs', true)).toBe('prs');
-    expect(segmentWithoutPrs('history', false)).toBe('history');
-    expect(segmentWithoutPrs('details', false)).toBe('details');
+    expect(segmentAvailable('prs', { ...git, prs: false })).toBe('files');
+    expect(segmentAvailable('prs', git)).toBe('prs');
+    expect(segmentAvailable('history', { ...git, prs: false })).toBe('history');
+    expect(segmentAvailable('details', { ...git, prs: false })).toBe('details');
+  });
+
+  it("leaves git's views for Files once the folder has no git", () => {
+    const plain = { git: false, prs: true };
+    expect(segmentAvailable('history', plain)).toBe('files');
+    expect(segmentAvailable('prs', plain)).toBe('files');
+    expect(segmentAvailable('agent', plain)).toBe('agent');
+    expect(segmentAvailable('details', plain)).toBe('details');
   });
 });
 

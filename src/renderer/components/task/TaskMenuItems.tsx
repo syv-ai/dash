@@ -15,7 +15,7 @@ import { DropdownMenuItem, DropdownMenuSeparator } from '../ui/DropdownMenu';
 import { IdeIcon } from '../ui/IdeIcon';
 import { usePreferredIde } from '../../hooks/usePreferredIde';
 import { copyTaskMessageAddress } from '../../utils/copyMessageAddress';
-import { useProjects, selectTaskById } from '../../stores/projectsStore';
+import { useProjects, selectProjectHasGit, selectTaskById } from '../../stores/projectsStore';
 import { sessionRegistry } from '../../terminal/SessionRegistry';
 import { copyText, revealLabel } from '../diffEditor/fileActions';
 import { showTaskMemory } from '../memory/showMemory';
@@ -84,6 +84,7 @@ export function TaskMenuItems({
   const { ideId, openLabel } = usePreferredIde();
   const task = useProjects((s) => selectTaskById(s, taskId));
   const setFavorite = useProjects((s) => s.setFavorite);
+  const hasGit = useProjects((s) => selectProjectHasGit(s, task?.projectId));
   // Read as the menu opens. While unknown, or when a setting turns it off,
   // the item stays out: Task settings shows it off with the reason.
   const bypass = useBypassAvailability(task?.path);
@@ -112,10 +113,12 @@ export function TaskMenuItems({
             <FolderOpen size={13} strokeWidth={1.8} />
             {revealLabel()}
           </Item>
-          <Item onSelect={() => copyText(task.branch, 'branch')}>
-            <GitBranch size={13} strokeWidth={1.8} />
-            Copy branch
-          </Item>
+          {hasGit && (
+            <Item onSelect={() => copyText(task.branch, 'branch')}>
+              <GitBranch size={13} strokeWidth={1.8} />
+              Copy branch
+            </Item>
+          )}
           <Item onSelect={() => copyText(task.path, 'path')}>
             <Link2 size={13} strokeWidth={1.8} />
             Copy path

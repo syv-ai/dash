@@ -19,7 +19,7 @@ export interface TaskPrsView {
  * switch, a branch change, a change in the branch's own PRs, and when the
  * review-mode PR's loaded state changes (D-R3a).
  */
-export function useTaskPrs(task: Pick<Task, 'id' | 'branch'>): TaskPrsView {
+export function useTaskPrs(task: Pick<Task, 'id' | 'branch' | 'projectId'>): TaskPrsView {
   const taskId = task.id;
   const entry = usePrReviews((s) => s.prs[taskId]);
   const branch = useTaskBranch(task);

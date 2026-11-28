@@ -339,7 +339,7 @@ function Badges() {
         <CountBadge count={128} />
         <TokenBadge totalTokens={184_000} totalCostUsd={1.42} />
         <TokenBadge totalTokens={9_200} totalCostUsd={0.08} size="sm" />
-        <MainRepoBadge task={{ id: 'gallery', branch: 'main' }} />
+        <MainRepoBadge task={{ id: 'gallery', branch: 'main', projectId: 'gallery' }} />
         <LineStats add={128} del={14} />
         <span className="text-xs">
           <LineStats add={3} del={0} />

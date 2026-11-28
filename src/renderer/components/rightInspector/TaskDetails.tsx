@@ -4,7 +4,7 @@ import { forgeBranchUrl, linkedItemUrl, parseForgeRepo } from '../../../shared/u
 import { formatRelativeTime } from '../../../shared/relativeTime';
 import { useGit } from '../../stores/gitStore';
 import { useRuntime } from '../../stores/runtimeStore';
-import { selectTaskById, useProjects } from '../../stores/projectsStore';
+import { selectProjectHasGit, selectTaskById, useProjects } from '../../stores/projectsStore';
 import { useSettings } from '../../stores/settingsStore';
 import { Badge } from '../ui/Badge';
 import { DetailItem, DetailList, DetailSection } from '../ui/DetailList';
@@ -30,10 +30,19 @@ interface TaskDetailsProps {
   syncLinks: SyncLinks;
 }
 
-/** The branch's newest commit, refetched when HEAD's status changes. */
-function useLastCommit(cwd: string, statusKey: unknown): EditorCommitListItem | null {
+/** The branch's newest commit, refetched when HEAD's status changes; none
+ *  without git. */
+function useLastCommit(
+  cwd: string,
+  statusKey: unknown,
+  hasGit: boolean,
+): EditorCommitListItem | null {
   const [commit, setCommit] = useState<EditorCommitListItem | null>(null);
   useEffect(() => {
+    if (!hasGit) {
+      setCommit(null);
+      return;
+    }
     let live = true;
     void window.electronAPI.editorListCommits({ cwd, limit: 1 }).then((r) => {
       if (live) setCommit(r.success && r.data?.[0] ? r.data[0] : null);
@@ -41,7 +50,7 @@ function useLastCommit(cwd: string, statusKey: unknown): EditorCommitListItem | 
     return () => {
       live = false;
     };
-  }, [cwd, statusKey]);
+  }, [cwd, statusKey, hasGit]);
   return commit;
 }
 
@@ -115,6 +124,7 @@ export function TaskDetails({
   syncLinks,
 }: TaskDetailsProps) {
   const project = useProjects((s) => s.projects.find((p) => p.id === task.projectId) ?? null);
+  const hasGit = useProjects((s) => selectProjectHasGit(s, task.projectId));
   const parentName = useProjects((s) =>
     task.parentTaskId ? (selectTaskById(s, task.parentTaskId)?.name ?? null) : null,
   );
@@ -123,7 +133,7 @@ export function TaskDetails({
   const livePermissionMode = useRuntime((s) => s.taskActivity[task.id]?.permissionMode ?? null);
   const gitStatus = useGit((s) => s.gitStatus);
   const prs = useGit((s) => s.branchPrsByTask[task.id]);
-  const lastCommit = useLastCommit(task.path, gitStatus);
+  const lastCommit = useLastCommit(task.path, gitStatus, hasGit);
   const { ms: lastActiveMs, now } = useLastActive(task.id, activity);
 
   const sections = useMemo(
@@ -131,6 +141,7 @@ export function TaskDetails({
       taskDetailSections({
         task,
         projectName: project?.name ?? null,
+        hasGit,
         parentTaskName: parentName,
         liveModel: modelName,
         contextPercent:
@@ -145,6 +156,7 @@ export function TaskDetails({
     [
       task,
       project?.name,
+      hasGit,
       parentName,
       modelName,
       contextUsage,
@@ -179,32 +191,38 @@ export function TaskDetails({
         </DetailSection>
       )}
 
-      <DetailSection title="Git">
-        <DetailList>
-          {branch && (
-            <DetailItem label="Branch" copy={branch} title={branch}>
-              <BranchLink branch={branch} status={gitStatus} remote={project?.gitRemote ?? null} />
-            </DetailItem>
-          )}
-          {gitStatus && (
-            <UpstreamRows
-              status={gitStatus}
-              remote={project?.gitRemote ?? null}
-              links={syncLinks}
-            />
-          )}
-          {lastCommit && (
-            <DetailItem label="Last commit" copy={lastCommit.shortHash}>
-              <LastCommit commit={lastCommit} cwd={task.path} onOpen={onOpenCommit} />
-            </DetailItem>
-          )}
-          {task.useWorktree && (
-            <DetailItem label="Branch from">
-              {task.branchCreatedByDash ? 'Created by Dash' : 'An existing branch'}
-            </DetailItem>
-          )}
-        </DetailList>
-      </DetailSection>
+      {hasGit && (
+        <DetailSection title="Git">
+          <DetailList>
+            {branch && (
+              <DetailItem label="Branch" copy={branch} title={branch}>
+                <BranchLink
+                  branch={branch}
+                  status={gitStatus}
+                  remote={project?.gitRemote ?? null}
+                />
+              </DetailItem>
+            )}
+            {gitStatus && (
+              <UpstreamRows
+                status={gitStatus}
+                remote={project?.gitRemote ?? null}
+                links={syncLinks}
+              />
+            )}
+            {lastCommit && (
+              <DetailItem label="Last commit" copy={lastCommit.shortHash}>
+                <LastCommit commit={lastCommit} cwd={task.path} onOpen={onOpenCommit} />
+              </DetailItem>
+            )}
+            {task.useWorktree && (
+              <DetailItem label="Branch from">
+                {task.branchCreatedByDash ? 'Created by Dash' : 'An existing branch'}
+              </DetailItem>
+            )}
+          </DetailList>
+        </DetailSection>
+      )}
 
       {prs && prs.length > 0 && (
         <DetailSection title="Pull requests">

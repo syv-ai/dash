@@ -53,6 +53,7 @@ const input = (
 ): TaskDetailsInput => ({
   task: { ...TASK, ...task },
   projectName: 'dash',
+  hasGit: true,
   parentTaskName: null,
   liveModel: null,
   contextPercent: null,
@@ -83,6 +84,11 @@ describe('taskDetailSections', () => {
     expect(labels(s.task)).toEqual(['Name', 'Project', 'Kind', 'Worktree', 'Created']);
     expect(labels(s.session)).toEqual(['Model', 'Effort', 'Permissions', 'State', 'Dash access']);
     expect(s.usage).toEqual([]);
+  });
+
+  it("leaves a plain folder's task without a Kind: it runs in the folder, as all do", () => {
+    const s = taskDetailSections(input({ hasGit: false }, { useWorktree: false }));
+    expect(labels(s.task)).toEqual(['Name', 'Project', 'Folder', 'Created']);
   });
 
   it('adds what a running, used task has', () => {

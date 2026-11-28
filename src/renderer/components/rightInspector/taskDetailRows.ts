@@ -24,6 +24,9 @@ export interface DetailRow {
 export interface TaskDetailsInput {
   task: Task;
   projectName: string | null;
+  /** Its project is a git checkout (`selectProjectHasGit`): else no Kind, as a
+   *  plain folder's tasks all run in it. */
+  hasGit: boolean;
   /** The task that created this one through the control API, by name. */
   parentTaskName: string | null;
   /** The live model from the session's status line, if it has reported. */
@@ -165,7 +168,7 @@ export function taskDetailSections(input: TaskDetailsInput): TaskDetailSections 
     task: present([
       { label: 'Name', value: task.name },
       !!input.projectName && { label: 'Project', value: input.projectName },
-      {
+      input.hasGit && {
         label: 'Kind',
         value: task.useWorktree ? 'Worktree' : 'Main checkout',
         title: task.useWorktree

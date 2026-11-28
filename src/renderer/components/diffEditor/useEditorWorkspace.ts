@@ -4,7 +4,7 @@ import type { DiffComment, FileChange, PrRef } from '../../../shared/types';
 import { needsAttention } from '../../../shared/diffComments';
 import { parsePrScope } from '../../../shared/prScope';
 import { useGit } from '../../stores/gitStore';
-import { selectTaskByPath, useProjects } from '../../stores/projectsStore';
+import { selectProjectHasGit, selectTaskByPath, useProjects } from '../../stores/projectsStore';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { prKey, usePrReviews } from '../../stores/prReviewStore';
 import { selectLayout, useEditorTabs } from '../../stores/editorTabsStore';
@@ -58,7 +58,7 @@ interface Args {
 export interface EditorWorkspace {
   tabsKey: string;
   cwd: string;
-  /** `cwd` is a task's worktree: git applies. */
+  /** `cwd` is a git project's task's worktree: git applies. */
   git: boolean;
   /** The task whose comments show here, or null. */
   activeTaskId: string | null;
@@ -112,9 +112,13 @@ export function useEditorWorkspace({
   prLive = false,
 }: Args): EditorWorkspace {
   // Git belongs to a task's worktree, and the task's comments to the active
-  // task's. A tab outside the worktree (A10) is plain: see EditorGroups.
+  // task's. A tab outside the worktree (A10) is plain: see EditorGroups; so is
+  // a plain folder's task (no git).
   const worktreeTaskId = useProjects((s) => selectTaskByPath(s, cwd)?.id ?? null);
-  const git = worktreeTaskId !== null;
+  const git = useProjects((s) => {
+    const task = selectTaskByPath(s, cwd);
+    return !!task && selectProjectHasGit(s, task.projectId);
+  });
   const activeTaskId = worktreeTaskId === openTaskId ? openTaskId : null;
   const gitStatus = useGit((s) => s.gitStatus);
 

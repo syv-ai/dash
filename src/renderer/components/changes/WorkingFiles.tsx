@@ -78,7 +78,7 @@ const NO_FILES: readonly FileChange[] = [];
  * sync text under it instead; on (`all`), every file with its changes, a staged one's letter boxed. Changed
  * rows swap their line counts for stage (or unstage), .gitignore and discard
  * on hover, and Space stages too, either way (all files: in the working tree's
- * view, which those act on).
+ * view, which those act on). A plain folder (no git) has its files alone.
  */
 export function WorkingFiles({
   cwd,
@@ -103,6 +103,25 @@ export function WorkingFiles({
   // at another view, that view's.
   const shown = changedOnly || working ? merged : repo.changedFiles;
   const tally = useMemo(() => buildTree(shown).tally, [shown]);
+  // A plain folder (no git): its files alone, with no changes to scope them to.
+  if (!repo.git) {
+    return (
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        <AllFiles
+          files={NO_FILES}
+          merged={NO_FILES}
+          tally={false}
+          working={false}
+          cwd={cwd}
+          onOpenFile={onOpenFile}
+          activePath={activePath}
+          view={view}
+          canOpenToSide={canOpenToSide}
+          repo={repo}
+        />
+      </div>
+    );
+  }
   if (!gitStatus) {
     return <EmptyState title={loading ? 'Loading…' : 'No task selected'} />;
   }

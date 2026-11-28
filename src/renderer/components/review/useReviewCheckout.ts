@@ -15,7 +15,7 @@ import { checkoutNotice, nextLiveAt, reviewCheckout, type ReviewCheckout } from 
  * `live`, and `useReviewMode` takes the workspace.
  */
 export function useReviewCheckout(
-  task: Pick<Task, 'id' | 'branch' | 'path'>,
+  task: Pick<Task, 'id' | 'branch' | 'path' | 'projectId'>,
 ): ReviewCheckout & { notice: string | null } {
   const review = usePrReviews(modeReviewOf(task.id));
   const status = useGit((s) => (s.gitStatusCwd === task.path ? s.gitStatus : null));

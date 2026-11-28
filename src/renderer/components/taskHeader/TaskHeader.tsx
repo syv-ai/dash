@@ -82,7 +82,8 @@ export function TaskHeader({
     needs,
   } = useFittedDensity<number>(fitTaskHeader, 0, null);
 
-  const branch = gitStatus?.branch || task.branch;
+  // A plain folder's task has no branch (nor a chevron before it).
+  const branch = project.isGitRepo ? gitStatus?.branch || task.branch : '';
   const branchHref =
     branch && project.gitRemote && gitStatus?.hasUpstream
       ? branchUrl(project.gitRemote, branch)
@@ -210,15 +211,17 @@ export function TaskHeader({
               Remote control
               {remoteControlOn && <DropdownMenuShortcut>On</DropdownMenuShortcut>}
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={onShowCommitGraph}>
-              <GitGraph size={13} strokeWidth={1.8} />
-              Commit graph
-              {keybindings.commitGraph && (
-                <DropdownMenuShortcut>
-                  {formatBinding(keybindings.commitGraph)}
-                </DropdownMenuShortcut>
-              )}
-            </DropdownMenuItem>
+            {project.isGitRepo && (
+              <DropdownMenuItem onSelect={onShowCommitGraph}>
+                <GitGraph size={13} strokeWidth={1.8} />
+                Commit graph
+                {keybindings.commitGraph && (
+                  <DropdownMenuShortcut>
+                    {formatBinding(keybindings.commitGraph)}
+                  </DropdownMenuShortcut>
+                )}
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <TaskMenuItems
               taskId={task.id}

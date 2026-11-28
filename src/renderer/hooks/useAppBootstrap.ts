@@ -1,5 +1,10 @@
 import { useEffect } from 'react';
-import { useProjects, selectActiveProject, selectActiveTask } from '../stores/projectsStore';
+import {
+  useProjects,
+  selectActiveProject,
+  selectActiveTask,
+  selectProjectHasGit,
+} from '../stores/projectsStore';
 import { useGit } from '../stores/gitStore';
 import { useRuntime } from '../stores/runtimeStore';
 
@@ -18,6 +23,7 @@ export function useAppBootstrap() {
   const projects = useProjects((s) => s.projects);
   const activeTask = useProjects(selectActiveTask);
   const activeProject = useProjects(selectActiveProject);
+  const activeHasGit = useProjects((s) => selectProjectHasGit(s, activeTask?.projectId));
   const gitBranch = useGit((s) => s.gitStatus?.branch ?? null);
 
   // Runtime IPC subscriptions (activity, remote control, token writeback).
@@ -28,11 +34,12 @@ export function useAppBootstrap() {
     void useRuntime.getState().refreshTokenRollups();
   }, [projects]);
 
-  // Git watcher + poll, re-wired whenever the active task changes.
+  // Git watcher + poll, re-wired whenever the active task changes or its
+  // folder gains or loses git; none for a plain folder's task.
   useEffect(() => {
-    useGit.getState().watchActiveTask(activeTask ?? null);
+    useGit.getState().watchActiveTask(activeHasGit ? (activeTask ?? null) : null);
     return () => useGit.getState().stopWatch();
-  }, [activeTask?.id, activeTask?.path]);
+  }, [activeTask?.id, activeTask?.path, activeHasGit]);
 
   // PR detection, re-run on task / project / branch change.
   useEffect(() => {

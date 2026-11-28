@@ -21,10 +21,13 @@ export function prTargetFor(project: Project, cwd: string, taskId = ''): PrDetec
 /**
  * One lookup per task. Main reads each checkout's live branch, so a session
  * that switched branches is covered and the default branch yields none; the
- * recorded `task.branch` (fixed at creation) is not consulted. Pure so it can
+ * recorded `task.branch` (fixed at creation) is not consulted; none for a
+ * plain folder's tasks. Pure so it can
  * be unit-tested without touching IPC.
  */
 export function prDetectionTargets(project: Project, tasks: Task[]): PrDetectionTarget[] {
+  // A plain folder has no branches, so no PRs.
+  if (!project.isGitRepo) return [];
   return tasks.map((t) => prTargetFor(project, t.path || project.path, t.id));
 }
 
