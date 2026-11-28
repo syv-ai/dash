@@ -569,8 +569,11 @@ export function makeGithubProvider(
 
     listOpen: (ctx) => GithubService.listPullRequests(ctx.cwd),
 
-    prepareBranch: (ctx, pr) =>
-      GithubService.fetchPullRequestHead(ctx.cwd, pr.number, pr.headRefName),
+    prepareBranch: async (ctx, pr) =>
+      GithubService.fetchPullRequestBranch(ctx.cwd, {
+        number: pr.number,
+        ...(await GithubService.pullRequestHead(ctx.cwd, pr.number)),
+      }),
 
     failedChecks: (ctx, number) => GithubService.getFailedChecks(ctx.cwd, number),
 

@@ -48,8 +48,9 @@ describe('taskForPr', () => {
     expect(taskForPr(pr(1, null, 'feat'), [task('old', 'feat', '2026-11-01')])).toBe('old');
   });
 
-  it("has none for a fork's PR, though a task's branch has its head's name", () => {
+  it("finds a fork PR's task on pr/<n>/<head>, never one on a same-named branch", () => {
     expect(taskForPr(pr(1, null, 'feat', true), [task('t', 'feat')])).toBeNull();
+    expect(taskForPr(pr(1, null, 'feat', true), [task('t', 'pr/1/feat')])).toBe('t');
   });
 
   it('has none when no task is on its head', () => {

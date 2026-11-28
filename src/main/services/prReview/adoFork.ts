@@ -1,10 +1,4 @@
-import {
-  ensureCommits,
-  gitStderr,
-  isFastForwardConflict,
-  runGit,
-  type RunGit,
-} from './localCommits';
+import { ensureCommits, fetchHeadInto, gitStderr, runGit, type RunGit } from './localCommits';
 
 /**
  * Where a fork PR's head lives, from the PR (`GET …/pullRequests/{id}`): the
@@ -53,44 +47,9 @@ export function adoForkHead(raw: unknown, originUrl: string | null): AdoForkHead
 }
 
 /**
- * The local branch a fork PR's task works on: `pr/<id>/<branch>`. Never the
- * bare source name, which may also be one of origin's branches: a task on it
- * would count ahead/behind against origin's same-named branch, and deleting
- * the task with its remote branch would delete origin's.
- */
-export const adoForkBranch = (number: number, headRefName: string) => `pr/${number}/${headRefName}`;
-
-/**
- * Fetch `refspec` from `source` into the checkout. No leading '+': an existing
- * branch fast-forwards to the head, and one that diverged (or is checked out)
- * is kept as is rather than rewound (see `GithubService.fetchPullRequestHead`).
- */
-async function fetchInto(
-  cwd: string,
-  source: string,
-  refspec: string,
-  branch: string,
-  run: RunGit,
-): Promise<void> {
-  try {
-    await run(cwd, ['fetch', '--no-tags', '--', source, refspec], 60_000);
-  } catch (err) {
-    const exists = await run(
-      cwd,
-      ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`],
-      15_000,
-    ).then(
-      () => true,
-      () => false,
-    );
-    if (!isFastForwardConflict(err) || !exists) throw err;
-  }
-}
-
-/**
- * Put fork PR `number`'s head on local branch `branch`, with no upstream: the
- * fork's branch is the PR's, and pushing there may not be allowed, so a push
- * from the task fails with git's "no upstream branch" rather than landing on origin.
+ * Put fork PR `number`'s head on local branch `branch` (`prTaskBranch`), with
+ * no upstream: the fork's branch is the PR's, and pushing there may not be
+ * allowed, so a push from the task fails rather than landing on origin.
  *
  * First from the fork itself, by its URL (no remote is added). When that
  * fails (no URL, no read access to the fork, another organization), from
@@ -109,7 +68,7 @@ export async function fetchAdoForkHead(
   let forkError: unknown = null;
   if (head.url) {
     try {
-      await fetchInto(cwd, head.url, `${head.ref}:${target}`, branch, run);
+      await fetchHeadInto(cwd, head.url, `${head.ref}:${target}`, branch, run);
       return;
     } catch (err) {
       forkError = err;
@@ -127,7 +86,7 @@ export async function fetchAdoForkHead(
       `Could not fetch PR ${number}'s head ${head.sha.slice(0, 8)} from its fork${firstLine(forkError)} or from origin`,
     );
   }
-  await fetchInto(cwd, '.', `${head.sha}:${target}`, branch, run);
+  await fetchHeadInto(cwd, '.', `${head.sha}:${target}`, branch, run);
 }
 
 const firstLine = (err: unknown) => {

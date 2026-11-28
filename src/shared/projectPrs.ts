@@ -1,4 +1,5 @@
 import type { PrViewerInvolvement, RelevantPr, Task } from './types';
+import { prTaskBranch } from './prBranch';
 
 /** A project's open PR as its PR list shows it: the PR, and the task whose
  *  branch is its head, if any. */
@@ -26,16 +27,17 @@ export function prGroupOf(viewer: PrViewerInvolvement | null): keyof ProjectPrGr
 }
 
 /**
- * The task a PR's head branch is checked out in: the project's task on
- * `headRefName`, a live one before an archived one. A fork's PR has none:
- * its head is a same-named branch in the fork, not this repo's.
+ * The task a PR's head is checked out in: the project's task on the PR's
+ * task branch (`prTaskBranch`: a fork's is `pr/<n>/<head>`, never a
+ * same-named branch of this repo), a live one before an archived one.
  */
 export function taskForPr(
-  pr: Pick<RelevantPr, 'headRefName' | 'fromFork'>,
+  pr: Pick<RelevantPr, 'number' | 'headRefName' | 'fromFork'>,
   tasks: readonly Pick<Task, 'id' | 'branch' | 'archivedAt'>[],
 ): string | null {
-  if (pr.fromFork || !pr.headRefName) return null;
-  const on = tasks.filter((t) => t.branch === pr.headRefName);
+  if (!pr.headRefName) return null;
+  const branch = prTaskBranch(pr);
+  const on = tasks.filter((t) => t.branch === branch);
   return (on.find((t) => !t.archivedAt) ?? on[0])?.id ?? null;
 }
 

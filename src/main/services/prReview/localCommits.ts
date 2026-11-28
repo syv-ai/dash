@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { CheckoutVsHead, PrFile } from '@shared/types';
+import { prTaskBranch } from '@shared/prBranch';
 
 const execFileAsync = promisify(execFile);
 
@@ -54,6 +55,69 @@ export async function ensureCommits(
  */
 export const isFastForwardConflict = (err: unknown): boolean =>
   /non-fast-forward|\[rejected\]|refusing to fetch into branch|checked out/i.test(gitStderr(err));
+
+const hasRef = (cwd: string, ref: string, run: RunGit) =>
+  run(cwd, ['rev-parse', '--verify', '--quiet', ref], 15_000).then(
+    () => true,
+    () => false,
+  );
+
+/**
+ * Fetch `refspec` (`<src>:refs/heads/<branch>`) from `source` into the
+ * checkout. No leading '+': an existing branch fast-forwards to the head, and
+ * one that diverged (or is checked out) is kept as is rather than rewound.
+ */
+export async function fetchHeadInto(
+  cwd: string,
+  source: string,
+  refspec: string,
+  branch: string,
+  run: RunGit = runGit,
+): Promise<void> {
+  try {
+    await run(cwd, ['fetch', '--no-tags', '--', source, refspec], 60_000);
+  } catch (err) {
+    if (!isFastForwardConflict(err) || !(await hasRef(cwd, `refs/heads/${branch}`, run))) throw err;
+  }
+}
+
+/**
+ * Put origin's `branch` on the local branch of that name, tracking it: a new
+ * one is created with origin's as its upstream, an existing one fast-forwards
+ * (see `fetchHeadInto`) and gets that upstream if it has none.
+ */
+export async function fetchOriginBranch(
+  cwd: string,
+  branch: string,
+  run: RunGit = runGit,
+): Promise<void> {
+  const remote = `refs/remotes/origin/${branch}`;
+  await run(cwd, ['fetch', '--no-tags', 'origin', `+refs/heads/${branch}:${remote}`], 60_000);
+  if (!(await hasRef(cwd, `refs/heads/${branch}`, run))) {
+    await run(cwd, ['branch', '--track', branch, remote], 15_000);
+    return;
+  }
+  await fetchHeadInto(cwd, '.', `${remote}:refs/heads/${branch}`, branch, run);
+  const tracks = await run(cwd, ['config', '--get', `branch.${branch}.merge`], 15_000).then(
+    (out) => !!out.trim(),
+    () => false,
+  );
+  if (!tracks) await run(cwd, ['branch', `--set-upstream-to=${remote}`, branch], 15_000);
+}
+
+/**
+ * Put PR `pr`'s head on its task branch (see `prTaskBranch`) and answer its
+ * name: a same-repo PR's from origin, tracking it (`origin`); a fork's through
+ * the forge's own `fork` fetch, which sets no upstream.
+ */
+export async function preparePrBranch(
+  pr: { number: number; headRefName: string; fromFork: boolean },
+  fetch: { origin: (branch: string) => Promise<void>; fork: (branch: string) => Promise<void> },
+): Promise<string> {
+  const branch = prTaskBranch(pr);
+  await (pr.fromFork ? fetch.fork : fetch.origin)(branch);
+  return branch;
+}
 
 /** What a failed git run said: its stderr, else the error's message. */
 export const gitStderr = (err: unknown): string =>

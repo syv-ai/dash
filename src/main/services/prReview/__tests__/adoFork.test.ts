@@ -5,7 +5,7 @@ import { tmpdir } from 'os';
 import path from 'path';
 import forkPr from './fixtures/ado-fork-pr.json';
 import adoPr from './fixtures/ado-pr.json';
-import { adoForkBranch, adoForkHead, fetchAdoForkHead } from '../adoFork';
+import { adoForkHead, fetchAdoForkHead } from '../adoFork';
 import { runGit, type RunGit } from '../localCommits';
 import { makeAdoProvider, type AdoDeps } from '../ado';
 
@@ -52,10 +52,6 @@ describe('adoForkHead', () => {
         sha: null,
       });
     }
-  });
-
-  it("names the task branch apart from origin's branches", () => {
-    expect(adoForkBranch(7, 'main')).toBe('pr/7/main');
   });
 });
 

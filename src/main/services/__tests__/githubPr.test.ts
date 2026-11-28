@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  githubBranchPrsFrom,
-  mapGithubPrList,
-  buildPrHeadRefspec,
-  githubPrListArgs,
-} from '../githubPr';
+import { githubBranchPrsFrom, mapGithubPrList, githubPrListArgs } from '../githubPr';
 
 describe('mapGithubPrList', () => {
   it('maps gh pr list JSON to PullRequest[]', () => {
@@ -55,12 +50,6 @@ describe('mapGithubPrList', () => {
   it('returns [] for non-array input', () => {
     expect(mapGithubPrList(null)).toEqual([]);
     expect(mapGithubPrList({})).toEqual([]);
-  });
-});
-
-describe('buildPrHeadRefspec', () => {
-  it('builds the refs/pull head refspec into a local branch', () => {
-    expect(buildPrHeadRefspec(42, 'fix/auth')).toBe('pull/42/head:fix/auth');
   });
 });
 

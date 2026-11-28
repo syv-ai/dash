@@ -1,12 +1,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { GithubIssue, PullRequest, PullRequestInfo } from '@shared/types';
-import {
-  githubBranchPrsFrom,
-  mapGithubPrList,
-  buildPrHeadRefspec,
-  githubPrListArgs,
-} from './githubPr';
+import { githubBranchPrsFrom, mapGithubPrList, githubPrListArgs } from './githubPr';
 import {
   actionsJobId,
   annotationsFrom,
@@ -15,7 +10,13 @@ import {
   failedStepsFrom,
   type FailedCheck,
 } from './ciReport';
-import { isFastForwardConflict } from './prReview/localCommits';
+import {
+  fetchHeadInto,
+  fetchOriginBranch,
+  preparePrBranch,
+  runGit,
+  type RunGit,
+} from './prReview/localCommits';
 
 const execFileAsync = promisify(execFile);
 
@@ -156,46 +157,42 @@ export class GithubService {
     return mapGithubPrList(JSON.parse(stdout));
   }
 
-  /**
-   * Fetch a PR's head into a local branch so a worktree can be created on it.
-   * Uses refs/pull/<n>/head, which covers fork PRs. Returns the local branch
-   * name (= the PR head branch name). If the local branch already exists (the
-   * PR was prepared before), the fetch fails with a non-fast-forward / exists
-   * error — we treat that as "already present" and reuse it.
-   */
-  static async fetchPullRequestHead(
+  /** Where PR `prNumber`'s head is, as gh tells it: its branch, and whether that's in a fork. */
+  static async pullRequestHead(
     cwd: string,
     prNumber: number,
-    headRefName: string,
-  ): Promise<string> {
-    // No leading '+': git fast-forwards an existing local branch to the PR head
-    // when it can, and creates the branch when it's absent — so a stale local
-    // copy is refreshed for free, without ever rewinding local work.
-    const refspec = buildPrHeadRefspec(prNumber, headRefName);
-    try {
-      await execFileAsync('git', ['fetch', 'origin', refspec], { cwd, timeout: TIMEOUT_MS });
-    } catch (err) {
-      // Reuse the existing local branch only for the *expected* fast-forward
-      // conflicts: it has diverged from the PR head (non-ff), or it's checked out
-      // in a worktree. Forcing either would clobber work, so keep what's there.
-      // Any other failure (network, auth, a deleted PR ref) must not be masked as
-      // "reuse stale" — surface it.
-      const exists = await GithubService.localBranchExists(cwd, headRefName);
-      if (!isFastForwardConflict(err) || !exists) throw err;
-    }
-    return headRefName;
+  ): Promise<{ headRefName: string; fromFork: boolean }> {
+    const { stdout } = await execFileAsync(
+      'gh',
+      ['pr', 'view', String(prNumber), '--json', 'headRefName,isCrossRepository'],
+      { cwd, timeout: TIMEOUT_MS, env: process.env as Record<string, string> },
+    );
+    const pr = JSON.parse(stdout) as { headRefName?: string; isCrossRepository?: boolean };
+    if (!pr.headRefName) throw new Error(`gh names no head branch for PR #${prNumber}`);
+    return { headRefName: pr.headRefName, fromFork: pr.isCrossRepository === true };
   }
 
-  private static async localBranchExists(cwd: string, branch: string): Promise<boolean> {
-    try {
-      await execFileAsync('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], {
-        cwd,
-        timeout: TIMEOUT_MS,
-      });
-      return true;
-    } catch {
-      return false;
-    }
+  /**
+   * Put PR `pr`'s head on its task branch (see `prTaskBranch`) and answer its
+   * name: a same-repo PR's from origin's branch, tracking it; a fork's from
+   * origin's `refs/pull/<n>/head`, which GitHub keeps for every PR, with no upstream.
+   */
+  static fetchPullRequestBranch(
+    cwd: string,
+    pr: { number: number; headRefName: string; fromFork: boolean },
+    run: RunGit = runGit,
+  ): Promise<string> {
+    return preparePrBranch(pr, {
+      origin: (branch) => fetchOriginBranch(cwd, branch, run),
+      fork: (branch) =>
+        fetchHeadInto(
+          cwd,
+          'origin',
+          `refs/pull/${pr.number}/head:refs/heads/${branch}`,
+          branch,
+          run,
+        ),
+    });
   }
 
   /** `created`: Dash made the branch for the task; false for an existing branch. */

@@ -21,6 +21,51 @@ const PRESERVE_PATTERNS = [
   'docker-compose.override.yml',
 ];
 
+/** Branches a task's delete never removes from the remote. */
+const PROTECTED_BRANCHES = ['main', 'master', 'develop', 'dev'];
+
+/**
+ * The origin branch that is `branch`'s own pushed work, with its tip as last
+ * seen: only when `branch` tracks origin's branch of the same name (what
+ * `push -u origin <branch>` sets) and isn't a shared one. Null otherwise: no
+ * upstream (a fork PR's task, or a branch fetched from a PR ref under origin's
+ * same name, which is someone else's branch), another branch's (one cut from
+ * `origin/main` tracks main), or no tracking ref.
+ */
+export async function ownPushedBranch(
+  cwd: string,
+  branch: string,
+): Promise<{ ref: string; sha: string } | null> {
+  if (PROTECTED_BRANCHES.includes(branch)) return null;
+  const upstream = await GitService.getUpstream(cwd, branch);
+  if (upstream?.remote !== 'origin' || upstream.branch !== branch) return null;
+  try {
+    const { stdout } = await execFileAsync(
+      'git',
+      ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}^{commit}`],
+      { cwd },
+    );
+    return { ref: `refs/heads/${branch}`, sha: stdout.trim() };
+  } catch {
+    return null;
+  }
+}
+
+/** Delete `own` from origin while it is still where the task last saw it:
+ *  the lease refuses once anyone has moved it. */
+export async function deleteOwnPushedBranch(
+  cwd: string,
+  { ref, sha }: { ref: string; sha: string },
+): Promise<void> {
+  await execFileAsync(
+    'git',
+    ['push', `--force-with-lease=${ref}:${sha}`, 'origin', '--delete', ref],
+    {
+      cwd,
+    },
+  );
+}
+
 export class WorktreeService {
   /**
    * Create a git worktree for a task.
@@ -134,6 +179,10 @@ export class WorktreeService {
       }
     }
 
+    // Read what the remote branch may be before the local branch (and its
+    // upstream config) goes.
+    const remoteBranch = deleteRemoteBranch ? await ownPushedBranch(projectPath, branch) : null;
+
     // Delete local branch
     if (deleteLocalBranch) {
       try {
@@ -143,13 +192,9 @@ export class WorktreeService {
       }
     }
 
-    // Delete remote branch (best effort, non-blocking)
-    const protectedBranches = ['main', 'master', 'develop', 'dev'];
-    if (deleteRemoteBranch && !protectedBranches.includes(branch)) {
-      execFileAsync('git', ['push', 'origin', '--delete', branch], { cwd: projectPath }).catch(
-        () => {},
-      );
-    }
+    // Delete remote branch (best effort, non-blocking), only while it is still
+    // where the task last pushed it: the lease refuses it once anyone moved it.
+    if (remoteBranch) deleteOwnPushedBranch(projectPath, remoteBranch).catch(() => {});
   }
 
   /**
@@ -263,16 +308,6 @@ export class WorktreeService {
         // Best effort — gh may not be available
       }
     }
-  }
-
-  /**
-   * Fetch a single branch from origin so a worktree can be created on it.
-   * Used by the task-from-PR flow for ADO, whose PR source branch lives on
-   * origin. Returns the branch name unchanged for caller convenience.
-   */
-  async fetchRemoteBranch(projectPath: string, branch: string): Promise<string> {
-    await execFileAsync('git', ['fetch', 'origin', branch], { cwd: projectPath });
-    return branch;
   }
 
   private async refExists(cwd: string, ref: string): Promise<boolean> {

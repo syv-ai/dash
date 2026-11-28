@@ -45,4 +45,21 @@ describe('prsForCheckout', () => {
     expect(await prsForCheckout({ prsFrom }, ctx, 'main', git(null))).toEqual([]);
     expect(prsFrom).not.toHaveBeenCalled();
   });
+
+  it("finds a fork task's PR by the number in its branch, not origin's same-named branch's", async () => {
+    const prsFrom = vi.fn(async (_c: unknown, b: string) =>
+      b === 'fix/typo' ? [pr(9, 'open'), pr(7, 'open')] : [],
+    );
+    const prs = await prsForCheckout({ prsFrom }, ctx, 'main', git('pr/7/fix/typo'));
+    expect(prsFrom).toHaveBeenCalledWith(ctx, 'fix/typo');
+    expect(prs.map((p) => p.number)).toEqual([7]);
+  });
+
+  it("keeps a branch only named like a fork task's on its own PRs", async () => {
+    const prsFrom = vi.fn(async (_c: unknown, b: string) =>
+      b === 'pr/7/x' ? [pr(2, 'open')] : [],
+    );
+    const prs = await prsForCheckout({ prsFrom }, ctx, 'main', git('pr/7/x'));
+    expect(prs.map((p) => p.number)).toEqual([2]);
+  });
 });

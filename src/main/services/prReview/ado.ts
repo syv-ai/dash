@@ -28,8 +28,15 @@ import { adoPrListQuery, mapAdoPrList, mapAdoRelevantPrs } from '../adoPr';
 import type { FailedCheck } from '../ciReport';
 import { adoBuildIdOf, adoLogExcerpt, adoLogStartLine, adoTimelineFailure } from '../adoCi';
 import { ciOf } from '../prRelevance';
-import { ensureCommits, filesAtCommit, localDiffStat, runGit } from './localCommits';
-import { adoForkBranch, adoForkHead, fetchAdoForkHead } from './adoFork';
+import {
+  ensureCommits,
+  fetchOriginBranch,
+  filesAtCommit,
+  localDiffStat,
+  preparePrBranch,
+  runGit,
+} from './localCommits';
+import { adoForkHead, fetchAdoForkHead } from './adoFork';
 import type { ForgeDetails, ForgeReview, PrContext, ForgeProvider } from './types';
 
 const execFileAsync = promisify(execFile);
@@ -661,7 +668,7 @@ export interface AdoDeps {
     number: number,
     projectId: string | undefined,
   ) => Promise<PrCheck[]>;
-  /** Fetch branch `branch` from origin into the checkout at `cwd`. */
+  /** Put origin's `branch` on its local branch, tracking it (see `fetchOriginBranch`). */
   fetchBranch: (cwd: string, branch: string) => Promise<void>;
   /** Put a fork PR's head on local branch `branch` (see `fetchAdoForkHead`). */
   fetchForkHead: typeof fetchAdoForkHead;
@@ -688,9 +695,7 @@ const defaultDeps: AdoDeps = {
     ).stdout,
   checks: (ado, number, projectId) =>
     AzureDevOpsService.getPullRequestChecks(ado, ado.repository, number, projectId),
-  fetchBranch: async (cwd, branch) => {
-    await runGit(cwd, ['fetch', 'origin', branch], 60_000);
-  },
+  fetchBranch: (cwd, branch) => fetchOriginBranch(cwd, branch),
   fetchForkHead: fetchAdoForkHead,
   diffStat: localDiffStat,
   diffHunks: (cwd, from, to, paths) =>
@@ -968,18 +973,17 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
       return mapAdoPrList(list(res), repoContext(ado));
     },
 
-    /** A PR from the repo's own branch: that branch, from origin. A fork
-     *  PR's branch isn't on origin: its head goes on `pr/<id>/<branch>`
-     *  (see `fetchAdoForkHead`). */
+    /** A fork PR's head comes from the fork (see `fetchAdoForkHead`), a
+     *  same-repo PR's from origin; on the branch `preparePrBranch` names. */
     async prepareBranch(ctx, pr) {
       const fork = adoForkHead(await deps.request(adoOf(ctx), prPath(ctx, pr.number)), ctx.remote);
-      if (!fork) {
-        await deps.fetchBranch(ctx.cwd, pr.headRefName);
-        return pr.headRefName;
-      }
-      const branch = adoForkBranch(pr.number, pr.headRefName);
-      await deps.fetchForkHead(ctx.cwd, pr.number, fork, branch);
-      return branch;
+      return preparePrBranch(
+        { ...pr, fromFork: !!fork },
+        {
+          origin: (branch) => deps.fetchBranch(ctx.cwd, branch),
+          fork: (branch) => deps.fetchForkHead(ctx.cwd, pr.number, fork!, branch),
+        },
+      );
     },
 
     failedChecks: async (ctx, number) => adoFailedChecks(ctx, number),

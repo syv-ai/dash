@@ -41,15 +41,6 @@ export function mapGithubPrList(raw: unknown): PullRequest[] {
   });
 }
 
-/**
- * Refspec that fetches a PR head into a local branch. `refs/pull/<n>/head`
- * exists for every PR including fork PRs, so this works regardless of where
- * the head lives. The local branch is named after the PR head branch.
- */
-export function buildPrHeadRefspec(prNumber: number, headRefName: string): string {
-  return `pull/${prNumber}/head:${headRefName}`;
-}
-
 /** `gh pr list`'s arguments for the repo's open PRs (the new-task PR picker). */
 export function githubPrListArgs(): string[] {
   return ['pr', 'list', '--state', 'open', '--json', GITHUB_PR_FIELDS, '--limit', '50'];
