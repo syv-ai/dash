@@ -30,11 +30,19 @@ export function stopFailureText(payload: Record<string, unknown>): string | unde
  * What each Notification `notification_type` Dash registers means for the
  * task (H2; the types are listed at code.claude.com/docs/en/hooks):
  * `needs` it waits on the user, `answered` a wait ended and the work goes
- * on, `idle` it has sat at the prompt for a minute. Types missing here are
- * about other sessions (agent view) or ask nothing of the user.
+ * on, `idle` it has sat at the prompt for a minute, `resumed` Claude Code
+ * continued it on its own after a usage limit (auto-resume), `noted` nothing
+ * for the task: registered only for the limit evidence log. Types missing
+ * here are about other sessions (agent view) or ask nothing of the user.
+ *
+ * The quota types (2.1.234+): `_fired` resumes the task; `_stale` (the reset
+ * passed while the computer slept) waits on Enter; `_disabled` (Claude Code
+ * stopped waiting: auto-continue off, a reset over a day away, the limit hit
+ * again) leaves the task red with its error, the limit already announced
+ * [provisional].
  */
 export const WAIT_NOTIFICATIONS: Readonly<
-  Partial<Record<NotificationType, 'needs' | 'answered' | 'idle'>>
+  Partial<Record<NotificationType, 'needs' | 'answered' | 'idle' | 'resumed' | 'noted'>>
 > = {
   permission_prompt: 'needs',
   elicitation_dialog: 'needs',
@@ -43,6 +51,8 @@ export const WAIT_NOTIFICATIONS: Readonly<
   elicitation_response: 'answered',
   elicitation_complete: 'answered',
   idle_prompt: 'idle',
+  quota_auto_resume_fired: 'resumed',
+  quota_auto_resume_disabled: 'noted',
 };
 
 /**

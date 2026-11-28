@@ -34,14 +34,17 @@ describe('WAIT_NOTIFICATIONS', () => {
     expect(WAIT_NOTIFICATIONS.idle_prompt).toBe('idle');
   });
 
+  it('resumes the task when auto-resume fires, and only notes it when auto-resume gives up', () => {
+    expect(WAIT_NOTIFICATIONS.quota_auto_resume_fired).toBe('resumed');
+    expect(WAIT_NOTIFICATIONS.quota_auto_resume_disabled).toBe('noted');
+  });
+
   it('ignores types about other sessions or that ask nothing of the user', () => {
     for (const type of [
       'agent_needs_input',
       'agent_completed',
       'auth_success',
       'auth_storage_failure',
-      'quota_auto_resume_fired',
-      'quota_auto_resume_disabled',
       'plugin_notification',
     ] as const satisfies NotificationType[]) {
       expect(WAIT_NOTIFICATIONS[type], type).toBeUndefined();

@@ -409,6 +409,9 @@ class HookServerImpl {
               } else if (effect === 'idle') {
                 activityMonitor.setIdle(ptyId);
                 this.showDesktopNotification(ptyId);
+              } else if (effect === 'resumed') {
+                // Claude Code continues the turn itself; no UserPromptSubmit says so.
+                activityMonitor.setBusy(ptyId, { selfStarted: true });
               }
 
               res.writeHead(200);
