@@ -9,7 +9,9 @@ import { FormSection, SettingRow } from '../ui/Field';
 import { EnvVarList } from '../ui/EnvVarList';
 import { IconButton } from '../ui/IconButton';
 import { Notice } from '../ui/Notice';
+import { Segmented } from '../ui/Segmented';
 import { Select, type SelectOption } from '../ui/Select';
+import { Textarea } from '../ui/Textarea';
 import { SwitchField } from '../ui/SwitchField';
 import { TextLink } from '../ui/TextLink';
 import { DEFAULT_EFFORTS, EFFORT_LABELS, type DefaultEffort } from '../../../shared/effort';
@@ -17,12 +19,22 @@ import { EffortOption, effortDescription } from '../task/EffortPicker';
 import { ModelPicker } from '../task/ModelPicker';
 import { PermissionModePicker } from '../task/PermissionModePicker';
 
+const DASH_DEFAULT_ATTRIBUTION =
+  '\n\nCo-Authored-By: Claude <noreply@anthropic.com> via Dash <dash@syv.ai>';
+
 /** `claude --version` says "2.1.332 (Claude Code)"; the number alone. */
 function cliVersion(info: ClaudeCliInfo): string | null {
   return info.version?.replace(/\s*\(Claude Code\)\s*$/, '') ?? null;
 }
 
-export function ClaudeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) {
+export function ClaudeTab({
+  claudeInfo,
+  activeProjectPath,
+}: {
+  claudeInfo: ClaudeCliInfo | null;
+  /** Whose Claude Code settings name the default commit trailer. */
+  activeProjectPath?: string;
+}) {
   const syncShellEnv = useSettings((s) => s.syncShellEnv);
   const setSyncShellEnv = useSettings((s) => s.setSyncShellEnv);
   const stopSessionsOnQuit = useSettings((s) => s.stopSessionsOnQuit);
@@ -58,6 +70,8 @@ export function ClaudeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) 
           onCheckedChange={setStopSessionsOnQuit}
         />
       </FormSection>
+
+      <CommitsSection activeProjectPath={activeProjectPath} />
 
       <EnvVarsSection />
 
@@ -110,6 +124,64 @@ function NewTaskDefaults() {
           </div>
         }
       />
+    </FormSection>
+  );
+}
+
+/** The trailer on commits Claude makes: Claude Code's own (its `attribution`
+ *  setting for the project), or one of yours. */
+function CommitsSection({ activeProjectPath }: { activeProjectPath?: string }) {
+  const attribution = useSettings((s) => s.commitAttribution);
+  const setAttribution = useSettings((s) => s.setCommitAttribution);
+  const [claudeDefault, setClaudeDefault] = useState<string | null>(null);
+  const isDefault = attribution === undefined;
+
+  useEffect(() => {
+    void window.electronAPI.getClaudeAttribution(activeProjectPath).then((resp) => {
+      if (resp.success && resp.data != null) setClaudeDefault(resp.data);
+    });
+  }, [activeProjectPath]);
+
+  return (
+    <FormSection title="Commits">
+      <SettingRow
+        label="Commit trailer"
+        hint={
+          isDefault
+            ? `Added to commits Claude makes for you. Default uses Claude Code’s own: ${(claudeDefault ?? DASH_DEFAULT_ATTRIBUTION).trim()}`
+            : 'Added to commits Claude makes for you. Clear it for none.'
+        }
+        control={
+          <Segmented
+            aria-label="Commit trailer"
+            fullWidth={false}
+            size="sm"
+            value={isDefault ? 'default' : 'custom'}
+            options={[
+              { value: 'default', label: 'Default' },
+              { value: 'custom', label: 'Custom' },
+            ]}
+            onChange={(v) =>
+              setAttribution(
+                v === 'default'
+                  ? undefined
+                  : (attribution ?? claudeDefault ?? DASH_DEFAULT_ATTRIBUTION),
+              )
+            }
+          />
+        }
+      >
+        {!isDefault && (
+          <Textarea
+            aria-label="Custom commit trailer"
+            value={attribution}
+            onChange={(e) => setAttribution(e.target.value)}
+            placeholder="No trailer"
+            rows={3}
+            className="resize-none"
+          />
+        )}
+      </SettingRow>
     </FormSection>
   );
 }

@@ -8,7 +8,6 @@ import {
   Code2,
   Download,
   FolderOpen,
-  GitCommit,
   HeartPulse,
   Info,
   Keyboard,
@@ -57,9 +56,6 @@ import { ClaudeTab } from './ClaudeTab';
 import { KEYBINDINGS_HINT, KeybindingsTab, ResetAllKeybindings } from './KeybindingsTab';
 import { UsageTab } from './UsageTab';
 
-const DASH_DEFAULT_ATTRIBUTION =
-  '\n\nCo-Authored-By: Claude <noreply@anthropic.com> via Dash <dash@syv.ai>';
-
 const RELEASES_URL = 'https://github.com/syv-ai/dash/releases';
 
 /** PostHog's public, read-only share of the dashboard behind `docs/telemetry.md`. */
@@ -71,7 +67,6 @@ type SettingsTab =
   | 'appearance'
   | 'notifications'
   | 'ide'
-  | 'attribution'
   | 'claude-code'
   | 'keybindings'
   | 'usage'
@@ -89,7 +84,6 @@ const SECTIONS: Record<SettingsTab, { label: string; icon: React.ReactNode }> = 
   appearance: { label: 'Appearance', icon: icon(Palette) },
   notifications: { label: 'Notifications', icon: icon(Bell) },
   ide: { label: 'Editor', icon: icon(Code2) },
-  attribution: { label: 'Attribution', icon: icon(GitCommit) },
   'claude-code': { label: 'Claude', icon: icon(Sparkles) },
   keybindings: { label: 'Keybindings', icon: icon(Keyboard) },
   usage: { label: 'Usage', icon: icon(Activity) },
@@ -100,9 +94,8 @@ const SECTIONS: Record<SettingsTab, { label: string; icon: React.ReactNode }> = 
 };
 
 const NAV_GROUPS: Array<{ label: string; ids: SettingsTab[] }> = [
-  { label: 'Interface', ids: ['appearance', 'notifications'] },
-  { label: 'Editor', ids: ['ide'] },
-  { label: 'Workflow', ids: ['attribution', 'claude-code', 'keybindings', 'usage'] },
+  { label: 'Interface', ids: ['appearance', 'notifications', 'keybindings'] },
+  { label: 'Workflow', ids: ['claude-code', 'ide', 'usage'] },
   { label: 'System', ids: ['performance', 'updates', 'telemetry', 'about'] },
 ];
 
@@ -173,8 +166,9 @@ export function SettingsModal({
         {tab === 'appearance' && <AppearanceTab />}
         {tab === 'notifications' && <NotificationsTab />}
         {tab === 'ide' && <IdeTab availableIDEs={availableIDEs} />}
-        {tab === 'attribution' && <AttributionTab activeProjectPath={activeProjectPath} />}
-        {tab === 'claude-code' && <ClaudeTab claudeInfo={claudeInfo} />}
+        {tab === 'claude-code' && (
+          <ClaudeTab claudeInfo={claudeInfo} activeProjectPath={activeProjectPath} />
+        )}
         {tab === 'keybindings' && <KeybindingsTab />}
         {tab === 'usage' && <UsageTab latestRateLimits={latestRateLimits} />}
         {tab === 'performance' && <PerformanceTab />}
@@ -406,7 +400,7 @@ function PerformanceTab() {
           control={
             <Select
               aria-label="Sleep idle sessions"
-              className="w-40"
+              className="w-56"
               value={autoSleep}
               onValueChange={setAutoSleep}
               options={AUTO_SLEEP_CHOICES.map((v) => ({ value: v, label: AUTO_SLEEP_LABELS[v] }))}
@@ -494,7 +488,7 @@ function IdeTab({ availableIDEs }: { availableIDEs: Array<{ id: string; label: s
       </FormSection>
       <FormSection title="IDE">
         <SettingRow
-          label="Open tasks in"
+          label="Preferred IDE"
           hint="Open in IDE on a task, a project, or a file or folder in the tree. Only installed IDEs are listed."
           note={
             availableIDEs.length === 0
@@ -560,62 +554,6 @@ function IdeTab({ availableIDEs }: { availableIDEs: Array<{ id: string; label: s
         )}
       </FormSection>
     </>
-  );
-}
-
-function AttributionTab({ activeProjectPath }: { activeProjectPath?: string }) {
-  const attribution = useSettings((s) => s.commitAttribution);
-  const setAttribution = useSettings((s) => s.setCommitAttribution);
-  const [claudeDefault, setClaudeDefault] = useState<string | null>(null);
-  const isDefault = attribution === undefined;
-
-  useEffect(() => {
-    void window.electronAPI.getClaudeAttribution(activeProjectPath).then((resp) => {
-      if (resp.success && resp.data != null) setClaudeDefault(resp.data);
-    });
-  }, [activeProjectPath]);
-
-  return (
-    <FormSection>
-      <SettingRow
-        label="Commit trailer"
-        hint={
-          isDefault
-            ? `Added to commits Claude makes for you. Default uses Claude Code’s own: ${(claudeDefault ?? DASH_DEFAULT_ATTRIBUTION).trim()}`
-            : 'Added to commits Claude makes for you. Clear it for none.'
-        }
-        control={
-          <Segmented
-            aria-label="Commit trailer"
-            fullWidth={false}
-            size="sm"
-            value={isDefault ? 'default' : 'custom'}
-            options={[
-              { value: 'default', label: 'Default' },
-              { value: 'custom', label: 'Custom' },
-            ]}
-            onChange={(v) =>
-              setAttribution(
-                v === 'default'
-                  ? undefined
-                  : (attribution ?? claudeDefault ?? DASH_DEFAULT_ATTRIBUTION),
-              )
-            }
-          />
-        }
-      >
-        {!isDefault && (
-          <Textarea
-            aria-label="Custom commit trailer"
-            value={attribution}
-            onChange={(e) => setAttribution(e.target.value)}
-            placeholder="No trailer"
-            rows={3}
-            className="resize-none"
-          />
-        )}
-      </SettingRow>
-    </FormSection>
   );
 }
 

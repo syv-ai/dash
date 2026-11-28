@@ -16,7 +16,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
   // ── Tasks ──
   newTask: {
     id: 'newTask',
-    label: 'New Task',
+    label: 'New task',
     category: 'Tasks',
     mod: true,
     shift: false,
@@ -25,7 +25,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
   },
   nextTask: {
     id: 'nextTask',
-    label: 'Next Task',
+    label: 'Next task',
     category: 'Tasks',
     mod: true,
     shift: true,
@@ -34,7 +34,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
   },
   prevTask: {
     id: 'prevTask',
-    label: 'Previous Task',
+    label: 'Previous task',
     category: 'Tasks',
     mod: true,
     shift: true,
@@ -43,7 +43,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
   },
   findTask: {
     id: 'findTask',
-    label: 'Find Task',
+    label: 'Find task',
     category: 'Tasks',
     mod: true,
     shift: false,
@@ -53,7 +53,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
   // ── Git ──
   stageAll: {
     id: 'stageAll',
-    label: 'Stage All Files',
+    label: 'Stage all files',
     category: 'Git',
     mod: true,
     shift: true,
@@ -62,7 +62,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
   },
   unstageAll: {
     id: 'unstageAll',
-    label: 'Unstage All Files',
+    label: 'Unstage all files',
     category: 'Git',
     mod: true,
     shift: true,
@@ -71,7 +71,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
   },
   commitGraph: {
     id: 'commitGraph',
-    label: 'Commit Graph',
+    label: 'Commit graph',
     category: 'Git',
     mod: true,
     shift: true,
@@ -81,7 +81,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
   // ── Navigation ──
   openSettings: {
     id: 'openSettings',
-    label: 'Open Settings',
+    label: 'Open settings',
     category: 'Navigation',
     mod: true,
     shift: false,
@@ -90,7 +90,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
   },
   toggleSidebar: {
     id: 'toggleSidebar',
-    label: 'Toggle Sidebar',
+    label: 'Toggle sidebar',
     category: 'Navigation',
     mod: true,
     shift: false,
@@ -99,7 +99,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
   },
   toggleInspector: {
     id: 'toggleInspector',
-    label: 'Toggle Task Sidebar',
+    label: 'Toggle task sidebar',
     category: 'Navigation',
     mod: true,
     shift: false,
@@ -108,7 +108,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
   },
   openFolder: {
     id: 'openFolder',
-    label: 'Open Folder',
+    label: 'Open folder',
     category: 'Navigation',
     mod: true,
     shift: false,
@@ -117,7 +117,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
   },
   closeDiff: {
     id: 'closeDiff',
-    label: 'Close Overlay',
+    label: 'Close overlay',
     category: 'Navigation',
     mod: false,
     shift: false,
@@ -126,7 +126,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
   },
   focusTerminal: {
     id: 'focusTerminal',
-    label: 'Focus Terminal',
+    label: 'Focus terminal',
     category: 'Navigation',
     mod: true,
     shift: false,
@@ -135,7 +135,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
   },
   toggleShellDrawer: {
     id: 'toggleShellDrawer',
-    label: 'Toggle Shell',
+    label: 'Toggle shell',
     category: 'Navigation',
     mod: true,
     shift: false,
@@ -145,7 +145,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
   // ── Terminal ──
   findInTerminal: {
     id: 'findInTerminal',
-    label: 'Find in Terminal',
+    label: 'Find in terminal',
     category: 'Terminal',
     mod: true,
     shift: false,
@@ -155,7 +155,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
   // ── Editor ──
   saveFile: {
     id: 'saveFile',
-    label: 'Save File',
+    label: 'Save file',
     category: 'Editor',
     mod: true,
     shift: false,
@@ -164,7 +164,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
   },
   closeEditorTab: {
     id: 'closeEditorTab',
-    label: 'Close Editor Tab',
+    label: 'Close editor tab',
     category: 'Editor',
     mod: true,
     shift: false,
