@@ -903,6 +903,9 @@ export interface PrReview {
   viewerIsRequestedReviewer: boolean;
   /** You're among its assignees; false on ADO, which has none. */
   viewerIsAssignee: boolean;
+  /** Your name as `assignees` spells it, so a list can leave you out where
+   *  you're already said; null where the forge doesn't name you there (ADO). */
+  viewerName: string | null;
   /** You've left a comment on it: in a thread or its conversation. */
   viewerCommented: boolean;
   /** The verdicts this provider offers, in display order. */

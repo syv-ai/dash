@@ -314,6 +314,7 @@ export function githubReviewFrom(
     viewerIsAuthor,
     viewerIsRequestedReviewer,
     viewerIsAssignee: !!viewer && assignees.includes(viewer),
+    viewerName: viewer || null,
     viewerCommented,
     verdicts: viewerIsAuthor ? ['comment'] : GITHUB_VERDICTS,
     base,

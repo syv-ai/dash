@@ -59,6 +59,7 @@ const review = (pr: PrRef): PrReview => ({
   viewerIsAuthor: true,
   viewerIsRequestedReviewer: false,
   viewerIsAssignee: false,
+  viewerName: null,
   viewerCommented: false,
   verdicts: ['comment'],
   base: 'b0',

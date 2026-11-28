@@ -472,6 +472,7 @@ export function adoReviewFrom(
     viewerIsRequestedReviewer:
       !!raw.me && (pr.reviewers ?? []).some((r) => r.id === raw.me && !r.vote),
     viewerIsAssignee: false,
+    viewerName: null,
     viewerCommented:
       !!raw.me &&
       list<RawThread>(raw.threads)

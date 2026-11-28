@@ -101,3 +101,11 @@ export function needsDetails(
   if (updatedAt !== null && updatedAt !== last.updatedAt) return true;
   return now - last.at > DETAILS_FRESH_MS;
 }
+
+/** The PR's assignees but you: the "You" row already says you're assigned. */
+export function otherAssignees(
+  review: Pick<PrReview, 'assignees' | 'viewerIsAssignee' | 'viewerName'>,
+): string[] {
+  const me = review.viewerIsAssignee ? review.viewerName : null;
+  return me ? review.assignees.filter((a) => a !== me) : review.assignees;
+}

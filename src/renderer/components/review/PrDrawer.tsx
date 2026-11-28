@@ -21,7 +21,13 @@ import { ChecksRollupIcon } from './ChecksRollupIcon';
 import { draftCount, pendingReviewLine, unsentNoteCount } from './finishReview';
 import { plural, providerName } from './labels';
 import { checksRollup, checksSummary, reviewComments } from './outline';
-import { needsDetails, prInvolvement, type DetailsFetch, type PrSide } from './prList';
+import {
+  needsDetails,
+  prInvolvement,
+  type DetailsFetch,
+  type PrSide,
+  otherAssignees,
+} from './prList';
 import { Person, Reviewers } from './ReviewOverview';
 
 /** Per PR (`prKey`): when its details were last asked for, this session. */
@@ -123,6 +129,7 @@ export function PrDrawer({
       }
     : pr.threads;
   const involvement = review ? prInvolvement(review) : [];
+  const others = review ? otherAssignees(review) : [];
   const updated = pr.updatedAt ? Date.parse(pr.updatedAt) / 1000 : NaN;
   const forge = providerName(pr.provider);
 
@@ -177,10 +184,10 @@ export function PrDrawer({
             </li>
           )}
           {review && <Reviewers reviewers={review.reviewers} />}
-          {review && review.assignees.length > 0 && (
+          {others.length > 0 && (
             <li>
               Assigned to{' '}
-              {review.assignees.map((a, i) => (
+              {others.map((a, i) => (
                 <Fragment key={a}>
                   {i > 0 && ', '}
                   <Person name={a} url={githubProfileUrl(remote, a)} />

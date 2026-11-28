@@ -149,6 +149,7 @@ const review = (number: number, threads: PrReviewThread[]): PrReview => ({
   viewerIsAuthor: false,
   viewerIsRequestedReviewer: false,
   viewerIsAssignee: false,
+  viewerName: null,
   viewerCommented: false,
   verdicts: ['comment'],
   base: 'b',

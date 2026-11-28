@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { PrReview, RelevantPr } from '../../../../shared/types';
-import { DETAILS_FRESH_MS, needsDetails, prInvolvement, prsTabShown, taskPrList } from '../prList';
+import {
+  DETAILS_FRESH_MS,
+  needsDetails,
+  prInvolvement,
+  prsTabShown,
+  taskPrList,
+  otherAssignees,
+} from '../prList';
 
 const listed = (number: number): RelevantPr => ({
   number,
@@ -106,5 +113,21 @@ describe('needsDetails', () => {
     const last = { at, updatedAt: '2026-11-01T00:00:00Z' };
     expect(needsDetails(last, '2026-11-01T00:00:00Z', at + 1)).toBe(false);
     expect(needsDetails(last, '2026-11-02T00:00:00Z', at + 1)).toBe(true);
+  });
+});
+
+describe('otherAssignees', () => {
+  it('leaves you out when the You row already says you are assigned', () => {
+    expect(
+      otherAssignees({ assignees: ['cy', 'me'], viewerIsAssignee: true, viewerName: 'me' }),
+    ).toEqual(['cy']);
+  });
+  it('keeps everyone when you are not assigned or the forge does not name you', () => {
+    expect(
+      otherAssignees({ assignees: ['cy'], viewerIsAssignee: false, viewerName: 'me' }),
+    ).toEqual(['cy']);
+    expect(
+      otherAssignees({ assignees: ['cy'], viewerIsAssignee: false, viewerName: null }),
+    ).toEqual(['cy']);
   });
 });
