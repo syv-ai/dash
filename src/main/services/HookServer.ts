@@ -243,7 +243,8 @@ class HookServerImpl {
 
   /** The account hit a usage limit: a toast when Dash has focus, else a desktop notification. */
   private notifyLimit(ptyId: string, hit: UsageLimitHit): void {
-    const { title, body } = limitNotice(hit, Date.now());
+    // The renderer's locale, so the toast's clock reads as the usage ring's.
+    const { title, body } = limitNotice(hit, Date.now(), { locale: app.getLocale() });
     const win = BrowserWindow.getAllWindows()[0];
     if (win?.isFocused()) {
       toastRenderer({ kind: 'warning', title, description: body, key: 'usage-limit' });
