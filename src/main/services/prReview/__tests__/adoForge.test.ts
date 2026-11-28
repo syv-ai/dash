@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { PrCheck } from '../../../../shared/types';
+import timeline from '../../__tests__/fixtures/ado-build-timeline.json';
 import { adoBranchPrFrom, makeAdoProvider, type AdoDeps } from '../ado';
 
 const repo = { organizationUrl: 'https://dev.azure.com/org', project: 'Proj', repository: 'repo' };
@@ -96,5 +97,68 @@ describe('the ADO forge', () => {
 
   it('matches no commit author to a profile', async () => {
     expect(await makeAdoProvider(deps({}).d).commitAuthorUrl('/repo', 'abc')).toBeNull();
+  });
+
+  it('reports a failed build with its failed tasks, errors and the failing log', async () => {
+    const build = 'Proj/_apis/build/builds/42';
+    const { d, asked } = deps(
+      {
+        [`${build}/logs/5`]: '2026-11-27T10:00:01.3000000Z ##[error]Bash exited with code 1.',
+        [`${build}/logs`]: { value: [{ id: 5, lineCount: 900 }] },
+        [`${build}/timeline`]: timeline,
+        [build]: { result: 'failed', definition: { name: 'CI' } },
+      },
+      [
+        {
+          name: 'Build CI',
+          state: 'failing',
+          url: 'https://dev.azure.com/org/Proj/_build/results?buildId=42',
+        },
+        { name: 'sonar/quality', state: 'failing', url: 'https://sonar/x' },
+        { name: 'Lint', state: 'passing', url: null },
+      ],
+    );
+    const checks = await makeAdoProvider(d).failedChecks(ctx, 7);
+    expect(asked).toContain(`${build}/logs/5?startLine=501`);
+    expect(checks).toEqual([
+      {
+        name: 'Build CI',
+        state: 'failed',
+        workflow: 'CI',
+        link: 'https://dev.azure.com/org/Proj/_build/results?buildId=42',
+        description: '',
+        failedSteps: ['Linux / Lint', 'Linux / npm test'],
+        annotations: [
+          'error src/a.test.ts:12: Expected 2 to be 3',
+          "error Bash exited with code '1'.",
+        ],
+        log: '##[error]Bash exited with code 1.',
+        notice: undefined,
+      },
+      {
+        name: 'sonar/quality',
+        state: 'failed',
+        workflow: '',
+        link: 'https://sonar/x',
+        description: '',
+        notice: 'Not an Azure Pipelines build; see the link.',
+      },
+    ]);
+  });
+
+  it("says so when a failing build's timeline can't be read", async () => {
+    const { d } = deps({}, [
+      {
+        name: 'Build',
+        state: 'failing',
+        url: 'https://dev.azure.com/org/Proj/_build/results?buildId=9',
+      },
+    ]);
+    d.request = async (_c, path) => {
+      if (path.endsWith('/timeline')) throw new Error('gone');
+      return {};
+    };
+    const [check] = await makeAdoProvider(d).failedChecks(ctx, 7);
+    expect(check?.notice).toMatch(/timeline could not be fetched/);
   });
 });

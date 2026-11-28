@@ -1,0 +1,78 @@
+{
+  "records": [
+    {
+      "id": "s1",
+      "parentId": null,
+      "type": "Stage",
+      "name": "Build",
+      "result": "failed",
+      "order": 1
+    },
+    {
+      "id": "p1",
+      "parentId": "s1",
+      "type": "Phase",
+      "name": "Build",
+      "result": "failed",
+      "order": 1
+    },
+    {
+      "id": "j1",
+      "parentId": "p1",
+      "type": "Job",
+      "name": "Linux",
+      "result": "failed",
+      "order": 1,
+      "log": { "id": 2 }
+    },
+    {
+      "id": "t1",
+      "parentId": "j1",
+      "type": "Task",
+      "name": "Checkout",
+      "result": "succeeded",
+      "order": 1,
+      "log": { "id": 3 }
+    },
+    {
+      "id": "t2",
+      "parentId": "j1",
+      "type": "Task",
+      "name": "npm test",
+      "result": "failed",
+      "order": 3,
+      "log": { "id": 5 },
+      "issues": [
+        {
+          "type": "error",
+          "category": "General",
+          "message": "Expected 2 to be 3",
+          "data": { "sourcepath": "src/a.test.ts", "linenumber": "12", "type": "error" }
+        },
+        {
+          "type": "error",
+          "category": "General",
+          "message": "Bash exited with code '1'.",
+          "data": { "type": "error", "logFileLineNumber": "88" }
+        },
+        { "type": "warning", "message": "deprecated" }
+      ]
+    },
+    {
+      "id": "t3",
+      "parentId": "j1",
+      "type": "Task",
+      "name": "Lint",
+      "result": "canceled",
+      "order": 2
+    },
+    {
+      "id": "c1",
+      "parentId": "s1",
+      "type": "Checkpoint",
+      "name": "Checkpoint",
+      "result": "succeeded",
+      "order": 0
+    }
+  ]
+}

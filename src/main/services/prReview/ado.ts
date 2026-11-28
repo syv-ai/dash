@@ -23,6 +23,7 @@ import {
 import { FORGE_CAPABILITIES } from '@shared/forgeCapabilities';
 import { adoPrListQuery, mapAdoPrList, mapAdoRelevantPrs } from '../adoPr';
 import type { FailedCheck } from '../ciReport';
+import { adoBuildIdOf, adoLogExcerpt, adoLogStartLine, adoTimelineFailure } from '../adoCi';
 import { ciOf } from '../prRelevance';
 import { ensureCommits, filesAtCommit, runGit } from './localCommits';
 import type { ForgeReview, PrContext, ForgeProvider } from './types';
@@ -564,21 +565,86 @@ const repoPath = (ado: NonNullable<PrContext['ado']>) =>
 export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
   const prPath = (ctx: PrContext, n: number) => `${repoPath(adoOf(ctx))}/pullRequests/${n}`;
 
-  /** The PR's failing checks, each linked to where ADO shows it. */
+  /**
+   * What a failed Azure Pipelines build tells of its failure: its definition
+   * and result, its failed tasks and their errors (the timeline), and the log
+   * of the task that stopped it, its last lines. A detail ADO won't give
+   * becomes a notice; the build's own failure never fails the report.
+   */
+  const buildFailure = async (
+    ado: NonNullable<PrContext['ado']>,
+    buildId: number,
+  ): Promise<Partial<FailedCheck>> => {
+    const at = `${adoProjectSegment(ado)}/_apis/build/builds/${buildId}`;
+    const [build, timeline] = await Promise.allSettled([
+      deps.request(ado, at),
+      deps.request(ado, `${at}/timeline`),
+    ]);
+    const b =
+      build.status === 'fulfilled'
+        ? ((build.value ?? {}) as { result?: string; definition?: { name?: string } })
+        : {};
+    if (timeline.status === 'rejected') {
+      return {
+        workflow: b.definition?.name ?? '',
+        notice: 'The build timeline could not be fetched; open the link.',
+      };
+    }
+    const failure = adoTimelineFailure(timeline.value);
+    let log: string | undefined;
+    let notice: string | undefined;
+    if (failure.logId !== null) {
+      try {
+        const logs = await deps.request(ado, `${at}/logs`);
+        const start = adoLogStartLine(logs, failure.logId);
+        const text = await deps.request(ado, `${at}/logs/${failure.logId}?startLine=${start}`, {
+          responseType: 'text',
+        });
+        log = typeof text === 'string' ? adoLogExcerpt(text) : undefined;
+      } catch {
+        notice = 'The task log could not be fetched (it may have been deleted); open the link.';
+      }
+    }
+    // A build policy reads failing once its build expires (the target moved
+    // on), though that build may have passed.
+    if (b.result === 'succeeded' && failure.failedSteps.length === 0) {
+      notice = 'This build passed but has expired (the target branch moved on); queue it again.';
+    }
+    return {
+      ...(b.result ? { state: b.result } : {}),
+      workflow: b.definition?.name ?? '',
+      failedSteps: failure.failedSteps,
+      annotations: failure.annotations,
+      log,
+      notice,
+    };
+  };
+
+  /** The PR's failing checks: each build policy's build with what its
+   *  timeline and log tell (see `buildFailure`); a status another service
+   *  posted, with its link. */
   const adoFailedChecks = async (ctx: PrContext, number: number): Promise<FailedCheck[]> => {
     const ado = adoOf(ctx);
     const pr = (await deps.request(ado, prPath(ctx, number))) as RawPr | null;
     const checks = await deps.checks(ado, number, pr?.repository?.project?.id);
-    return checks
-      .filter((c) => c.state === 'failing')
-      .map((c) => ({
-        name: c.name,
-        state: 'failed',
-        workflow: '',
-        link: c.url ?? '',
-        description: '',
-        notice: 'Azure DevOps details are not fetched yet; see the link.',
-      }));
+    return Promise.all(
+      checks
+        .filter((c) => c.state === 'failing')
+        .map(async (c): Promise<FailedCheck> => {
+          const check = {
+            name: c.name,
+            state: 'failed',
+            workflow: '',
+            link: c.url ?? '',
+            description: '',
+          };
+          const buildId = adoBuildIdOf(c.url);
+          if (buildId === null) {
+            return { ...check, notice: 'Not an Azure Pipelines build; see the link.' };
+          }
+          return { ...check, ...(await buildFailure(ado, buildId)) };
+        }),
+    );
   };
 
   /** A reply under the thread's first comment, posted at once. */

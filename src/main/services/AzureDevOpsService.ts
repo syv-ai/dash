@@ -38,6 +38,15 @@ export function adoProjectSegment(config: AzureDevOpsConfig): string {
   return encodeURIComponent(normalizeAdoProject(config.project));
 }
 
+export interface AdoRequestOptions {
+  method?: string;
+  body?: unknown;
+  contentType?: string;
+  apiVersion?: string;
+  /** `text`: ask for and answer the body as plain text (a build log), not JSON. */
+  responseType?: 'json' | 'text';
+}
+
 /**
  * One Azure DevOps REST call. A plain function (no `this`), so it can be passed
  * around as an injectable default. Bad auth answers 401 rather than a sign-in
@@ -46,7 +55,7 @@ export function adoProjectSegment(config: AzureDevOpsConfig): string {
 export async function adoRequest(
   config: AzureDevOpsConfig,
   path: string,
-  options?: { method?: string; body?: unknown; contentType?: string; apiVersion?: string },
+  options?: AdoRequestOptions,
 ): Promise<unknown> {
   const baseUrl = config.organizationUrl.replace(/\/+$/, '');
   const separator = path.includes('?') ? '&' : '?';
@@ -70,6 +79,7 @@ export async function adoRequest(
           Authorization: authHeader(config.pat),
           'Content-Type': options?.contentType ?? 'application/json',
           'X-TFS-FedAuthRedirect': 'Suppress',
+          ...(options?.responseType === 'text' ? { Accept: 'text/plain' } : {}),
         },
         body: options?.body ? JSON.stringify(options.body) : undefined,
         signal: controller.signal,
@@ -90,6 +100,7 @@ export async function adoRequest(
 
     // A write like DELETE …/likes answers 204 with no body.
     const text = await resp.text();
+    if (options?.responseType === 'text') return text;
     return text ? (JSON.parse(text) as unknown) : null;
   } finally {
     clearTimeout(timeout);
@@ -104,7 +115,7 @@ export class AzureDevOpsService {
   private static request(
     config: AzureDevOpsConfig,
     path: string,
-    options?: { method?: string; body?: unknown; contentType?: string; apiVersion?: string },
+    options?: AdoRequestOptions,
   ): Promise<unknown> {
     return adoRequest(config, path, options);
   }

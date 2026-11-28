@@ -59,3 +59,14 @@ describe('AzureDevOpsService.getMyId', () => {
     await expect(AzureDevOpsService.getMyId(config)).rejects.toBeInstanceOf(AdoRequestError);
   });
 });
+
+describe('adoRequest as text', () => {
+  it('asks for and answers a plain-text body, such as a build log', async () => {
+    const fetchMock = stubFetch(200, '2026-11-27T10:00:00Z line', 'text/plain');
+    expect(
+      await adoRequest(config, 'proj/_apis/build/builds/1/logs/5', { responseType: 'text' }),
+    ).toBe('2026-11-27T10:00:00Z line');
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect((init.headers as Record<string, string>).Accept).toBe('text/plain');
+  });
+});

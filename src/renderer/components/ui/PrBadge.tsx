@@ -69,9 +69,9 @@ function StateIcon({ pr, size, still }: { pr: PullRequestInfo; size: number; sti
   return <Icon size={size} strokeWidth={size < 14 ? 2 : 1.8} className={still ? '' : pulse(pr)} />;
 }
 
-/** "Fix CI" for a GitHub PR with failing checks: types a prompt pointing at them into the task. */
+/** "Fix CI" for a PR with failing checks: types a prompt pointing at them into the task. */
 function FixCiButton({ pr, taskId }: { pr: PullRequestInfo; taskId?: string }) {
-  if (!taskId || pr.provider !== 'github' || pr.state !== 'open' || pr.ci !== 'failing') {
+  if (!taskId || pr.state !== 'open' || pr.ci !== 'failing') {
     return null;
   }
   return (

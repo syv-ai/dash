@@ -1,6 +1,6 @@
 /**
  * Pure pieces of the "Fix CI" action: parse what `gh` reports about a PR's
- * failed checks, render it as a Markdown file for the task's session to read,
+ * failed checks (`adoCi.ts` reads Azure Pipelines'), render it as a Markdown file for the task's session to read,
  * and the one-line pointer typed into the session. CI output can contain text
  * from anyone who can push to the PR, so the file says up front that it is
  * data, not instructions.
@@ -8,7 +8,7 @@
 
 export interface FailedCheck {
   name: string;
-  /** gh's state, e.g. FAILURE, CANCELLED, TIMED_OUT. */
+  /** The forge's state: gh's FAILURE, CANCELLED, TIMED_OUT; an ADO build's failed, canceled. */
   state: string;
   workflow: string;
   link: string;
