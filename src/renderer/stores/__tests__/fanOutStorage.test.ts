@@ -28,9 +28,9 @@ describe('fanOutStorage (PersistStorage)', () => {
     expect(read(mem).state).toMatchObject({ theme: 'light', showTaskTokens: false });
   });
 
-  it('absent keys decode to defaults (dark / true)', () => {
+  it('absent keys decode to defaults (system / true)', () => {
     expect(read(createMemoryStorage()).state).toMatchObject({
-      theme: 'dark',
+      theme: 'system',
       showTaskTokens: true,
     });
   });

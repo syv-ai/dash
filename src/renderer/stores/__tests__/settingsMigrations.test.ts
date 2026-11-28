@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createMemoryStorage } from '../fanOutStorage';
-import { runSettingsMigrations } from '../settingsMigrations';
+import { SCHEMA_KEY, runSettingsMigrations } from '../settingsMigrations';
+import { defaultSettings } from '../settingsKeys';
 
 describe('runSettingsMigrations', () => {
   it("rewrites legacy preferredIDE 'code' to 'vscode'", () => {
@@ -29,5 +30,42 @@ describe('runSettingsMigrations', () => {
     runSettingsMigrations(mem);
     expect(mem.getItem('webglHeldLimit')).toBeNull();
     expect(mem.getItem('terminalsKeptReady')).toBeNull();
+  });
+
+  describe('theme default (System since schema 1)', () => {
+    it('gives a new install System', () => {
+      const mem = createMemoryStorage();
+      runSettingsMigrations(mem);
+      expect(mem.getItem('theme')).toBeNull();
+      expect(defaultSettings().theme).toBe('system');
+      // A later launch, with settings stored by then, doesn't take it back.
+      mem.setItem('showTaskTokens', 'false');
+      runSettingsMigrations(mem);
+      expect(mem.getItem('theme')).toBeNull();
+    });
+
+    it('keeps an existing install on Dark, the default it had', () => {
+      const mem = createMemoryStorage();
+      mem.setItem('showTaskTokens', 'false');
+      runSettingsMigrations(mem);
+      expect(mem.getItem('theme')).toBe('dark');
+      expect(mem.getItem(SCHEMA_KEY)).toBe('1');
+    });
+
+    it("keeps an existing install's own choice", () => {
+      const mem = createMemoryStorage();
+      mem.setItem('theme', 'light');
+      runSettingsMigrations(mem);
+      expect(mem.getItem('theme')).toBe('light');
+    });
+
+    it('runs once: a later launch leaves the theme alone', () => {
+      const mem = createMemoryStorage();
+      mem.setItem('showTaskTokens', 'false');
+      runSettingsMigrations(mem);
+      mem.removeItem('theme');
+      runSettingsMigrations(mem);
+      expect(mem.getItem('theme')).toBeNull();
+    });
   });
 });

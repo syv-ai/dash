@@ -12,6 +12,7 @@ import {
   HeartPulse,
   Info,
   Keyboard,
+  Monitor,
   Moon,
   Palette,
   RefreshCw,
@@ -27,6 +28,7 @@ import { TERMINAL_FONTS, resolveTerminalFontValue } from '../../terminal/termina
 import { KEPT_READY_MAX, KEPT_READY_MIN } from '../../terminal/keptTerminals';
 import { formatCheckedAt, updateHeadline } from '../../utils/updateStatus';
 import { AUTO_SLEEP_CHOICES, AUTO_SLEEP_LABELS } from '../../lib/autoSleep';
+import { useIsDark } from '../../hooks/useIsDark';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useSettings } from '../../stores/settingsStore';
 import {
@@ -201,6 +203,7 @@ function AppearanceTab() {
       <FormSection>
         <SettingRow
           label="Theme"
+          hint="System follows your OS's light or dark appearance as it changes."
           control={
             <Segmented
               aria-label="Theme"
@@ -208,6 +211,7 @@ function AppearanceTab() {
               size="sm"
               value={theme}
               options={[
+                { value: 'system', label: 'System', icon: icon(Monitor) },
                 { value: 'light', label: 'Light', icon: icon(Sun) },
                 { value: 'dark', label: 'Dark', icon: icon(Moon) },
               ]}
@@ -273,7 +277,7 @@ function AppearanceTab() {
 
 /** A terminal palette in the picker: its preview strip, then its name. */
 function PaletteOption({ id, label }: { id: string; label: string }) {
-  const dark = useSettings((s) => s.theme) === 'dark';
+  const dark = useIsDark();
   const t = TERMINAL_THEMES.find((x) => x.id === id);
   if (!t) return <>{label}</>;
   // 'default' follows the app's light/dark; the rest are fixed.

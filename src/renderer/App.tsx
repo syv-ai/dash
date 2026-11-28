@@ -13,6 +13,7 @@ import { expandShellDrawer } from './components/terminal/ShellDrawerWrapper';
 import { LeftSidebar, LEFT_SIDEBAR_MIN_PX } from './components/leftSidebar/LeftSidebar';
 import { MainContent } from './components/MainContent';
 import { openInIde } from './lib/openInIde';
+import { useIsDark } from './hooks/useIsDark';
 import {
   handOffWidth,
   loadInspectorWidths,
@@ -155,6 +156,7 @@ export function App() {
   const settingsInitialTab = useUi((s) => s.settingsInitialTab);
   const setSettingsInitialTab = useUi((s) => s.setSettingsInitialTab);
   const theme = useSettings((s) => s.theme);
+  const isDark = useIsDark();
   const keybindings = useSettings((s) => s.keybindings);
   const desktopNotification = useSettings((s) => s.desktopNotification);
   const autoUpdateEnabled = useSettings((s) => s.autoUpdateEnabled);
@@ -292,7 +294,12 @@ export function App() {
   // Sync the theme to main: a session started with no pane (the control API)
   // takes its terminal colours from it.
   useEffect(() => {
-    window.electronAPI.setIsDark?.(theme === 'dark');
+    window.electronAPI.setIsDark?.(isDark);
+  }, [isDark]);
+  // Native chrome (menus, dialogs, scrollbars) follows the theme; under System,
+  // Chromium's prefers-color-scheme then follows the OS (useIsDark).
+  useEffect(() => {
+    window.electronAPI.setThemeSource?.(theme);
   }, [theme]);
   // Sync orchestrator access to main (gates the control API's orchestrator caller)
   useEffect(() => {
@@ -420,13 +427,13 @@ export function App() {
   // Color of the active terminal bg — used to make the main-pane header strip
   // blend with whatever palette the user has selected (default / Dracula / Tokyo Night / …)
   const terminalBg = useMemo(
-    () => resolveTheme(terminalTheme, theme === 'dark').background || undefined,
-    [terminalTheme, theme],
+    () => resolveTheme(terminalTheme, isDark).background || undefined,
+    [terminalTheme, isDark],
   );
   // Full ITheme passed to the file editor so its Monaco view matches the terminal.
   const resolvedTerminalTheme = useMemo(
-    () => resolveTheme(terminalTheme, theme === 'dark'),
-    [terminalTheme, theme],
+    () => resolveTheme(terminalTheme, isDark),
+    [terminalTheme, isDark],
   );
 
   const activeTask = useProjects(selectActiveTask);
@@ -719,10 +726,10 @@ export function App() {
 
   // Theme
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-    document.documentElement.classList.toggle('light', theme === 'light');
-    sessionRegistry.setAllTerminalThemes(terminalTheme, theme === 'dark');
-  }, [theme, terminalTheme]);
+    document.documentElement.classList.toggle('dark', isDark);
+    document.documentElement.classList.toggle('light', !isDark);
+    sessionRegistry.setAllTerminalThemes(terminalTheme, isDark);
+  }, [isDark, terminalTheme]);
 
   useEffect(() => {
     const resolved = resolveTerminalFontValue(terminalFontFamily);
@@ -1682,7 +1689,7 @@ export function App() {
                     motion={sidebarMotion}
                     onEditorMounted={handleEditorMounted}
                     terminalTheme={resolvedTerminalTheme}
-                    isDark={theme === 'dark'}
+                    isDark={isDark}
                     onViewDiff={handleViewDiff}
                     onOpenEditor={() => {
                       useEditors.getState().open({ cwd: activeTask.path, filePath: '' });

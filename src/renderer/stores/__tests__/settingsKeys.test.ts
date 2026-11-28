@@ -2,10 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { SETTINGS_REGISTRY, type SettingsState } from '../settingsKeys';
 
 describe('settings registry', () => {
-  it('maps theme to the legacy key with a dark default', () => {
+  it('maps theme to the legacy key with a System default', () => {
     const e = SETTINGS_REGISTRY.find((r) => r.field === 'theme')!;
     expect(e.key).toBe('theme');
-    expect(e.codec.decode(null)).toBe('dark');
+    expect(e.codec.decode(null)).toBe('system');
+    expect(e.codec.decode('dark')).toBe('dark');
+    expect(e.codec.decode('sepia')).toBe('system');
     expect(e.codec.encode('light')).toBe('light');
   });
 

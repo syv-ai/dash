@@ -16,10 +16,12 @@ import type { UsageThresholds } from '@shared/types';
 import { clampMemoryWarningGb } from '@shared/systemHealth';
 import { AUTO_SLEEP_CHOICES, type AutoSleepAfter } from '../lib/autoSleep';
 import { parseKeybindings, type KeyBindingMap } from '../keybindings';
+import { THEME_CHOICES, type ThemeChoice } from '../lib/theme';
 
 /** The slice of settings managed by settingsStore. Grows as fields migrate. */
 export interface SettingsState {
-  theme: 'light' | 'dark';
+  /** System follows the OS's appearance (lib/theme.ts, hooks/useIsDark). */
+  theme: ThemeChoice;
   showTaskTokens: boolean;
   showTaskCost: boolean;
   showRateLimits: boolean;
@@ -107,7 +109,8 @@ function entry<K extends keyof SettingsState>(
 }
 
 export const SETTINGS_REGISTRY: RegistryEntry[] = [
-  entry('theme', 'theme', str('dark') as Codec<SettingsState['theme']>),
+  // System for a new install; an install from before it keeps dark (settingsMigrations).
+  entry('theme', 'theme', strEnum(THEME_CHOICES, 'system')),
   entry('showTaskTokens', 'showTaskTokens', boolDefaultTrue()),
   entry('showTaskCost', 'showTaskCost', boolDefaultTrue()),
   entry('showRateLimits', 'showRateLimits', boolNotFalse()),

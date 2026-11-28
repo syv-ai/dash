@@ -1,4 +1,13 @@
-import { ipcMain, dialog, app, shell, BrowserWindow, Notification, clipboard } from 'electron';
+import {
+  ipcMain,
+  dialog,
+  app,
+  shell,
+  BrowserWindow,
+  Notification,
+  clipboard,
+  nativeTheme,
+} from 'electron';
 import { z } from 'zod';
 import { parseArgs, parseArgsSafe, errorResponse, ipcError } from './validate';
 import { taskEffortSchema } from './schemas';
@@ -420,6 +429,11 @@ export function registerAppIpc(): void {
         console.error('[app:setIsDark] Failed:', err);
       }
     })();
+  });
+
+  ipcMain.on('app:setThemeSource', (_event, source: unknown) => {
+    const v = parseArgsSafe('app:setThemeSource', z.enum(['system', 'light', 'dark']), source);
+    if (v !== undefined) nativeTheme.themeSource = v;
   });
 
   ipcMain.on('app:setOrchestratorAccess', (_event, enabled: boolean) => {

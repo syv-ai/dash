@@ -214,6 +214,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setStopSessionsOnQuit: (enabled: boolean) =>
     ipcRenderer.send('app:setStopSessionsOnQuit', enabled),
   setIsDark: (isDark: boolean) => ipcRenderer.send('app:setIsDark', isDark),
+  setThemeSource: (source: 'system' | 'light' | 'dark') =>
+    ipcRenderer.send('app:setThemeSource', source),
   setOrchestratorAccess: (enabled: boolean) =>
     ipcRenderer.send('app:setOrchestratorAccess', enabled),
   getControlInfo: () => ipcRenderer.invoke('app:getControlInfo'),

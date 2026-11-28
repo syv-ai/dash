@@ -60,6 +60,9 @@ export interface SystemApi {
   setStopSessionsOnQuit: (enabled: boolean) => void;
   /** Dash's theme, for sessions started with no pane (the control API). */
   setIsDark: (isDark: boolean) => void;
+  /** Settings → Appearance's theme as Electron's `nativeTheme.themeSource`:
+   *  native chrome follows it, and under System so does prefers-color-scheme. */
+  setThemeSource: (source: 'system' | 'light' | 'dark') => void;
   /** Settings "Let other agents control Dash": gates orchestrator calls to the control API. */
   setOrchestratorAccess: (enabled: boolean) => void;
   getControlInfo: () => Promise<IpcResponse<ControlInfo>>;
