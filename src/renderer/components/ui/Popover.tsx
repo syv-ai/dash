@@ -12,11 +12,16 @@ type ContentProps = React.ComponentProps<typeof PopoverPrimitive.Content> & {
    *  element to clip the popover inside it (useful for scrollable surfaces
    *  like an editor pane). */
   container?: HTMLElement | null;
+  /** `menu`: the menu surface (raised). `panel`: a read-out (the system
+   *  health popover) on the dialog's deeper tone, so an inset `dialog-well`
+   *  inside it sinks like an instrument and the figures sit on dark. */
+  surface?: 'menu' | 'panel';
 };
 
 /** A floating panel on the menu surface, unpadded: the content sets its own. */
 export function PopoverContent({
   className,
+  surface = 'menu',
   sideOffset = 8,
   align = 'start',
   container,
@@ -27,7 +32,7 @@ export function PopoverContent({
       <PopoverPrimitive.Content
         sideOffset={sideOffset}
         align={align}
-        className={cn(menuSurface, 'p-0', className)}
+        className={cn(menuSurface, 'p-0', surface === 'panel' && 'bg-dialog', className)}
         {...props}
       />
     </PopoverPrimitive.Portal>

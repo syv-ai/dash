@@ -4,6 +4,7 @@ import {
   formatAgo,
   formatMemory,
   healthSummary,
+  headroomLabel,
   machineShare,
   memoryWarningCopy,
   sleepIdleLabel,
@@ -111,5 +112,19 @@ describe('machineShare', () => {
 
   it('is null without a machine reading', () => {
     expect(machineShare({ ...base, machine: null })).toBeNull();
+  });
+});
+
+describe('headroomLabel', () => {
+  it('says how far under the warning Dash sits', () => {
+    expect(headroomLabel(4.8 * GB, 6 * GB)).toBe('1.2 GB under the warning');
+  });
+
+  it('says how far over', () => {
+    expect(headroomLabel(6.3 * GB, 6 * GB)).toBe('307 MB over the warning');
+  });
+
+  it('says at the warning when the gap rounds to nothing', () => {
+    expect(headroomLabel(6 * GB, 6 * GB)).toBe('At the warning');
   });
 });

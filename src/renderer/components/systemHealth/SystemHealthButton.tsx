@@ -8,6 +8,7 @@ import {
   formatAgo,
   formatDuration,
   formatMemory,
+  headroomLabel,
   healthSummary,
   machineShare,
   PRESSURE_LABEL,
@@ -25,9 +26,10 @@ import {
 } from '../../stores/systemHealthStore';
 import { useUi } from '../../stores/uiStore';
 import { Button } from '../ui/Button';
+import { DetailItem, DetailList } from '../ui/DetailList';
+import { Dot } from '../ui/Dot';
 import { IconButton } from '../ui/IconButton';
 import { ListRow } from '../ui/ListRow';
-import { Meter } from '../ui/Meter';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
 import { TextLink } from '../ui/TextLink';
 import { TimelineChart, type TimelinePoint } from '../ui/TimelineChart';
@@ -87,7 +89,12 @@ export function SystemHealthButton({
           />
         </IconButton>
       </PopoverTrigger>
-      <PopoverContent side={rail ? 'right' : 'top'} align={rail ? 'end' : 'start'} className="w-88">
+      <PopoverContent
+        side={rail ? 'right' : 'top'}
+        align={rail ? 'end' : 'start'}
+        surface="panel"
+        className="w-88"
+      >
         <HealthPanel
           snapshot={snapshot}
           onSelectTask={(projectId, taskId) => {
@@ -102,6 +109,12 @@ export function SystemHealthButton({
   );
 }
 
+/**
+ * The popover, top to bottom: the title with a dot that breathes in the
+ * line's colour (`memoryColor`) while open; the figure and its timeline as
+ * one instrument on a sunk well; the machine's facts as a quiet key/value
+ * grid; the heaviest tasks; and the actions.
+ */
 function HealthPanel({
   snapshot,
   onSelectTask,
@@ -136,13 +149,24 @@ function HealthPanel({
   }
 
   return (
-    <div className="grid gap-4 p-3.5">
-      <h4 className="type-heading">System health</h4>
+    <div className="grid">
+      <header className="flex items-center gap-2 px-4 pt-3.5 pb-3">
+        {snapshot && (
+          <Dot
+            tone="neutral"
+            size="md"
+            pulse
+            color={memoryColor((snapshot.totalBytes / snapshot.thresholdBytes) * 100)}
+            label={headroomLabel(snapshot.totalBytes, snapshot.thresholdBytes)}
+          />
+        )}
+        <h4 className="type-heading">System health</h4>
+      </header>
       {snapshot ? (
         <>
           <MemoryTimeline snapshot={snapshot} />
           <MachineMemory snapshot={snapshot} />
-          <div className="grid gap-1">
+          <section className="grid gap-1 px-4 pt-4">
             <h5 className="type-subheading">Heaviest tasks</h5>
             {snapshot.tasks.length === 0 ? (
               <p className="type-caption">No task sessions are running.</p>
@@ -164,12 +188,16 @@ function HealthPanel({
                 })}
               </div>
             )}
-          </div>
+          </section>
         </>
       ) : (
-        <p className="type-caption">Measuring…</p>
+        <p className="type-caption px-4">Measuring…</p>
       )}
-      <div className="grid gap-2">
+      <footer className="flex items-center justify-between gap-3 px-4 pt-4 pb-3.5">
+        <p className="type-caption">
+          Auto-sleep {AUTO_SLEEP_LABELS[autoSleepAfter].toLowerCase()} ·{' '}
+          <TextLink onClick={openAutoSleep}>Change</TextLink>
+        </p>
         <Button
           variant="secondary"
           size="sm"
@@ -179,13 +207,9 @@ function HealthPanel({
             onSlept();
           }}
         >
-          {sleepLabel ?? 'No idle tasks to sleep'}
+          {sleepLabel ?? 'Nothing idle to sleep'}
         </Button>
-        <p className="type-caption">
-          Auto-sleep: {AUTO_SLEEP_LABELS[autoSleepAfter].toLowerCase()} ·{' '}
-          <TextLink onClick={openAutoSleep}>Change</TextLink>
-        </p>
-      </div>
+      </footer>
     </div>
   );
 }
@@ -211,21 +235,17 @@ function MemoryTimeline({ snapshot }: { snapshot: SystemHealthSnapshot }) {
   const to = points[points.length - 1]?.at ?? snapshot.sampledAt;
   const from = Math.min(points[0]?.at ?? to, to - MIN_SPAN_MS);
   const shown = hovered ?? { at: snapshot.sampledAt, value: snapshot.totalBytes };
-  const over = shown.value >= threshold;
 
   return (
-    <div className="grid gap-2">
-      <div className="flex items-end justify-between gap-2">
-        <div className="grid">
-          <span className="type-label">Dash and its sessions</span>
-          <span className="text-lg font-medium text-ink tabular-nums">
-            {formatMemory(shown.value)}
-          </span>
-        </div>
-        <span className="type-caption pb-0.5 tabular-nums">
+    <div className="mx-4 grid gap-2.5 rounded-md bg-dialog-well px-3 pt-3 pb-2.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-xl font-medium text-ink tabular-nums">
+          {formatMemory(shown.value)}
+        </span>
+        <span className="type-caption tabular-nums">
           {hovered
             ? formatAgo(snapshot.sampledAt - hovered.at)
-            : `${over ? 'over' : 'of'} your ${formatMemory(threshold)} warning`}
+            : headroomLabel(snapshot.totalBytes, threshold)}
         </span>
       </div>
       <TimelineChart
@@ -236,6 +256,7 @@ function MemoryTimeline({ snapshot }: { snapshot: SystemHealthSnapshot }) {
         colorAt={colorAt}
         gapMs={GAP_MS}
         trace
+        surface="dialog-well"
         onHover={setHovered}
         aria-label={`Dash and its sessions over the last ${formatDuration(to - from)}: now ${formatMemory(snapshot.totalBytes)} of a ${formatMemory(threshold)} warning`}
       />
@@ -247,38 +268,33 @@ function MemoryTimeline({ snapshot }: { snapshot: SystemHealthSnapshot }) {
   );
 }
 
-/** The machine: how much memory is still available to apps, Dash's share
- *  of what is installed, and the OS's pressure where it has one. */
+/** The machine, beside Dash's own figure: how much memory is still
+ *  available to apps, Dash's share of what is installed (`machineShare`
+ *  says why not of what is available), and the OS's pressure where it
+ *  has one. */
 function MachineMemory({ snapshot }: { snapshot: SystemHealthSnapshot }) {
   const share = machineShare(snapshot);
   const { machine, pressure } = snapshot;
   if (!machine && !pressure) return null;
   return (
-    <div className="grid gap-2.5">
-      {machine && share !== null && (
-        <>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="type-label">Available memory</span>
-            <span className="text-sm text-ink tabular-nums">
-              {formatMemory(machine.availableBytes)} of {formatMemory(machine.totalBytes)}
+    <div className="px-4 pt-3">
+      <DetailList numeric>
+        {machine && (
+          <DetailItem label="Available">
+            {formatMemory(machine.availableBytes)} of {formatMemory(machine.totalBytes)}
+          </DetailItem>
+        )}
+        {machine && share !== null && (
+          <DetailItem label="Dash's share">{Math.round(share)}% of installed</DetailItem>
+        )}
+        {pressure && (
+          <DetailItem label="Memory pressure">
+            <span className={cn(pressure !== 'normal' && 'text-warn')}>
+              {PRESSURE_LABEL[pressure]}
             </span>
-          </div>
-          <Meter
-            value={share}
-            label="Dash's share"
-            detail={`of ${formatMemory(machine.totalBytes)}`}
-            aria-label="Dash and its sessions as a share of this computer's memory"
-          />
-        </>
-      )}
-      {pressure && (
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="type-label">Memory pressure (macOS)</span>
-          <span className={cn('text-sm', pressure === 'normal' ? 'text-ink' : 'text-warn')}>
-            {PRESSURE_LABEL[pressure]}
-          </span>
-        </div>
-      )}
+          </DetailItem>
+        )}
+      </DetailList>
     </div>
   );
 }

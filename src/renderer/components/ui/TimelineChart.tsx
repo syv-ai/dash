@@ -38,6 +38,8 @@ interface TimelineChartProps {
    *  monitor. Only while mounted, nothing between points, and never under
    *  reduced motion. */
   trace?: boolean;
+  /** The tone the chart sits on, so the dots' rings cut the line cleanly. */
+  surface?: 'raised' | 'dialog-well';
   /** The plot's height in px; it takes its container's width. */
   height?: number;
   /** The point under the pointer, or null as it leaves: the caller shows the
@@ -78,6 +80,7 @@ export function TimelineChart({
   colorAt,
   gapMs = Number.POSITIVE_INFINITY,
   trace = false,
+  surface = 'raised',
   height = 72,
   onHover,
   'aria-label': ariaLabel,
@@ -146,6 +149,7 @@ export function TimelineChart({
     };
   }, [trace, last, width]);
 
+  const ring = `hsl(var(--${surface}))`;
   const stroke = stops ? `url(#${gradientId})` : 'hsl(var(--ink-2))';
   const hovered = hover !== null ? points[hover] : undefined;
   const endColor = last ? (colorAt?.(last.value) ?? 'hsl(var(--ink-2))') : undefined;
@@ -254,7 +258,7 @@ export function TimelineChart({
                 opacity={0}
                 style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
               />
-              <circle r={4} fill="currentColor" stroke="hsl(var(--raised))" strokeWidth={2} />
+              <circle r={4} fill="currentColor" stroke={ring} strokeWidth={2} />
             </g>
           )}
           {hovered && hovered !== last && (
@@ -263,7 +267,7 @@ export function TimelineChart({
               cy={yAt(frame, hovered.value)}
               r={4}
               fill={colorAt?.(hovered.value) ?? 'hsl(var(--ink-2))'}
-              stroke="hsl(var(--raised))"
+              stroke={ring}
               strokeWidth={2}
             />
           )}

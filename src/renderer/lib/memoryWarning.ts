@@ -76,7 +76,21 @@ export function formatAgo(ms: number): string {
   return ms < 5_000 ? 'Now' : `${formatDuration(ms)} ago`;
 }
 
-/** Dash's share of the machine's memory (0–100), or null without a reading. */
+/** "1.2 GB under the warning", "307 MB over the warning", "At the warning"
+ *  within half a megabyte: how far Dash's
+ *  total sits from the threshold, the health popover's line beside the
+ *  figure (the chart's dashed line already names the threshold). */
+export function headroomLabel(totalBytes: number, thresholdBytes: number): string {
+  const gap = thresholdBytes - totalBytes;
+  const size = formatMemory(Math.abs(gap));
+  if (size === '0 MB') return 'At the warning';
+  return `${size} ${gap > 0 ? 'under' : 'over'} the warning`;
+}
+
+/** Dash's share of the memory installed (0–100), or null without a reading.
+ *  Of what is installed, not of what is available: available is what Dash
+ *  does *not* hold, so a share of it means nothing steady and passes 100 %
+ *  under pressure; the popover lists available beside it instead. */
 export function machineShare(s: SystemHealthSnapshot): number | null {
   if (!s.machine || s.machine.totalBytes <= 0) return null;
   return Math.min(100, (s.totalBytes / s.machine.totalBytes) * 100);

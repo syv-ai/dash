@@ -104,10 +104,26 @@ function Summary({ text }: { text?: string | null }) {
 /**
  * Key/value rows: labels quiet in a fixed column, values in ink taking the
  * rest (truncated; the full value in the tooltip or behind copy).
+ * `numeric`: the values are figures, set flush right in tabular numerals so
+ * they line up with a list of sizes under them (the system health popover).
  */
-export function DetailList({ children }: { children: React.ReactNode }) {
+export function DetailList({
+  numeric = false,
+  children,
+}: {
+  numeric?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-sm">{children}</dl>
+    <dl
+      data-numeric={numeric || undefined}
+      className={cn(
+        'group/details grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-sm',
+        numeric && 'tabular-nums',
+      )}
+    >
+      {children}
+    </dl>
   );
 }
 
@@ -133,7 +149,7 @@ export function DetailItem({
   return (
     <>
       <dt className="type-label flex min-h-6 items-center truncate">{label}</dt>
-      <dd className="group/detail flex min-h-6 min-w-0 items-center gap-1 text-ink">
+      <dd className="group/detail flex min-h-6 min-w-0 items-center gap-1 text-ink group-data-[numeric]/details:justify-end">
         <span className={cn('min-w-0 truncate', mono && 'font-mono')} title={title}>
           {children}
         </span>
