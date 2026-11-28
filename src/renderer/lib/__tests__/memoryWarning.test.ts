@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { MemoryAlert, SystemHealthSnapshot } from '@shared/systemHealth';
-import { formatMemory, healthSummary, memoryWarningCopy, sleepIdleLabel } from '../memoryWarning';
+import {
+  formatAgo,
+  formatMemory,
+  healthSummary,
+  machineShare,
+  memoryWarningCopy,
+  sleepIdleLabel,
+} from '../memoryWarning';
 
 const GB = 1024 ** 3;
 
@@ -72,5 +79,37 @@ describe('healthSummary', () => {
   it('gives the usage against the threshold, and the pressure where there is one', () => {
     expect(healthSummary(snapshot)).toBe('6.8 GB of 8 GB · Memory pressure Normal');
     expect(healthSummary({ ...snapshot, pressure: null })).toBe('6.8 GB of 8 GB');
+  });
+});
+
+describe('formatAgo', () => {
+  it.each([
+    [0, 'Now'],
+    [40_000, '40 s ago'],
+    [12 * 60_000, '12 min ago'],
+    [60 * 60_000, '1 h ago'],
+    [80 * 60_000, '1 h 20 min ago'],
+  ])('%i ms → %s', (ms, text) => {
+    expect(formatAgo(ms)).toBe(text);
+  });
+});
+
+describe('machineShare', () => {
+  const base: SystemHealthSnapshot = {
+    totalBytes: 4 * GB,
+    thresholdBytes: 6 * GB,
+    pressure: null,
+    level: 'ok',
+    tasks: [],
+    machine: { totalBytes: 32 * GB, availableBytes: 10 * GB },
+    sampledAt: 0,
+  };
+
+  it('is Dash and its sessions as a percent of installed memory', () => {
+    expect(machineShare(base)).toBe(12.5);
+  });
+
+  it('is null without a machine reading', () => {
+    expect(machineShare({ ...base, machine: null })).toBeNull();
   });
 });

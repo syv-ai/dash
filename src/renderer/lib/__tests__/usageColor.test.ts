@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { quietUsageColor, usageColor } from '../usageColor';
+import { memoryColor, quietUsageColor, usageColor } from '../usageColor';
 
 const DONE = 'hsl(var(--state-done))';
 const INK = 'hsl(var(--ink))';
@@ -45,5 +45,23 @@ describe('quietUsageColor', () => {
   it('clamps out-of-range and NaN input', () => {
     expect(quietUsageColor(Number.NaN)).toBe(INK);
     expect(quietUsageColor(140)).toBe(FAIL);
+  });
+});
+
+describe('memoryColor', () => {
+  it('is the done green up to half the threshold', () => {
+    expect(memoryColor(0)).toBe(DONE);
+    expect(memoryColor(50)).toBe(DONE);
+  });
+
+  it('eases to amber by 90 % of the threshold', () => {
+    expect(memoryColor(70)).toBe(`color-mix(in oklch, ${WARN} 50%, ${DONE})`);
+    expect(memoryColor(90)).toBe(WARN);
+  });
+
+  it('reaches red at the threshold and stays red over it', () => {
+    expect(memoryColor(95)).toBe(`color-mix(in oklch, ${FAIL} 50%, ${WARN})`);
+    expect(memoryColor(100)).toBe(FAIL);
+    expect(memoryColor(180)).toBe(FAIL);
   });
 });

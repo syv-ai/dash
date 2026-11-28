@@ -59,3 +59,25 @@ export function healthSummary(s: SystemHealthSnapshot | null): string {
   const usage = usageOfThreshold(s);
   return s.pressure ? `${usage} · Memory pressure ${PRESSURE_LABEL[s.pressure]}` : usage;
 }
+
+/** "40 s", "12 min", "1 h 20 min". */
+export function formatDuration(ms: number): string {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s} s`;
+  const min = Math.round(s / 60);
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const rest = min % 60;
+  return rest ? `${h} h ${rest} min` : `${h} h`;
+}
+
+/** "Now" (under 5 s), else "12 min ago": how long before now. */
+export function formatAgo(ms: number): string {
+  return ms < 5_000 ? 'Now' : `${formatDuration(ms)} ago`;
+}
+
+/** Dash's share of the machine's memory (0–100), or null without a reading. */
+export function machineShare(s: SystemHealthSnapshot): number | null {
+  if (!s.machine || s.machine.totalBytes <= 0) return null;
+  return Math.min(100, (s.totalBytes / s.machine.totalBytes) * 100);
+}
