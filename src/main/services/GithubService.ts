@@ -15,6 +15,7 @@ import {
   failedStepsFrom,
   type FailedCheck,
 } from './ciReport';
+import { isFastForwardConflict } from './prReview/localCommits';
 
 const execFileAsync = promisify(execFile);
 
@@ -179,16 +180,8 @@ export class GithubService {
       // in a worktree. Forcing either would clobber work, so keep what's there.
       // Any other failure (network, auth, a deleted PR ref) must not be masked as
       // "reuse stale" — surface it.
-      const stderr =
-        err && typeof err === 'object' && 'stderr' in err
-          ? String((err as { stderr?: unknown }).stderr)
-          : err instanceof Error
-            ? err.message
-            : String(err);
-      const ffConflict =
-        /non-fast-forward|\[rejected\]|refusing to fetch into branch|checked out/i.test(stderr);
       const exists = await GithubService.localBranchExists(cwd, headRefName);
-      if (!ffConflict || !exists) throw err;
+      if (!isFastForwardConflict(err) || !exists) throw err;
     }
     return headRefName;
   }

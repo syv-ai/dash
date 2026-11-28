@@ -116,6 +116,7 @@ describe('the ADO review, outdated threads', () => {
       showFile: async () => '',
       checks: async () => [],
       fetchBranch: async () => {},
+      fetchForkHead: async () => {},
       diffStat: async () => null,
       diffHunks: async (_cwd, from, _to, paths) => {
         asked.push([from, ...paths]);

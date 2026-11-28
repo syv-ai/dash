@@ -38,6 +38,7 @@ function deps(answers: Record<string, unknown>, checks: PrCheck[] = []) {
     fetchBranch: async (_cwd, branch) => {
       fetched.push(branch);
     },
+    fetchForkHead: async () => {},
     diffStat: async () => ({ additions: 12, deletions: 3 }),
     diffHunks: async () => '',
   };

@@ -27,6 +27,7 @@ import type { FailedCheck } from '../ciReport';
 import { adoBuildIdOf, adoLogExcerpt, adoLogStartLine, adoTimelineFailure } from '../adoCi';
 import { ciOf } from '../prRelevance';
 import { ensureCommits, filesAtCommit, localDiffStat, runGit } from './localCommits';
+import { adoForkBranch, adoForkHead, fetchAdoForkHead } from './adoFork';
 import type { ForgeReview, PrContext, ForgeProvider } from './types';
 
 const execFileAsync = promisify(execFile);
@@ -629,6 +630,8 @@ export interface AdoDeps {
   ) => Promise<PrCheck[]>;
   /** Fetch branch `branch` from origin into the checkout at `cwd`. */
   fetchBranch: (cwd: string, branch: string) => Promise<void>;
+  /** Put a fork PR's head on local branch `branch` (see `fetchAdoForkHead`). */
+  fetchForkHead: typeof fetchAdoForkHead;
   /** Lines added and deleted from `base`'s merge-base with `head` to `head`,
    *  from local git; null unless both are in the checkout (nothing is fetched). */
   diffStat: typeof localDiffStat;
@@ -655,6 +658,7 @@ const defaultDeps: AdoDeps = {
   fetchBranch: async (cwd, branch) => {
     await runGit(cwd, ['fetch', 'origin', branch], 60_000);
   },
+  fetchForkHead: fetchAdoForkHead,
   diffStat: localDiffStat,
   diffHunks: (cwd, from, to, paths) =>
     runGit(cwd, ['diff', '-U0', '-M', '--no-color', from, to, '--', ...paths], 15_000),
@@ -914,10 +918,18 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
       return mapAdoPrList(list(res), repoContext(ado));
     },
 
-    // A fork PR's source branch isn't on origin; the fetch fails and says so.
+    /** A PR from the repo's own branch: that branch, from origin. A fork
+     *  PR's branch isn't on origin: its head goes on `pr/<id>/<branch>`
+     *  (see `fetchAdoForkHead`). */
     async prepareBranch(ctx, pr) {
-      await deps.fetchBranch(ctx.cwd, pr.headRefName);
-      return pr.headRefName;
+      const fork = adoForkHead(await deps.request(adoOf(ctx), prPath(ctx, pr.number)), ctx.remote);
+      if (!fork) {
+        await deps.fetchBranch(ctx.cwd, pr.headRefName);
+        return pr.headRefName;
+      }
+      const branch = adoForkBranch(pr.number, pr.headRefName);
+      await deps.fetchForkHead(ctx.cwd, pr.number, fork, branch);
+      return branch;
     },
 
     failedChecks: async (ctx, number) => adoFailedChecks(ctx, number),

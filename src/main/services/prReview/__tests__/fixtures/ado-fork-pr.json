@@ -1,0 +1,31 @@
+{
+  "pullRequestId": 7,
+  "title": "Wire inputs from a fork",
+  "status": "active",
+  "isDraft": false,
+  "sourceRefName": "refs/heads/feature/x",
+  "targetRefName": "refs/heads/main",
+  "createdBy": { "id": "author-id", "displayName": "Bo Author" },
+  "repository": {
+    "id": "repo-id",
+    "name": "repo",
+    "remoteUrl": "https://org@dev.azure.com/org/Proj/_git/repo",
+    "project": { "id": "proj-id", "name": "Proj" }
+  },
+  "forkSource": {
+    "name": "refs/heads/feature/x",
+    "objectId": "1111111111111111111111111111111111111111",
+    "repository": {
+      "id": "fork-id",
+      "name": "repo-fork",
+      "isFork": true,
+      "remoteUrl": "https://org@dev.azure.com/org/Forks/_git/repo-fork",
+      "sshUrl": "git@ssh.dev.azure.com:v3/org/Forks/repo-fork",
+      "webUrl": "https://dev.azure.com/org/Forks/_git/repo-fork",
+      "project": { "id": "forks-id", "name": "Forks" }
+    }
+  },
+  "lastMergeSourceCommit": { "commitId": "1111111111111111111111111111111111111111" },
+  "lastMergeTargetCommit": { "commitId": "2222222222222222222222222222222222222222" },
+  "lastMergeCommit": { "commitId": "3333333333333333333333333333333333333333" }
+}

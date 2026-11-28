@@ -47,6 +47,23 @@ export async function ensureCommits(
 }
 
 /**
+ * Whether a failed `git fetch <src> <ref>:refs/heads/<b>` failed only because
+ * `b` can't move: it diverged from the fetched head (non-fast-forward) or is
+ * checked out in a worktree. Keeping the branch is right then; any other
+ * failure (network, auth, a missing ref) is a real one.
+ */
+export const isFastForwardConflict = (err: unknown): boolean =>
+  /non-fast-forward|\[rejected\]|refusing to fetch into branch|checked out/i.test(gitStderr(err));
+
+/** What a failed git run said: its stderr, else the error's message. */
+export const gitStderr = (err: unknown): string =>
+  err && typeof err === 'object' && 'stderr' in err
+    ? String((err as { stderr?: unknown }).stderr)
+    : err instanceof Error
+      ? err.message
+      : String(err);
+
+/**
  * Lines added and deleted on `head` since its merge-base with `base` (`git
  * diff --shortstat base...head`); null unless both commits are in the
  * checkout already, since nothing is fetched for it, or git can't say.
