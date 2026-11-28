@@ -21,10 +21,12 @@ import { useMinuteClock } from '../../hooks/useMinuteClock';
 import { useSettings } from '../../stores/settingsStore';
 import { LEVEL_FIGURE, LevelText, type LevelSize } from '../ui/LevelText';
 import { ProgressRing } from '../ui/ProgressRing';
+import { Skeleton } from '../ui/Skeleton';
 import { Tooltip, type RichTooltip } from '../ui/Tooltip';
 import { useFittedDensity } from '../ui/useFittedDensity';
 import { cn } from '../../lib/cn';
 import { fitUsage, USAGE_MEASURED, type UsageDensity } from './usageDensity';
+import { useLimitsPending } from './useLimitsPending';
 
 interface UsageSectionProps {
   /** The task session's context window use; absent until its first reply. */
@@ -59,6 +61,7 @@ const COLUMNS = [
 type Cell = { key: string; tooltip: RichTooltip; label: string; caption?: string } & (
   | { kind: 'level'; pct: number | null; aria: string }
   | { kind: 'pace'; rate: string; outlook: PaceOutlook | null }
+  | { kind: 'loading' }
 );
 
 /** A level's column: the session's context, or a limit. */
@@ -81,9 +84,11 @@ function Column({ cell, density, bare }: { cell: Cell; density: UsageDensity; ba
       <Figure cell={cell} density={density} />
       <span className="flex w-full flex-col items-center">
         <span className="max-w-full truncate type-caption text-ink-2">{cell.label}</span>
-        {caption && (
-          <span className="max-w-full truncate type-caption tabular-nums">{caption}</span>
-        )}
+        {cell.kind === 'loading'
+          ? density !== 'compact' && <Skeleton className="h-4 w-14" />
+          : caption && (
+              <span className="max-w-full truncate type-caption tabular-nums">{caption}</span>
+            )}
       </span>
     </div>
   );
@@ -105,6 +110,13 @@ function Figure({ cell, density }: { cell: Cell; density: UsageDensity }) {
         {cell.rate}
         <span className="text-ink-2">{RATE_UNIT}</span>
       </span>
+    );
+  }
+  if (cell.kind === 'loading') {
+    return density === 'compact' ? (
+      <Skeleton className="h-5 w-8" />
+    ) : (
+      <Skeleton shape="circle" className="size-16" />
     );
   }
   if (density === 'compact') return <LevelReading cell={cell} />;
@@ -253,6 +265,17 @@ export function levelCells({
   return cells;
 }
 
+/** The limits' columns while they are on their way: ring, label, reset. */
+const LOADING_LIMITS: Cell[] = (Object.keys(LIMIT_LABELS) as LimitKey[]).map((limit) => ({
+  key: limit,
+  kind: 'loading',
+  label: LIMIT_LABELS[limit],
+  tooltip: {
+    title: `${LIMIT_LABELS[limit]} limit`,
+    body: "Waiting for Claude Code's first reading.",
+  },
+}));
+
 /** How far back the barometer looks: "last 30 min", "last hour". */
 function lookBack(key: LimitKey): string {
   const minutes = LOOK_BACK_MS[key] / 60_000;
@@ -315,10 +338,12 @@ export function UsageSection({ contextUsage, rateLimits, paces }: UsageSectionPr
   const showLimits = useSettings((s) => s.showRateLimits);
   const showPace = useSettings((s) => s.showPace);
   const now = useMinuteClock();
+  const limitsPending = useLimitsPending(rateLimits, contextUsage !== undefined);
 
   const pressing = showPace && showLimits && rateLimits ? pressingPace(paces) : null;
 
   const cells: Cell[] = levelCells({ contextUsage, rateLimits, showSession, showLimits, now });
+  if (showLimits && limitsPending) cells.push(...LOADING_LIMITS);
   if (pressing) cells.push(paceCell(paces, pressing));
 
   const { rootRef, sizerRef, density } = useFittedDensity<UsageDensity>(
