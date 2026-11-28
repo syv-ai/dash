@@ -21,7 +21,7 @@ let claudeEnvVars: Record<string, string> = {};
 // When true, inherit the full parent process.env as a base instead of the minimal set.
 let syncShellEnv = false;
 
-// Settings → Claude's Effort and Ultracode as one value: the `--effort` a task
+// Settings → Claude's Effort (Ultracode one of its levels): the `--effort` a task
 // that sets none starts with (null → no flag, Claude Code decides). A flag, not
 // CLAUDE_CODE_EFFORT_LEVEL: that env var outranks `--effort`, so a task's own
 // effort couldn't override it, and it doesn't take ultracode.

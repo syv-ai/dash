@@ -54,7 +54,7 @@ export interface SystemApi {
   setCommitAttribution: (value: string | undefined) => void;
   setClaudeEnvVars: (vars: Record<string, string>) => void;
   setSyncShellEnv: (enabled: boolean) => void;
-  /** Settings → Claude's Effort and Ultracode as one default `--effort` (null: none). */
+  /** Settings → Claude's Effort, Ultracode included, as the default `--effort` (null: none). */
   setDefaultEffort: (effort: TaskEffort | null) => void;
   /** `claude stop` every task session when Dash quits (default: sessions live on). */
   setStopSessionsOnQuit: (enabled: boolean) => void;

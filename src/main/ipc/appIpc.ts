@@ -458,7 +458,7 @@ export function registerAppIpc(): void {
     }
   });
 
-  // Settings → Claude's Effort and Ultracode as one default (defaultEffortFrom).
+  // Settings → Claude's Effort, Ultracode included, as the default (defaultEffortFrom).
   ipcMain.on('app:setDefaultEffort', (_event, effort: TaskEffort | null) => {
     const v = parseArgsSafe('app:setDefaultEffort', taskEffortSchema.nullable(), effort);
     if (v === undefined) return;

@@ -22,12 +22,11 @@ export const EFFORT_LABELS: Record<TaskEffort, string> = {
   ultracode: 'Ultracode',
 };
 
-/**
- * The effort a task gets when it sets none: Settings → Claude's Effort and
- * Ultracode, as one value. Ultracode wins (it runs at X-High); Auto is none,
- * so Claude Code decides.
- */
-export function defaultEffortFrom(level: string, ultracode: boolean): TaskEffort | null {
-  if (ultracode) return 'ultracode';
+/** Settings → Claude's Effort: a level, or Auto (Claude Code decides). */
+export const DEFAULT_EFFORTS = ['auto', ...TASK_EFFORTS] as const;
+export type DefaultEffort = (typeof DEFAULT_EFFORTS)[number];
+
+/** The effort a task gets when it sets none: Settings → Claude's; Auto is none. */
+export function defaultEffortFrom(level: DefaultEffort): TaskEffort | null {
   return isTaskEffort(level) ? level : null;
 }

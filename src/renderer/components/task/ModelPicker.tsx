@@ -17,8 +17,6 @@ const DESCRIPTIONS: Record<TaskModel, string> = {
   fable: 'Frontier model for the hardest tasks',
 };
 
-const STORAGE_KEY = 'taskModel';
-
 export function ModelPicker({
   value,
   onChange,
@@ -62,22 +60,4 @@ export function ModelPicker({
       {select}
     </Field>
   );
-}
-
-export function readInitialModel(): TaskModel {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (
-    stored === 'default' ||
-    stored === 'opus' ||
-    stored === 'sonnet' ||
-    stored === 'haiku' ||
-    stored === 'fable'
-  ) {
-    return stored;
-  }
-  return 'default';
-}
-
-export function persistModelChoice(model: TaskModel): void {
-  localStorage.setItem(STORAGE_KEY, model);
 }

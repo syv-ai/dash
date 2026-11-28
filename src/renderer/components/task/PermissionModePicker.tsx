@@ -1,10 +1,6 @@
 import React from 'react';
 import { Shield, FilePen, Zap, Flame } from 'lucide-react';
-import {
-  isPermissionMode,
-  type BypassAvailability,
-  type PermissionMode,
-} from '../../../shared/types';
+import type { BypassAvailability, PermissionMode } from '../../../shared/types';
 import { Field, SettingRow } from '../ui/Field';
 import { Select, type SelectOption } from '../ui/Select';
 import { bypassUnavailableReason, MODE_LABELS } from './sessionSettingChange';
@@ -86,13 +82,4 @@ export function PermissionModePicker({
       {select}
     </Field>
   );
-}
-
-/** The last mode picked in Dash, else auto. */
-export function readInitialPermissionMode(): PermissionMode {
-  const stored = localStorage.getItem('permissionMode');
-  if (isPermissionMode(stored)) return stored;
-  // One-time migration from the old yoloMode boolean.
-  if (localStorage.getItem('yoloMode') === 'true') return 'bypassPermissions';
-  return 'auto';
 }

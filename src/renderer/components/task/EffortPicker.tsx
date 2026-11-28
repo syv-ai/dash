@@ -27,6 +27,21 @@ export function defaultEffortLabel(def: TaskEffort | null): string {
   return def ? `Default (${EFFORT_LABELS[def]})` : 'Default';
 }
 
+/** What a level does, as the pickers' ⓘ say it. */
+export function effortDescription(effort: TaskEffort): string {
+  return DESCRIPTIONS[effort];
+}
+
+/** An option's look in an effort picker: the gauge, then its name. */
+export function EffortOption({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center gap-2 align-middle">
+      <Gauge size={14} strokeWidth={1.8} className="text-icon" />
+      <span>{label}</span>
+    </span>
+  );
+}
+
 /** What the picker's ⓘ says for a choice. */
 export function effortHint(value: TaskEffort | null, def: TaskEffort | null): string {
   if (value)
@@ -50,9 +65,7 @@ export function EffortPicker({
   /** The select's width, as ModelPicker's. */
   width?: 'sm' | 'md';
 }) {
-  const level = useSettings((s) => s.effortLevel);
-  const ultracode = useSettings((s) => s.ultracode);
-  const def = defaultEffortFrom(level, ultracode);
+  const def = defaultEffortFrom(useSettings((s) => s.effortLevel));
   const options: SelectOption<Choice>[] = [
     { value: 'default', label: defaultEffortLabel(def) },
     ...TASK_EFFORTS.map((e) => ({ value: e, label: EFFORT_LABELS[e] })),
@@ -68,12 +81,7 @@ export function EffortPicker({
             value={value ?? 'default'}
             onValueChange={(v) => onChange(v === 'default' ? null : v)}
             options={options}
-            renderOption={(opt) => (
-              <span className="inline-flex items-center gap-2 align-middle">
-                <Gauge size={14} strokeWidth={1.8} className="text-icon" />
-                <span>{opt.label}</span>
-              </span>
-            )}
+            renderOption={(opt) => <EffortOption label={opt.label} />}
           />
         </div>
       }

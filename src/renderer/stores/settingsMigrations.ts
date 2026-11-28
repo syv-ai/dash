@@ -15,6 +15,20 @@ const SCHEMA_STEPS: Array<(backing: StorageLike, existing: boolean) => void> = [
   (backing, existing) => {
     if (existing && backing.getItem('theme') === null) backing.setItem('theme', 'dark');
   },
+  // 2. Ultracode was a switch beside Effort; it is now one of Effort's choices.
+  (backing) => {
+    if (backing.getItem('ultracode') === 'true') backing.setItem('claudeEffortLevel', 'ultracode');
+    backing.removeItem('ultracode');
+  },
+  // 3. The old Yolo switch (yoloMode) becomes New task's default permission
+  //    mode, unless one was picked since.
+  (backing) => {
+    const picked = backing.getItem('permissionMode');
+    if (picked === null && backing.getItem('yoloMode') === 'true') {
+      backing.setItem('permissionMode', 'bypassPermissions');
+    }
+    backing.removeItem('yoloMode');
+  },
 ];
 
 /** An install that stored a setting before: one of the registry's keys is there. */

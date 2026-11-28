@@ -12,7 +12,14 @@ import {
 import { clampKeptReady } from '../terminal/keptTerminals';
 import { TERMINAL_THEME_IDS } from '../terminal/terminalThemes';
 import type { NotificationSound } from '../sounds';
-import type { UsageThresholds } from '@shared/types';
+import {
+  PERMISSION_MODES,
+  TASK_MODELS,
+  type PermissionMode,
+  type TaskModel,
+  type UsageThresholds,
+} from '@shared/types';
+import { DEFAULT_EFFORTS, type DefaultEffort } from '@shared/effort';
 import { clampMemoryWarningGb } from '@shared/systemHealth';
 import { AUTO_SLEEP_CHOICES, type AutoSleepAfter } from '../lib/autoSleep';
 import { parseKeybindings, type KeyBindingMap } from '../keybindings';
@@ -36,7 +43,6 @@ export interface SettingsState {
   showProjectTokens: boolean;
   desktopNotification: boolean;
   syncShellEnv: boolean;
-  ultracode: boolean;
   /** `claude stop` every task session when Dash quits. Off: sessions keep
    *  running under Claude Code's supervisor and resume on the next attach. */
   stopSessionsOnQuit: boolean;
@@ -50,7 +56,13 @@ export interface SettingsState {
    *  ready, attach client and all (see keptTerminals). Clamped to
    *  KEPT_READY_MIN..MAX. */
   terminalsKeptReady: number;
-  effortLevel: string;
+  /** Settings → Claude's Effort, Ultracode included: what a task that sets
+   *  none runs at (`defaultEffortFrom`). */
+  effortLevel: DefaultEffort;
+  /** New task's model and permission mode before you pick (a project's
+   *  permission mode default wins). Settings → Claude. */
+  newTaskModel: TaskModel;
+  newTaskPermissionMode: PermissionMode;
   customIDE: { path: string; args: string[] };
   customClaudeEnvVars: Record<string, string>;
   usageThresholds: UsageThresholds;
@@ -129,7 +141,6 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('showProjectTokens', 'showProjectTokens', boolDefaultTrue()),
   entry('desktopNotification', 'desktopNotification', boolDefaultFalse()),
   entry('syncShellEnv', 'syncShellEnv', boolDefaultFalse()),
-  entry('ultracode', 'ultracode', boolDefaultFalse()),
   entry('stopSessionsOnQuit', 'stopSessionsOnQuit', boolDefaultFalse()),
   entry('orchestratorAccess', 'orchestratorAccess', boolDefaultFalse()),
   entry('notificationSound', 'notificationSound', str('off') as Codec<NotificationSound>),
@@ -142,7 +153,11 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
     decode: (raw) => clampKeptReady(parseFloat(raw ?? '')),
     encode: (v) => String(v),
   }),
-  entry('effortLevel', 'claudeEffortLevel', str('auto')),
+  // Ultracode was a switch of its own; settingsMigrations folds it in here.
+  entry('effortLevel', 'claudeEffortLevel', strEnum(DEFAULT_EFFORTS, 'auto')),
+  // The keys New task kept its last pick in; they now hold the default.
+  entry('newTaskModel', 'taskModel', strEnum(TASK_MODELS, 'default')),
+  entry('newTaskPermissionMode', 'permissionMode', strEnum(PERMISSION_MODES, 'auto')),
   entry(
     'customIDE',
     'customIDE',

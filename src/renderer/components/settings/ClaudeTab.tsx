@@ -9,9 +9,13 @@ import { FormSection, SettingRow } from '../ui/Field';
 import { EnvVarList } from '../ui/EnvVarList';
 import { IconButton } from '../ui/IconButton';
 import { Notice } from '../ui/Notice';
-import { Segmented } from '../ui/Segmented';
+import { Select, type SelectOption } from '../ui/Select';
 import { SwitchField } from '../ui/SwitchField';
 import { TextLink } from '../ui/TextLink';
+import { DEFAULT_EFFORTS, EFFORT_LABELS, type DefaultEffort } from '../../../shared/effort';
+import { EffortOption, effortDescription } from '../task/EffortPicker';
+import { ModelPicker } from '../task/ModelPicker';
+import { PermissionModePicker } from '../task/PermissionModePicker';
 
 /** `claude --version` says "2.1.332 (Claude Code)"; the number alone. */
 function cliVersion(info: ClaudeCliInfo): string | null {
@@ -19,12 +23,8 @@ function cliVersion(info: ClaudeCliInfo): string | null {
 }
 
 export function ClaudeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) {
-  const effortLevel = useSettings((s) => s.effortLevel);
-  const setEffortLevel = useSettings((s) => s.setEffortLevel);
   const syncShellEnv = useSettings((s) => s.syncShellEnv);
   const setSyncShellEnv = useSettings((s) => s.setSyncShellEnv);
-  const ultracode = useSettings((s) => s.ultracode);
-  const setUltracode = useSettings((s) => s.setUltracode);
   const stopSessionsOnQuit = useSettings((s) => s.stopSessionsOnQuit);
   const setStopSessionsOnQuit = useSettings((s) => s.setStopSessionsOnQuit);
 
@@ -34,34 +34,9 @@ export function ClaudeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) 
         <CliStatus info={claudeInfo} />
       </FormSection>
 
+      <NewTaskDefaults />
+
       <FormSection title="Sessions">
-        <SettingRow
-          label="Effort"
-          hint="How much Claude reasons in a task that doesn't set its own (Task settings → Effort). Auto lets the model decide; X-High and Max need a newer model (Opus 4.8 and up), others use their highest level. A session gets it when it starts or restarts, not when a sleeping one wakes."
-          control={
-            <Segmented
-              fullWidth={false}
-              size="sm"
-              aria-label="Effort"
-              value={effortLevel}
-              options={[
-                { value: 'auto', label: 'Auto' },
-                { value: 'low', label: 'Low' },
-                { value: 'medium', label: 'Medium' },
-                { value: 'high', label: 'High' },
-                { value: 'xhigh', label: 'X-High' },
-                { value: 'max', label: 'Max' },
-              ]}
-              onChange={setEffortLevel}
-            />
-          }
-        />
-        <SwitchField
-          label="Ultracode"
-          hint="Tasks that don't set their own effort start with X-High reasoning and multi-agent orchestration. Uses more tokens and runs slower, and overrides Effort. A session gets it when it starts or restarts."
-          checked={ultracode}
-          onCheckedChange={setUltracode}
-        />
         <SwitchField
           label="Inherit shell environment"
           hint={
@@ -82,11 +57,60 @@ export function ClaudeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) 
           checked={stopSessionsOnQuit}
           onCheckedChange={setStopSessionsOnQuit}
         />
-        <OrchestratorAccessRow />
       </FormSection>
 
       <EnvVarsSection />
+
+      <OrchestratorAccessSection />
     </>
+  );
+}
+
+const EFFORT_OPTIONS: SelectOption<DefaultEffort>[] = DEFAULT_EFFORTS.map((e) => ({
+  value: e,
+  label: e === 'auto' ? 'Auto' : EFFORT_LABELS[e],
+}));
+
+/** What a new task starts with: its model, permission mode and effort. Each
+ *  task changes its own; a project's permission mode default comes first. */
+function NewTaskDefaults() {
+  const model = useSettings((s) => s.newTaskModel);
+  const setModel = useSettings((s) => s.setNewTaskModel);
+  const mode = useSettings((s) => s.newTaskPermissionMode);
+  const setMode = useSettings((s) => s.setNewTaskPermissionMode);
+  const effort = useSettings((s) => s.effortLevel);
+  const setEffort = useSettings((s) => s.setEffortLevel);
+
+  return (
+    <FormSection
+      title="New tasks"
+      hint={{
+        title: 'Where a task starts',
+        body: "New task opens on these. A task changes its own in New task or later in Task settings (its … menu), and a project's own defaults (Project settings → New tasks) come before these.",
+      }}
+    >
+      <ModelPicker layout="row" value={model} onChange={setModel} />
+      <PermissionModePicker layout="row" value={mode} onChange={setMode} />
+      <SettingRow
+        label="Effort"
+        hint={
+          effort === 'auto'
+            ? 'Claude Code decides how much Claude reasons. Applies to tasks that keep Default in their own Effort; a session gets it when it starts or restarts.'
+            : `${effortDescription(effort)} Applies to tasks that keep Default in their own Effort; a session gets it when it starts or restarts. A model without a level runs at the highest it has below it.`
+        }
+        control={
+          <div className="w-56">
+            <Select<DefaultEffort>
+              aria-label="Effort"
+              value={effort}
+              onValueChange={setEffort}
+              options={EFFORT_OPTIONS}
+              renderOption={(opt) => <EffortOption label={opt.label} />}
+            />
+          </div>
+        }
+      />
+    </FormSection>
   );
 }
 
@@ -119,7 +143,7 @@ function CliStatus({ info }: { info: ClaudeCliInfo | null }) {
 
 /** The orchestrator switch and, when on, where `dashctl` is, for a session
  *  outside Dash to run. Hidden where the control API doesn't run (win32). */
-function OrchestratorAccessRow() {
+function OrchestratorAccessSection() {
   const enabled = useSettings((s) => s.orchestratorAccess);
   const setEnabled = useSettings((s) => s.setOrchestratorAccess);
   const info = useControlInfo();
@@ -135,35 +159,41 @@ function OrchestratorAccessRow() {
   const command = shellQuote(info.dashctlPath);
 
   return (
-    <SwitchField
-      label="Let other agents control Dash"
-      hint={
-        <>
-          A Claude Code session outside Dash can create and drive tasks with <Code>dashctl</Code>.
-          Holi&rsquo;s Dash plugin finds it by itself; elsewhere, run it by this path.
-        </>
-      }
-      checked={enabled}
-      onCheckedChange={setEnabled}
-    >
-      {enabled && (
-        <div className="flex h-7.5 items-center gap-1 rounded-md bg-well pr-0.5 pl-2.5">
-          <code className="min-w-0 flex-1 truncate font-mono text-xs text-ink-2 select-all">
-            {command}
-          </code>
-          <IconButton
-            size="sm"
-            title={copied ? 'Copied' : 'Copy path'}
-            onClick={() => {
-              window.electronAPI.clipboardWriteText(command);
-              setCopied(true);
-            }}
-          >
-            {copied ? <Check size={14} strokeWidth={1.8} /> : <Copy size={14} strokeWidth={1.8} />}
-          </IconButton>
-        </div>
-      )}
-    </SwitchField>
+    <FormSection title="Other agents">
+      <SwitchField
+        label="Let other agents control Dash"
+        hint={
+          <>
+            A Claude Code session outside Dash can create and drive tasks with <Code>dashctl</Code>.
+            Holi&rsquo;s Dash plugin finds it by itself; elsewhere, run it by this path.
+          </>
+        }
+        checked={enabled}
+        onCheckedChange={setEnabled}
+      >
+        {enabled && (
+          <div className="flex h-7.5 items-center gap-1 rounded-md bg-well pr-0.5 pl-2.5">
+            <code className="min-w-0 flex-1 truncate font-mono text-xs text-ink-2 select-all">
+              {command}
+            </code>
+            <IconButton
+              size="sm"
+              title={copied ? 'Copied' : 'Copy path'}
+              onClick={() => {
+                window.electronAPI.clipboardWriteText(command);
+                setCopied(true);
+              }}
+            >
+              {copied ? (
+                <Check size={14} strokeWidth={1.8} />
+              ) : (
+                <Copy size={14} strokeWidth={1.8} />
+              )}
+            </IconButton>
+          </div>
+        )}
+      </SwitchField>
+    </FormSection>
   );
 }
 
@@ -173,7 +203,7 @@ function EnvVarsSection() {
   return (
     <FormSection
       title="Environment variables"
-      hint="Passed to Claude on new tasks."
+      hint="Passed to every task's session when it starts. A task adds its own in Task settings › Advanced."
       action={<TextLink href="https://code.claude.com/docs/en/env-vars">Reference</TextLink>}
     >
       <EnvVarList value={vars} onChange={setVars} />

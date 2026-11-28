@@ -240,7 +240,6 @@ export function App() {
   const commitAttribution = useSettings((s) => s.commitAttribution);
   const effortLevel = useSettings((s) => s.effortLevel);
   const syncShellEnv = useSettings((s) => s.syncShellEnv);
-  const ultracode = useSettings((s) => s.ultracode);
   const stopSessionsOnQuit = useSettings((s) => s.stopSessionsOnQuit);
   const orchestratorAccess = useSettings((s) => s.orchestratorAccess);
   const customClaudeEnvVars = useSettings((s) => s.customClaudeEnvVars);
@@ -286,8 +285,8 @@ export function App() {
   // Sync the default effort to main: a task with none of its own starts with
   // it (`--effort`, so a task's own can override it).
   useEffect(() => {
-    window.electronAPI.setDefaultEffort?.(defaultEffortFrom(effortLevel, ultracode));
-  }, [effortLevel, ultracode]);
+    window.electronAPI.setDefaultEffort?.(defaultEffortFrom(effortLevel));
+  }, [effortLevel]);
   // Sync stop-sessions-on-quit to main process (read in the before-quit handler)
   useEffect(() => {
     window.electronAPI.setStopSessionsOnQuit?.(stopSessionsOnQuit);

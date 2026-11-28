@@ -49,7 +49,7 @@ describe('runSettingsMigrations', () => {
       mem.setItem('showTaskTokens', 'false');
       runSettingsMigrations(mem);
       expect(mem.getItem('theme')).toBe('dark');
-      expect(mem.getItem(SCHEMA_KEY)).toBe('1');
+      expect(mem.getItem(SCHEMA_KEY)).toBe('3');
     });
 
     it("keeps an existing install's own choice", () => {
@@ -66,6 +66,55 @@ describe('runSettingsMigrations', () => {
       mem.removeItem('theme');
       runSettingsMigrations(mem);
       expect(mem.getItem('theme')).toBeNull();
+    });
+  });
+
+  describe('Ultracode folds into Effort (schema 2)', () => {
+    it('turns the Ultracode switch into the Ultracode effort', () => {
+      const mem = createMemoryStorage();
+      mem.setItem('claudeEffortLevel', 'high');
+      mem.setItem('ultracode', 'true');
+      runSettingsMigrations(mem);
+      expect(mem.getItem('claudeEffortLevel')).toBe('ultracode');
+      expect(mem.getItem('ultracode')).toBeNull();
+    });
+
+    it('keeps the effort when Ultracode was off', () => {
+      const mem = createMemoryStorage();
+      mem.setItem('claudeEffortLevel', 'high');
+      mem.setItem('ultracode', 'false');
+      runSettingsMigrations(mem);
+      expect(mem.getItem('claudeEffortLevel')).toBe('high');
+      expect(mem.getItem('ultracode')).toBeNull();
+    });
+  });
+
+  describe("Yolo becomes New task's default permission mode (schema 3)", () => {
+    it('carries the old yoloMode switch over', () => {
+      const mem = createMemoryStorage();
+      mem.setItem('yoloMode', 'true');
+      runSettingsMigrations(mem);
+      expect(mem.getItem('permissionMode')).toBe('bypassPermissions');
+      expect(mem.getItem('yoloMode')).toBeNull();
+    });
+
+    it('keeps a mode picked since', () => {
+      const mem = createMemoryStorage();
+      mem.setItem('yoloMode', 'true');
+      mem.setItem('permissionMode', 'acceptEdits');
+      runSettingsMigrations(mem);
+      expect(mem.getItem('permissionMode')).toBe('acceptEdits');
+    });
+
+    it('keeps the last model and mode New task remembered as the defaults', () => {
+      const mem = createMemoryStorage();
+      mem.setItem('taskModel', 'opus');
+      mem.setItem('permissionMode', 'default');
+      runSettingsMigrations(mem);
+      const s = defaultSettings();
+      expect(s.newTaskModel).toBe('default');
+      expect(mem.getItem('taskModel')).toBe('opus');
+      expect(mem.getItem('permissionMode')).toBe('default');
     });
   });
 });

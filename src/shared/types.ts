@@ -94,7 +94,8 @@ export type BypassAvailability =
  * `--model` flag entirely so the user's own Claude Code config decides; the rest
  * map to the CLI's model aliases (`--model opus|sonnet|haiku|fable`).
  */
-export type TaskModel = 'default' | 'opus' | 'sonnet' | 'haiku' | 'fable';
+export const TASK_MODELS = ['default', 'opus', 'sonnet', 'haiku', 'fable'] as const;
+export type TaskModel = (typeof TASK_MODELS)[number];
 
 /**
  * Lifecycle state of a task row. `idle` is the DB default; `active` is set when

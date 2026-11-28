@@ -23,8 +23,9 @@ import { useModalClose } from '../ui/Modal';
 import { Notice } from '../ui/Notice';
 import { SuggestionMenu } from '../ui/SuggestionMenu';
 import { Textarea } from '../ui/Textarea';
-import { PermissionModePicker, readInitialPermissionMode } from './PermissionModePicker';
-import { ModelPicker, readInitialModel, persistModelChoice } from './ModelPicker';
+import { PermissionModePicker } from './PermissionModePicker';
+import { useSettings } from '../../stores/settingsStore';
+import { ModelPicker } from './ModelPicker';
 import { getTaskCreatability } from './taskModalCreatability';
 import { Expandable } from '../ui/Expandable';
 import { isDirectCheckout } from './directCheckout';
@@ -187,9 +188,9 @@ function TaskModalBody({
     taskDefaults?.useWorktree ?? (isGitRepo || worktreeForced),
   );
   const [permissionMode, setPermissionMode] = useState<PermissionMode>(
-    () => taskDefaults?.permissionMode ?? readInitialPermissionMode(),
+    () => taskDefaults?.permissionMode ?? useSettings.getState().newTaskPermissionMode,
   );
-  const [model, setModel] = useState<TaskModel>(() => readInitialModel());
+  const [model, setModel] = useState<TaskModel>(() => useSettings.getState().newTaskModel);
   const [effort, setEffort] = useState<TaskEffort | null>(null);
   const [agent, setAgent] = useState<string | null>(null);
   const [contextPrompt, setContextPrompt] = useState(taskDefaults?.contextPrompt ?? '');
@@ -600,21 +601,10 @@ function TaskModalBody({
                 layout="row"
                 width="sm"
                 value={permissionMode}
-                onChange={(v) => {
-                  setPermissionMode(v);
-                  localStorage.setItem('permissionMode', v);
-                }}
+                onChange={setPermissionMode}
                 bypass={bypass}
               />
-              <ModelPicker
-                layout="row"
-                width="sm"
-                value={model}
-                onChange={(v) => {
-                  setModel(v);
-                  persistModelChoice(v);
-                }}
-              />
+              <ModelPicker layout="row" width="sm" value={model} onChange={setModel} />
               <EffortPicker width="sm" value={effort} onChange={setEffort} />
               <AgentPicker
                 projectPath={projectPath}

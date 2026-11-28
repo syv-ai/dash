@@ -9,10 +9,9 @@ describe('effort', () => {
     expect(isTaskEffort(null)).toBe(false);
   });
 
-  it("folds Settings' Effort and Ultracode into one default, ultracode first", () => {
-    expect(defaultEffortFrom('high', false)).toBe('high');
-    expect(defaultEffortFrom('high', true)).toBe('ultracode');
-    expect(defaultEffortFrom('auto', false)).toBeNull();
-    expect(defaultEffortFrom('auto', true)).toBe('ultracode');
+  it("gives a task Settings' effort, none for Auto", () => {
+    expect(defaultEffortFrom('high')).toBe('high');
+    expect(defaultEffortFrom('ultracode')).toBe('ultracode');
+    expect(defaultEffortFrom('auto')).toBeNull();
   });
 });
