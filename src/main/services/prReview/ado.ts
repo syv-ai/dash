@@ -62,6 +62,16 @@ interface RawThread {
     leftFileStart?: RawPosition | null;
     leftFileEnd?: RawPosition | null;
   } | null;
+  /** Where the thread was left (its iteration) and, once ADO tracked it onto
+   *  a later one, where it was then (`trackingCriteria`'s orig* fields). */
+  pullRequestThreadContext?: {
+    iterationContext?: { firstComparingIteration?: number; secondComparingIteration?: number };
+    trackingCriteria?: {
+      origFilePath?: string;
+      origRightFileStart?: RawPosition | null;
+      origRightFileEnd?: RawPosition | null;
+    } | null;
+  } | null;
   comments?: RawComment[];
 }
 interface RawIteration {
@@ -309,6 +319,62 @@ export function adoRowFacts(
   };
 }
 
+/** Where a thread on the PR's side was left, when that was before the latest
+ *  iteration: the commit it was left on, and its path and lines there. */
+export interface ThreadOrigin {
+  threadId: string;
+  commit: string;
+  /** Its path in `commit`, and at head (they differ once the file moved). */
+  path: string;
+  headPath: string;
+  start: number;
+  end: number;
+}
+
+/**
+ * The origins of the threads left on the PR's (right) side of an earlier
+ * iteration than `latest`: the iteration's head commit, and the thread's
+ * place in it (ADO's `trackingCriteria` once it tracked the thread on, else
+ * its context as left). A thread whose iteration isn't listed is left out.
+ */
+export function adoThreadOrigins(
+  threads: unknown,
+  iterations: unknown,
+  latest: number,
+): ThreadOrigin[] {
+  const commits = new Map(
+    list<RawIteration>(iterations).map((i) => [i.id, i.sourceRefCommit?.commitId ?? '']),
+  );
+  return list<RawThread>(threads).flatMap((t) => {
+    const where = t.threadContext;
+    const left = t.pullRequestThreadContext?.iterationContext?.secondComparingIteration;
+    if (!where?.rightFileStart || !left || left >= latest || !isHumanThread(t)) return [];
+    const commit = commits.get(left);
+    const tracked = t.pullRequestThreadContext?.trackingCriteria;
+    const start = (tracked?.origRightFileStart ?? where.rightFileStart).line;
+    const end = (tracked?.origRightFileEnd ?? where.rightFileEnd ?? where.rightFileStart).line;
+    const headPath = (where.filePath ?? '').replace(/^\/+/, '');
+    const path = (tracked?.origFilePath ?? where.filePath ?? '').replace(/^\/+/, '');
+    if (!commit || !path || !start) return [];
+    return [{ threadId: String(t.id ?? ''), commit, path, headPath, start, end: end ?? start }];
+  });
+}
+
+/**
+ * Whether `git diff -U0 <from> <to>` changed any of lines `start`–`end` of
+ * the `from` side: a hunk that removes or rewrites one of them, or adds lines
+ * inside the range. Lines that only moved (an edit above them) aren't changed,
+ * as GitHub reads an outdated comment.
+ */
+export function linesChanged(diff: string, start: number, end: number): boolean {
+  for (const m of diff.matchAll(/^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@/gm)) {
+    const at = Number(m[1]);
+    const count = m[2] === undefined ? 1 : Number(m[2]);
+    if (count === 0 ? at >= start && at < end : at <= end && at + count - 1 >= start) return true;
+  }
+  return false;
+}
+
 /** The paths (without ADO's leading '/') that threads sit on. */
 export function threadPaths(threads: unknown): string[] {
   const paths = list<RawThread>(threads)
@@ -340,7 +406,8 @@ export function adoIssuesFrom(items: unknown, ctx: AdoRepoContext): PrIssue[] {
  * The ForgeReview of an ADO pull request: its threads (fetched with
  * `$iteration=N&$baseIteration=0`, so their positions are tracked onto the
  * latest diff), with ADO's own bookkeeping threads left out. ADO has no
- * "outdated" flag; a thread whose file is gone at head counts as outdated.
+ * "outdated" flag; a thread is outdated, as on GitHub, once its file is gone
+ * at head or its lines changed since it was left (`changedSince`).
  */
 export function adoReviewFrom(
   raw: {
@@ -349,6 +416,9 @@ export function adoReviewFrom(
     threads: unknown;
     me: string;
     filesAtHead: ReadonlySet<string>;
+    /** Threads whose lines have changed since they were left (see
+     *  `adoThreadOrigins`, `linesChanged`); none when not given. */
+    changedSince?: ReadonlySet<string>;
     checks: PrCheck[];
     /** Its linked work items; none when not given. */
     issues?: PrIssue[];
@@ -376,7 +446,7 @@ export function adoReviewFrom(
     const right = where.rightFileStart ? 'RIGHT' : where.leftFileStart ? 'LEFT' : null;
     const start = right === 'RIGHT' ? where.rightFileStart : where.leftFileStart;
     const end = (right === 'RIGHT' ? where.rightFileEnd : where.leftFileEnd) ?? start;
-    const isOutdated = !raw.filesAtHead.has(path);
+    const isOutdated = !raw.filesAtHead.has(path) || !!raw.changedSince?.has(tid);
     const line = right && !isOutdated ? (end?.line ?? null) : null;
     threads.push({
       id: tid,
@@ -561,6 +631,9 @@ export interface AdoDeps {
   /** Lines added and deleted from `base`'s merge-base with `head` to `head`,
    *  from local git; null unless both are in the checkout (nothing is fetched). */
   diffStat: typeof localDiffStat;
+  /** `git diff -U0 -M <from> <to> -- <paths>` in the checkout at `cwd`: a
+   *  file's hunks against its path in `from`, followed through a move. */
+  diffHunks: (cwd: string, from: string, to: string, paths: string[]) => Promise<string>;
 }
 
 const defaultDeps: AdoDeps = {
@@ -582,6 +655,8 @@ const defaultDeps: AdoDeps = {
     await runGit(cwd, ['fetch', 'origin', branch], 60_000);
   },
   diffStat: localDiffStat,
+  diffHunks: (cwd, from, to, paths) =>
+    runGit(cwd, ['diff', '-U0', '-M', '--no-color', from, to, '--', ...paths], 15_000),
 };
 
 /** How many of a listing's PRs get their row facts, newest first, and how
@@ -689,6 +764,49 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
           return { ...check, ...(await buildFailure(ado, buildId)) };
         }),
     );
+  };
+
+  /**
+   * The threads whose lines changed between the commit each was left on and
+   * `head`: one diff per commit and path. A commit that can't be fetched (a
+   * force-push left it unreachable) or a diff that fails leaves its threads
+   * as they were.
+   */
+  const changedThreads = async (
+    cwd: string,
+    origins: ThreadOrigin[],
+    head: string,
+  ): Promise<Set<string>> => {
+    const changed = new Set<string>();
+    const commits = [...new Set(origins.map((o) => o.commit))];
+    const present = new Set(
+      (
+        await Promise.all(
+          commits.map((c) =>
+            deps.ensureCommits(cwd, [c]).then(
+              () => c,
+              () => null,
+            ),
+          ),
+        )
+      ).filter((c): c is string => !!c),
+    );
+    const diffs = new Map<string, Promise<string>>();
+    await Promise.all(
+      origins
+        .filter((o) => present.has(o.commit))
+        .map(async (o) => {
+          const paths = [...new Set([o.path, o.headPath])];
+          const key = `${o.commit}\0${paths.join('\0')}`;
+          if (!diffs.has(key))
+            diffs.set(
+              key,
+              deps.diffHunks(cwd, o.commit, head, paths).catch(() => ''),
+            );
+          if (linesChanged(await diffs.get(key)!, o.start, o.end)) changed.add(o.threadId);
+        }),
+    );
+    return changed;
   };
 
   const rowFactsCache = new Map<string, { at: number; facts: Promise<Partial<RelevantPr>> }>();
@@ -847,10 +965,13 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
       ]);
       const baseTip = (pr as RawPr | null)?.lastMergeTargetCommit?.commitId || null;
       await deps.ensureCommits(ctx.cwd, [base, head, ...(baseTip ? [baseTip] : [])]);
-      const filesAtHead = await deps.filesAtCommit(ctx.cwd, head, threadPaths(threads));
+      const [filesAtHead, changedSince] = await Promise.all([
+        deps.filesAtCommit(ctx.cwd, head, threadPaths(threads)),
+        changedThreads(ctx.cwd, adoThreadOrigins(threads, iterations, id), head),
+      ]);
       return {
         ...adoReviewFrom(
-          { pr, iterations, threads, me, filesAtHead, checks, issues },
+          { pr, iterations, threads, me, filesAtHead, changedSince, checks, issues },
           repoContext(ado),
         ),
         baseTip,

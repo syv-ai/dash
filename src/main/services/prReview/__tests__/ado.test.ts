@@ -412,6 +412,7 @@ function fakeDeps(failOnCall?: number) {
     checks: async () => checks,
     fetchBranch: async () => {},
     diffStat: async () => null,
+    diffHunks: async () => '',
   };
   return { deps, calls };
 }
@@ -487,7 +488,8 @@ describe('adoProvider', () => {
     };
     const review = await makeAdoProvider(withTip).load(pctx, 7204);
     expect(review.baseTip).toBe('TIP');
-    expect(fetched).toEqual([[review.base, 'HEAD11', 'TIP']]);
+    // Then, on its own, the commit an earlier iteration's thread was left on.
+    expect(fetched).toEqual([[review.base, 'HEAD11', 'TIP'], ['h9']]);
   });
 
   it('posts comments, replies, the vote and the summary, in that order', async () => {

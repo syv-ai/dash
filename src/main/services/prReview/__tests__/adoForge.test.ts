@@ -39,6 +39,7 @@ function deps(answers: Record<string, unknown>, checks: PrCheck[] = []) {
       fetched.push(branch);
     },
     diffStat: async () => ({ additions: 12, deletions: 3 }),
+    diffHunks: async () => '',
   };
   return { d, asked, fetched };
 }
