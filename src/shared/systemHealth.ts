@@ -73,12 +73,34 @@ export interface TaskMemory {
   bytes: number;
 }
 
+/**
+ * The machine's physical memory and how much of it is still available to
+ * apps, as the OS counts it: macOS free + file cache + purgeable pages (what
+ * Activity Monitor's physical memory leaves after Memory Used), Linux
+ * `MemAvailable`, Windows available physical memory (free + standby).
+ */
+export interface MachineMemory {
+  totalBytes: number;
+  availableBytes: number;
+}
+
+/** One point of the popover's timeline: Dash's total at a sample. */
+export interface HealthPoint {
+  at: number;
+  totalBytes: number;
+}
+
+/** How far back main keeps the timeline (and the popover draws it). */
+export const HEALTH_HISTORY_MS = 2 * 60 * 60_000;
+
 /** One sample for the health icon and its popover, sent on every sample while
  *  the icon is on (`systemHealth:snapshot`). */
 export interface SystemHealthSnapshot extends HealthReading {
   level: HealthLevel;
   /** Every live task session, heaviest first. */
   tasks: TaskMemory[];
+  /** null where it couldn't be read. */
+  machine: MachineMemory | null;
   /** When it was taken (ms). */
   sampledAt: number;
 }

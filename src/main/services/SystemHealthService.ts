@@ -1,9 +1,14 @@
 import { execFile } from 'child_process';
+import { readFile } from 'fs/promises';
+import os from 'os';
 import { promisify } from 'util';
 import { app, BrowserWindow, Notification } from 'electron';
 import {
   BYTES_PER_GB,
+  HEALTH_HISTORY_MS,
   healthLevel,
+  type HealthPoint,
+  type MachineMemory,
   MEMORY_WARNING_DEFAULT_GB,
   type MemoryAlert,
   type MemoryPressure,
@@ -26,6 +31,13 @@ import {
   type ProcRow,
   type TreeRoot,
 } from './processTree';
+import { HealthHistory } from './healthHistory';
+import {
+  DARWIN_SYSCTL_NAMES,
+  darwinMachineMemory,
+  parseMeminfo,
+  parseSysctl,
+} from './machineMemory';
 import {
   INITIAL_ALERT_STATE,
   parsePressureLevel,
@@ -36,7 +48,9 @@ import {
 const execFileAsync = promisify(execFile);
 
 /** One sample costs a `ps` (~25 ms of CPU for 800 processes), on macOS a
- *  footprint read of Dash's own trees (~5 ms) and a `sysctl` (~2 ms). */
+ *  footprint read of Dash's own trees (~5 ms) and a `sysctl` (~2 ms) for
+ *  the pressure and the available memory together; on Linux a read of
+ *  `/proc/meminfo`. */
 export const SAMPLE_MS = 45_000;
 /** While the health popover is open, so its numbers move. */
 export const LIVE_SAMPLE_MS = 5_000;
@@ -65,6 +79,7 @@ interface Sample {
   metric: MemoryMetric;
   totalBytes: number;
   pressure: MemoryPressure | null;
+  machine: MachineMemory | null;
   tasks: TaskMemory[];
 }
 
@@ -111,24 +126,44 @@ function onScreen(): boolean {
   return BrowserWindow.getAllWindows().some((w) => w.isVisible() && !w.isMinimized());
 }
 
+interface SystemMemory {
+  pressure: MemoryPressure | null;
+  machine: MachineMemory | null;
+}
+
 /**
- * The OS's memory pressure. macOS only: `sysctl kern.memorystatus_vm_pressure_level`
- * is the kernel's own level (the one Activity Monitor's graph shows), a ~2 ms
- * read; `memory_pressure -Q` prints only a free percentage. Linux and Windows
- * have no equivalent this cheap, so there the threshold alone warns.
+ * The OS's memory pressure and the machine's available memory (machineMemory.ts).
+ * The pressure is macOS only: `kern.memorystatus_vm_pressure_level` is the
+ * kernel's own level (the one Activity Monitor's graph shows); `memory_pressure
+ * -Q` prints only a free percentage. One ~2 ms `sysctl` reads both. Linux and
+ * Windows have no pressure this cheap, so there the threshold alone warns.
  */
-async function readPressure(): Promise<MemoryPressure | null> {
-  if (process.platform !== 'darwin') return null;
-  try {
-    const { stdout } = await execFileAsync(
-      'sysctl',
-      ['-n', 'kern.memorystatus_vm_pressure_level'],
-      { timeout: EXEC_TIMEOUT_MS },
-    );
-    return parsePressureLevel(String(stdout));
-  } catch {
-    return null;
+async function readSystemMemory(): Promise<SystemMemory> {
+  if (process.platform === 'darwin') {
+    let stdout = '';
+    try {
+      ({ stdout } = await execFileAsync('sysctl', [...DARWIN_SYSCTL_NAMES], {
+        timeout: EXEC_TIMEOUT_MS,
+      }));
+    } catch (err) {
+      // An unknown name exits 1 but still prints the others.
+      stdout = (err as { stdout?: string }).stdout ?? '';
+    }
+    const values = parseSysctl(String(stdout));
+    const level = values.get('kern.memorystatus_vm_pressure_level');
+    return {
+      pressure: level === undefined ? null : parsePressureLevel(String(level)),
+      machine: darwinMachineMemory(values),
+    };
   }
+  if (process.platform === 'linux') {
+    try {
+      return { pressure: null, machine: parseMeminfo(await readFile('/proc/meminfo', 'utf8')) };
+    } catch {
+      return { pressure: null, machine: null };
+    }
+  }
+  return { pressure: null, machine: { totalBytes: os.totalmem(), availableBytes: os.freemem() } };
 }
 
 /**
@@ -160,6 +195,12 @@ class SystemHealthServiceImpl {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private sampling = false;
   private last: Sample | null = null;
+  /** The popover's timeline: every sample, two hours back, at most one per
+   *  LIVE_SAMPLE_MS's worth (1,440 points, ~60 KB). */
+  private readonly history = new HealthHistory(
+    HEALTH_HISTORY_MS / LIVE_SAMPLE_MS,
+    HEALTH_HISTORY_MS,
+  );
   private loggedSource = false;
   private watchingFocus = false;
 
@@ -212,6 +253,12 @@ class SystemHealthServiceImpl {
     this.schedule(0);
   }
 
+  /** The timeline so far, oldest first, sent once as the popover opens; each
+   *  snapshot after carries the next point. */
+  historyPoints(): HealthPoint[] {
+    return this.history.points(Date.now());
+  }
+
   stop(): void {
     this.config = { ...this.config, alerts: false, indicator: false };
     this.clearTimer();
@@ -233,6 +280,7 @@ class SystemHealthServiceImpl {
     try {
       const sample = await this.sample();
       this.last = sample;
+      this.history.push({ at: sample.at, totalBytes: sample.totalBytes });
       if (this.config.indicator) this.sendSnapshot(sample);
       if (this.config.alerts) this.checkAlert(sample);
     } catch (err) {
@@ -280,6 +328,7 @@ class SystemHealthServiceImpl {
       ...reading,
       level: healthLevel(reading),
       tasks: sample.tasks,
+      machine: sample.machine,
       sampledAt: sample.at,
     };
     win.webContents.send('systemHealth:snapshot', snapshot);
@@ -288,7 +337,7 @@ class SystemHealthServiceImpl {
   private async sample(): Promise<Sample> {
     const startedAt = performance.now();
     const metrics = app.getAppMetrics();
-    const [rows, pressure] = await Promise.all([listProcesses(), readPressure()]);
+    const [rows, { pressure, machine }] = await Promise.all([listProcesses(), readSystemMemory()]);
 
     const pidByJob = new Map<string, number>();
     for (const s of supervisorService.getSessions()) {
@@ -324,10 +373,14 @@ class SystemHealthServiceImpl {
         `[SystemHealth] sampling every ${SAMPLE_MS / 1000}s: ${metric}, ` +
           `${rows.length ? 'ps tree' : 'no ps'}, pressure ${
             process.platform === 'darwin' ? 'sysctl kern.memorystatus_vm_pressure_level' : 'none'
-          }; now ${(totalBytes / BYTES_PER_GB).toFixed(2)} GB over ${tasks.length} sessions, pressure ${pressure ?? 'n/a'}, in ${Math.round(performance.now() - startedAt)} ms`,
+          }; now ${(totalBytes / BYTES_PER_GB).toFixed(2)} GB over ${tasks.length} sessions, pressure ${pressure ?? 'n/a'}, ${
+            machine
+              ? `${(machine.availableBytes / BYTES_PER_GB).toFixed(1)} of ${(machine.totalBytes / BYTES_PER_GB).toFixed(1)} GB available`
+              : 'available memory n/a'
+          }, in ${Math.round(performance.now() - startedAt)} ms`,
       );
     }
-    return { at: Date.now(), metric, totalBytes, pressure, tasks };
+    return { at: Date.now(), metric, totalBytes, pressure, machine, tasks };
   }
 
   /** Each process's memory: the footprint of Dash's trees on macOS, RSS from

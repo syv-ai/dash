@@ -61,6 +61,7 @@ describe('healthSummary', () => {
     pressure: 'normal',
     level: 'ok',
     tasks: [],
+    machine: null,
     sampledAt: 0,
   };
 
