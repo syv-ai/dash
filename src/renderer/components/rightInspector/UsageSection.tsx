@@ -1,4 +1,5 @@
 import type { ContextUsage, RateLimitInfo, RateLimits } from '../../../shared/types';
+import { resetClock } from '../../../shared/rateLimits';
 import { formatResetAt, formatTokens, formatTtr, TTR_MEANING } from '../../utils/format';
 import {
   LOOK_BACK_MS,
@@ -164,26 +165,35 @@ export function limitCell(
   const resetsAt = info?.resetsAt ?? 0;
   const ttr = resetsAt ? formatTtr(resetsAt * 1000 - now) : undefined;
   const used = { label: 'Used', value: `${pct}%` };
-  const tooltip: RichTooltip = info
+  // The account hit it (`withLimitHit`): full, and the caption says when it's back.
+  const reached = info?.reached === true;
+  const caption = reached && resetsAt ? `Resets ${resetClock(resetsAt, now)}` : ttr;
+  const tooltip: RichTooltip = reached
     ? {
-        title: `${long} limit`,
-        ...(ttr ? { body: TTR_MEANING } : {}),
-        rows: [
-          used,
-          ...(ttr ? [{ label: 'Resets', value: `${formatResetAt(resetsAt)} (${ttr})` }] : []),
-        ],
+        title: `${long} limit reached`,
+        body: 'Tasks pause until it resets.',
+        rows: [used, ...(resetsAt ? [{ label: 'Resets', value: formatResetAt(resetsAt) }] : [])],
       }
-    : {
-        title: `${long} limit`,
-        body: 'No window running; the next message starts one.',
-        rows: [used],
-      };
+    : info
+      ? {
+          title: `${long} limit`,
+          ...(ttr ? { body: TTR_MEANING } : {}),
+          rows: [
+            used,
+            ...(ttr ? [{ label: 'Resets', value: `${formatResetAt(resetsAt)} (${ttr})` }] : []),
+          ],
+        }
+      : {
+          title: `${long} limit`,
+          body: 'No window running; the next message starts one.',
+          rows: [used],
+        };
   return {
     key: limit,
     kind: 'level',
     pct,
-    aria: `${long} limit used`,
-    caption: ttr,
+    aria: reached ? `${long} limit reached` : `${long} limit used`,
+    caption,
     tooltip,
     label: long,
   };

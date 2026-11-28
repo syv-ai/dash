@@ -553,6 +553,20 @@ class ActivityMonitorImpl {
   }
 
   /**
+   * The cause of a StopFailure is over (the usage limit reset): a task still
+   * red with an error of `type` goes back to idle, as it sits at its prompt.
+   * A task that moved on since is left alone.
+   */
+  clearError(ptyId: string, type: ActivityError['type']): void {
+    const a = this.activities.get(ptyId);
+    if (!a || a.state !== 'error' || a.error?.type !== type) return;
+    a.state = 'idle';
+    a.error = null;
+    a.detail = null;
+    this.emitAll();
+  }
+
+  /**
    * The permission mode a hook payload reported. Every hook carries it, so
    * the session's own mode (cycled with Shift+Tab, or fallen back from a
    * refused bypass) reaches Dash on its next hook. Not a state change, so

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { RateLimits } from '../../../../shared/types';
-import { mergeRateLimits } from '../../../lib/rateLimits';
+import { mergeRateLimits, resetClock } from '../../../../shared/rateLimits';
 import { formatTtr } from '../../../utils/format';
 import { levelCells, limitCell } from '../UsageSection';
 
@@ -75,5 +75,11 @@ describe('limitCell', () => {
     const cell = limitCell('sevenDay', undefined, 0);
     expect([cell.pct, cell.caption]).toEqual([0, undefined]);
     expect(cell.tooltip.rows).toEqual([{ label: 'Used', value: '0%' }]);
+  });
+
+  it('reads a reached limit full, its caption the clock time it resets at', () => {
+    const cell = limitCell('fiveHour', { usedPercentage: 100, resetsAt: 3600, reached: true }, 0);
+    expect([cell.pct, cell.caption]).toEqual([100, `Resets ${resetClock(3600, 0)}`]);
+    expect(cell.tooltip.title).toBe('5-hour limit reached');
   });
 });

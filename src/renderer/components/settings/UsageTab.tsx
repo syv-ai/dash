@@ -1,6 +1,7 @@
 import React from 'react';
 import type { RateLimitInfo, RateLimits } from '../../../shared/types';
 import type { LimitKey } from '../../lib/pace';
+import { resetClock } from '../../../shared/rateLimits';
 import { usageColor } from '../../lib/usageColor';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useSettings } from '../../stores/settingsStore';
@@ -17,11 +18,13 @@ const LIMIT_KEYS = Object.keys(LIMIT_LABELS) as LimitKey[];
  *  has started the next) reads 0%, as in the task sidebar (R16). */
 function LimitMeter({ label, info }: { label: string; info: RateLimitInfo | undefined }) {
   const pct = info?.usedPercentage ?? 0;
-  const detail = info?.resetsAt
-    ? `resets ${formatResetTime(info.resetsAt)}`
-    : info
-      ? undefined
-      : 'starts with the next message';
+  const detail = info?.reached
+    ? `reached · resets at ${info.resetsAt ? resetClock(info.resetsAt, Date.now()) : 'its reset'}`
+    : info?.resetsAt
+      ? `resets ${formatResetTime(info.resetsAt)}`
+      : info
+        ? undefined
+        : 'starts with the next message';
   return <Meter label={label} value={pct} color={usageColor(pct)} detail={detail} />;
 }
 

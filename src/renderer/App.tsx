@@ -311,7 +311,7 @@ export function App() {
   const remoteControlModalPtyId = useUi((s) => s.remoteControlModalPtyId);
   const setRemoteControlModalPtyId = useUi((s) => s.setRemoteControlModalPtyId);
 
-  const latestRateLimits = useRuntime((s) => s.rateLimits);
+  const latestRateLimits = useRuntime((s) => s.shownLimits);
   const paces = useRuntime((s) => s.paces);
   const activeLiveModel = useRuntime((s) =>
     activeTaskId ? s.statusLine[activeTaskId]?.model : undefined,

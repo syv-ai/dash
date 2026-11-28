@@ -121,6 +121,19 @@ describe('ActivityMonitor — state transitions (hooks-only)', () => {
     expect(info.error).toBeUndefined();
   });
 
+  it('clearError puts back only a task still red with that error', () => {
+    activityMonitor.register('pty1', 1);
+    activityMonitor.register('pty2', 2);
+    activityMonitor.setError('pty1', { type: 'rate_limit' });
+    activityMonitor.setError('pty2', { type: 'server_error' });
+    activityMonitor.clearError('pty1', 'rate_limit');
+    activityMonitor.clearError('pty2', 'rate_limit');
+    const all = activityMonitor.getAll();
+    expect(all['pty1']).toMatchObject({ state: 'idle' });
+    expect(all['pty1']!.error).toBeUndefined();
+    expect(all['pty2']!.state).toBe('error');
+  });
+
   it('setIdle on an already-idle PTY does not emit', () => {
     activityMonitor.register('pty1', 12345);
     const before = mockSender.send.mock.calls.length;

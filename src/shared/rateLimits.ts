@@ -1,4 +1,4 @@
-import type { RateLimitInfo, RateLimits, StatusLineData } from '../../shared/types';
+import type { RateLimitInfo, RateLimits, StatusLineData, UsageLimitHit } from './types';
 
 /*
  * The account's rate limits, merged from every session's status line.
@@ -47,4 +47,54 @@ export function mergeRateLimits(
     }
   }
   return merged.fiveHour || merged.sevenDay ? merged : undefined;
+}
+
+/** At or above this a window counts as the one a limit hit that names none was on. */
+export const NEAR_LIMIT_PCT = 90;
+
+/** The window closest to full, when it is at least NEAR_LIMIT_PCT; else null. */
+export function nearestLimit(limits: RateLimits | undefined): keyof RateLimits | null {
+  let best: keyof RateLimits | null = null;
+  for (const key of LIMIT_KEYS) {
+    const pct = limits?.[key]?.usedPercentage ?? -1;
+    if (pct >= NEAR_LIMIT_PCT && (best === null || pct > limits![best]!.usedPercentage)) best = key;
+  }
+  return best;
+}
+
+/**
+ * The limits as shown while the account is at a limit: the hit window full,
+ * flagged `reached`, with the hit's reset time, until that passes. The statusLine re-runs on a
+ * new assistant message, not on a failed request, so its reading can sit at
+ * 97% while the limit is hit. A hit on an unknown window changes nothing.
+ */
+export function withLimitHit(
+  limits: RateLimits | undefined,
+  hit: UsageLimitHit | null,
+  nowMs: number,
+): RateLimits | undefined {
+  if (!hit?.limit) return limits;
+  const resetsAt = hit.resetsAt || limits?.[hit.limit]?.resetsAt || 0;
+  // Past its reset (main's timer runs late after a sleep): over.
+  if (resetsAt && resetsAt * 1000 <= nowMs) return limits;
+  return { ...limits, [hit.limit]: { usedPercentage: 100, resetsAt, reached: true } };
+}
+
+/**
+ * A reset time as a clock reads it, in the user's locale: "20:40", with its
+ * weekday when it is most of a day away or more ("Sat 20:40").
+ */
+export function resetClock(
+  epochSeconds: number,
+  nowMs: number,
+  { locale, timeZone }: { locale?: string; timeZone?: string } = {},
+): string {
+  const at = new Date(epochSeconds * 1000);
+  const far = epochSeconds * 1000 - nowMs > 20 * 3_600_000;
+  return new Intl.DateTimeFormat(locale, {
+    timeZone,
+    ...(far ? { weekday: 'short' } : {}),
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(at);
 }

@@ -12,10 +12,11 @@ import type {
   StatusLineData,
   SupervisorSession,
   Task,
+  UsageLimitHit,
 } from '../../shared/types';
 import { playNotificationSound, playPeonSound } from '../sounds';
 import { limitPaces, recordLimits, type LimitHistories, type LimitPaces } from '../lib/pace';
-import { mergeRateLimits } from '../lib/rateLimits';
+import { mergeRateLimits, withLimitHit } from '../../shared/rateLimits';
 import { replaceEqualDeep } from '../lib/replaceEqualDeep';
 import { emptyTracker, observeActivity } from './activityTransitions';
 import { useProjects } from './projectsStore';
@@ -41,6 +42,12 @@ export interface RuntimeState {
   contextUsage: Record<string, ContextUsage>;
   /** The account's limits, merged across the sessions' status lines (`mergeRateLimits`). */
   rateLimits: RateLimits | undefined;
+  /** The usage limit the account is at, held in main (UsageLimitService); null when none. */
+  usageLimit: UsageLimitHit | null;
+  /** The limits as the usage rings show them: `rateLimits` with the hit window
+   *  full while the account is at it (`withLimitHit`). Alerts and pace read
+   *  `rateLimits`, the readings themselves. */
+  shownLimits: RateLimits | undefined;
   /** Recent readings of the limits, in memory, for their pace. */
   limitHistories: LimitHistories;
   /** Each limit's pace, from `limitHistories`. */
@@ -103,6 +110,8 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
   statusLine: {},
   contextUsage: {},
   rateLimits: undefined,
+  usageLimit: null,
+  shownLimits: undefined,
   limitHistories: {},
   paces: {},
   remoteControlStates: {},
@@ -255,7 +264,11 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
             ? recordLimits(s.limitHistories, rateLimits, now)
             : s.limitHistories;
           const paces = replaceEqualDeep(s.paces, limitPaces(limitHistories, rateLimits ?? {}));
-          return { statusLine, contextUsage, rateLimits, limitHistories, paces };
+          const shownLimits = replaceEqualDeep(
+            s.shownLimits,
+            withLimitHit(rateLimits, s.usageLimit, now),
+          );
+          return { statusLine, contextUsage, rateLimits, shownLimits, limitHistories, paces };
         });
       };
       cleanups.push(window.electronAPI.onPtyStatusLine(receive));
@@ -265,6 +278,25 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
           if (resp.success && resp.data) receive(resp.data);
         })
         .catch((err) => console.warn('[statusLine] Initial fetch failed:', err));
+    }
+
+    // ── Usage limit (account-wide, held in main) ───────────
+    {
+      const receive = (usageLimit: UsageLimitHit | null) =>
+        set((s) => ({
+          usageLimit,
+          shownLimits: replaceEqualDeep(
+            s.shownLimits,
+            withLimitHit(s.rateLimits, usageLimit, Date.now()),
+          ),
+        }));
+      cleanups.push(window.electronAPI.onUsageLimit(receive));
+      window.electronAPI
+        .ptyGetUsageLimit()
+        .then((resp) => {
+          if (resp.success && resp.data !== undefined) receive(resp.data);
+        })
+        .catch((err) => console.warn('[usageLimit] Initial fetch failed:', err));
     }
 
     // ── Supervisor sessions ────────────────────────────────

@@ -14,11 +14,16 @@ import type { NotificationType } from '../claudeContract/hookSchemas';
  * unknown one.
  */
 export function stopFailureError(payload: Record<string, unknown>): ActivityError {
-  const { error, error_details: details, last_assistant_message: rendered } = payload;
-  const type = STOP_FAILURE_ERRORS.find((e) => e === error) ?? 'unknown';
+  const type = STOP_FAILURE_ERRORS.find((e) => e === payload.error) ?? 'unknown';
   if (type !== 'unknown') return { type };
-  const text = [rendered, details].find((t): t is string => typeof t === 'string' && t !== '');
+  const text = stopFailureText(payload);
   return text ? { type, message: text } : { type };
+}
+
+/** The error text a StopFailure shows: `last_assistant_message`, else `error_details`. */
+export function stopFailureText(payload: Record<string, unknown>): string | undefined {
+  const { error_details: details, last_assistant_message: rendered } = payload;
+  return [rendered, details].find((t): t is string => typeof t === 'string' && t !== '');
 }
 
 /**
@@ -39,6 +44,16 @@ export const WAIT_NOTIFICATIONS: Readonly<
   elicitation_complete: 'answered',
   idle_prompt: 'idle',
 };
+
+/**
+ * Notifications that say the account's usage limit is over: auto-resume
+ * fired (the limit reset, or usage came back), or the reset passed while the
+ * computer slept (`_stale`, which then waits on Enter).
+ */
+export const LIMIT_OVER_NOTIFICATIONS: ReadonlySet<NotificationType> = new Set([
+  'quota_auto_resume_fired',
+  'quota_auto_resume_stale',
+]);
 
 /** What a wait on the user waits for, for analytics (`wait_ended.kind`). */
 export type WaitKind = 'permission' | 'question' | 'elicitation' | 'quota';

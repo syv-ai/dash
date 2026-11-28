@@ -5,6 +5,7 @@ import type {
   ActivityInfo,
   RemoteControlState,
   StatusLineData,
+  UsageLimitHit,
   RendererSleepReason,
 } from '../../shared/types';
 
@@ -80,6 +81,9 @@ export interface PtyApi {
   // Status line data (context + cost + rate limits)
   ptyGetAllStatusLine: () => Promise<IpcResponse<Record<string, StatusLineData>>>;
   onPtyStatusLine: (callback: (data: Record<string, StatusLineData>) => void) => () => void;
+  /** The account's usage limit hit, or null; pushed on every change. */
+  ptyGetUsageLimit: () => Promise<IpcResponse<UsageLimitHit | null>>;
+  onUsageLimit: (callback: (hit: UsageLimitHit | null) => void) => () => void;
 
   // Snapshots
   ptyGetSnapshot: (id: string) => Promise<IpcResponse<TerminalSnapshot | null>>;

@@ -23,6 +23,7 @@ import {
 import { DatabaseService } from '../services/DatabaseService';
 import { terminalSnapshotService } from '../services/TerminalSnapshotService';
 import { activityMonitor } from '../services/ActivityMonitor';
+import { usageLimitService } from '../services/UsageLimitService';
 import { contextUsageService } from '../services/ContextUsageService';
 import { remoteControlService } from '../services/remoteControlService';
 import { TelemetryService } from '../services/TelemetryService';
@@ -283,6 +284,9 @@ export function registerPtyIpc(): void {
   ipcMain.handle('pty:statusLine:getAll', () => {
     return { success: true, data: contextUsageService.getAllStatusLine() };
   });
+
+  // The account's usage limit hit, or null (UsageLimitService)
+  ipcMain.handle('pty:usageLimit:get', () => ({ success: true, data: usageLimitService.get() }));
 
   ipcMain.handle(
     'pty:listForTask',

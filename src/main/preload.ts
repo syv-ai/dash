@@ -168,6 +168,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Status line data (context + cost + rate limits)
   ptyGetAllStatusLine: () => ipcRenderer.invoke('pty:statusLine:getAll'),
   onPtyStatusLine: listen<Record<string, import('@shared/types').StatusLineData>>('pty:statusLine'),
+  ptyGetUsageLimit: () => ipcRenderer.invoke('pty:usageLimit:get'),
+  onUsageLimit: listen<import('@shared/types').UsageLimitHit | null>('pty:usageLimit'),
 
   // Snapshots
   ptyGetSnapshot: (id: string) => ipcRenderer.invoke('pty:snapshot:get', id),

@@ -11,17 +11,22 @@ import { tokenStatsService } from './TokenStatsService';
 import {
   isSelfStartedPrompt,
   isSubagentHook,
+  LIMIT_OVER_NOTIFICATIONS,
   NOTIFICATION_WAIT_KINDS,
   runningSubagentIds,
   sessionPermissionMode,
   statusLineTaskId,
   stopFailureError,
+  stopFailureText,
   subagentId,
   WAIT_NOTIFICATIONS,
   type WaitKind,
 } from './hookPayload';
 import { logLimitEvent } from './limitEventLog';
 import { setTaskInbox } from './taskInbox';
+import { usageLimitService } from './UsageLimitService';
+import { limitNotice } from './usageLimitState';
+import { toastRenderer } from '../utils/toast';
 import { noteScratchpad } from './ScratchpadService';
 import { claudeConfigDir } from '../utils/claudePaths';
 import { checkShape } from '../claudeContract/check';
@@ -31,6 +36,7 @@ import { checkHookPayload, type NotificationType } from '../claudeContract/hookS
 import { statusLineSchema } from '../claudeContract/statusLineSchema';
 import { getDb } from '../db/client';
 import { tasks } from '../db/schema';
+import type { UsageLimitHit } from '@shared/types';
 
 /**
  * In-process event bus for hook events that other main-side services may need
@@ -235,6 +241,17 @@ class HookServerImpl {
     }
   }
 
+  /** The account hit a usage limit: a toast when Dash has focus, else a desktop notification. */
+  private notifyLimit(ptyId: string, hit: UsageLimitHit): void {
+    const { title, body } = limitNotice(hit, Date.now());
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win?.isFocused()) {
+      toastRenderer({ kind: 'warning', title, description: body, key: 'usage-limit' });
+    } else {
+      this.showDesktopNotification(ptyId, `${title}. ${body}`);
+    }
+  }
+
   /** Keep a StopFailure or quota Notification as evidence (limitEventLog). */
   private logLimitEvent(ptyId: string, payload: Record<string, unknown>): void {
     logLimitEvent({
@@ -338,6 +355,8 @@ class HookServerImpl {
               // Background subagents still running keep the task working;
               // "finished" waits for the last of them.
               const over = activityMonitor.endTurn(ptyId, runningSubagentIds(payload));
+              // A turn got through: the account isn't at its limit.
+              usageLimitService.noteLimitOver();
               if (over) this.showDesktopNotification(ptyId);
               // A turn just ended, so the transcript has new usage to total.
               void tokenStatsService.recomputeForTask(ptyId);
@@ -365,6 +384,10 @@ class HookServerImpl {
               const message = typeof payload.message === 'string' ? payload.message : undefined;
               const effect = WAIT_NOTIFICATIONS[notificationType as NotificationType];
               if (notificationType.startsWith('quota_')) this.logLimitEvent(ptyId, payload);
+              // Before the task's own effect: clearing puts the limit's red tasks back.
+              if (LIMIT_OVER_NOTIFICATIONS.has(notificationType as NotificationType)) {
+                usageLimitService.noteLimitOver();
+              }
 
               // These notifications come ~6 s into a wait, and only when the
               // user seems away: the state may already be set by the instant
@@ -492,9 +515,10 @@ class HookServerImpl {
               console.error(`[HookServer] StopFailure for ptyId=${ptyId} type=${error.type}`);
               activityMonitor.setError(ptyId, error);
 
+              // The limit is the account's: one notice per hit, not one per task.
               if (error.type === 'rate_limit') {
-                const taskName = this.getTaskName(ptyId);
-                this.showDesktopNotification(ptyId, `${taskName} hit rate limit`);
+                const hit = usageLimitService.noteRateLimited(ptyId, stopFailureText(payload));
+                if (hit) this.notifyLimit(ptyId, hit);
               }
 
               res.writeHead(200);

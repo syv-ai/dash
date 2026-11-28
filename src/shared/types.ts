@@ -416,11 +416,26 @@ export interface RateLimitInfo {
   usedPercentage: number;
   /** When this rate limit window resets. Epoch seconds (NOT milliseconds). */
   resetsAt: number;
+  /** The account hit this limit (`UsageLimitHit`): it reads full until it resets. */
+  reached?: true;
 }
 
 export interface RateLimits {
   fiveHour?: RateLimitInfo;
   sevenDay?: RateLimitInfo;
+}
+
+/**
+ * A usage limit the account has hit (a StopFailure `rate_limit`), held in
+ * main until the window resets, auto-resume fires or a turn succeeds.
+ */
+export interface UsageLimitHit {
+  /** The window that was hit; null when Dash can't tell (a "usage limit"). */
+  limit: keyof RateLimits | null;
+  /** When it resets, epoch seconds; 0 when unknown. */
+  resetsAt: number;
+  /** When it was hit, epoch ms. */
+  hitAt: number;
 }
 
 export interface StatusLineData {

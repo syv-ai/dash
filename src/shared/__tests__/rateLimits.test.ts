@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import type { RateLimits, StatusLineData } from '../../../shared/types';
-import { mergeRateLimits } from '../rateLimits';
+import type { RateLimits, StatusLineData } from '../types';
+import { mergeRateLimits, nearestLimit, withLimitHit } from '../rateLimits';
 
 const NOW = 1_800_000_000_000;
 const inHours = (h: number) => NOW / 1000 + h * 3600;
@@ -76,5 +76,36 @@ describe('mergeRateLimits', () => {
   it('is undefined when no session reports a limit', () => {
     expect(mergeRateLimits({ a: session(NOW) }, NOW)).toBeUndefined();
     expect(mergeRateLimits({}, NOW)).toBeUndefined();
+  });
+});
+
+describe('withLimitHit', () => {
+  const at = NOW / 1000 + 600;
+  const limits: RateLimits = { fiveHour: { usedPercentage: 97, resetsAt: at } };
+
+  it('shows the hit window full, flagged reached, with its reset time', () => {
+    expect(withLimitHit(limits, { limit: 'fiveHour', resetsAt: 0, hitAt: NOW }, NOW)).toEqual({
+      fiveHour: { usedPercentage: 100, resetsAt: at, reached: true },
+    });
+  });
+
+  it('changes nothing for an unknown window or once the reset passed', () => {
+    expect(withLimitHit(limits, { limit: null, resetsAt: 0, hitAt: NOW }, NOW)).toBe(limits);
+    expect(withLimitHit(limits, null, NOW)).toBe(limits);
+    const hit = { limit: 'fiveHour' as const, resetsAt: at, hitAt: NOW };
+    expect(withLimitHit(limits, hit, at * 1000)).toBe(limits);
+  });
+});
+
+describe('nearestLimit', () => {
+  it('is the window closest to full from 90%, else null', () => {
+    expect(
+      nearestLimit({
+        fiveHour: { usedPercentage: 91, resetsAt: 1 },
+        sevenDay: { usedPercentage: 95, resetsAt: 2 },
+      }),
+    ).toBe('sevenDay');
+    expect(nearestLimit({ fiveHour: { usedPercentage: 89, resetsAt: 1 } })).toBeNull();
+    expect(nearestLimit(undefined)).toBeNull();
   });
 });
