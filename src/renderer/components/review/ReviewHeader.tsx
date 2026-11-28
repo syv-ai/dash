@@ -25,7 +25,8 @@ export function Branch({ remote, name }: { remote: string | null; name: string }
  * number, and an `action` at the row's end; then "who wants to merge n
  * commits into base from head" in secondary ink, its links in the link
  * colour (the commits to History, where `onShowCommits` is given; a listed
- * PR not yet fetched leaves the count out). The diff totals are About's. A
+ * PR not yet fetched leaves the count out; a fork's head branch is plain
+ * text, as origin has no such branch). The diff totals are About's. A
  * failed reload says why until the next lands (reloads are automatic in
  * review mode: `useReviewData`).
  */
@@ -85,7 +86,8 @@ export function ReviewHeader({
           </>
         )}
         into <Branch remote={remote} name={review.baseRef} /> from{' '}
-        <Branch remote={remote} name={review.headRef} />
+        {/* A fork's branch isn't origin's: named, not linked. */}
+        <Branch remote={review.headFromFork ? null : remote} name={review.headRef} />
       </p>
       {error && (
         <p className="type-caption wrap-break-word" role="status">

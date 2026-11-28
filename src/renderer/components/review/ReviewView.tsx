@@ -3,6 +3,7 @@ import { GitCompareArrows, GitPullRequestArrow } from 'lucide-react';
 import { prScope } from '../../../shared/prScope';
 import type { PrRef, Task } from '../../../shared/types';
 import { useCommentsStore } from '../../stores/commentsStore';
+import { usePrReviews } from '../../stores/prReviewStore';
 import { useProjects } from '../../stores/projectsStore';
 import { useUi } from '../../stores/uiStore';
 import { useTaskReview } from '../diffEditor/prReview/useTaskReview';
@@ -19,6 +20,7 @@ import { FinishReviewSheet } from './FinishReviewSheet';
 import { ThreadsTab } from './ThreadsTab';
 import { NotesTray } from './NotesTray';
 import { fileRows, reviewComments } from './outline';
+import { headFromFork } from './prList';
 import { ReviewFiles, type RepoFiles } from './ReviewFiles';
 import { ReviewHeader } from './ReviewHeader';
 import { ReviewOverview } from './ReviewOverview';
@@ -94,6 +96,7 @@ function Review({
   const remote = useProjects(
     (s) => s.projects.find((p) => p.id === task.projectId)?.gitRemote ?? null,
   );
+  const relevant = usePrReviews((s) => s.prs[task.id]?.relevant ?? null);
   const pane = useUi((s) => s.reviewThreadsPane);
   const [finishing, setFinishing] = useState(false);
   const scope = prScope(mode.provider, mode.number);
@@ -135,7 +138,15 @@ function Review({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="scrollbar-thin-hover flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <ReviewHeader review={review} remote={remote} error={error} onShowCommits={onShowCommits} />
+        <ReviewHeader
+          review={{
+            ...review,
+            headFromFork: headFromFork(review.number, relevant, task.branch),
+          }}
+          remote={remote}
+          error={error}
+          onShowCommits={onShowCommits}
+        />
         {notice && (
           <Notice icon={<GitCompareArrows size={14} strokeWidth={1.8} />} className="mx-2.5 my-1">
             {notice}

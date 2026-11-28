@@ -3,6 +3,7 @@ import type { PrDetails, PrReview, RelevantPr } from '../../../../shared/types';
 import {
   DETAILS_FRESH_MS,
   needsDetails,
+  headFromFork,
   prHead,
   prInvolvement,
   prsTabShown,
@@ -147,6 +148,7 @@ describe('prHead', () => {
       commits: null,
       baseRef: 'main',
       headRef: 'feat/x',
+      headFromFork: false,
     });
     expect(prHead(pr, null, null).authorUrl).toBeNull();
   });
@@ -166,5 +168,22 @@ describe('prHead', () => {
     const head = prHead(listed(5), { ...fetched, commits: 4 }, remote);
     expect(head).toMatchObject({ state: 'merged', title: 'Five', commits: 4 });
     expect(prHead(listed(5), fetched, remote).commits).toBeNull();
+  });
+});
+
+describe('headFromFork', () => {
+  const relevant = {
+    branch: 'main',
+    from: [],
+    into: [{ ...listed(7), fromFork: true }, listed(8)],
+  };
+  it("takes the task's listing's word for it", () => {
+    expect(headFromFork(7, relevant, 'main')).toBe(true);
+    expect(headFromFork(8, relevant, 'main')).toBe(false);
+  });
+  it("else knows a fork PR by the task's own pr/<number>/<head> branch", () => {
+    expect(headFromFork(9, relevant, 'pr/9/fix')).toBe(true);
+    expect(headFromFork(9, relevant, 'pr/10/fix')).toBe(false);
+    expect(headFromFork(9, null, 'fix')).toBe(false);
   });
 });

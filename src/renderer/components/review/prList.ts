@@ -5,6 +5,7 @@ import type {
   RelevantPr,
   RelevantPrs,
 } from '../../../shared/types';
+import { forkPrOfBranch } from '../../../shared/prBranch';
 import { githubProfileUrl } from '../../../shared/urls';
 import { shownPrState } from '../ui/prStatusColors';
 import { OWN_REVIEW_LABELS } from './finishReview';
@@ -28,11 +29,27 @@ export function taskPrList(relevant: RelevantPrs | null): RelevantPr[] {
 export type PrCardReview = PrDetails & Partial<Pick<PrReview, PrGitField>>;
 
 /** What a PR's head (`ReviewHeader`) says of it; the commit count only where
- *  git counted it. */
+ *  git counted it. `headFromFork`: its head branch is a fork's, which origin's
+ *  same-named branch (if any) isn't, so the header doesn't link it there. */
 export type PrHead = Pick<
   PrReview,
   'provider' | 'number' | 'title' | 'url' | 'state' | 'author' | 'authorUrl' | 'baseRef' | 'headRef'
-> & { commits: number | null };
+> & { commits: number | null; headFromFork: boolean };
+
+/**
+ * Whether PR `number`'s head is a fork's, as far as the renderer can tell
+ * (the review itself doesn't say): the task's listing of its PRs says so, or
+ * the task is on the fork PR's own branch (`pr/<number>/<head>`).
+ */
+export function headFromFork(
+  number: number,
+  relevant: RelevantPrs | null,
+  taskBranch: string | null,
+): boolean {
+  const listed = taskPrList(relevant).find((p) => p.number === number);
+  if (listed) return listed.fromFork;
+  return !!taskBranch && forkPrOfBranch(taskBranch)?.number === number;
+}
 
 /**
  * A listed PR's head: its fetched review's once there is one (with no commit
@@ -52,6 +69,7 @@ export function prHead(pr: RelevantPr, review: PrCardReview | null, remote: stri
       commits: review.commits ?? null,
       baseRef: review.baseRef,
       headRef: review.headRef,
+      headFromFork: pr.fromFork,
     };
   return {
     provider: pr.provider,
@@ -64,6 +82,7 @@ export function prHead(pr: RelevantPr, review: PrCardReview | null, remote: stri
     commits: null,
     baseRef: pr.baseRefName,
     headRef: pr.headRefName,
+    headFromFork: pr.fromFork,
   };
 }
 
