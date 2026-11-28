@@ -73,9 +73,14 @@ describe('MemoryWatcher', { timeout: 20_000 }, () => {
     fs.mkdirSync(a.dir, { recursive: true });
     fs.mkdirSync(b.dir, { recursive: true });
     await startMemoryWatches([a, b]);
+    // FSEvents may still report the folders made just before the watch
+    // started; let that pass before writing.
+    await quiet();
+    seen.length = 0;
     await writeUntilSeen(path.join(b.dir, 'x.md'));
     await quiet();
-    expect(seen).toEqual(['b']);
+    // Which project hears it, not how often: the retries can each be heard.
+    expect([...new Set(seen)]).toEqual(['b']);
   });
 
   it('picks up a memory folder created after the watch started', async () => {
