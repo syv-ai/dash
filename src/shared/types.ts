@@ -905,9 +905,6 @@ export interface PrReview {
   viewerIsRequestedReviewer: boolean;
   /** You're among its assignees; false on ADO, which has none. */
   viewerIsAssignee: boolean;
-  /** Your name as `assignees` spells it, so a list can leave you out where
-   *  you're already said; null where the forge doesn't name you there (ADO). */
-  viewerName: string | null;
   /** You've left a comment on it: in a thread or its conversation. */
   viewerCommented: boolean;
   /** The verdicts this provider offers, in display order. */
@@ -1054,6 +1051,9 @@ export interface RelevantPr extends PullRequest {
   /** A fork PR's head branch page on the fork; null for a same-repo PR or
    *  where the forge didn't say. */
   headUrl: string | null;
+  /** How many commits it would merge; null where the listing didn't count
+   *  them (ADO, past its newest rows). */
+  commits: number | null;
 }
 
 /** Where you stand on a listed PR. */

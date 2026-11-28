@@ -434,6 +434,7 @@ describe('githubRelevantPrsFrom', () => {
       // Asked of you (and others), no review in yet.
       verdict: 'pending',
       headUrl: null,
+      commits: 4,
     });
     expect(draft).toMatchObject({
       state: 'open',

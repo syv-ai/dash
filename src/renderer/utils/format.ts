@@ -116,3 +116,14 @@ export function formatDateTime(at: Date, { locale, timeZone }: ClockOptions = {}
   }).format(at);
   return `${weekday} ${when}`;
 }
+
+/** How long ago, in words: `just now`, `5 minutes ago`, `3 hours ago`, `2 days ago`. */
+export function formatAgo(ms: number): string {
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return 'just now';
+  const unit = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'} ago`;
+  if (min < 60) return unit(min, 'minute');
+  const h = Math.floor(min / 60);
+  if (h < 24) return unit(h, 'hour');
+  return unit(Math.floor(h / 24), 'day');
+}

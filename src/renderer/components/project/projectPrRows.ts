@@ -48,31 +48,6 @@ export function prListView(
   return groups ? { kind: 'listed', groups, error: listing.error } : { kind: 'loading' };
 }
 
-/** What a folded row says beside its title: its open threads (null where the
- *  forge's listing doesn't count them, ADO), and how long since it moved
- *  ('' where the listing has no update time). `now` in unix seconds. */
-export interface PrRowFacts {
-  openThreads: number | null;
-  /** The threads' tooltip: "2 unresolved of 5 threads". */
-  threadsTitle: string | null;
-  updated: string;
-  /** The update time's tooltip. */
-  updatedTitle: string | null;
-}
-
-export function prRowFacts(pr: Pick<RelevantPr, 'threads' | 'updatedAt'>, now: number): PrRowFacts {
-  const ms = pr.updatedAt ? Date.parse(pr.updatedAt) : NaN;
-  const at = Number.isNaN(ms) ? 0 : ms / 1000;
-  return {
-    openThreads: pr.threads?.open ?? null,
-    threadsTitle: pr.threads
-      ? `${pr.threads.open} unresolved of ${plural(pr.threads.total, 'thread')}`
-      : null,
-    updated: formatRelativeTime(at, now),
-    updatedTitle: at ? `Updated ${new Date(at * 1000).toLocaleString()}` : null,
-  };
-}
-
 /**
  * What a row offers, by the task on its head branch (`taskForPr`): go to that
  * task, or start one from the PR (the new-task flow, prefilled); either way

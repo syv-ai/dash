@@ -99,6 +99,7 @@ describe('mapAdoRelevantPrs', () => {
         issues: null,
         verdict: null,
         headUrl: null,
+        commits: null,
       },
     ]);
   });

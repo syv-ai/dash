@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ProjectPrGroups } from '../../../../shared/projectPrs';
 import type { RelevantPr } from '../../../../shared/types';
-import { prListView, prRowFacts, prRowRoute, unsupportedReason } from '../projectPrRows';
+import { prListView, prRowRoute, unsupportedReason } from '../projectPrRows';
 
 const pr = { number: 1 } as RelevantPr;
 const groups: ProjectPrGroups = { waiting: [], yours: [{ pr, taskId: null }], others: [] };
@@ -31,28 +31,6 @@ describe('prListView', () => {
   });
   it('is empty with no open PRs', () => {
     expect(prListView({ prs: [], error: null }, groups, 'r')).toEqual({ kind: 'empty' });
-  });
-});
-
-describe('prRowFacts', () => {
-  const now = Date.parse('2026-11-28T12:00:00Z') / 1000;
-  it('counts open threads and says how long since it moved', () => {
-    const facts = prRowFacts(
-      { threads: { open: 2, total: 5 }, updatedAt: '2026-11-28T10:00:00Z' },
-      now,
-    );
-    expect(facts.openThreads).toBe(2);
-    expect(facts.threadsTitle).toBe('2 unresolved of 5 threads');
-    expect(facts.updated).toBe('2h');
-    expect(facts.updatedTitle).toMatch(/^Updated /);
-  });
-  it("leaves out what the forge's listing doesn't carry (ADO)", () => {
-    expect(prRowFacts({ threads: null, updatedAt: null }, now)).toEqual({
-      openThreads: null,
-      threadsTitle: null,
-      updated: '',
-      updatedTitle: null,
-    });
   });
 });
 

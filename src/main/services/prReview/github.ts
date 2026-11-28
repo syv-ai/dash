@@ -114,7 +114,7 @@ export const RELEVANT_PRS_QUERY = `query($owner: String!, $name: String!, $head:
         reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } } } }
         closingIssuesReferences(first: 10) { nodes { number title url } }
         reviewThreads(first: 100) { totalCount nodes { isResolved } }
-        commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+        commits(last: 1) { totalCount nodes { commit { statusCheckRollup { state } } } }
       }
     }
   }
@@ -234,6 +234,7 @@ export function githubRelevantPrsFrom(data: Node): RelevantPr[] {
         : null,
       issues: issuesFrom(p),
       verdict: listedVerdict(p),
+      commits: num(pick(p, 'commits', 'totalCount')),
       headUrl: p.isCrossRepository === true ? forkHeadUrl(p) : null,
     };
   });
@@ -380,7 +381,6 @@ export function githubDetailsFrom(
     viewerIsAuthor,
     viewerIsRequestedReviewer,
     viewerIsAssignee: !!viewer && assignees.includes(viewer),
-    viewerName: viewer || null,
     viewerCommented,
     verdicts: viewerIsAuthor ? ['comment'] : GITHUB_VERDICTS,
     head: str(p.headRefOid),

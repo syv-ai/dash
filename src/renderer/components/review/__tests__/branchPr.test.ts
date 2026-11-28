@@ -22,6 +22,7 @@ const listed = (number: number): RelevantPr => ({
   issues: null,
   verdict: null,
   headUrl: null,
+  commits: null,
 });
 const detected = (number: number, state: PullRequestInfo['state'] = 'open'): PullRequestInfo => ({
   number,

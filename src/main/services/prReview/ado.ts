@@ -218,6 +218,12 @@ export function adoBranchPrFrom(
 }
 
 // A reviewer's vote: 10 approved, 5 with suggestions, 0 none yet, -5 waiting, -10 rejected.
+/** How many commits a PR's commits answer lists; null when it lists none. */
+export function adoCommitCount(res: unknown): number | null {
+  const value = (res as { value?: unknown } | null)?.value;
+  return Array.isArray(value) ? value.length : null;
+}
+
 const VOTE_STATES: Record<number, PrViewerReview['state']> = {
   10: 'approved',
   5: 'approved_with_suggestions',
@@ -498,7 +504,6 @@ export function adoDetailsFrom(raw: AdoRawPr, ctx: AdoRepoContext): ForgeDetails
     viewerIsAuthor: viewer?.isAuthor ?? false,
     viewerIsRequestedReviewer: viewer?.isRequestedReviewer ?? false,
     viewerIsAssignee: false,
-    viewerName: null,
     viewerCommented:
       !!raw.me &&
       list<RawThread>(raw.threads)
@@ -909,11 +914,12 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
     if (hit && Date.now() - hit.at < ROW_FACTS_TTL_MS) return hit.facts;
     const facts = (async (): Promise<Partial<RelevantPr>> => {
       const at = `${repoPath(ado)}/pullRequests/${id}`;
-      const [threads, checks, issues, lines] = await Promise.allSettled([
+      const [threads, checks, issues, lines, commits] = await Promise.allSettled([
         deps.request(ado, `${at}/threads`),
         deps.checks(ado, id, pr.repository?.project?.id),
         workItems(ado, at),
         deps.diffStat(ctx.cwd, pr.lastMergeTargetCommit?.commitId ?? '', head),
+        deps.request(ado, `${at}/commits?$top=1000`),
       ]);
       const stat = lines.status === 'fulfilled' ? lines.value : null;
       return {
@@ -921,6 +927,7 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
         ...(checks.status === 'fulfilled' ? { ci: ciOf(checks.value) } : {}),
         ...(issues.status === 'fulfilled' ? { issues: issues.value } : {}),
         ...(stat ? stat : {}),
+        ...(commits.status === 'fulfilled' ? { commits: adoCommitCount(commits.value) } : {}),
       };
     })();
     for (const [k, v] of rowFactsCache) {

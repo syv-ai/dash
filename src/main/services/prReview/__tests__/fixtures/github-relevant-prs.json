@@ -34,7 +34,7 @@
             "totalCount": 3,
             "nodes": [{ "isResolved": true }, { "isResolved": false }, { "isResolved": false }]
           },
-          "commits": { "nodes": [{ "commit": { "statusCheckRollup": { "state": "FAILURE" } } }] }
+          "commits": { "totalCount": 4, "nodes": [{ "commit": { "statusCheckRollup": { "state": "FAILURE" } } }] }
         },
         {
           "number": 210,

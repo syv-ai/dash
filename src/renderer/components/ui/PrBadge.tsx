@@ -213,15 +213,6 @@ export function PrBadge({ prs, allPrs, size = 'md', variant = 'pill', taskId }: 
 }
 
 /** A PR's number on its state's tint, not clickable (inside a picker's field). */
-/** A PR's state in a word, on its state's tint (D133): Open, Draft, Merged,
- *  Closed. */
-export function PrStateBadge({ state }: { state: PrState }) {
-  return (
-    <span className={cn(badgeVariants({ tone: 'neutral', size: 'sm' }), prStatusTint(state))}>
-      {state.charAt(0).toUpperCase() + state.slice(1)}
-    </span>
-  );
-}
 
 export function PrNumberBadge({ number, state }: { number: number; state: PullRequestState }) {
   return (

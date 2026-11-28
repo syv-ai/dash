@@ -1,4 +1,3 @@
-import { reviewVerdict, type ReviewVerdict } from '../../../shared/prVerdict';
 import type {
   PrDetails,
   PrGitField,
@@ -8,6 +7,7 @@ import type {
   RelevantPrs,
 } from '../../../shared/types';
 import { forkPrOfBranch } from '../../../shared/prBranch';
+import { formatAgo } from '../../utils/format';
 import { githubProfileUrl } from '../../../shared/urls';
 import { shownPrState } from '../ui/prStatusColors';
 import { diffTotals } from './labels';
@@ -73,7 +73,7 @@ export function prHead(pr: RelevantPr, review: PrCardReview | null, remote: stri
       state: review.state,
       author: review.author,
       authorUrl: review.authorUrl,
-      commits: review.commits ?? null,
+      commits: review.commits ?? pr.commits,
       baseRef: review.baseRef,
       headRef: review.headRef,
       headFromFork: pr.fromFork,
@@ -87,7 +87,7 @@ export function prHead(pr: RelevantPr, review: PrCardReview | null, remote: stri
     state: shownPrState(pr),
     author: pr.author,
     authorUrl: githubProfileUrl(remote, pr.author),
-    commits: null,
+    commits: pr.commits,
     baseRef: pr.baseRefName,
     headRef: pr.headRefName,
     headFromFork: pr.fromFork,
@@ -99,125 +99,33 @@ export function prHead(pr: RelevantPr, review: PrCardReview | null, remote: stri
 export const prsTabShown = (relevant: RelevantPrs | null): boolean =>
   taskPrList(relevant).length > 0;
 
-/** How the person stands on a PR, as far as it asks something of them. */
-export type YourPartInput = Pick<
-  PrReview,
-  'viewerIsAuthor' | 'viewerIsAssignee' | 'viewerIsRequestedReviewer' | 'viewerReview'
->;
-
-/** A review of theirs, named as the thing commits can land after. */
-const OWN_REVIEW_NOUNS: Record<NonNullable<PrReview['viewerReview']>['state'], string> = {
-  approved: 'approval',
-  approved_with_suggestions: 'approval',
-  changes_requested: 'request for changes',
-  commented: 'review',
-  waiting: 'vote',
-  rejected: 'rejection',
+/** What the person's own review did, as "You …" says it. */
+const YOUR_REVIEW_VERBS: Record<NonNullable<PrReview['viewerReview']>['state'], string> = {
+  approved: 'approved it',
+  approved_with_suggestions: 'approved it with suggestions',
+  changes_requested: 'requested changes',
+  rejected: 'rejected it',
+  waiting: 'set it to waiting for the author',
+  commented: 'commented',
 };
 
 /**
- * The one line a PR card says about the person, only where it asks something
- * of them: they're asked to review it, commits landed after their review, or
- * it's assigned to them (and isn't theirs). Null otherwise: being its author
- * reads in the merge line ("You want to merge"), a current review in the
- * card's verdict, and a comment asks nothing.
+ * A PR card's line about the person, always one so the card keeps its size:
+ * "You approved it 2 days ago" (their latest review), else "You opened it 3
+ * hours ago" (theirs), "Your review is requested", or "You haven't reviewed
+ * it". `now` in ms; a time the forge didn't give is left out.
  */
-export function yourPart(v: YourPartInput): string | null {
-  if (v.viewerIsRequestedReviewer) return "You're asked to review it";
-  if (v.viewerReview?.stale)
-    return `New commits since your ${OWN_REVIEW_NOUNS[v.viewerReview.state]}`;
-  if (v.viewerIsAssignee && !v.viewerIsAuthor) return "It's assigned to you";
-  return null;
-}
-
-/** How long a drawer's details stay fresh before opening it fetches them again. */
-export const DETAILS_FRESH_MS = 2 * 60_000;
-
-/** When a PR's details were last fetched, and its update time then. */
-export interface DetailsFetch {
-  at: number;
-  updatedAt: string | null;
-}
-
-/**
- * Whether opening a PR's drawer fetches its details (the full review): never
- * fetched, the listing says it has moved since (GitHub's update time; ADO
- * lists none), or fetched longer than `DETAILS_FRESH_MS` ago. `now` in ms.
- */
-export function needsDetails(
-  last: DetailsFetch | undefined,
-  updatedAt: string | null,
+export function yourStanding(
+  d: Pick<PrDetails, 'viewerReview' | 'viewerIsAuthor' | 'viewerIsRequestedReviewer' | 'createdAt'>,
   now: number,
-): boolean {
-  if (!last) return true;
-  if (updatedAt !== null && updatedAt !== last.updatedAt) return true;
-  return now - last.at > DETAILS_FRESH_MS;
-}
-
-/** The PR's assignees but you: the "You" row already says you're assigned. */
-export function otherAssignees(
-  review: Pick<PrReview, 'assignees' | 'viewerIsAssignee' | 'viewerName'>,
-): string[] {
-  const me = review.viewerIsAssignee ? review.viewerName : null;
-  return me ? review.assignees.filter((a) => a !== me) : review.assignees;
-}
-
-export { reviewVerdict, type ReviewVerdict };
-
-/** `yourPart` from the listing, before the PR's review is fetched (which
- *  adds the person's own review). Null where the forge couldn't say who they are. */
-export function listedYourPart(viewer: PrViewerInvolvement | null): string | null {
-  if (!viewer) return null;
-  return yourPart({
-    viewerIsAuthor: viewer.isAuthor,
-    viewerIsAssignee: viewer.isAssignee,
-    viewerIsRequestedReviewer: viewer.isRequestedReviewer,
-    viewerReview: null,
-  });
-}
-
-/** The task PRs view's drawers open at first: the only PR, or the branch's
- *  own (listed first); the rest folded. */
-export const prOpenByDefault = (relevant: RelevantPrs | null, index: number): boolean =>
-  index === 0 && (taskPrList(relevant).length === 1 || (relevant?.from.length ?? 0) > 0);
-
-/** What a PR card's head says of it, from the listing until its review is
- *  fetched, then from the review (newer, and with the person's own review
- *  and comments). `files` only where git listed them. */
-export interface PrCardFacts {
-  additions: number | null;
-  deletions: number | null;
-  files: number | null;
-  threads: { open: number; total: number } | null;
-  verdict: ReviewVerdict | null;
-  /** `yourPart`: the line the card says about the person, if any. */
-  you: string | null;
-  /** They opened it: the merge line says "You". */
-  yours: boolean;
-}
-
-export function prCardFacts(pr: RelevantPr, review: PrCardReview | null): PrCardFacts {
-  if (!review)
-    return {
-      additions: pr.additions,
-      deletions: pr.deletions,
-      files: null,
-      threads: pr.threads,
-      verdict: pr.verdict,
-      you: listedYourPart(pr.viewer),
-      yours: pr.viewer?.isAuthor ?? false,
-    };
-  const totals = review.files ? diffTotals(review.files) : null;
-  return {
-    additions: totals?.additions ?? pr.additions,
-    deletions: totals?.deletions ?? pr.deletions,
-    files: totals?.files ?? null,
-    threads: {
-      open: review.threads.filter((t) => !t.resolved).length,
-      total: review.threads.length,
-    },
-    verdict: reviewVerdict(review.reviewers),
-    you: yourPart(review),
-    yours: review.viewerIsAuthor,
+): string {
+  const ago = (iso: string) => {
+    const t = Date.parse(iso);
+    return Number.isNaN(t) ? '' : ` ${formatAgo(Math.max(0, now - t))}`;
   };
+  if (d.viewerReview)
+    return `You ${YOUR_REVIEW_VERBS[d.viewerReview.state]}${ago(d.viewerReview.at)}`;
+  if (d.viewerIsAuthor) return `You opened it${ago(d.createdAt)}`;
+  if (d.viewerIsRequestedReviewer) return 'Your review is requested';
+  return "You haven't reviewed it";
 }
