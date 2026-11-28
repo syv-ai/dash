@@ -58,6 +58,21 @@ describe('adoReviewFrom', () => {
     ).toBe(true);
   });
 
+  it('tells a reviewer who declined', () => {
+    const [r] = adoReviewFrom(
+      {
+        pr: { ...pr, reviewers: [{ id: 'x', displayName: 'Fi', vote: 0, hasDeclined: true }] },
+        iterations,
+        threads: [],
+        me: '',
+        filesAtHead,
+        checks,
+      },
+      ctx,
+    ).reviewers;
+    expect(r).toEqual({ name: 'Fi', url: null, state: 'pending', declined: true });
+  });
+
   it('describes who wrote it, where it stands, its branches, reviewers and checks', () => {
     expect(review).toMatchObject({
       author: 'Bo Author',
@@ -68,9 +83,9 @@ describe('adoReviewFrom', () => {
       checks,
     });
     expect(review.reviewers).toEqual([
-      { name: 'Ann Reviewer', url: null, state: 'approved_with_suggestions' },
+      { name: 'Ann Reviewer', url: null, state: 'approved_with_suggestions', required: true },
       { name: 'Cy Lead', url: null, state: 'waiting' },
-      { name: '[Proj]\\Proj Team', url: null, state: 'pending' },
+      { name: '[Proj]\\Proj Team', url: null, state: 'pending', group: true },
       { name: 'Di Ops', url: null, state: 'approved' },
       { name: 'Ed Sec', url: null, state: 'rejected' },
     ]);

@@ -82,7 +82,17 @@ interface RawPr {
   sourceRefName?: string;
   targetRefName?: string;
   createdBy?: { id?: string; displayName?: string } | null;
-  reviewers?: { id?: string; displayName?: string; vote?: number }[] | null;
+  reviewers?:
+    | {
+        id?: string;
+        displayName?: string;
+        vote?: number;
+        isRequired?: boolean;
+        hasDeclined?: boolean;
+        /** A group (deprecated in the docs, still sent). */
+        isContainer?: boolean;
+      }[]
+    | null;
   repository?: { project?: { id?: string } } | null;
   /** The target branch's tip ADO last merged the PR against. */
   lastMergeTargetCommit?: { commitId?: string } | null;
@@ -199,6 +209,9 @@ const reviewersFrom = (pr: RawPr): PrReviewer[] =>
     name: r.displayName || 'Unknown',
     url: null,
     state: VOTE_STATES[r.vote ?? 0] ?? 'pending',
+    ...(r.isRequired ? { required: true as const } : {}),
+    ...(r.hasDeclined ? { declined: true as const } : {}),
+    ...(r.isContainer ? { group: true as const } : {}),
   }));
 
 /**

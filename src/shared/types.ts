@@ -828,6 +828,13 @@ export interface PrReviewer {
     | 'approved_with_suggestions'
     | 'waiting'
     | 'rejected';
+  /** Their review is required to merge (ADO's required reviewer). GitHub
+   *  doesn't say per reviewer: code owners and branch protection decide. */
+  required?: true;
+  /** They declined to review (ADO); GitHub has no such answer. */
+  declined?: true;
+  /** A group or team asked to review, not one person. */
+  group?: true;
 }
 
 /** The person's own latest review of a PR (GitHub's review, ADO's vote). */

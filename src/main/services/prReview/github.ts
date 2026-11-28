@@ -233,8 +233,15 @@ function reviewersFrom(p: Node): PrReviewer[] {
   }
   for (const r of nodes(p.reviewRequests)) {
     const who = r.requestedReviewer;
+    const team = !login(who);
     const name = login(who) || str((who as Node | null)?.name);
-    if (name) byName.set(name, { name, url: profileUrl(who), state: 'pending' });
+    if (name)
+      byName.set(name, {
+        name,
+        url: profileUrl(who),
+        state: 'pending',
+        ...(team ? { group: true as const } : {}),
+      });
   }
   return [...byName.values()];
 }
