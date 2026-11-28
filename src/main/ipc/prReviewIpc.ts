@@ -128,6 +128,20 @@ export function registerPrReviewIpc(): void {
     },
   );
 
+  /** All the project's open PRs, newest first, with where you stand on each
+   *  (see `groupProjectPrs`); null on a forge Dash has no provider for. Not
+   *  `pr:listOpen`, which lists less of each PR, for the new-task PR list. */
+  ipcMain.handle('pr:listProject', async (_e, args: { projectId: string }) => {
+    try {
+      parseArgs('pr:listProject', z.looseObject({ projectId: z.string() }), args);
+      const { adapter, ctx } = prContextForProject(args.projectId, appDeps);
+      return { success: true, data: await adapter.list(ctx) };
+    } catch (err) {
+      if (err instanceof UnsupportedForgeError) return { success: true, data: null };
+      return errorResponse(err);
+    }
+  });
+
   /** PR `number` of the project as its forge tells it, with no git call
    *  (see `PrDetails`): the project's PR list expands a row into it. */
   ipcMain.handle('pr:details', async (_e, args: { projectId: string; number: number }) => {

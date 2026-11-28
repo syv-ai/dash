@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeElectronApiMock, installWindow, resetWindow } from './helpers/electronApiMock';
-import type { PrDetails } from '../../../shared/types';
+import type { PrDetails, RelevantPr } from '../../../shared/types';
 
 const details = (title: string) => ({ number: 4, title, threads: [] }) as unknown as PrDetails;
 
@@ -67,5 +67,45 @@ describe('projectPrsStore.loadDetails', () => {
     await load('p1', 4, 'T1');
     expect(await load('p1', 4, 'T2')).toEqual({ ok: false, error: 'offline' });
     expect(prDetailsOf('p1', 4)(useProjectPrs.getState())).toEqual(details('a'));
+  });
+});
+
+describe('projectPrsStore.loadList', () => {
+  let api: ReturnType<typeof makeElectronApiMock>;
+  beforeEach(() => {
+    api = makeElectronApiMock();
+    installWindow(api);
+  });
+  afterEach(() => resetWindow());
+
+  const listed = [{ number: 4 }] as RelevantPr[];
+
+  it("lists a project's open PRs, sharing a listing under way", async () => {
+    api.prListProject = vi.fn(() => Promise.resolve({ success: true, data: listed }));
+    const { useProjectPrs } = await freshStore();
+    const { loadList } = useProjectPrs.getState();
+    await Promise.all([loadList('p1'), loadList('p1')]);
+    expect(api.prListProject).toHaveBeenCalledTimes(1);
+    expect(api.prListProject).toHaveBeenCalledWith({ projectId: 'p1' });
+    expect(useProjectPrs.getState().lists.p1).toEqual({ prs: listed, error: null });
+  });
+
+  it('says a forge without a provider has no PRs to list', async () => {
+    api.prListProject = vi.fn(() => Promise.resolve({ success: true, data: null }));
+    const { useProjectPrs } = await freshStore();
+    await useProjectPrs.getState().loadList('p1');
+    expect(useProjectPrs.getState().lists.p1).toEqual({ prs: null, error: null });
+  });
+
+  it('keeps the last listing when one fails, and says why', async () => {
+    api.prListProject = vi
+      .fn()
+      .mockResolvedValueOnce({ success: true, data: listed })
+      .mockResolvedValueOnce({ success: false, error: 'gh: not logged in' });
+    const { useProjectPrs } = await freshStore();
+    const { loadList } = useProjectPrs.getState();
+    await loadList('p1');
+    await loadList('p1');
+    expect(useProjectPrs.getState().lists.p1).toEqual({ prs: listed, error: 'gh: not logged in' });
   });
 });

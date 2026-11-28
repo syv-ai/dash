@@ -11,6 +11,7 @@ import type {
   PrVerdict,
   PullRequest,
   PullRequestInfo,
+  RelevantPr,
   SubmitResult,
   TaskPrs,
 } from '../../shared/types';
@@ -53,6 +54,9 @@ export interface PrReviewApi {
     cwd: string;
     number: number;
   }) => Promise<IpcResponse<PrReview>>;
+  /** All the project's open PRs, newest first, with where you stand on each
+   *  and the issues each closes; null on a forge Dash has no provider for. */
+  prListProject: (args: { projectId: string }) => Promise<IpcResponse<RelevantPr[] | null>>;
   /** PR `number` of the project as its forge tells it, with no git call:
    *  its review without the git-derived fields (see `PrDetails`). */
   prDetails: (args: { projectId: string; number: number }) => Promise<IpcResponse<PrDetails>>;
