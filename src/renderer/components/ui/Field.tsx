@@ -17,12 +17,15 @@ import type { TooltipContent } from './Tooltip';
  * their height.
  */
 export function FormSection({
+  id,
   title,
   hint,
   action,
   className,
   children,
 }: {
+  /** For a link that lands on this section. */
+  id?: string;
   title?: React.ReactNode;
   /** What the section is for, behind an ⓘ beside the title. */
   hint?: TooltipContent;
@@ -31,7 +34,7 @@ export function FormSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className={cn('grid content-start', className)}>
+    <section id={id} className={cn('grid content-start', className)}>
       {(title || action) && (
         <header className="flex min-h-6 items-center gap-3 pb-1">
           <div className="flex min-w-0 flex-1 items-center gap-1.5">

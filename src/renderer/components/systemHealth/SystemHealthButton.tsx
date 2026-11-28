@@ -147,7 +147,7 @@ function HealthPanel({
   function openAutoSleep() {
     onOpenSettings();
     const ui = useUi.getState();
-    ui.setSettingsInitialTab('system-health');
+    ui.setSettingsInitialTab('performance#sessions');
     ui.setShowSettings(true);
   }
 

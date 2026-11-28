@@ -75,7 +75,7 @@ type SettingsTab =
   | 'claude-code'
   | 'keybindings'
   | 'usage'
-  | 'system-health'
+  | 'performance'
   | 'updates'
   | 'telemetry'
   | 'about';
@@ -93,7 +93,7 @@ const SECTIONS: Record<SettingsTab, { label: string; icon: React.ReactNode }> = 
   'claude-code': { label: 'Claude', icon: icon(Sparkles) },
   keybindings: { label: 'Keybindings', icon: icon(Keyboard) },
   usage: { label: 'Usage', icon: icon(Activity) },
-  'system-health': { label: 'System health', icon: icon(HeartPulse) },
+  performance: { label: 'Performance', icon: icon(HeartPulse) },
   updates: { label: 'Updates', icon: icon(Download) },
   telemetry: { label: 'Telemetry', icon: icon(ChartLine) },
   about: { label: 'About', icon: icon(Info) },
@@ -103,10 +103,13 @@ const NAV_GROUPS: Array<{ label: string; ids: SettingsTab[] }> = [
   { label: 'Interface', ids: ['appearance', 'notifications'] },
   { label: 'Editor', ids: ['ide'] },
   { label: 'Workflow', ids: ['attribution', 'claude-code', 'keybindings', 'usage'] },
-  { label: 'System', ids: ['system-health', 'updates', 'telemetry', 'about'] },
+  { label: 'System', ids: ['performance', 'updates', 'telemetry', 'about'] },
 ];
 
 const isTab = (v: string | undefined): v is SettingsTab => !!v && v in SECTIONS;
+
+/** A section's element id, for a link into it (`initialTab` "performance#sessions"). */
+const sectionId = (name: string) => `settings-section-${name}`;
 
 interface SettingsModalProps {
   initialTab?: string;
@@ -124,7 +127,13 @@ export function SettingsModal({
   onClose,
 }: SettingsModalProps) {
   const updateStatus = useRuntime((s) => s.updateStatus);
-  const [tab, setTab] = useState<SettingsTab>(isTab(initialTab) ? initialTab : 'appearance');
+  // "tab" or "tab#section": a link can land on one section of a page.
+  const [initialId, initialSection] = (initialTab ?? '').split('#');
+  const [tab, setTab] = useState<SettingsTab>(isTab(initialId) ? initialId : 'appearance');
+  useEffect(() => {
+    if (!initialSection) return;
+    document.getElementById(sectionId(initialSection))?.scrollIntoView({ block: 'start' });
+  }, [initialSection]);
   const [claudeInfo, setClaudeInfo] = useState<ClaudeCliInfo | null>(null);
   const [appVersion, setAppVersion] = useState('');
 
@@ -168,7 +177,7 @@ export function SettingsModal({
         {tab === 'claude-code' && <ClaudeTab claudeInfo={claudeInfo} />}
         {tab === 'keybindings' && <KeybindingsTab />}
         {tab === 'usage' && <UsageTab latestRateLimits={latestRateLimits} />}
-        {tab === 'system-health' && <SystemHealthTab />}
+        {tab === 'performance' && <PerformanceTab />}
         {tab === 'updates' && <UpdatesTab appVersion={appVersion} />}
         {tab === 'telemetry' && <TelemetryTab />}
         {tab === 'about' && (
@@ -190,13 +199,6 @@ function AppearanceTab() {
   const setTerminalTheme = useSettings((s) => s.setTerminalTheme);
   const terminalFontFamily = useSettings((s) => s.terminalFontFamily);
   const setTerminalFontFamily = useSettings((s) => s.setTerminalFontFamily);
-  const keptReady = useSettings((s) => s.terminalsKeptReady);
-  const setKeptReady = useSettings((s) => s.setTerminalsKeptReady);
-  // The number follows the drag; the setting is saved (and applied) only on
-  // release, so dragging 8→2→8 doesn't close six terminals on the way.
-  const [keptReadyDraft, setKeptReadyDraft] = useState(keptReady);
-  useEffect(() => setKeptReadyDraft(keptReady), [keptReady]);
-
   return (
     <>
       <FormSection>
@@ -250,23 +252,6 @@ function AppearanceTab() {
                 fontFamily: resolveTerminalFontValue(f.id),
               }))}
             />
-          }
-        />
-        <SettingRow
-          label="Terminals kept ready"
-          hint="Recently viewed task terminals that show instantly. An older task reconnects when you open it, taking a moment to redraw. Fewer use less memory."
-          control={
-            <span className="flex w-56 items-center gap-3">
-              <Slider
-                value={keptReadyDraft}
-                onValueChange={setKeptReadyDraft}
-                onValueCommit={setKeptReady}
-                min={KEPT_READY_MIN}
-                max={KEPT_READY_MAX}
-                aria-label="Terminals kept ready"
-              />
-              <span className="type-body w-5 text-right tabular-nums">{keptReadyDraft}</span>
-            </span>
           }
         />
       </FormSection>
@@ -332,9 +317,10 @@ function NotificationsTab() {
   );
 }
 
-/** The health icon and the memory warning (SystemHealthService), and the
- *  threshold both read. */
-function SystemHealthTab() {
+/** What Dash and its sessions cost the machine, and what keeps it down:
+ *  Memory (the health icon, the warning, their threshold; SystemHealthService),
+ *  Sessions (auto-sleep) and Terminals (how many stay ready). */
+function PerformanceTab() {
   const icon = useSettings((s) => s.systemHealthIcon);
   const setIcon = useSettings((s) => s.setSystemHealthIcon);
   const warning = useSettings((s) => s.memoryWarning);
@@ -343,6 +329,8 @@ function SystemHealthTab() {
   const setGb = useSettings((s) => s.setMemoryWarningGb);
   const autoSleep = useSettings((s) => s.autoSleepAfter);
   const setAutoSleep = useSettings((s) => s.setAutoSleepAfter);
+  const keptReady = useSettings((s) => s.terminalsKeptReady);
+  const setKeptReady = useSettings((s) => s.setTerminalsKeptReady);
   // A draft while typing, so "0.5" isn't clamped at its "0"; kept on blur or Enter.
   const [draft, setDraft] = useState(String(gb));
   useEffect(() => setDraft(String(gb)), [gb]);
@@ -351,73 +339,102 @@ function SystemHealthTab() {
     setDraft(String(next));
     if (next !== gb) setGb(next);
   };
+  // The number follows the drag; the setting is saved (and applied) only on
+  // release, so dragging 8→2→8 doesn't close six terminals on the way.
+  const [keptReadyDraft, setKeptReadyDraft] = useState(keptReady);
+  useEffect(() => setKeptReadyDraft(keptReady), [keptReady]);
   const id = useId();
 
   const thresholdOff = !icon && !warning;
 
   return (
-    <FormSection>
-      <SwitchField
-        label="Health icon"
-        hint={{
-          title: 'Beside Settings',
-          body: 'Turns amber when Dash and its sessions pass the threshold or macOS reports memory pressure, and breathes when the pressure is critical. Click it to see what uses the memory and to put idle tasks to sleep.',
-        }}
-        checked={icon}
-        onCheckedChange={setIcon}
-      />
-      <SwitchField
-        label="Memory warning"
-        hint={{
-          title: 'Dash and its sessions',
-          body: 'Counts Dash and every task session with its subagents, MCP servers and shells. Warns once when they pass the threshold, or when macOS reports memory pressure, and offers to put idle tasks to sleep. A desktop notification while Dash is in the background.',
-        }}
-        checked={warning}
-        onCheckedChange={setWarning}
-      />
-      <SettingRow
-        label="Threshold"
-        hint="Dash and its sessions together. The icon and the warning both use it."
-        htmlFor={id}
-        disabled={thresholdOff}
-        control={
-          <span className="flex items-center gap-1.5">
-            <Input
-              id={id}
-              type="number"
-              min={MEMORY_WARNING_MIN_GB}
-              max={MEMORY_WARNING_MAX_GB}
-              step={0.5}
-              value={draft}
-              disabled={thresholdOff}
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={commit}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commit();
-              }}
-              className="w-16 text-right"
+    <>
+      <FormSection title="Memory" id={sectionId('memory')}>
+        <SwitchField
+          label="Health icon"
+          hint={{
+            title: 'Beside Settings',
+            body: 'Turns amber when Dash and its sessions pass the threshold or macOS reports memory pressure, and breathes when the pressure is critical. Click it to see what uses the memory and to put idle tasks to sleep.',
+          }}
+          checked={icon}
+          onCheckedChange={setIcon}
+        />
+        <SwitchField
+          label="Memory warning"
+          hint={{
+            title: 'Dash and its sessions',
+            body: 'Counts Dash and every task session with its subagents, MCP servers and shells. Warns once when they pass the threshold, or when macOS reports memory pressure, and offers to put idle tasks to sleep. A desktop notification while Dash is in the background.',
+          }}
+          checked={warning}
+          onCheckedChange={setWarning}
+        />
+        <SettingRow
+          label="Threshold"
+          hint="Dash and its sessions together. The icon and the warning both use it."
+          htmlFor={id}
+          disabled={thresholdOff}
+          control={
+            <span className="flex items-center gap-1.5">
+              <Input
+                id={id}
+                type="number"
+                min={MEMORY_WARNING_MIN_GB}
+                max={MEMORY_WARNING_MAX_GB}
+                step={0.5}
+                value={draft}
+                disabled={thresholdOff}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={commit}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commit();
+                }}
+                className="w-16 text-right"
+              />
+              <span className="type-caption">GB</span>
+            </span>
+          }
+        />
+      </FormSection>
+
+      <FormSection title="Sessions" id={sectionId('sessions')}>
+        <SettingRow
+          label="Sleep idle sessions"
+          hint={{
+            title: "Frees a session's memory",
+            body: "Puts a task's session to sleep once it has sat at rest this long since you last saw it. A live session holds about 400 MB; a sleeping one holds nothing and wakes with its context when you open the task. Never a session that is working, waiting on you or finished unseen, the task on screen, a protected task, or one under remote control.",
+          }}
+          control={
+            <Select
+              aria-label="Sleep idle sessions"
+              className="w-40"
+              value={autoSleep}
+              onValueChange={setAutoSleep}
+              options={AUTO_SLEEP_CHOICES.map((v) => ({ value: v, label: AUTO_SLEEP_LABELS[v] }))}
             />
-            <span className="type-caption">GB</span>
-          </span>
-        }
-      />
-      <SettingRow
-        label="Sleep idle sessions"
-        hint={{
-          title: "Frees a session's memory",
-          body: "Puts a task's session to sleep once it has sat at rest this long since you last saw it. A live session holds about 400 MB; a sleeping one holds nothing and wakes with its context when you open the task. Never a session that is working, waiting on you or finished unseen, the task on screen, a protected task, or one under remote control.",
-        }}
-        control={
-          <Select
-            aria-label="Sleep idle sessions"
-            className="w-40"
-            value={autoSleep}
-            onValueChange={setAutoSleep}
-            options={AUTO_SLEEP_CHOICES.map((v) => ({ value: v, label: AUTO_SLEEP_LABELS[v] }))}
-          />
-        }
-      />
-    </FormSection>
+          }
+        />
+      </FormSection>
+
+      <FormSection title="Terminals" id={sectionId('terminals')}>
+        <SettingRow
+          label="Kept ready"
+          hint="Recently viewed task terminals that show instantly. An older task reconnects when you open it, taking a moment to redraw. Fewer use less memory."
+          control={
+            <span className="flex w-56 items-center gap-3">
+              <Slider
+                value={keptReadyDraft}
+                onValueChange={setKeptReadyDraft}
+                onValueCommit={setKeptReady}
+                min={KEPT_READY_MIN}
+                max={KEPT_READY_MAX}
+                aria-label="Terminals kept ready"
+              />
+              <span className="type-body w-5 text-right tabular-nums">{keptReadyDraft}</span>
+            </span>
+          }
+        />
+      </FormSection>
+    </>
   );
 }
 
