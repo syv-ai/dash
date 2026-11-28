@@ -74,6 +74,8 @@ export function buildSessionSettings(opts: {
   env?: Record<string, string>;
   /** Commands for every SessionStart (startup, resume, clear, compact). */
   sessionStart?: { type: 'command'; command: string }[];
+  /** Commands for a SessionStart that resets the history (clear, compact). */
+  onReset?: { type: 'command'; command: string }[];
   /**
    * `permissions.denyInsteadOfPrompting`: a call that would wait on a
    * permission prompt is denied and the turn goes on (Claude Code 2.1.319+;
@@ -88,9 +90,12 @@ export function buildSessionSettings(opts: {
   if (opts.denyInsteadOfPrompting) permissions.denyInsteadOfPrompting = true;
   if (Object.keys(permissions).length > 0) settings.permissions = permissions;
   if (opts.env && Object.keys(opts.env).length > 0) settings.env = opts.env;
-  if (opts.sessionStart?.length) {
-    settings.hooks = { SessionStart: [{ matcher: '', hooks: opts.sessionStart }] };
+  const sessionStart: NonNullable<SessionSettings['hooks']>['SessionStart'] = [];
+  if (opts.sessionStart?.length) sessionStart.push({ matcher: '', hooks: opts.sessionStart });
+  if (opts.onReset?.length) {
+    for (const matcher of ['clear', 'compact']) sessionStart.push({ matcher, hooks: opts.onReset });
   }
+  if (sessionStart.length > 0) settings.hooks = { SessionStart: sessionStart };
   return settings;
 }
 

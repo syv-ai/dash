@@ -40,8 +40,22 @@ describe('buildSessionSettings', () => {
     expect(buildSessionSettings({ denyInsteadOfPrompting: false })).toEqual({});
   });
 
+  it('runs the reset commands on clear and compact only', () => {
+    const hook = { type: 'command' as const, command: 'echo ctx' };
+    expect(buildSessionSettings({ onReset: [hook] })).toEqual({
+      hooks: {
+        SessionStart: [
+          { matcher: 'clear', hooks: [hook] },
+          { matcher: 'compact', hooks: [hook] },
+        ],
+      },
+    });
+  });
+
   it('leaves out what is empty', () => {
-    expect(buildSessionSettings({ allowTools: [], env: {}, sessionStart: [] })).toEqual({});
+    expect(
+      buildSessionSettings({ allowTools: [], env: {}, sessionStart: [], onReset: [] }),
+    ).toEqual({});
   });
 });
 

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { execFileSync } from 'child_process';
 
 vi.mock('electron', () => ({
   app: { getPath: () => '/tmp/dash-hooksettings-test' },
@@ -11,9 +12,8 @@ vi.mock('../HookServer', () => ({
   hookServer: { port: 1234 },
   getHookPortFilePath: () => '/tmp/dash-hook-port',
 }));
-vi.mock('../DatabaseService', () => ({ DatabaseService: { getTask: () => undefined } }));
 
-import { writeHookSettings, INBOX_HEADERS_HEREDOC } from '../ptyHookSettings';
+import { writeHookSettings, INBOX_HEADERS_HEREDOC, taskContextHook } from '../ptyHookSettings';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-hooks-'));
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -33,7 +33,7 @@ describe('the inbox hooks', () => {
   it('SessionStart reports the inbox for every source, beside the clear/compact idle hooks', () => {
     expect(hooks.SessionStart!.map((e) => e.matcher)).toEqual(['clear', 'compact', '']);
     const [inbox] = hooks.SessionStart![2]!.hooks;
-    expect(inbox!.command).toContain('/hook/inbox?ptyId=task-1');
+    expect(inbox!.command).toContain('/hook/inbox?ptyId=${DASH_TASK_ID:-task-1}');
     expect(inbox!.command).toContain(INBOX_HEADERS_HEREDOC);
     expect(inbox!.async).toBe(true);
     // The clear/compact entries post to session-start, which sets idle; no inbox there.
@@ -42,7 +42,7 @@ describe('the inbox hooks', () => {
 
   it('UserPromptSubmit sends the inbox headers with the busy report', () => {
     const [busy] = hooks.UserPromptSubmit![0]!.hooks;
-    expect(busy!.command).toContain('/hook/busy?ptyId=task-1');
+    expect(busy!.command).toContain('/hook/busy?ptyId=${DASH_TASK_ID:-task-1}');
     // The headers come on fd 3 from a heredoc: never in curl's argv.
     const [curlLine] = busy!.command.split(' 3<<');
     expect(curlLine).toContain('-H @/dev/fd/3');
@@ -126,11 +126,38 @@ describe('the inbox hooks', () => {
     expect(got[0]!.headers['x-dash-messaging-token']).toBe('tok');
   });
 
+  it("posts as the session's own task when its settings name one (tasks sharing a folder)", async () => {
+    const { command } = hooks.Stop![0]!.hooks[0]!;
+    const { got } = await run(command, { DASH_TASK_ID: 'task-2' });
+    expect(got.map((g) => g.url)).toEqual(['/hook/stop?ptyId=task-2']);
+  });
+
   it('still posts, with no inbox headers worth keeping, when both variables are unset', async () => {
     const { command } = hooks.UserPromptSubmit![0]!.hooks[0]!;
     const { got, out } = await run(command, {});
     expect(out).toBe('');
     expect(got).toHaveLength(1);
     expect(got[0]!.headers['x-dash-messaging-token'] ?? '').toBe('');
+  });
+});
+
+describe('taskContextHook', () => {
+  it.skipIf(process.platform === 'win32')(
+    "prints the task's context as SessionStart output under sh, quotes and all",
+    () => {
+      const context = `Fix "it" — don't break $HOME`;
+      const out = execFileSync('sh', ['-c', taskContextHook(context).command], {
+        encoding: 'utf8',
+      });
+      expect(JSON.parse(out)).toEqual({
+        hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: context },
+      });
+    },
+  );
+
+  it('leaves the shared settings.local.json without any task context', () => {
+    writeHookSettings(dir, 'task-1');
+    const raw = fs.readFileSync(path.join(dir, '.claude', 'settings.local.json'), 'utf8');
+    expect(raw).not.toContain('base64');
   });
 });

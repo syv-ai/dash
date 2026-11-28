@@ -140,15 +140,17 @@ export function isSelfStartedPrompt(payload: Record<string, unknown>): boolean {
 /**
  * The task a statusLine report belongs to. A session loads the statusLine of
  * every `settings.local.json` above it and runs only one: inside a worktree
- * under a project that is itself a task, that is the root task's, carrying
- * the root's `ptyId`. The payload names the session's own folder
- * (`workspace.project_dir`, else `cwd`), so a task at exactly that path owns
- * the report; otherwise the URL's id does.
+ * under a project that is itself a task, that is the root task's. Its URL
+ * names the session's own task once the session has TASK_ID_ENV, else the
+ * task that wrote the file. The payload names the session's own folder
+ * (`workspace.project_dir`, else `cwd`): its only task owns the report;
+ * with none there, or several (tasks with no branch share a folder), the
+ * URL's id does.
  */
 export function statusLineTaskId(
   urlPtyId: string,
   payload: Record<string, unknown>,
-  taskIdAtPath: (dir: string) => string | undefined,
+  taskIdsAtPath: (dir: string) => string[],
 ): string {
   const workspace = payload.workspace as Record<string, unknown> | undefined;
   const dir =
@@ -157,5 +159,6 @@ export function statusLineTaskId(
       : typeof payload.cwd === 'string'
         ? payload.cwd
         : undefined;
-  return (dir && taskIdAtPath(dir)) || urlPtyId;
+  const ids = dir ? taskIdsAtPath(dir) : [];
+  return ids.length === 1 ? ids[0]! : urlPtyId;
 }

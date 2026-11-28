@@ -11,7 +11,6 @@ vi.mock('../HookServer', () => ({
   hookServer: { port: 1234 },
   getHookPortFilePath: () => '/tmp/dash-hook-port',
 }));
-vi.mock('../DatabaseService', () => ({ DatabaseService: { getTask: () => undefined } }));
 
 import { writeHookSettings } from '../ptyHookSettings';
 import { WAIT_NOTIFICATIONS } from '../hookPayload';
@@ -67,7 +66,7 @@ describe('hooks for a wait on the user', () => {
     const matchers = hooks.Notification!.map((e) => e.matcher);
     expect(new Set(matchers)).toEqual(new Set(Object.keys(WAIT_NOTIFICATIONS)));
     for (const e of hooks.Notification!) {
-      expect(e.hooks[0]!.command).toContain('/hook/notification?ptyId=task-1');
+      expect(e.hooks[0]!.command).toContain('/hook/notification?ptyId=${DASH_TASK_ID:-task-1}');
     }
   });
 
@@ -78,7 +77,7 @@ describe('hooks for a wait on the user', () => {
     ] as const) {
       expect(hooks[event], event).toHaveLength(1);
       const [hook] = hooks[event]![0]!.hooks;
-      expect(hook!.command).toContain(`/hook/${endpoint}?ptyId=task-1`);
+      expect(hook!.command).toContain(`/hook/${endpoint}?ptyId=\${DASH_TASK_ID:-task-1}`);
       // async: Claude Code ignores any answer, so the hook can never accept,
       // decline or rewrite the user's response.
       expect(hook!.async).toBe(true);
@@ -88,7 +87,7 @@ describe('hooks for a wait on the user', () => {
   it('observes permission requests the moment they open, asynchronously', () => {
     expect(hooks.PermissionRequest).toHaveLength(1);
     const [hook] = hooks.PermissionRequest![0]!.hooks;
-    expect(hook!.command).toContain('/hook/permission-request?ptyId=task-1');
+    expect(hook!.command).toContain('/hook/permission-request?ptyId=${DASH_TASK_ID:-task-1}');
     // async: Claude Code reads no decision from it, so the user's prompt
     // always appears and decides.
     expect(hook!.async).toBe(true);

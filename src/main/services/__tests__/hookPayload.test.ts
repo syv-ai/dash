@@ -125,11 +125,12 @@ describe('isSubagentHook', () => {
 });
 
 describe('statusLineTaskId', () => {
-  const tasksByPath: Record<string, string> = {
-    '/repo': 'root',
-    '/repo/.claude/worktrees/wt': 'wt',
+  const tasksByPath: Record<string, string[]> = {
+    '/repo': ['root'],
+    '/repo/.claude/worktrees/wt': ['wt'],
+    '/plain': ['a', 'b', 'c'],
   };
-  const lookup = (dir: string) => tasksByPath[dir];
+  const lookup = (dir: string) => tasksByPath[dir] ?? [];
 
   it("credits a worktree session's report to the worktree task, not the root's ptyId", () => {
     const payload = { workspace: { project_dir: '/repo/.claude/worktrees/wt' }, cwd: '/x' };
@@ -140,6 +141,11 @@ describe('statusLineTaskId', () => {
     expect(statusLineTaskId('root', { cwd: '/repo/.claude/worktrees/wt' }, lookup)).toBe('wt');
     expect(statusLineTaskId('root', { cwd: '/elsewhere' }, lookup)).toBe('root');
     expect(statusLineTaskId('root', {}, lookup)).toBe('root');
+  });
+
+  it('keeps the URL id in a folder several tasks share', () => {
+    expect(statusLineTaskId('b', { cwd: '/plain' }, lookup)).toBe('b');
+    expect(statusLineTaskId('c', { workspace: { project_dir: '/plain' } }, lookup)).toBe('c');
   });
 });
 

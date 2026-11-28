@@ -33,7 +33,8 @@ import { DatabaseService } from './DatabaseService';
 import { dashSessionAccess } from '../control/taskAccess';
 import { syncTaskSkills } from '../control/taskSkills';
 import { writeTaskSettings } from './taskSettings';
-import { writeHookSettings, setCommitAttributionValue } from './ptyHookSettings';
+import { writeHookSettings, setCommitAttributionValue, taskContextHook } from './ptyHookSettings';
+import { TASK_ID_ENV } from './hookSessionGuard';
 import { dropTaskInbox } from './taskInbox';
 import type { PermissionMode, RendererSleepReason, TaskModel } from '@shared/types';
 
@@ -337,6 +338,8 @@ async function ensureTaskSession(opts: {
   appendSystemPrompt?: string;
   /** The task's own env vars, for its settings file. */
   taskEnv: Record<string, string>;
+  /** The task's context, re-injected on clear and compact (taskContextHook). */
+  contextPrompt: string | null;
   denyInsteadOfPrompting: boolean;
   /** The dispatch process's env (buildClaudeEnv). */
   env: Record<string, string>;
@@ -351,9 +354,15 @@ async function ensureTaskSession(opts: {
       opts.id,
       buildSessionSettings({
         allowTools: dash?.allow,
-        // Dash's own last: a task's env never replaces its dashctl access.
-        env: { ...buildSessionEnv(opts.cwd, opts.taskEnv), ...dash?.env },
+        // Dash's own last: a task's env never replaces its dashctl access,
+        // nor the id its hooks post as (several tasks can share a folder).
+        env: {
+          ...buildSessionEnv(opts.cwd, opts.taskEnv),
+          ...dash?.env,
+          [TASK_ID_ENV]: opts.id,
+        },
         sessionStart: dash?.sessionStart,
+        onReset: opts.contextPrompt ? [taskContextHook(opts.contextPrompt)] : undefined,
         denyInsteadOfPrompting: opts.denyInsteadOfPrompting && supportsDenyInsteadOfPrompting(),
       }),
     );
@@ -650,6 +659,7 @@ async function startTaskSessionNow(
       appendSystemPrompt: projectAppendSystemPrompt(task.projectId),
       agent: task.agent,
       taskEnv: task.env,
+      contextPrompt: task.contextPrompt,
       denyInsteadOfPrompting: task.denyInsteadOfPrompting,
       env,
       wakeStopped: opts.wakeStopped,

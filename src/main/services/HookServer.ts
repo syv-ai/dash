@@ -220,13 +220,18 @@ class HookServerImpl {
     }
   }
 
-  private getTaskIdAtPath(dir: string): string | undefined {
+  private getTaskIdsAtPath(dir: string): string[] {
     try {
       const db = getDb();
-      return db.select({ id: tasks.id }).from(tasks).where(eq(tasks.path, dir)).get()?.id;
+      return db
+        .select({ id: tasks.id })
+        .from(tasks)
+        .where(eq(tasks.path, dir))
+        .all()
+        .map((row) => row.id);
     } catch (err) {
       console.warn('[HookServer] DB lookup for task path failed:', err);
-      return undefined;
+      return [];
     }
   }
 
@@ -459,8 +464,8 @@ class HookServerImpl {
           if (pathname === '/hook/context') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (data) => {
               // The statusLine is one slot, and the root task's wins inside a
-              // worktree under it: route by the session's own folder.
-              const owner = statusLineTaskId(ptyId, data, (dir) => this.getTaskIdAtPath(dir));
+              // worktree under it: route by the session's own folder too.
+              const owner = statusLineTaskId(ptyId, data, (dir) => this.getTaskIdsAtPath(dir));
               if (owner === ptyId || this._hasPty(owner)) {
                 contextUsageService.updateFromStatusLine(owner, data);
                 noteScratchpad(owner, data);

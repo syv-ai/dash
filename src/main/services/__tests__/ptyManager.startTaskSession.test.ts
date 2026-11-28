@@ -45,7 +45,8 @@ vi.mock('../DatabaseService', () => ({
 }));
 
 const hookWrites: Array<[string, string]> = [];
-vi.mock('../ptyHookSettings', () => ({
+vi.mock('../ptyHookSettings', async (importOriginal) => ({
+  taskContextHook: (await importOriginal<typeof import('../ptyHookSettings')>()).taskContextHook,
   writeHookSettings: (cwd: string, id: string) => {
     hookWrites.push([cwd, id]);
     return { ok: true };
@@ -272,7 +273,12 @@ describe('startTaskSession', () => {
         't1',
         {
           permissions: { allow: ['Bash(dashctl tasks get:*)'] },
-          env: { WEB_PORT: '3001', DASH_CALLER: 'task:t1', DASH_TOKEN: 'tok' },
+          env: {
+            WEB_PORT: '3001',
+            DASH_CALLER: 'task:t1',
+            DASH_TOKEN: 'tok',
+            DASH_TASK_ID: 't1',
+          },
           hooks: { SessionStart: [{ matcher: '', hooks: [hook] }] },
         },
       ],
@@ -301,10 +307,25 @@ describe('startTaskSession', () => {
     expect(settingsWrites[1]![1]).not.toHaveProperty('permissions.denyInsteadOfPrompting');
   });
 
+  it("re-injects the task's own context on clear and compact from its settings file", async () => {
+    seed({ contextPrompt: 'Issue #7: fix login' });
+    await startTaskSession('t1');
+    const starts = (
+      settingsWrites[0]![1] as {
+        hooks: { SessionStart: Array<{ matcher: string; hooks: Array<{ command: string }> }> };
+      }
+    ).hooks.SessionStart;
+    expect(starts.map((e) => e.matcher)).toEqual(['clear', 'compact']);
+    expect(Buffer.from(starts[0]!.hooks[0]!.command.split("'")[1]!, 'base64').toString()).toContain(
+      'Issue #7: fix login',
+    );
+  });
+
   it('reads Dash access from the row at each start, so a restart after a toggle sees it', async () => {
     seed({ dashAccess: false });
     await startTaskSession('t1');
-    expect(settingsWrites[0]![1]).toEqual({ env: { WEB_PORT: '3001' } });
+    // The task id even without access: its hooks post as it (folderSharing).
+    expect(settingsWrites[0]![1]).toEqual({ env: { WEB_PORT: '3001', DASH_TASK_ID: 't1' } });
     tasks.set('t1', { ...tasks.get('t1')!, dashAccess: true, jobId: null });
     await startTaskSession('t1');
     expect(settingsWrites[1]![1]).toMatchObject({ env: { DASH_CALLER: 'task:t1' } });
@@ -318,7 +339,8 @@ describe('startTaskSession', () => {
     });
     await startTaskSession('t1');
     expect(sup.respawn).toHaveBeenCalledWith('job-live');
-    expect(settingsWrites[0]![1]).toEqual({ env: { WEB_PORT: '3001' } });
+    // The task id even without access: its hooks post as it (folderSharing).
+    expect(settingsWrites[0]![1]).toEqual({ env: { WEB_PORT: '3001', DASH_TASK_ID: 't1' } });
   });
 
   it('uses the last isDark a pane passed when the caller gives none', async () => {

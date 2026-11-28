@@ -13,9 +13,13 @@ vi.mock('electron', () => ({
 const TASKS = [
   { id: 'root', path: '/p' },
   { id: 'wt', path: '/p/.claude/worktrees/wt' },
+  // Three tasks with no branch in one plain folder.
+  { id: 'plain-a', path: '/plain' },
+  { id: 'plain-b', path: '/plain' },
+  { id: 'plain-c', path: '/plain' },
 ];
 
-// `where(eq(column, value))` → the task whose path or id is `value`.
+// `where(eq(column, value))` → the tasks whose path or id is `value`.
 vi.mock('drizzle-orm', async (importOriginal) => ({
   ...(await importOriginal<typeof import('drizzle-orm')>()),
   eq: (_column: unknown, value: unknown) => ({ value }),
@@ -26,6 +30,7 @@ vi.mock('../../db/client', () => ({
       from: () => ({
         where: ({ value }: { value: string }) => ({
           get: () => TASKS.find((t) => t.path === value || t.id === value),
+          all: () => TASKS.filter((t) => t.path === value || t.id === value),
         }),
       }),
     }),
@@ -78,6 +83,11 @@ describe('HookServer statusLine routing', () => {
   it('uses the URL id for a folder no task has (e.g. a non-task worktree)', async () => {
     await postContext('root', report('/p/.claude/worktrees/subagent'));
     expect(update.mock.calls[0]![0]).toBe('root');
+  });
+
+  it('credits each report in a shared folder to the task its URL names', async () => {
+    for (const id of ['plain-a', 'plain-b', 'plain-c']) await postContext(id, report('/plain'));
+    expect(update.mock.calls.map((c) => c[0])).toEqual(['plain-a', 'plain-b', 'plain-c']);
   });
 
   it('drops a report for a worktree task without a live pty, rather than credit the root', async () => {

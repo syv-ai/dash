@@ -2,9 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { toastRenderer } from '../utils/toast';
 import { hookServer, getHookPortFilePath } from './HookServer';
-import { DatabaseService } from './DatabaseService';
 import { writeFileAtomic } from '../utils/atomicWrite';
-import { ownSessionGuard } from './hookSessionGuard';
+import { ownSessionGuard, taskIdExpansion } from './hookSessionGuard';
 import {
   type HookEntry,
   type CommandHook,
@@ -55,17 +54,6 @@ let commitAttributionSetting: string | undefined = undefined;
  */
 export function setCommitAttributionValue(value: string | undefined): void {
   commitAttributionSetting = value;
-}
-
-/** Retrieve stored task context prompt from the database. */
-function getTaskContextPrompt(taskId: string): string | null {
-  try {
-    const task = DatabaseService.getTask(taskId);
-    return task?.contextPrompt ?? null;
-  } catch (err) {
-    console.error('[getTaskContextPrompt] Failed to read context for task', taskId, err);
-    return null;
-  }
 }
 
 function realPathOr(dir: string): string {
@@ -154,7 +142,7 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
   // POSIX like the rest; on Windows the hooks stay unguarded.
   const guard = process.platform === 'win32' ? '' : ownSessionGuard([cwd, realPathOr(cwd)]);
   const postCommand = (endpoint: DashHookEndpoint, inbox = false): string => {
-    const url = `http://127.0.0.1:$P/hook/${endpoint}?ptyId=${ptyId}`;
+    const url = `http://127.0.0.1:$P/hook/${endpoint}?ptyId=${taskIdExpansion(ptyId)}`;
     return (
       `P=$(cat "${portFile}" 2>/dev/null) || exit 0; [ -n "$P" ] || exit 0; ` +
       `curl -s --max-time 2 -X POST -H 'Content-Type: application/json'${inbox ? ' -H @/dev/fd/3' : ''} -d @- "${url}" >/dev/null 2>&1` +
@@ -237,38 +225,6 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
     { matcher: 'compact', hooks: [dashCmd('session-start', true)] },
   ];
 
-  // SessionStart context-injection: re-inject the task context (context prompt +
-  // linked issue/work-item prompt) on compact and clear — which drop it from
-  // history — but NOT startup or resume. Startup is covered by the initial-prompt
-  // auto-submit (see setInitialPrompt / createTask): the first spawn submits the
-  // same context as a real message the agent acts on, so a startup matcher here
-  // would inject it a second time as silent context. Resume already has it in
-  // history. Coexists with the defensive-idle HTTP hooks on the same matchers.
-  const contextPrompt = getTaskContextPrompt(ptyId);
-  if (contextPrompt) {
-    const hookPayload = JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: 'SessionStart',
-        additionalContext: contextPrompt,
-      },
-    });
-    // Use base64 encoding to safely embed user-controlled content in a shell command.
-    // Single-quote escaping is fragile with content from GitHub issues / ADO work items.
-    const b64 = Buffer.from(hookPayload).toString('base64');
-    // Cross-platform decode: macOS uses `base64 -D`, Linux uses `base64 -d`,
-    // Windows cmd.exe doesn't have base64 so we use PowerShell instead.
-    const decodeCmd =
-      process.platform === 'win32'
-        ? `powershell.exe -NoProfile -Command "[Console]::Out.Write([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64}')))"`
-        : `${guard}echo '${b64}' | base64 ${process.platform === 'darwin' ? '-D' : '-d'}`;
-    const contextHook: CommandHook = { type: 'command', command: decodeCmd };
-    for (const entry of sessionStartEntries) {
-      // clear and compact already exist — append the context hook alongside
-      // the idle hook so both fire from the same matcher.
-      entry.hooks.push(tagDash(contextHook));
-    }
-  }
-
   dashEntries.SessionStart = [
     ...sessionStartEntries,
     { matcher: '', hooks: [inboxCmd('inbox', true)] },
@@ -348,8 +304,9 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
     // The statusLine doubles as the context-usage reporter: it POSTs to the
     // context endpoint and discards output (so the bar stays blank). Same
     // port-file guard as the hooks, so it too no-ops outside Dash. No session
-    // guard: it is one slot, the root task's wins in a worktree under it, and
-    // HookServer credits the report to the task at the payload's folder.
+    // guard: it is one slot, the root task's wins in a worktree under it; it
+    // posts the session's own task id (taskIdExpansion), and HookServer also
+    // credits a report to the task at the payload's folder.
     merged.statusLine = {
       type: 'command',
       command: postCommand('context'),
@@ -434,4 +391,30 @@ export function cleanupHookSettings(): void {
   }
 
   writtenSettingsPaths.clear();
+}
+
+/**
+ * The SessionStart hook that re-injects a task's context (context prompt and
+ * linked issue or work item) on compact and clear, which drop it from the
+ * history; not on startup or resume. Startup is covered by the initial-prompt
+ * auto-submit (setInitialPrompt / createTask): the first spawn submits the
+ * same context as a real message the agent acts on, so a startup matcher
+ * would inject it a second time as silent context. Resume already has it.
+ * It goes in the task's own settings file (buildSessionSettings' `onReset`),
+ * not `settings.local.json`, which the tasks sharing a folder share.
+ */
+export function taskContextHook(contextPrompt: string): CommandHook {
+  const hookPayload = JSON.stringify({
+    hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: contextPrompt },
+  });
+  // Base64 embeds user-controlled content in a shell command safely; quote
+  // escaping is fragile with content from GitHub issues and ADO work items.
+  const b64 = Buffer.from(hookPayload).toString('base64');
+  // macOS decodes with `base64 -D`, Linux `base64 -d`; Windows has no base64,
+  // so PowerShell does it.
+  const command =
+    process.platform === 'win32'
+      ? `powershell.exe -NoProfile -Command "[Console]::Out.Write([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64}')))"`
+      : `echo '${b64}' | base64 ${process.platform === 'darwin' ? '-D' : '-d'}`;
+  return { type: 'command', command };
 }
