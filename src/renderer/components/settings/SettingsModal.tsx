@@ -88,7 +88,7 @@ const icon = (Icon: React.ComponentType<{ size: number; strokeWidth: number }>) 
 const SECTIONS: Record<SettingsTab, { label: string; icon: React.ReactNode }> = {
   appearance: { label: 'Appearance', icon: icon(Palette) },
   notifications: { label: 'Notifications', icon: icon(Bell) },
-  ide: { label: 'IDE', icon: icon(Code2) },
+  ide: { label: 'Editor', icon: icon(Code2) },
   attribution: { label: 'Attribution', icon: icon(GitCommit) },
   'claude-code': { label: 'Claude', icon: icon(Sparkles) },
   keybindings: { label: 'Keybindings', icon: icon(Keyboard) },
@@ -427,6 +427,8 @@ function IdeTab({ availableIDEs }: { availableIDEs: Array<{ id: string; label: s
   const setPreferredIDE = useSettings((s) => s.setPreferredIDE);
   const customIDE = useSettings((s) => s.customIDE);
   const setCustomIDE = useSettings((s) => s.setCustomIDE);
+  const openFilesIn = useSettings((s) => s.openFilesIn);
+  const setOpenFilesIn = useSettings((s) => s.setOpenFilesIn);
   const pathId = useId();
   const argsId = useId();
 
@@ -450,73 +452,98 @@ function IdeTab({ availableIDEs }: { availableIDEs: Array<{ id: string; label: s
   ];
 
   return (
-    <FormSection>
-      <SettingRow
-        label="Open tasks in"
-        hint="Used by the task header’s Open button. Only installed IDEs are listed."
-        note={
-          availableIDEs.length === 0
-            ? 'No supported IDE found (Cursor, VS Code, Windsurf, Antigravity, Zed).'
-            : undefined
-        }
-        control={
-          <Select
-            aria-label="IDE"
-            className="w-56"
-            value={preferredIDE}
-            onValueChange={setPreferredIDE}
-            options={ideOptions}
-          />
-        }
-      />
-      {preferredIDE === 'custom' && (
-        <>
-          <SettingRow
-            label="Executable"
-            htmlFor={pathId}
-            control={
-              <span className="flex w-72 items-center gap-1">
-                <Input
-                  id={pathId}
-                  value={customIDE.path}
-                  onChange={(e) => setCustomIDE({ ...customIDE, path: e.target.value })}
-                  placeholder="/Applications/MyIDE.app/…/myide"
+    <>
+      <FormSection title="Files">
+        <SettingRow
+          label="Open files in"
+          hint={
+            openFilesIn === 'dash'
+              ? "A file path you click in a terminal opens in the task's editor, at its line. One outside the task's folder goes to the external editor."
+              : 'A file path you click in a terminal opens in $VISUAL or $EDITOR, else the first of Cursor, VS Code or Zed found, else the system default.'
+          }
+          control={
+            <Segmented
+              aria-label="Open files in"
+              fullWidth={false}
+              size="sm"
+              value={openFilesIn}
+              options={[
+                { value: 'dash', label: 'Dash editor' },
+                { value: 'ide', label: 'External editor' },
+              ]}
+              onChange={setOpenFilesIn}
+            />
+          }
+        />
+      </FormSection>
+      <FormSection title="IDE">
+        <SettingRow
+          label="Open tasks in"
+          hint="Open in IDE on a task, a project, or a file or folder in the tree. Only installed IDEs are listed."
+          note={
+            availableIDEs.length === 0
+              ? 'No supported IDE found (Cursor, VS Code, Windsurf, Antigravity, Zed).'
+              : undefined
+          }
+          control={
+            <Select
+              aria-label="IDE"
+              className="w-56"
+              value={preferredIDE}
+              onValueChange={setPreferredIDE}
+              options={ideOptions}
+            />
+          }
+        />
+        {preferredIDE === 'custom' && (
+          <>
+            <SettingRow
+              label="Executable"
+              htmlFor={pathId}
+              control={
+                <span className="flex w-72 items-center gap-1">
+                  <Input
+                    id={pathId}
+                    value={customIDE.path}
+                    onChange={(e) => setCustomIDE({ ...customIDE, path: e.target.value })}
+                    placeholder="/Applications/MyIDE.app/…/myide"
+                  />
+                  <IconButton title="Browse" onClick={() => void browse()}>
+                    <FolderOpen size={14} strokeWidth={1.8} />
+                  </IconButton>
+                </span>
+              }
+            />
+            <SettingRow
+              label="Arguments"
+              htmlFor={argsId}
+              hint={
+                <>
+                  One per line. <Code>{'{path}'}</Code> places the folder; without it the folder
+                  goes last.
+                </>
+              }
+              control={
+                <Textarea
+                  id={argsId}
+                  value={customIDE.args.join('\n')}
+                  onChange={(e) =>
+                    setCustomIDE({
+                      ...customIDE,
+                      args: e.target.value.split('\n').filter((line) => line.length > 0),
+                    })
+                  }
+                  rows={2}
+                  placeholder={'--new-window\n{path}'}
+                  variant="code"
+                  className="w-72 resize-none"
                 />
-                <IconButton title="Browse" onClick={() => void browse()}>
-                  <FolderOpen size={14} strokeWidth={1.8} />
-                </IconButton>
-              </span>
-            }
-          />
-          <SettingRow
-            label="Arguments"
-            htmlFor={argsId}
-            hint={
-              <>
-                One per line. <Code>{'{path}'}</Code> places the folder; without it the folder goes
-                last.
-              </>
-            }
-            control={
-              <Textarea
-                id={argsId}
-                value={customIDE.args.join('\n')}
-                onChange={(e) =>
-                  setCustomIDE({
-                    ...customIDE,
-                    args: e.target.value.split('\n').filter((line) => line.length > 0),
-                  })
-                }
-                rows={2}
-                placeholder={'--new-window\n{path}'}
-                variant="code"
-                className="w-72 resize-none"
-              />
-            }
-          />
-        </>
-      )}
-    </FormSection>
+              }
+            />
+          </>
+        )}
+      </FormSection>
+    </>
   );
 }
 

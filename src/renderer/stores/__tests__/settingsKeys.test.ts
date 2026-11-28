@@ -2,6 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { SETTINGS_REGISTRY, type SettingsState } from '../settingsKeys';
 
 describe('settings registry', () => {
+  it("opens a terminal's file links in Dash's editor by default", () => {
+    const e = SETTINGS_REGISTRY.find((r) => r.field === 'openFilesIn')!;
+    expect(e.codec.decode(null)).toBe('dash');
+    expect(e.codec.decode('ide')).toBe('ide');
+    expect(e.codec.decode('vim')).toBe('dash');
+  });
+
   it('maps theme to the legacy key with a System default', () => {
     const e = SETTINGS_REGISTRY.find((r) => r.field === 'theme')!;
     expect(e.key).toBe('theme');

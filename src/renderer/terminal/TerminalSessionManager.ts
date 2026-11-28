@@ -6,6 +6,7 @@ import { ClipboardAddon } from '@xterm/addon-clipboard';
 import type { WebglAddon } from '@xterm/addon-webgl';
 import { Utf8Base64 } from './Utf8Base64';
 import type { PermissionMode, TerminalSnapshot } from '../../shared/types';
+import { openFileLink } from '../lib/openFileLink';
 import { FilePathLinkProvider } from './FilePathLinkProvider';
 import type { ITheme } from '@xterm/xterm';
 import { darkTheme, lightTheme, resolveTheme } from './terminalThemes';
@@ -203,27 +204,15 @@ export class TerminalSessionManager {
       }),
     );
 
-    // Register file path link provider (click to open in editor)
+    // A file path is a link: Settings → Editor › Open files in says where (openFileLink).
     this.terminal.registerLinkProvider(
       new FilePathLinkProvider(
         this.terminal,
         () => this._currentCwd,
         (filePath, line, col) => {
-          window.electronAPI
-            .openInEditor({
-              cwd: this._currentCwd,
-              filePath,
-              line,
-              col,
-            })
-            .then((res) => {
-              if (!res.success) {
-                console.warn('[FilePathLink] openInEditor failed:', res.error);
-              }
-            })
-            .catch((err) => {
-              console.warn('[FilePathLink] openInEditor error:', err);
-            });
+          openFileLink(this._currentCwd, filePath, line, col).catch((err) => {
+            console.warn('[FilePathLink] open failed:', err);
+          });
         },
       ),
     );

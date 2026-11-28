@@ -59,6 +59,9 @@ export interface SettingsState {
   unseenTaskIds: Set<string>;
   commitAttribution: string | undefined;
   preferredIDE: string;
+  /** Where a file path clicked in a terminal opens: the task's own editor, or
+   *  the external one (lib/openFileLink). */
+  openFilesIn: 'dash' | 'ide';
   keybindings: KeyBindingMap;
   sidebarCollapsed: boolean;
   changesPanelCollapsed: boolean;
@@ -160,6 +163,7 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('unseenTaskIds', 'unseenTaskIds', stringSet()),
   entry('commitAttribution', 'commitAttribution', strOrUndefined()),
   entry('preferredIDE', 'preferredIDE', str('auto')),
+  entry('openFilesIn', 'openFilesIn', strEnum(['dash', 'ide'] as const, 'dash')),
   entry('keybindings', 'keybindings', keybindingsCodec()),
   entry('sidebarCollapsed', 'sidebarCollapsed', boolDefaultFalse()),
   entry('changesPanelCollapsed', 'changesPanelCollapsed', boolDefaultFalse()),

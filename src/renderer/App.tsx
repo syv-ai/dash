@@ -57,7 +57,7 @@ import { useSystemHealth } from './hooks/useSystemHealth';
 import { useAutoSleep } from './hooks/useAutoSleep';
 import type { Task, WorktreeMigrationProject, WorktreeMigrationResult } from '../shared/types';
 import { defaultEffortFrom } from '../shared/effort';
-import type { CreateTaskOptions, TaskModalDefaults } from './components/task/TaskModal';
+import type { CreateTaskOptions, TaskFromPr, TaskModalDefaults } from './components/task/TaskModal';
 import { matchesBinding } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
 import { useKeptTerminals } from './terminal/useKeptTerminals';
@@ -82,6 +82,7 @@ import {
   selectTaskById,
   selectActiveProjectTasks,
 } from './stores/projectsStore';
+import { usePrReviews } from './stores/prReviewStore';
 
 /** Chrome around the pinned TUI canvas (panel padding + drawer gutter) added
  *  to the measured canvas px so the panel hugs it without clipping. */
@@ -1426,8 +1427,13 @@ export function App() {
   // taskDefaults already applied (prefill only).
   const [taskModalDefaults, setTaskModalDefaults] = useState<TaskModalDefaults | null>(null);
 
-  async function handleNewTask(projectId: string) {
+  // The PR a task is being started from (the project page's Pull requests),
+  // set each time the modal opens.
+  const [taskModalFromPr, setTaskModalFromPr] = useState<TaskFromPr | null>(null);
+
+  async function handleNewTask(projectId: string, fromPr?: TaskFromPr) {
     setActiveProjectId(projectId);
+    setTaskModalFromPr(fromPr ?? null);
     setTaskModalProjectId(projectId);
     // Read from the store (not a closure) so a freshly-created project resolves.
     const project = useProjects.getState().projects.find((p) => p.id === projectId);
@@ -1440,11 +1446,19 @@ export function App() {
     setShowTaskModal(true);
   }
 
-  function handleCreateTask(options: CreateTaskOptions): Promise<boolean> {
+  async function handleCreateTask(options: CreateTaskOptions): Promise<boolean> {
     // Modal-selected project (App-owned) takes precedence over the active one.
-    return useProjects
+    const created = await useProjects
       .getState()
       .createTask(options, taskModalProjectId || activeProjectId || undefined);
+    // A task started to review a PR enters review mode on it. createTask
+    // selects the task it made.
+    const newTaskId = useProjects.getState().activeTaskId;
+    if (created && taskModalFromPr?.review && newTaskId) {
+      const { pr } = taskModalFromPr;
+      usePrReviews.getState().setMode(newTaskId, { provider: pr.provider, number: pr.number });
+    }
+    return created;
   }
 
   function handleDeleteTask(id: string) {
@@ -1600,8 +1614,8 @@ export function App() {
               onOpenIde={() => {
                 if (activeTask) void openInIde(activeTask.path);
               }}
-              onNewTask={() => {
-                if (activeProjectId) void handleNewTask(activeProjectId);
+              onNewTask={(fromPr) => {
+                if (activeProjectId) void handleNewTask(activeProjectId, fromPr);
               }}
               onProjectSettings={() => {
                 if (activeProject) setProjectSettingsTarget(activeProject);
@@ -1728,6 +1742,7 @@ export function App() {
           return (
             <TaskModal
               projectPath={modalProject?.path ?? ''}
+              fromPr={taskModalFromPr?.pr}
               projectId={modalProjectId || undefined}
               isGitRepo={modalProject?.isGitRepo ?? false}
               gitRemote={modalProject?.gitRemote ?? null}
