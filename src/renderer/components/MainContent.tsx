@@ -10,6 +10,7 @@ import { useRuntime } from '../stores/runtimeStore';
 import { useSettings } from '../stores/settingsStore';
 import { cn } from '../lib/cn';
 import type { Project, Task } from '../../shared/types';
+import type { TaskFromPr } from './task/TaskModal';
 
 interface MainContentProps {
   activeTask: Task | null;
@@ -27,7 +28,7 @@ interface MainContentProps {
   /** The model the active task's session is running (live, from its status line). */
   modelName: string | null;
   onOpenIde: () => void;
-  onNewTask: () => void;
+  onNewTask: (fromPr?: TaskFromPr) => void;
   onProjectSettings: () => void;
   onShowCommitGraph: () => void;
   onDeleteProject: () => void;

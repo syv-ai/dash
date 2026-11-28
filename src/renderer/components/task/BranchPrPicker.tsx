@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   GitBranch,
   GitPullRequestArrow,
@@ -44,6 +44,9 @@ interface BranchPrPickerProps {
   /** Fired after the PR head has been fetched into `branch`. `checkedOut` is
    *  true when that branch is already checked out elsewhere. */
   onSelectPr: (branch: string, prTitle: string, checkedOut: boolean) => void;
+  /** A PR to pick as the picker mounts (a task started from the project
+   *  page's Pull requests): prepared as a pick from the list would be. */
+  initialPr?: PullRequest | null;
 }
 
 /**
@@ -66,6 +69,7 @@ export function BranchPrPicker({
   projectPath,
   projectId,
   onSelectPr,
+  initialPr,
 }: BranchPrPickerProps) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<PickerTab>('branch');
@@ -136,6 +140,20 @@ export function BranchPrPicker({
       setPreparingId(null);
     }
   }
+
+  // The PR the task is started from, picked once, with the PR list open on
+  // it meanwhile: its row shows the fetch under way, and a failure stays in
+  // sight with its retry (a pick that lands closes the list).
+  const pickedInitial = useRef(false);
+  useEffect(() => {
+    if (!initialPr || pickedInitial.current) return;
+    pickedInitial.current = true;
+    setTab('pr');
+    setOpen(true);
+    void choosePr(initialPr);
+    // Once, as the picker mounts: a later `initialPr` is the same task's.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPr]);
 
   // Branch fetch failure replaces the control with a retry affordance, matching
   // the prior behavior — a worktree can't be created without a branch.

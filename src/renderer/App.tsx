@@ -1869,7 +1869,8 @@ export function App() {
         />
       )}
 
-      {showCommitGraph && activeProject && (
+      {/* A plain folder has no commits to graph. */}
+      {showCommitGraph && activeProject?.isGitRepo && (
         <CommitGraphModal
           projectPath={activeProject.path}
           projectName={activeProject.name}

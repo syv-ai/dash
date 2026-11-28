@@ -4,6 +4,7 @@ import { SearchableMultiSelect } from '../ui/SearchableMultiSelect';
 import type {
   BranchInfo,
   CreateTaskOptions,
+  PullRequest,
   GithubIssue,
   AzureDevOpsWorkItem,
   LinkedItem,
@@ -43,6 +44,14 @@ import { EffortPicker } from './EffortPicker';
 import { AgentPicker } from './AgentPicker';
 import type { TaskEffort } from '../../../shared/effort';
 
+/** A task started from a PR (the project page's Pull requests): the modal
+ *  opens with the PR's head picked, and `review` enters review mode on the
+ *  PR once the task is made. */
+export interface TaskFromPr {
+  pr: PullRequest;
+  review: boolean;
+}
+
 // Lives in shared/types (main's TaskService takes it too); re-exported so
 // imports don't churn.
 export type { CreateTaskOptions };
@@ -63,6 +72,8 @@ export interface TaskModalDefaults {
 
 interface TaskModalProps {
   projectPath: string;
+  /** The PR the task starts from, its head picked as the modal opens. */
+  fromPr?: PullRequest | null;
   projectId?: string;
   isGitRepo: boolean;
   gitRemote: string | null;
@@ -84,6 +95,7 @@ export function TaskModal(props: TaskModalProps) {
     <Dialog size="xl" onClose={props.onClose} overflow="visible">
       <TaskModalBody
         projectPath={props.projectPath}
+        fromPr={props.fromPr}
         projectId={props.projectId}
         isGitRepo={props.isGitRepo}
         gitRemote={props.gitRemote}
@@ -101,6 +113,8 @@ export function TaskModal(props: TaskModalProps) {
 
 interface TaskModalBodyProps {
   projectPath: string;
+  /** The PR the task starts from, its head picked as the modal opens. */
+  fromPr?: PullRequest | null;
   projectId?: string;
   isGitRepo: boolean;
   gitRemote: string | null;
@@ -153,6 +167,7 @@ function AdoWorkItemRow({ item }: { item: AzureDevOpsWorkItem }) {
 
 function TaskModalBody({
   projectPath,
+  fromPr,
   projectId,
   isGitRepo,
   gitRemote,
@@ -523,6 +538,7 @@ function TaskModalBody({
                   projectPath={projectPath}
                   projectId={projectId}
                   onSelectPr={handlePrPrepared}
+                  initialPr={fromPr}
                 />
 
                 {/* Selected branch is checked out elsewhere, so a worktree on it

@@ -14,11 +14,16 @@ import {
   ChevronDown,
   ArchiveRestore,
 } from 'lucide-react';
-import type { Project, Task, ActivityInfo } from '../../../shared/types';
+import type { Project, Task } from '../../../shared/types';
+import type { TaskFromPr } from '../task/TaskModal';
+import { useProjectPrList } from '../../hooks/useProjectPrs';
+import { usePrReviews } from '../../stores/prReviewStore';
+import { ViewPanel, ViewTabs } from '../ui/ViewTabs';
+import { ProjectPrs, type ProjectPrActions } from './ProjectPrs';
+import { ActivityDot } from './ActivityDot';
 import { IconButton } from '../ui/IconButton';
 import { TextLink } from '../ui/TextLink';
 import { Tooltip } from '../ui/Tooltip';
-import { StatusDot, type AgentState } from '../ui/StatusDot';
 import { LinkedItemLinks } from '../taskHeader/LinkedItemLinks';
 import { TaskActions } from '../task/TaskActions';
 import { TokenBadge } from '../ui/TokenBadge';
@@ -30,7 +35,8 @@ interface ProjectOverviewProps {
   tasks: Task[];
   archivedTasks: Task[];
   onSelectTask: (id: string) => void;
-  onNewTask: () => void;
+  /** Open the new-task flow; from a PR, on its head (Pull requests' Start task). */
+  onNewTask: (fromPr?: TaskFromPr) => void;
   onProjectSettings: () => void;
   onShowCommitGraph: () => void;
   onDeleteProject: () => void;
@@ -52,42 +58,9 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
-/** A task's agent state on the overview: the same StatusDot (and colours)
- *  as the sidebar, with the reason in a tooltip. */
-function ActivityDot({ info }: { info?: ActivityInfo }) {
-  const [state, label]: [AgentState, string] = (() => {
-    switch (info?.state) {
-      case 'error':
-        return [
-          'fail',
-          info.error?.type === 'rate_limit'
-            ? 'Rate limited'
-            : info.error?.type === 'authentication_failed'
-              ? 'Auth error'
-              : 'Error',
-        ];
-      case 'waiting':
-        return ['needs', 'Waiting for you'];
-      case 'busy':
-        return [
-          'work',
-          info.compacting ? 'Compacting context…' : info.tool?.label || 'Claude is working',
-        ];
-      case 'idle':
-        return ['idle', 'Idle'];
-      default:
-        return ['asleep', 'Asleep'];
-    }
-  })();
-  if (state === 'asleep') return <StatusDot state="asleep" />;
-  return (
-    <Tooltip content={label}>
-      <span className="inline-flex">
-        <StatusDot state={state} label={label} />
-      </span>
-    </Tooltip>
-  );
-}
+/** The project page's views. */
+type ProjectView = 'tasks' | 'prs';
+const VIEWS: readonly ProjectView[] = ['tasks', 'prs'];
 
 function remoteDisplayName(remote: string): string {
   return remote
@@ -119,6 +92,16 @@ export function ProjectOverview({
   const detectProjectPrs = useGit((s) => s.detectProjectPrs);
   const projectTokens = useRuntime((s) => s.projectTokenStats[project.id]);
   const [showArchived, setShowArchived] = useState(false);
+  const [view, setView] = useState<ProjectView>('tasks');
+  const prCount = useProjectPrList(project.id).listing?.prs?.length;
+  const prActions: ProjectPrActions = {
+    goToTask: onSelectTask,
+    startTask: (pr, review) => onNewTask({ pr, review }),
+    reviewInTask: (taskId, pr) => {
+      usePrReviews.getState().setMode(taskId, { provider: pr.provider, number: pr.number });
+      onSelectTask(taskId);
+    },
+  };
   // Card whose "…" menu is open: its toolbar stays visible off-hover.
   const [menuOpenTaskId, setMenuOpenTaskId] = useState<string | null>(null);
   const busyCount = tasks.filter((t) => taskActivity[t.id]?.state === 'busy').length;
@@ -176,9 +159,11 @@ export function ProjectOverview({
 
             {/* Actions */}
             <div className="flex items-center gap-1 shrink-0 ml-4">
-              <IconButton onClick={onShowCommitGraph} title="Commit graph">
-                <GitGraph size={15} strokeWidth={1.8} />
-              </IconButton>
+              {project.isGitRepo && (
+                <IconButton onClick={onShowCommitGraph} title="Commit graph">
+                  <GitGraph size={15} strokeWidth={1.8} />
+                </IconButton>
+              )}
               <IconButton onClick={onProjectSettings} title="Project settings">
                 <Settings size={15} strokeWidth={1.8} />
               </IconButton>
@@ -187,7 +172,7 @@ export function ProjectOverview({
               </IconButton>
               <div className="w-px h-5 bg-border/40 mx-1.5" />
               <button
-                onClick={onNewTask}
+                onClick={() => onNewTask()}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-sm text-primary font-medium transition-colors"
               >
                 <Plus size={14} strokeWidth={2} />
@@ -235,217 +220,242 @@ export function ProjectOverview({
               )}
             </div>
           )}
+
+          <ViewTabs<ProjectView>
+            variant="pill"
+            aria-label="Project view"
+            className="mt-4 ml-12"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: 'tasks', label: 'Tasks', count: tasks.length, countLabel: 'Tasks' },
+              {
+                value: 'prs',
+                label: 'Pull requests',
+                count: prCount,
+                countLabel: 'Open pull requests',
+              },
+            ]}
+          />
         </div>
       </div>
 
       {/* Scrollable content */}
-      <div className="scrollbar-thin-hover flex-1 overflow-y-auto px-14 py-6">
-        <div className="w-full">
-          {tasks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <p className="text-base text-muted-foreground mb-4">
-                No tasks yet — create one to start a Claude session.
-              </p>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/40 text-xs text-muted-foreground">
-                <kbd className="px-1.5 py-0.5 rounded-md bg-accent text-xs font-medium">Cmd</kbd>
-                <span>+</span>
-                <kbd className="px-1.5 py-0.5 rounded-md bg-accent text-xs font-medium">N</kbd>
-              </div>
-            </div>
+      <div className="scrollbar-thin-hover min-h-0 flex-1 overflow-y-auto px-14 py-6">
+        <ViewPanel value={view} order={VIEWS} onChange={setView}>
+          {view === 'prs' ? (
+            <ProjectPrs project={project} actions={prActions} />
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {tasks.map((task) => {
-                const activity = taskActivity[task.id];
-                const linkedItems = task.linkedItems ?? [];
+            <div className="w-full">
+              {tasks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <p className="text-base text-muted-foreground mb-4">
+                    No tasks yet — create one to start a Claude session.
+                  </p>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/40 text-xs text-muted-foreground">
+                    <kbd className="px-1.5 py-0.5 rounded-md bg-accent text-xs font-medium">
+                      Cmd
+                    </kbd>
+                    <span>+</span>
+                    <kbd className="px-1.5 py-0.5 rounded-md bg-accent text-xs font-medium">N</kbd>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {tasks.map((task) => {
+                    const activity = taskActivity[task.id];
+                    const linkedItems = task.linkedItems ?? [];
 
-                return (
-                  // role=button (not <button>) so the interactive children below
-                  // (Open-in-IDE, issue links, Delete) are valid DOM — a <button>
-                  // can't contain other buttons or anchors.
-                  <div
-                    key={task.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onSelectTask(task.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        onSelectTask(task.id);
-                      }
-                    }}
-                    className="relative flex flex-col p-4 rounded-xl border border-border bg-[hsl(var(--surface-2))] hover:bg-[hsl(var(--surface-3))] hover:border-foreground/20 transition-all text-left group overflow-hidden min-w-0 cursor-pointer"
-                  >
-                    {/* Task name + status */}
-                    <div className="flex items-start gap-2.5 mb-3 pr-6 min-w-0">
-                      <div className="mt-1.5 shrink-0">
-                        <ActivityDot info={activity} />
-                      </div>
-                      <span className="text-base font-medium text-foreground flex-1 min-w-0 wrap-break-word">
-                        {task.name}
-                      </span>
-                      {!task.useWorktree && (
-                        <span className="mt-[3px] shrink-0">
-                          <MainRepoBadge task={task} />
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Details */}
-                    <div className="flex flex-col gap-1.5 flex-1 text-xs w-full overflow-hidden">
-                      {(branchByTask[task.id] ?? task.branch) && (
-                        <div className="text-muted-foreground truncate">
-                          <span className="text-muted-fade-70">Branch: </span>
-                          {branchByTask[task.id] ?? task.branch}
-                        </div>
-                      )}
-
-                      {task.useWorktree && task.path && (
-                        <div className="text-muted-foreground truncate">
-                          <span className="text-muted-fade-70">Worktree: </span>
-                          <span className="text-xs">
-                            {task.path.split(/[\\/]/).slice(-2).join('/')}
+                    return (
+                      // role=button (not <button>) so the interactive children below
+                      // (Open-in-IDE, issue links, Delete) are valid DOM — a <button>
+                      // can't contain other buttons or anchors.
+                      <div
+                        key={task.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onSelectTask(task.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            onSelectTask(task.id);
+                          }
+                        }}
+                        className="relative flex flex-col p-4 rounded-xl border border-border bg-[hsl(var(--surface-2))] hover:bg-[hsl(var(--surface-3))] hover:border-foreground/20 transition-all text-left group overflow-hidden min-w-0 cursor-pointer"
+                      >
+                        {/* Task name + status */}
+                        <div className="flex items-start gap-2.5 mb-3 pr-6 min-w-0">
+                          <div className="mt-1.5 shrink-0">
+                            <ActivityDot info={activity} />
+                          </div>
+                          <span className="text-base font-medium text-foreground flex-1 min-w-0 wrap-break-word">
+                            {task.name}
                           </span>
+                          {!task.useWorktree && (
+                            <span className="mt-[3px] shrink-0">
+                              <MainRepoBadge task={task} />
+                            </span>
+                          )}
                         </div>
-                      )}
 
-                      {linkedItems.length > 0 &&
-                        (() => {
-                          const isAdo = linkedItems.some((i) => i.provider === 'ado');
-                          const label = isAdo
-                            ? linkedItems.length === 1
-                              ? 'Work item:'
-                              : 'Work items:'
-                            : linkedItems.length === 1
-                              ? 'Issue:'
-                              : 'Issues:';
-                          return (
+                        {/* Details */}
+                        <div className="flex flex-col gap-1.5 flex-1 text-xs w-full overflow-hidden">
+                          {project.isGitRepo && (branchByTask[task.id] ?? task.branch) && (
+                            <div className="text-muted-foreground truncate">
+                              <span className="text-muted-fade-70">Branch: </span>
+                              {branchByTask[task.id] ?? task.branch}
+                            </div>
+                          )}
+
+                          {task.useWorktree && task.path && (
+                            <div className="text-muted-foreground truncate">
+                              <span className="text-muted-fade-70">Worktree: </span>
+                              <span className="text-xs">
+                                {task.path.split(/[\\/]/).slice(-2).join('/')}
+                              </span>
+                            </div>
+                          )}
+
+                          {linkedItems.length > 0 &&
+                            (() => {
+                              const isAdo = linkedItems.some((i) => i.provider === 'ado');
+                              const label = isAdo
+                                ? linkedItems.length === 1
+                                  ? 'Work item:'
+                                  : 'Work items:'
+                                : linkedItems.length === 1
+                                  ? 'Issue:'
+                                  : 'Issues:';
+                              return (
+                                <div className="flex items-start gap-1.5 text-muted-foreground">
+                                  <span className="shrink-0 text-muted-fade-70">{label}</span>
+                                  <LinkedItemLinks
+                                    items={linkedItems}
+                                    gitRemote={project.gitRemote ?? null}
+                                    max={3}
+                                  />
+                                </div>
+                              );
+                            })()}
+
+                          {(branchPrsByTask[task.id]?.length ?? 0) > 0 && (
                             <div className="flex items-start gap-1.5 text-muted-foreground">
-                              <span className="shrink-0 text-muted-fade-70">{label}</span>
-                              <LinkedItemLinks
-                                items={linkedItems}
-                                gitRemote={project.gitRemote ?? null}
-                                max={3}
+                              <span className="shrink-0 text-muted-fade-70 mt-0.5">PR:</span>
+                              <PrBadge
+                                prs={prByTask[task.id] ?? []}
+                                allPrs={branchPrsByTask[task.id]}
+                                size="sm"
+                                taskId={task.id}
                               />
                             </div>
-                          );
-                        })()}
-
-                      {(branchPrsByTask[task.id]?.length ?? 0) > 0 && (
-                        <div className="flex items-start gap-1.5 text-muted-foreground">
-                          <span className="shrink-0 text-muted-fade-70 mt-0.5">PR:</span>
-                          <PrBadge
-                            prs={prByTask[task.id] ?? []}
-                            allPrs={branchPrsByTask[task.id]}
-                            size="sm"
-                            taskId={task.id}
-                          />
+                          )}
                         </div>
-                      )}
-                    </div>
 
-                    {/* Footer: Updated + tokens on the left; the action toolbar
+                        {/* Footer: Updated + tokens on the left; the action toolbar
                         fades in on hover, right-aligned on the same row.
                         opacity-0 still reserves layout, so nothing shifts. */}
-                    <div className="mt-3 pt-2.5 border-t border-border/50 flex items-center justify-between gap-2 min-w-0">
-                      <div className="flex items-center gap-2 min-w-0 text-xs text-muted-foreground">
-                        <span className="shrink-0">Updated {timeAgo(task.updatedAt)}</span>
-                        {task.totalTokens > 0 && (
-                          <TokenBadge
-                            totalTokens={task.totalTokens}
-                            totalCostUsd={task.totalCostUsd}
-                            size="sm"
-                          />
-                        )}
-                      </div>
-                      <div
-                        className={`transition-opacity shrink-0 ${
-                          menuOpenTaskId === task.id
-                            ? 'opacity-100'
-                            : 'opacity-0 group-hover:opacity-100'
-                        }`}
-                      >
-                        <TaskActions
-                          taskId={task.id}
-                          activityState={activity?.state}
-                          onOpenIde={() => void openInIde(task.path || project.path)}
-                          onClose={() => onCloseTask(task.id)}
-                          onSettings={() => onTaskSettings(task.id)}
-                          onArchive={() => onArchiveTask(task.id)}
-                          onDelete={() => onDeleteTask(task.id)}
-                          onMenuOpenChange={(open) => setMenuOpenTaskId(open ? task.id : null)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Archived tasks */}
-          {archivedTasks.length > 0 && (
-            <div className="mt-6">
-              <button
-                onClick={() => setShowArchived((prev) => !prev)}
-                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-3"
-              >
-                {showArchived ? (
-                  <ChevronDown size={14} strokeWidth={2} />
-                ) : (
-                  <ChevronRight size={14} strokeWidth={2} />
-                )}
-                <span>Archived ({archivedTasks.length})</span>
-              </button>
-
-              {showArchived && (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                  {archivedTasks.map((task) => (
-                    <div
-                      key={task.id}
-                      className="flex flex-col p-4 rounded-xl border border-border/50 bg-[hsl(var(--surface-1))] text-left group"
-                    >
-                      <div className="flex items-center gap-2.5 mb-2">
-                        <span className="text-base text-muted-foreground truncate flex-1">
-                          {task.name}
-                        </span>
-                      </div>
-
-                      {task.branch && (
-                        <div className="flex items-center gap-1.5 text-xs text-muted-fade-70 mb-1.5">
-                          <span className="shrink-0 text-muted-fade-50">Branch:</span>
-                          <span className="truncate">{task.branch}</span>
-                        </div>
-                      )}
-
-                      <div className="flex items-center justify-between mt-2 pt-2.5 border-t border-border/30">
-                        <span className="text-xs text-muted-fade-70">
-                          Archived {timeAgo(task.archivedAt!)}
-                        </span>
-                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <IconButton
-                            onClick={() => onRestoreTask(task.id)}
-                            title="Restore task"
-                            size="sm"
+                        <div className="mt-3 pt-2.5 border-t border-border/50 flex items-center justify-between gap-2 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0 text-xs text-muted-foreground">
+                            <span className="shrink-0">Updated {timeAgo(task.updatedAt)}</span>
+                            {task.totalTokens > 0 && (
+                              <TokenBadge
+                                totalTokens={task.totalTokens}
+                                totalCostUsd={task.totalCostUsd}
+                                size="sm"
+                              />
+                            )}
+                          </div>
+                          <div
+                            className={`transition-opacity shrink-0 ${
+                              menuOpenTaskId === task.id
+                                ? 'opacity-100'
+                                : 'opacity-0 group-hover:opacity-100'
+                            }`}
                           >
-                            <ArchiveRestore size={12} strokeWidth={1.8} />
-                          </IconButton>
-                          <IconButton
-                            onClick={() => onDeleteTask(task.id)}
-                            title="Delete task"
-                            variant="destructive"
-                            size="sm"
-                          >
-                            <Trash2 size={12} strokeWidth={1.8} />
-                          </IconButton>
+                            <TaskActions
+                              taskId={task.id}
+                              activityState={activity?.state}
+                              onOpenIde={() => void openInIde(task.path || project.path)}
+                              onClose={() => onCloseTask(task.id)}
+                              onSettings={() => onTaskSettings(task.id)}
+                              onArchive={() => onArchiveTask(task.id)}
+                              onDelete={() => onDeleteTask(task.id)}
+                              onMenuOpenChange={(open) => setMenuOpenTaskId(open ? task.id : null)}
+                            />
+                          </div>
                         </div>
                       </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Archived tasks */}
+              {archivedTasks.length > 0 && (
+                <div className="mt-6">
+                  <button
+                    onClick={() => setShowArchived((prev) => !prev)}
+                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-3"
+                  >
+                    {showArchived ? (
+                      <ChevronDown size={14} strokeWidth={2} />
+                    ) : (
+                      <ChevronRight size={14} strokeWidth={2} />
+                    )}
+                    <span>Archived ({archivedTasks.length})</span>
+                  </button>
+
+                  {showArchived && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                      {archivedTasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className="flex flex-col p-4 rounded-xl border border-border/50 bg-[hsl(var(--surface-1))] text-left group"
+                        >
+                          <div className="flex items-center gap-2.5 mb-2">
+                            <span className="text-base text-muted-foreground truncate flex-1">
+                              {task.name}
+                            </span>
+                          </div>
+
+                          {project.isGitRepo && task.branch && (
+                            <div className="flex items-center gap-1.5 text-xs text-muted-fade-70 mb-1.5">
+                              <span className="shrink-0 text-muted-fade-50">Branch:</span>
+                              <span className="truncate">{task.branch}</span>
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between mt-2 pt-2.5 border-t border-border/30">
+                            <span className="text-xs text-muted-fade-70">
+                              Archived {timeAgo(task.archivedAt!)}
+                            </span>
+                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <IconButton
+                                onClick={() => onRestoreTask(task.id)}
+                                title="Restore task"
+                                size="sm"
+                              >
+                                <ArchiveRestore size={12} strokeWidth={1.8} />
+                              </IconButton>
+                              <IconButton
+                                onClick={() => onDeleteTask(task.id)}
+                                title="Delete task"
+                                variant="destructive"
+                                size="sm"
+                              >
+                                <Trash2 size={12} strokeWidth={1.8} />
+                              </IconButton>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </div>
           )}
-        </div>
+        </ViewPanel>
       </div>
     </div>
   );
