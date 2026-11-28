@@ -79,11 +79,12 @@ export class TaskService {
     const problem = launchOptionsProblem({ extraArgs: extraArgs ?? null, addDirs, env: input.env });
     if (problem) throw new Error(problem);
 
-    // saveTask enforces one active in-place task per project folder; check it
-    // before the checkout too, or a refused task would still switch the
-    // occupant's branch.
+    // saveTask enforces the folder rule (folderSharing); check it before the
+    // checkout too, or a refused task would still switch the occupant's
+    // branch. A plain folder's tasks share it.
     if (input.kind === 'in-place-checkout' || input.kind === 'in-place-no-git') {
-      const occupant = DatabaseService.findActiveNonWorktreeTaskAt(project.id, project.path);
+      const branch = input.kind === 'in-place-checkout' ? input.branch : '';
+      const occupant = DatabaseService.findFolderOccupant(project.id, project.path, branch);
       if (occupant) {
         throw new FolderOccupiedError(
           `Cannot run "${name}" in ${project.path}: active task "${occupant.name}" already uses this folder. Archive it first.`,

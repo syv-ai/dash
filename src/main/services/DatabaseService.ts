@@ -18,6 +18,7 @@ import type {
 } from '@shared/types';
 import { isPermissionMode } from '@shared/types';
 import { FolderOccupiedError } from './FolderOccupiedError';
+import { canShareFolder } from '@shared/folderSharing';
 import { normalizeAddDirs } from '@shared/addDirs';
 import { isTaskEffort } from '@shared/effort';
 
@@ -216,14 +217,16 @@ export class DatabaseService {
   }
 
   /**
-   * Resume strategy in ptyManager (`claude --continue`) is correct only because
-   * each task has a unique cwd: worktree tasks get their own dir by construction,
-   * and non-worktree tasks must be unique per project path. UI gating in TaskModal
-   * is best-effort; this is the load-bearing check.
+   * The active in-place task `branch` can't share `path` with (folderSharing:
+   * a task on a branch needs its folder to itself; branchless tasks share
+   * one), or null when the folder is free for it. The load-bearing check of
+   * that rule: create, save and restore all come here; TaskModal's gating is
+   * best-effort.
    */
-  static findActiveNonWorktreeTaskAt(
+  static findFolderOccupant(
     projectId: string,
     path: string,
+    branch: string,
     excludeId?: string,
   ): { id: string; name: string } | null {
     const db = getDb();
@@ -234,12 +237,13 @@ export class DatabaseService {
       isNull(tasks.archivedAt),
     ];
     if (excludeId) conditions.push(ne(tasks.id, excludeId));
-    const row = db
-      .select({ id: tasks.id, name: tasks.name })
+    const rows = db
+      .select({ id: tasks.id, name: tasks.name, branch: tasks.branch })
       .from(tasks)
       .where(and(...conditions))
-      .get();
-    return row ?? null;
+      .all();
+    const occupant = rows.find((row) => !canShareFolder({ branch }, row));
+    return occupant ? { id: occupant.id, name: occupant.name } : null;
   }
 
   static saveTask(
@@ -250,7 +254,7 @@ export class DatabaseService {
     const now = new Date().toISOString();
 
     if (data.useWorktree === false) {
-      const conflict = this.findActiveNonWorktreeTaskAt(data.projectId, data.path, id);
+      const conflict = this.findFolderOccupant(data.projectId, data.path, data.branch, id);
       if (conflict) {
         throw new FolderOccupiedError(
           `Cannot save non-worktree task at "${data.path}": active task "${conflict.name}" already occupies this directory. Archive it first.`,
@@ -569,7 +573,7 @@ export class DatabaseService {
     const target = db.select().from(tasks).where(eq(tasks.id, id)).get();
     if (!target) return;
     if (!target.useWorktree) {
-      const conflict = this.findActiveNonWorktreeTaskAt(target.projectId, target.path, id);
+      const conflict = this.findFolderOccupant(target.projectId, target.path, target.branch, id);
       if (conflict) {
         throw new FolderOccupiedError(
           `Cannot restore "${target.name}": active task "${conflict.name}" already occupies "${target.path}". Archive it first.`,

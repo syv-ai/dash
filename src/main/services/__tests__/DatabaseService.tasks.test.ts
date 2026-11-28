@@ -9,6 +9,7 @@ vi.mock('../../db/client', () => ({ getDb: () => db, getRawDb: () => raw, initDb
 
 import { runMigrations } from '../../db/migrate';
 import { DatabaseService } from '../DatabaseService';
+import { FolderOccupiedError } from '../FolderOccupiedError';
 
 beforeEach(() => {
   raw = new Database(':memory:');
@@ -70,5 +71,40 @@ describe('DatabaseService tasks: Dash access and parent task', () => {
     expect(renamed.favorite).toBe(true);
     DatabaseService.setTaskFavorite(t.id, false);
     expect(DatabaseService.getTask(t.id)?.favorite).toBe(false);
+  });
+});
+
+describe('DatabaseService tasks: the folder rule', () => {
+  const inPlace = { projectId: 'p1', path: '/repo', useWorktree: false };
+
+  it('lets branchless tasks share a plain folder', () => {
+    DatabaseService.saveTask({ ...inPlace, name: 'a', branch: '' });
+    const b = DatabaseService.saveTask({ ...inPlace, name: 'b', branch: '' });
+    expect(DatabaseService.findFolderOccupant('p1', '/repo', '')).toBeNull();
+    DatabaseService.archiveTask(b.id);
+    expect(() => DatabaseService.restoreTask(b.id)).not.toThrow();
+    expect(DatabaseService.getTasksByPath('/repo')).toHaveLength(2);
+  });
+
+  it('gives a task on a branch the folder to itself, either way round', () => {
+    const plain = DatabaseService.saveTask({ ...inPlace, name: 'plain', branch: '' });
+    expect(() => DatabaseService.saveTask({ ...inPlace, name: 'co', branch: 'main' })).toThrow(
+      FolderOccupiedError,
+    );
+    DatabaseService.archiveTask(plain.id);
+    const co = DatabaseService.saveTask({ ...inPlace, name: 'co', branch: 'main' });
+    expect(DatabaseService.findFolderOccupant('p1', '/repo', '')).toEqual({
+      id: co.id,
+      name: 'co',
+    });
+    expect(() => DatabaseService.restoreTask(plain.id)).toThrow(/"co"/);
+  });
+
+  it('lets a task be saved again beside the tasks it shares its folder with', () => {
+    const a = DatabaseService.saveTask({ ...inPlace, name: 'a', branch: '' });
+    DatabaseService.saveTask({ ...inPlace, name: 'b', branch: '' });
+    expect(DatabaseService.saveTask({ ...inPlace, id: a.id, name: 'a2', branch: '' }).name).toBe(
+      'a2',
+    );
   });
 });

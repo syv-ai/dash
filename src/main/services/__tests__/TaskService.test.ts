@@ -46,10 +46,14 @@ vi.mock('../DatabaseService', () => ({
     restoreTask: (id: string) => {
       db.tasks.find((t) => t.id === id)!.archivedAt = null;
     },
-    findActiveNonWorktreeTaskAt: (projectId: string, path: string) =>
+    findFolderOccupant: (projectId: string, path: string, branch: string) =>
       db.tasks.find(
         (t) =>
-          t.projectId === projectId && t.path === path && !t.useWorktree && t.archivedAt == null,
+          t.projectId === projectId &&
+          t.path === path &&
+          !t.useWorktree &&
+          t.archivedAt == null &&
+          (!!t.branch || !!branch),
       ) ?? null,
   },
 }));
@@ -313,6 +317,30 @@ describe('TaskService.create', () => {
     expect(git.updateBranchToRemote).not.toHaveBeenCalled();
     expect(git.checkoutBranch).not.toHaveBeenCalled();
     expect(db.tasks).toHaveLength(1);
+  });
+
+  it('lets a plain folder take a second task beside an active one', async () => {
+    db.tasks.push({
+      id: 'first',
+      projectId: 'p1',
+      name: 'First',
+      branch: '',
+      path: '/repo/app',
+      useWorktree: false,
+      archivedAt: null,
+    } as Task);
+    const second = await TaskService.create(
+      {
+        kind: 'in-place-no-git',
+        projectId: 'p1',
+        name: 'second',
+        permissionMode: 'default',
+        model: 'default',
+      },
+      UI,
+    );
+    expect(second.task.path).toBe('/repo/app');
+    expect(db.tasks.filter((t) => t.path === '/repo/app')).toHaveLength(2);
   });
 
   it('starts the first message of an API task with the unattended instruction, and only then', async () => {
