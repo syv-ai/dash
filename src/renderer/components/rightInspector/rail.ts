@@ -28,8 +28,8 @@ export function railParts(status: Status | null): RailParts {
   };
 }
 
-/** What leads off the rail: a part, a PR picked from its list, an action at
- *  its foot, or the space around them. */
+/** What leads off the rail: a part (the PRs among them), an action at its
+ *  foot, or the space around them. */
 export type RailTarget = 'changes' | 'sync' | 'pr' | 'details' | 'terminal' | 'space';
 
 /** How the sidebar shows, narrow, from the rail. */
@@ -44,15 +44,14 @@ const show = (view: SidebarView | null, terminal = false): RailShow => ({ view, 
 
 /**
  * Where each rail target shows the sidebar, narrow (R3): the changes on
- * Files, ahead/behind on History, Details on Details; a PR picked from the
- * rail's list as review mode has it (entering it shows Overview, R10); the
+ * Files, ahead/behind on History, the PRs on PRs, Details on Details; the
  * terminal and the space on the view it has, the terminal drawer opened
  * (R11). A limit isn't a target: it only has its tooltip.
  */
 export const RAIL_SHOW: Record<RailTarget, RailShow> = {
   changes: show('files'),
   sync: show('history'),
-  pr: show(null),
+  pr: show('prs'),
   details: show('details'),
   terminal: show(null, true),
   space: show(null),

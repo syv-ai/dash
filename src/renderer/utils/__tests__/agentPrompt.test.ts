@@ -146,6 +146,8 @@ const review = (number: number, threads: PrReviewThread[]): PrReview => ({
   url: `https://github.com/o/r/pull/${number}`,
   viewerIsAuthor: false,
   viewerIsRequestedReviewer: false,
+  viewerIsAssignee: false,
+  viewerCommented: false,
   verdicts: ['comment'],
   base: 'b',
   head: 'h',

@@ -41,9 +41,9 @@ export interface ReviewMode {
   review: PrReview | null;
   /** The open PRs from and into the branch; null until first listed. */
   relevant: RelevantPrs | null;
-  /** List the relevant PRs again (the PR button opening). */
+  /** List the relevant PRs again (the PRs view showing). */
   refreshPrs: () => void;
-  /** The branch's own PR and its unresolved threads (the PR button's badge). */
+  /** The branch's own PR and its unresolved threads (the rail's PRs badge). */
   own: (BranchPr & { threads: number }) | null;
   /** History's row for the branch's own PR (normal mode only). */
   historyPr: PrEntry | null;
@@ -68,7 +68,7 @@ export interface ReviewMode {
  * Review mode's state machine for the task sidebar (spec Revision 3):
  * entering and exiting, the editor following the mode's PR (its view at the
  * loaded head, a push re-pointing it), Overview being the mode's alone, the
- * branch's own PR (one source for the PR button and History's row), and the
+ * branch's own PR (one source for the rail's PRs badge and History's row), and the
  * PR's commits for History. The rules are `sidebarState`'s; this applies
  * them to the sidebar's segment and the editor's workspace.
  */
@@ -85,7 +85,7 @@ export function useReviewMode(
   const { view, selectView, showPr } = ws;
   const { segment, showSegment } = sidebar;
 
-  // ── The branch's own PR: the PR button's badge and History's row ──
+  // ── The branch's own PR: the rail's PRs badge and History's row ──
   const detected = useGit((s) => s.prByTask[task.id]);
   const ownPr = branchPr(taskPrs.relevant, detected);
   const ownReview = usePrReviews((s) =>

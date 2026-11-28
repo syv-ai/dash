@@ -1,28 +1,32 @@
-import type { ComponentProps } from 'react';
-import { FileDiff, Info, Terminal } from 'lucide-react';
+import { FileDiff, GitPullRequestArrow, Info, Terminal } from 'lucide-react';
 import type { ContextUsage, GitStatus, RateLimits } from '../../../shared/types';
 import { useMinuteClock } from '../../hooks/useMinuteClock';
 import { getBindingKeys } from '../../keybindings';
 import { useSettings } from '../../stores/settingsStore';
 import { SyncArrowsStacked, syncSentence } from '../changes/SyncStatus';
-import { PrButton } from '../review/PrButton';
+import { plural } from '../review/labels';
+import { CountBadge } from '../ui/CountBadge';
 import { IconButton } from '../ui/IconButton';
 import { Rail, RailItem } from '../ui/Rail';
 import { LevelReading, levelCells } from './UsageSection';
 import { RAIL_SHOW, railParts, type RailShow, type RailTarget } from './rail';
 
-/** The view row's PR button, as the rail takes it (null in review mode). */
-type RailPrs = Omit<ComponentProps<typeof PrButton>, 'variant'>;
+/** The PRs from and into the branch, as the rail counts them, and the
+ *  branch's own PR with its unresolved threads (0: no badge). */
+interface RailPrs {
+  count: number;
+  own: { number: number; threads: number } | null;
+}
 
 /**
  * The task sidebar collapsed: a rail of what it would show at a glance, top
  * to bottom: the usage row's levels, the session's context and the account's
  * limits (their percent, coloured by use; the rest in their tooltips), how far the branch and its upstream have moved apart
- * ("↑3" over "↓1"), the changed files and the PRs; at its foot, Details and
- * the terminal. A click shows the sidebar narrow (`RAIL_SHOW`): ahead/behind
- * on History, the changes on Files, Details on Details, the terminal and the
- * rail's own space as it was, the terminal opened and focused; the PRs open
- * their list beside the rail, a PR picked entering review mode. A limit only
+ * ("↑3" over "↓1"), the changed files and the PRs (badged with the unresolved
+ * threads on the branch's own); at its foot, Details and the terminal. A
+ * click shows the sidebar narrow (`RAIL_SHOW`): ahead/behind on History, the
+ * changes on Files, the PRs on PRs, Details on Details, the terminal and the
+ * rail's own space as it was, the terminal opened and focused. A limit only
  * has its tooltip.
  */
 export function TaskRail({
@@ -38,7 +42,7 @@ export function TaskRail({
   rateLimits?: RateLimits;
   /** The task's git status; null until loaded. */
   status: GitStatus | null;
-  /** The PR button's state; null in review mode (it has none). */
+  /** The PRs; null in review mode, or with none from or into the branch. */
   prs: RailPrs | null;
   /** Show the sidebar narrow, as `show` says. */
   onShow: (show: RailShow) => void;
@@ -104,14 +108,27 @@ export function TaskRail({
         </RailItem>
       )}
       {prs && (
-        <PrButton
-          {...prs}
-          variant="rail"
-          onPick={(pr) => {
-            prs.onPick(pr);
-            show('pr')();
+        <RailItem
+          aria-label={`${plural(prs.count, 'pull request')}: show PRs`}
+          tooltip={{
+            icon: GitPullRequestArrow,
+            title: `${plural(prs.count, 'pull request')} from or into this branch`,
+            rows:
+              prs.own && prs.own.threads > 0
+                ? [{ label: `Unresolved on #${prs.own.number}`, value: prs.own.threads }]
+                : undefined,
+            body: 'Click to show PRs.',
           }}
-        />
+          onClick={show('pr')}
+        >
+          <GitPullRequestArrow size={14} strokeWidth={1.8} className="text-icon" aria-hidden />
+          <span className="type-body flex items-center gap-0.5 tabular-nums">
+            {prs.count}
+            {prs.own && prs.own.threads > 0 && (
+              <CountBadge count={prs.own.threads} tone="outline" />
+            )}
+          </span>
+        </RailItem>
       )}
     </Rail>
   );

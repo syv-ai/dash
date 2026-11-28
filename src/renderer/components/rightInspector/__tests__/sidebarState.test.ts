@@ -5,6 +5,7 @@ import {
   firstTreeFile,
   pickSegment,
   segmentOnMode,
+  segmentWithoutPrs,
   viewForMode,
   viewOnExit,
   viewOnSegment,
@@ -38,6 +39,12 @@ describe('pickSegment', () => {
     expect(pick('agent', 'agent', false)).toBe('none');
     expect(pick('agent', 'agent', true)).toBe('narrow');
     expect(pick('files', 'agent', true)).toBe('select');
+  });
+
+  it("doesn't expand on PRs, which lists no files", () => {
+    expect(pick('prs', 'prs', false)).toBe('none');
+    expect(pick('prs', 'prs', true)).toBe('narrow');
+    expect(pick('files', 'prs', false)).toBe('select');
   });
 
   it('goes narrow when the expanded view is picked again', () => {
@@ -154,11 +161,26 @@ describe('segmentOnMode', () => {
     expect(on('agent', undefined, undefined)).toBe('agent');
   });
 
+  it("leaves PRs for Overview on entering review mode; it is normal mode's alone", () => {
+    expect(on('prs', false, true)).toBe('overview');
+    expect(on('prs', true, true)).toBe('overview');
+    expect(on('prs', undefined, false)).toBe('prs');
+  });
+
   it('leaves Overview and Threads for Files once review mode ends; they are its alone', () => {
     expect(on('overview', true, false)).toBe('files');
     expect(on('threads', true, false)).toBe('files');
     expect(on('files', true, false)).toBe('files');
     expect(on('details', true, false)).toBe('details');
+  });
+});
+
+describe('segmentWithoutPrs', () => {
+  it('leaves PRs for Files once the tab goes, and keeps any other view', () => {
+    expect(segmentWithoutPrs('prs', false)).toBe('files');
+    expect(segmentWithoutPrs('prs', true)).toBe('prs');
+    expect(segmentWithoutPrs('history', false)).toBe('history');
+    expect(segmentWithoutPrs('details', false)).toBe('details');
   });
 });
 

@@ -287,6 +287,15 @@ export function githubReviewFrom(
     .map(commentFrom)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const threads = p.reviewThreads as { pageInfo?: { hasNextPage?: unknown } } | undefined;
+  const assignees = nodes(p.assignees).map(login).filter(Boolean);
+  // Any comment of the viewer's: in the conversation, a submitted review, or a thread.
+  const viewerCommented =
+    !!viewer &&
+    [
+      ...nodes(p.comments),
+      ...nodes(p.reviews).filter((r) => r.state !== 'PENDING'),
+      ...nodes(p.reviewThreads).flatMap((t) => nodes(t.comments)),
+    ].some((c) => login(c.author) === viewer);
   return {
     provider: 'github',
     number,
@@ -295,6 +304,8 @@ export function githubReviewFrom(
     url: str(p.url),
     viewerIsAuthor,
     viewerIsRequestedReviewer,
+    viewerIsAssignee: !!viewer && assignees.includes(viewer),
+    viewerCommented,
     verdicts: viewerIsAuthor ? ['comment'] : GITHUB_VERDICTS,
     base,
     head,
@@ -310,7 +321,7 @@ export function githubReviewFrom(
     headRef: str(p.headRefName),
     reviewers: reviewersFrom(p),
     viewerReview: githubViewerReview(p, viewer),
-    assignees: nodes(p.assignees).map(login).filter(Boolean),
+    assignees,
     issues: nodes(p.closingIssuesReferences).flatMap((i) => {
       const n = num(i.number);
       return n === null ? [] : [{ number: n, title: str(i.title), url: str(i.url) }];

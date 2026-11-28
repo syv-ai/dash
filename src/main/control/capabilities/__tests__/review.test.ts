@@ -56,6 +56,8 @@ const review = (pr: PrRef): PrReview => ({
   url: 'https://github.com/o/r/pull/12',
   viewerIsAuthor: true,
   viewerIsRequestedReviewer: false,
+  viewerIsAssignee: false,
+  viewerCommented: false,
   verdicts: ['comment'],
   base: 'b0',
   head: 'h0',

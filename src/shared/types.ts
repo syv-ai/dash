@@ -879,6 +879,10 @@ export interface PrReview {
   viewerIsAuthor: boolean;
   /** You're asked to review it and haven't yet. */
   viewerIsRequestedReviewer: boolean;
+  /** You're among its assignees; false on ADO, which has none. */
+  viewerIsAssignee: boolean;
+  /** You've left a comment on it: in a thread or its conversation. */
+  viewerCommented: boolean;
   /** The verdicts this provider offers, in display order. */
   verdicts: PrVerdict[];
   /** Merge-base of the PR's base and head: the left side of its diff. */
@@ -986,7 +990,7 @@ export interface PrListFilter {
   base?: string;
 }
 
-/** A relevant PR as the PR button lists it: the listing's PR, plus what the
+/** A relevant PR as the PRs view lists it: the listing's PR, plus what the
  *  forge answers in the same call. A fact the forge's listing doesn't carry
  *  is null (ADO lists no update time, line counts, threads or checks). */
 export interface RelevantPr extends PullRequest {

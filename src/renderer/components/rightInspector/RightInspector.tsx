@@ -21,7 +21,7 @@ import { UsageSection } from './UsageSection';
 import { TaskRail } from './TaskRail';
 import { RAIL_PX } from '../ui/Rail';
 import type { RailShow } from './rail';
-import { ViewRow, type ViewRowExtra } from './ViewRow';
+import { ViewRow } from './ViewRow';
 import { viewRowMinPx } from './viewRowFit';
 import { TaskDetails } from './TaskDetails';
 import { AgentView } from './AgentView';
@@ -50,6 +50,7 @@ import {
   firstListedChange,
   firstTreeFile,
   pickSegment,
+  segmentWithoutPrs,
   type CodeSegment,
   type SidebarView,
 } from './sidebarState';
@@ -61,7 +62,8 @@ import {
   saveListWidth,
   type ListMode,
 } from '../../lib/inspectorWidths';
-import { PrButton } from '../review/PrButton';
+import { PrsView } from '../review/PrsView';
+import { prsTabShown, taskPrList } from '../review/prList';
 import { ReviewBanner } from '../review/ReviewBanner';
 import { ReviewView } from '../review/ReviewView';
 import { useReviewCheckout } from '../review/useReviewCheckout';
@@ -333,6 +335,8 @@ export function RightInspector({
   const selectSegment = (next: CodeSegment) => {
     showSegment(next);
     review.onSegment(next);
+    // PRs lists them again as it shows, as the forge may have moved on.
+    if (next === 'prs') review.refreshPrs();
   };
   // Double-clicking the current view (`reselect`; a single click does
   // nothing) while expanded goes narrow (never collapsed: that is the Hide
@@ -548,25 +552,15 @@ export function RightInspector({
     if (listMinPx !== undefined) onMinWidth?.(listMinPx);
   }, [listMinPx, onMinWidth]);
 
-  const extras: ViewRowExtra[] = [];
-  // The PR button's state, for the row and the rail; normal mode only.
-  const prs = reviewing
-    ? null
-    : {
-        taskId: task.id,
-        relevant: review.relevant,
-        own: review.own,
-        onOpen: review.refreshPrs,
-        onPick: review.enter,
-      };
-  if (prs) {
-    extras.push({
-      key: 'pr',
-      trailing: true,
-      node: <PrButton {...prs} />,
-      compact: <PrButton {...prs} variant="compact" />,
-    });
-  }
+  // PRs: normal mode's tab while the branch has PRs from or into it; once
+  // the last goes, its view leaves for Files.
+  const prCount = taskPrList(review.relevant).length;
+  const prsShown = prsTabShown(review.relevant);
+  useEffect(() => {
+    if (segmentWithoutPrs(segment, prsShown) !== segment) showSegment('files');
+  }, [segment, prsShown, showSegment]);
+  // The rail's PRs item; normal mode only.
+  const railPrs = reviewing || !prsShown ? null : { count: prCount, own: review.own };
 
   // The views' tabs, in order (Details is the row's end button, not a tab).
   // Review mode has no Agent: the PR is the subject, not the session.
@@ -596,13 +590,16 @@ export function RightInspector({
         },
         { value: 'history', label: 'History' },
         { value: 'agent', label: 'Agent' },
+        ...(prsShown
+          ? [{ value: 'prs' as const, label: 'PRs', count: prCount, countLabel: 'Pull requests' }]
+          : []),
       ];
 
   // The commit actions are Files' footer (`CommitBar`), not the row's.
   const header = (
     <ViewRow
       tabsMinPx={tabsMinPx}
-      extras={extras}
+      extras={[]}
       endPressed={segment === 'details'}
       tabs={
         <ViewTabs<Segment>
@@ -726,7 +723,9 @@ export function RightInspector({
 
   // Review mode's column: the PR's header over the picked view; its Files
   // list every file at the PR's head (the editor's view) on "All files".
-  const reviewColumn = mode && segment !== 'details' && segment !== 'agent' && (
+  // Agent, PRs and Details are no review mode's.
+  const reviewTab = segment !== 'details' && segment !== 'agent' && segment !== 'prs';
+  const reviewColumn = mode && reviewTab && (
     <ReviewView
       task={task}
       mode={mode}
@@ -749,9 +748,19 @@ export function RightInspector({
     />
   );
 
-  // The tree or list column: review mode's, the files, the commits or Agent.
+  // PRs (normal mode's): a drawer per PR from or into the branch.
+  const prsView = <PrsView task={task} relevant={review.relevant} onReview={review.enter} />;
+
+  // The tree or list column: review mode's, the files, the commits, Agent or PRs.
   const tree =
-    reviewColumn || (segment === 'history' ? history : segment === 'agent' ? agentView : filesView);
+    reviewColumn ||
+    (segment === 'history'
+      ? history
+      : segment === 'agent'
+        ? agentView
+        : segment === 'prs'
+          ? prsView
+          : filesView);
 
   // Narrow (and Details, expanded): the details, or the tree column alone.
   const list = segment === 'details' ? details : tree;
@@ -805,7 +814,7 @@ export function RightInspector({
       contextUsage={contextUsage}
       rateLimits={rateLimits}
       status={statusIsOwn ? gitStatus : null}
-      prs={prs}
+      prs={railPrs}
       onShow={onRailShow}
     />
   );

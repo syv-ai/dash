@@ -100,12 +100,9 @@ export function RailItem({
 
 const ITEM_LAYOUT = 'flex w-full flex-col items-center gap-0.5 py-1';
 
-/**
- * A `RailItem`'s button alone, without its tooltip: spreads its props and ref
- * onto the `<button>`, so it can be the `asChild` target of a Radix trigger
- * (a popover the item opens), under the caller's own `Tooltip side="left"`.
- */
-export function RailItemButton({
+/** A `RailItem`'s button, without its tooltip: spreads its props and ref
+ *  onto the `<button>`, so it can be its `Tooltip`'s trigger. */
+function RailItemButton({
   pressed,
   className,
   ...props

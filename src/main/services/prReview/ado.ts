@@ -341,6 +341,16 @@ export function adoReviewFrom(
     // so being on it alone doesn't mean you were asked.
     viewerIsRequestedReviewer:
       !!raw.me && (pr.reviewers ?? []).some((r) => r.id === raw.me && !r.vote),
+    viewerIsAssignee: false,
+    viewerCommented:
+      !!raw.me &&
+      list<RawThread>(raw.threads)
+        .filter(isHumanThread)
+        .some((t) =>
+          (t.comments ?? []).some(
+            (c) => c.commentType !== 'system' && !c.isDeleted && c.author?.id === raw.me,
+          ),
+        ),
     verdicts: ADO_VERDICTS,
     base,
     head,

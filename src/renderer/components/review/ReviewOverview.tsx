@@ -21,7 +21,7 @@ import { checksRollup, checksSummary } from './outline';
 import { useSectionOpen } from '../../lib/useSectionOpen';
 
 /** A person, linked to their page on the forge when it has one. */
-function Person({ name, url }: { name: string; url: string | null }) {
+export function Person({ name, url }: { name: string; url: string | null }) {
   return url ? (
     <TextLink href={url} title={`${name}'s profile`}>
       {name}
@@ -32,8 +32,8 @@ function Person({ name, url }: { name: string; url: string | null }) {
 }
 
 /** "Approved by A, B" / "Changes requested by C" / "Review requested from D",
- *  one fact per group. */
-function Reviewers({ reviewers }: { reviewers: PrReviewer[] }) {
+ *  one fact per group (Overview's About, the PRs view's drawers). */
+export function Reviewers({ reviewers }: { reviewers: PrReviewer[] }) {
   return reviewerGroups(reviewers).map((g) => (
     <li key={g.lead}>
       <span className="type-label">{g.lead}</span>{' '}

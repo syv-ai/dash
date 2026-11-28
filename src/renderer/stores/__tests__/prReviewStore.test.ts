@@ -10,6 +10,8 @@ const review = (n: number, provider: PrProvider = 'github'): PrReview => ({
   url: 'u',
   viewerIsAuthor: false,
   viewerIsRequestedReviewer: false,
+  viewerIsAssignee: false,
+  viewerCommented: false,
   verdicts: ['comment'],
   base: 'b',
   head: 'h',

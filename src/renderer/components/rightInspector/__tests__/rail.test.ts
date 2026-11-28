@@ -48,15 +48,15 @@ describe('railParts', () => {
 });
 
 describe('RAIL_SHOW', () => {
-  it('shows the changes on Files, ahead/behind on History and Details on Details', () => {
+  it('shows the changes on Files, ahead/behind on History, the PRs on PRs and Details on Details', () => {
     expect(RAIL_SHOW.changes).toEqual({ view: 'files', terminal: false });
     expect(RAIL_SHOW.sync).toEqual({ view: 'history', terminal: false });
+    expect(RAIL_SHOW.pr).toEqual({ view: 'prs', terminal: false });
     expect(RAIL_SHOW.details).toEqual({ view: 'details', terminal: false });
   });
 
-  it('leaves the view be for its space and a PR picked (review mode picks its own)', () => {
+  it('leaves the view be for its space', () => {
     expect(RAIL_SHOW.space).toEqual({ view: null, terminal: false });
-    expect(RAIL_SHOW.pr).toEqual({ view: null, terminal: false });
   });
 
   it('opens the terminal only from its own button, on the view the sidebar has', () => {

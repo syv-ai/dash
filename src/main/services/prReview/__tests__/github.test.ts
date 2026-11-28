@@ -183,6 +183,30 @@ describe('githubReviewFrom', () => {
     expect(githubReviewFrom(pr, { ...at, viewer: '' }).viewerIsRequestedReviewer).toBe(false);
   });
 
+  it("says whether you're assigned and whether you've commented, by your login", () => {
+    const comment = (who: string) => ({ author: { login: who } });
+    const pr = {
+      assignees: { nodes: [{ login: 'other' }] },
+      comments: { nodes: [comment('other')] },
+      reviews: { nodes: [{ ...comment('me'), state: 'PENDING' }] },
+      reviewThreads: { nodes: [{ comments: { nodes: [comment('other')] } }] },
+    };
+    expect(githubReviewFrom(pr, at)).toMatchObject({
+      viewerIsAssignee: false,
+      viewerCommented: false,
+    });
+    pr.assignees.nodes.push({ login: 'me' });
+    pr.reviewThreads.nodes[0]!.comments.nodes.push(comment('me'));
+    expect(githubReviewFrom(pr, at)).toMatchObject({
+      viewerIsAssignee: true,
+      viewerCommented: true,
+    });
+    expect(githubReviewFrom(pr, { ...at, viewer: '' })).toMatchObject({
+      viewerIsAssignee: false,
+      viewerCommented: false,
+    });
+  });
+
   it("links each comment's author and keeps the reactions someone gave", () => {
     const review = githubReviewFrom(prFixture, at);
     const [first, second] = review.threads[0]!.comments;

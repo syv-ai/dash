@@ -9,7 +9,7 @@ export interface TaskPrsView {
   /** The PR the task is in review mode for; null in normal mode, undefined
    *  until main has said. */
   mode: PrRef | null | undefined;
-  /** List again (the PR button opening). */
+  /** List again (the PRs view showing). */
   refresh: () => void;
 }
 

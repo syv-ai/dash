@@ -125,6 +125,21 @@ describe('adoReviewFrom', () => {
     expect(asked([{ id: 'other', vote: 0 }])).toBe(false);
   });
 
+  it("says whether you've commented, by your id; never assigned, ADO has no assignees", () => {
+    const thread = (id: string, commentType: number | string = 1) => ({
+      id: 1,
+      comments: [{ id: 1, content: 'Hm', commentType, author: { id } }],
+    });
+    const of = (threads: unknown[]) =>
+      adoReviewFrom({ pr, iterations, threads, me: 'me-id', filesAtHead, checks }, ctx);
+    expect(of([thread('other')])).toMatchObject({
+      viewerCommented: false,
+      viewerIsAssignee: false,
+    });
+    expect(of([thread('me-id', 'system')]).viewerCommented).toBe(false);
+    expect(of([thread('other'), thread('me-id')]).viewerCommented).toBe(true);
+  });
+
   it('maps file threads, with tracked positions, sides, resolution and outdated files', () => {
     expect(
       review.threads.map((t) => [

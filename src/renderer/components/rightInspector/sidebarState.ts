@@ -5,7 +5,8 @@
  * decide what the view switch does to it.
  *
  * Normal mode's views are Files, History and Agent (spec Revision 5; Agent,
- * A1: the session's scratchpad and the project's memory, `agentTab`). Files
+ * A1: the session's scratchpad and the project's memory, `agentTab`), and
+ * PRs while the branch has PRs from or into it (`prsTabShown`). Files
  * is one tree scoped by its "All files" switch (`filesScope`): the
  * changes (Staged / Unstaged, the commit footer) or the whole repo with them.
  *
@@ -17,9 +18,9 @@
 
 import { treeOrder } from '../fileTree/treeOrder';
 
-/** The view switch's views: normal mode's Files, History and Agent; review
- *  mode's Overview, Files, Threads, History and Agent. */
-export type CodeSegment = 'overview' | 'files' | 'threads' | 'history' | 'agent';
+/** The view switch's views: normal mode's Files, History, Agent and PRs;
+ *  review mode's Overview, Files, Threads and History. */
+export type CodeSegment = 'overview' | 'files' | 'threads' | 'history' | 'agent' | 'prs';
 
 /** What the sidebar's list shows: a view, or the task's details (an icon
  *  toggle at the view row's end, read least often). */
@@ -37,7 +38,8 @@ export type SegmentPick =
   | 'select'
   /** Nothing: a single click on the current view, or re-picking a narrow
    *  view with no first file (Files on its changes with none, Threads with
-   *  no open thread on the code, Agent, which has no first file of its own). */
+   *  no open thread on the code, Agent and PRs, which have no first file of
+   *  their own). */
   | 'none';
 
 /**
@@ -74,7 +76,8 @@ export function pickSegment({
   const empty =
     (next === 'files' && changesOnly && listedChanges === 0) ||
     (next === 'threads' && !openThread) ||
-    next === 'agent';
+    next === 'agent' ||
+    next === 'prs';
   return empty ? 'none' : 'expand';
 }
 
@@ -113,8 +116,8 @@ export function firstChangedTreeFile(paths: readonly string[]): string | null {
  * The view to show as review mode becomes known, starts or ends (each
  * `undefined` until main has said): a task found in review mode, opened or
  * just entered, shows Overview (D118); Overview and Threads are the mode's
- * alone, so ending it on either shows Files; Agent is normal mode's alone,
- * so reaching it in review mode shows Overview.
+ * alone, so ending it on either shows Files; Agent and PRs are normal mode's
+ * alone, so reaching either in review mode shows Overview.
  */
 export function segmentOnMode<S extends CodeSegment | 'details'>({
   segment,
@@ -125,9 +128,18 @@ export function segmentOnMode<S extends CodeSegment | 'details'>({
   was: boolean | undefined;
   now: boolean | undefined;
 }): S | 'overview' | 'files' {
-  if (now && (!was || segment === 'agent')) return 'overview';
+  if (now && (!was || segment === 'agent' || segment === 'prs')) return 'overview';
   const reviewOnly = segment === 'overview' || segment === 'threads';
   return reviewOnly && !now ? 'files' : segment;
+}
+
+/** The view to show once the PRs tab goes (the branch's last PR from or
+ *  into it merged or closed): Files; any other view stays. */
+export function segmentWithoutPrs<S extends CodeSegment | 'details'>(
+  segment: S,
+  prsShown: boolean,
+): S | 'files' {
+  return segment === 'prs' && !prsShown ? 'files' : segment;
 }
 
 /**

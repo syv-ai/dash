@@ -5,7 +5,7 @@ import { checkLook, ciLabel } from '../ui/prStatusColors';
 
 /** A PR's checks rolled up into one solid icon (`checkLook`): a tick when all
  *  pass (or skip), a cross when any fails, an amber pulse while any runs
- *  (Overview's folded Checks band, the PR button's list). */
+ *  (Overview's folded Checks band, the PRs view's folded drawers). */
 export function ChecksRollupIcon({ ci }: { ci: CiState }) {
   const { icon } = checkLook(ci);
   const label = ciLabel(ci);
