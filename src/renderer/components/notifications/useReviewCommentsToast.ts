@@ -31,7 +31,7 @@ function writeSeen(seen: Record<string, SeenReview>): void {
 }
 
 /**
- * When polling sees new comments in an open GitHub PR's unresolved review
+ * When polling sees new comments in an open PR's unresolved review
  * threads, offer once to send those threads to the task as a draft. The
  * comments seen per task are kept across restarts.
  */
@@ -69,7 +69,7 @@ export function useReviewCommentsToast(): void {
       const now = Date.now();
       for (const [taskId, prs] of Object.entries(state.prByTask)) {
         const pr = prs[0];
-        if (!pr || pr.state !== 'open' || pr.provider !== 'github') continue;
+        if (!pr || pr.state !== 'open') continue;
         if (now - (lastLook[taskId] ?? 0) < MIN_INTERVAL_MS) continue;
         const task = selectTaskById(projectsState, taskId);
         const project = useProjects.getState().projects.find((p) => p.id === task?.projectId);
