@@ -21,6 +21,7 @@ const live = (id: string, startLine: number, endLine: number): LiveComment => ({
   viewScope: 'live',
   side: 'RIGHT',
   replyTo: null,
+  commit: null,
   author: 'user',
   kind: 'note',
   createdAt: '',

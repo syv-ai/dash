@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Project, Task } from '../../shared/types';
+import type { PrRef, Project, Task } from '../../shared/types';
 import type { DeleteProjectOptions } from '../components/project/DeleteProjectModal';
 import { parseAdoRemote } from '../../shared/urls';
 import { useProjects } from './projectsStore';
@@ -41,6 +41,9 @@ export interface UiState {
    *  "Memories", a project's new-memory count); its sidebar takes it once
    *  it shows. */
   memoryRequestTaskId: string | null;
+  /** A task to show in review mode for a PR (`dashctl review open`); its
+   *  sidebar takes it once it shows. */
+  prRequest: { taskId: string; pr: PrRef } | null;
   settingsInitialTab: string | undefined;
   remoteControlModalPtyId: string | null;
   // Panel-animation flags (driven by App's panel toggle handlers)
@@ -79,6 +82,7 @@ export interface UiActions {
   setClaudeUpdateOpen: (v: boolean) => void;
   /** Ask `taskId`'s sidebar for Agent's Memory pane (null: the ask was taken). */
   setMemoryRequestTaskId: (v: string | null) => void;
+  setPrRequest: (v: { taskId: string; pr: PrRef } | null) => void;
   setSettingsInitialTab: (v: string | undefined) => void;
   setRemoteControlModalPtyId: (v: string | null) => void;
   setSidebarAnimating: (v: boolean) => void;
@@ -109,6 +113,7 @@ const initialState: UiState = {
   taskFinderOpen: false,
   claudeUpdateOpen: false,
   memoryRequestTaskId: null,
+  prRequest: null,
   settingsInitialTab: undefined,
   remoteControlModalPtyId: null,
   sidebarAnimating: false,
@@ -142,6 +147,7 @@ export const useUi = create<UiStore>((set, get) => ({
     }),
   setClaudeUpdateOpen: (v) => set({ claudeUpdateOpen: v }),
   setMemoryRequestTaskId: (v) => set({ memoryRequestTaskId: v }),
+  setPrRequest: (v) => set({ prRequest: v }),
   setSettingsInitialTab: (v) => set({ settingsInitialTab: v }),
   setRemoteControlModalPtyId: (v) => set({ remoteControlModalPtyId: v }),
   setSidebarAnimating: (v) => set({ sidebarAnimating: v }),

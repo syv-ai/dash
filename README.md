@@ -61,39 +61,42 @@ The orchestrator sees every project that isn't archived. Turning the switch off 
 
 ### Commands
 
-| Command                     | What it does                                                                       | No prompt in a task |
-| --------------------------- | ---------------------------------------------------------------------------------- | ------------------- |
-| `projects list`             | List projects (orchestrator only)                                                  |                     |
-| `projects add <path>`       | Open a folder already on this machine as a project (orchestrator only)             |                     |
-| `tasks list`                | List tasks with their state: idle, working, waiting, error, stopped or needs-trust | yes                 |
-| `tasks get <task-id>`       | One task: name, branch, worktree path, state and what it waits for                 | yes                 |
-| `tasks create <name>`       | Create a task (new worktree by default) and start its session with a prompt        |                     |
-| `tasks link <task-id>`      | Link a GitHub issue or ADO work item to a task (also `tasks create --issue`)       |                     |
-| `tasks wait <task-id>`      | Wait up to 110 s until a task is idle, waiting, not working, or changes state      | yes                 |
-| `tasks watch [task-id]`     | Print a JSON line per task change until stopped; meant to run in the background    | yes                 |
-| `tasks output <task-id>`    | The last lines of a task's terminal as plain text                                  | yes                 |
-| `tasks wake <task-id>`      | Make sure a task's session is running                                              |                     |
-| `tasks message <task-id>`   | Send a task's session a message (body on stdin), starting it if stopped            |                     |
-| `tasks reply <task-id>`     | A task's reply to a message, from its transcript (`--message-id`)                  | yes                 |
-| `tasks open <task-id>`      | Bring Dash to the front with the task open                                         |                     |
-| `tasks archive <task-id>`   | Archive a task (never the caller's own task)                                       |                     |
-| `tasks restore <task-id>`   | Restore an archived task                                                           |                     |
-| `tasks delete <task-id>`    | Delete a task, its worktree and optionally its branch (orchestrator only)          |                     |
-| `tasks restart <task-id>`   | Restart a task's session in the same conversation (never the caller's own task)    |                     |
-| `services list`             | A task's services from `.dash/ports.json`, with ports and whether they're up       | yes                 |
-| `services start <label>`    | Start a service's run command in a Dash terminal tab                               |                     |
-| `services stop <label>`     | Stop a service                                                                     |                     |
-| `services output <label>`   | The last lines of a service Dash started                                           | yes                 |
-| `review pr`                 | A PR's overview: description, branches, reviewers, checks, changed files           | yes                 |
-| `review threads`            | A PR's review threads and their comments (`--state unresolved\|resolved\|all`)     | yes                 |
-| `review drafts-list`        | A task's notes and draft review comments on a PR                                   | yes                 |
-| `review drafts-create`      | Write a note, or draft a review comment on a PR's lines or a reply to a thread     |                     |
-| `review drafts-update <id>` | Change a note or draft, the person's or the agent's (`--body -` reads stdin)       |                     |
-| `review drafts-delete <id>` | Delete a note or draft, the person's or the agent's                                |                     |
-| `review summary-get`        | A task's draft review summary for a PR (its PR-level comment)                      | yes                 |
-| `review summary-set`        | Draft the review summary, posted with the verdict on Submit                        |                     |
+| Command                      | What it does                                                                         | No prompt in a task |
+| ---------------------------- | ------------------------------------------------------------------------------------ | ------------------- |
+| `projects list`              | List projects (orchestrator only)                                                    |                     |
+| `projects add <path>`        | Open a folder already on this machine as a project (orchestrator only)               |                     |
+| `tasks list`                 | List tasks with their state: idle, working, waiting, error, stopped or needs-trust   | yes                 |
+| `tasks get <task-id>`        | One task: name, branch, worktree path, state and what it waits for                   | yes                 |
+| `tasks create <name>`        | Create a task (new worktree by default) and start its session with a prompt          |                     |
+| `tasks link <task-id>`       | Link a GitHub issue or ADO work item to a task (also `tasks create --issue`)         |                     |
+| `tasks wait <task-id>`       | Wait up to 110 s until a task is idle, waiting, not working, or changes state        | yes                 |
+| `tasks watch [task-id]`      | Print a JSON line per task change until stopped; meant to run in the background      | yes                 |
+| `tasks output <task-id>`     | The last lines of a task's terminal as plain text                                    | yes                 |
+| `tasks wake <task-id>`       | Make sure a task's session is running                                                |                     |
+| `tasks message <task-id>`    | Send a task's session a message (body on stdin), starting it if stopped              |                     |
+| `tasks reply <task-id>`      | A task's reply to a message, from its transcript (`--message-id`)                    | yes                 |
+| `tasks notify`               | From a task: reach the sender of a message later (`--to <message-id>`, stdin)        |                     |
+| `tasks open <task-id>`       | Bring Dash to the front with the task open                                           |                     |
+| `tasks archive <task-id>`    | Archive a task (never the caller's own task)                                         |                     |
+| `tasks restore <task-id>`    | Restore an archived task                                                             |                     |
+| `tasks delete <task-id>`     | Delete a task, its worktree and optionally its branch (orchestrator only)            |                     |
+| `tasks restart <task-id>`    | Restart a task's session in the same conversation (never the caller's own task)      |                     |
+| `services list`              | A task's services from `.dash/ports.json`, with ports and whether they're up         | yes                 |
+| `services start <label>`     | Start a service's run command in a Dash terminal tab                                 |                     |
+| `services stop <label>`      | Stop a service                                                                       |                     |
+| `services output <label>`    | The last lines of a service Dash started                                             | yes                 |
+| `review pr`                  | A PR's overview: description, branches, reviewers, checks, changed files             | yes                 |
+| `review threads`             | A PR's review threads and their comments (`--state unresolved\|resolved\|all`)       | yes                 |
+| `review drafts-list`         | A task's notes and draft review comments on a PR (`--all-prs` for every PR)          | yes                 |
+| `review drafts-get <id>`     | One note or draft, as `drafts-list` shows it                                         | yes                 |
+| `review drafts-create`       | Write a note, or draft a review comment on a PR's lines or a reply to a thread       |                     |
+| `review drafts-update <id>`  | Change or move a note or draft, the person's or the agent's (`--body -` reads stdin) |                     |
+| `review drafts-delete <id>…` | Delete notes or drafts by id, or `--all` on the PR                                   |                     |
+| `review summary-get`         | A task's draft review summary for a PR (its PR-level comment)                        | yes                 |
+| `review summary-set`         | Draft the review summary, posted with the verdict on Submit                          |                     |
+| `review open`                | Bring Dash to the front on the task in review mode for a PR                          |                     |
 
-The `review` commands work on the PR a task is in review mode for (picked from the task sidebar's PR button, which lists the open PRs from and into the task's branch), else the task branch's own open PR (`--number` picks another). `review pr` and `review threads` read it; the rest put notes and draft comments into the task's review mode and diff editor. A comment is for the PR's author; a note is for the developer and stays local (the person can promote it). A reply to a thread (`drafts-create --reply-to <thread-id> --kind comment`) takes the thread's file and lines. Nothing is posted: the person reads the drafts, edits them and posts them, as a review with a verdict on someone else's PR, or reply by reply on their own. An agent can change or delete any of the task's notes and drafts, the person's too; the person sees every change before posting.
+The `review` commands work on the PR a task is in review mode for (picked from the task sidebar's PR button, which lists the open PRs from and into the task's branch), else the task branch's own open PR (`--number` picks another). `review pr` and `review threads` read it; the rest put notes and draft comments into the task's review mode and diff editor. A comment is for the PR's author; a note is for the developer and stays local (the person can promote it). A reply to a thread (`drafts-create --reply-to <thread-id> --kind comment`) takes the thread's file and lines. Nothing is posted: the person reads the drafts, edits them and posts them, as a review with a verdict on someone else's PR, or reply by reply on their own. An agent can change or delete any of the task's notes and drafts, the person's too; the person sees every change before posting. A line draft records the PR head it was written on; once the author pushes, `drafts-list` marks it `moved` and posting the review holds it back. Writes take `--if-unchanged-since <updatedAt>` and answer 409 when the person changed the draft or summary since.
 
 Every task the commands return has two fields for messaging it with Claude Code's `SendMessage`: `messageAddress` (`uds:<socket>` while its session runs, otherwise `null`) and `messaging` (`direct`, or `needs-approval` for a task in `bypassPermissions`).
 
@@ -108,6 +111,8 @@ An orchestrator on any harness (Claude Code, Codex, Pi, a script) talks to a tas
 3. `dashctl tasks reply <task-id> --message-id <id>` reads the answer: the task's last message of the turn the message started. `status` is `pending` until the task stops working, then `done`.
 
 To follow tasks without polling, keep `dashctl tasks watch` running in the background (Claude Code's `run_in_background` or Monitor): it prints each task's view, then a `{"event":"task",…}` line whenever one changes and `{"event":"removed",…}` when one is archived or deleted. A task messaged since the watch started also gives a `{"event":"reply","messageId":…,"text":…}` line once it has answered, so you don't need `tasks reply`. Give a task id to watch just that task; it then ends once the task is removed. A watch also ends, on an `{"error":…}` line, once the caller's access is turned off.
+
+A task with Dash access can also reach you after that turn (a review came in, a build failed) with `dashctl tasks notify --to <message-id>`. Your watch prints it as `{"event":"notice","taskId":…,"inReplyTo":…,"text":…}`, where `inReplyTo` is the `messageId` your `tasks message` returned. A watch gets notices only from tasks it sees. Dash knows every outside orchestrator as the same sender, so each of their watches gets the notice, and `inReplyTo` tells yours apart. When no watch of yours sees the task, Dash holds the notice for your next watch that does, and shows the person a notification in Dash. A task without Dash access can only answer within the turn a message starts.
 
 An idle task starts a turn with the message. A working one reads it after the tool call in flight; the result then says `queued: true`, and the reply may be mixed with the turn's other work. Never send a message again after an error that says it may have been delivered: a message sent twice is a turn taken twice. Message ids live in Dash's memory, so `tasks reply` can't find one after Dash restarts. A task whose session started before this version of Dash has no inbox known: `dashctl tasks restart <task-id>` (same conversation) fixes it.
 

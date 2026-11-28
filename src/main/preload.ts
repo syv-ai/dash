@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { RendererErrorReport } from '../types/electron-api/telemetry';
+import type { HeldTaskNotice } from '../shared/types';
 
 /**
  * A main→renderer event subscription: `listen<T>(channel)(callback)` calls
@@ -63,6 +64,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getTaskMessageAddresses: (id: string) => ipcRenderer.invoke('task:messageAddresses', id),
   getTaskLastActive: (id: string) => ipcRenderer.invoke('task:lastActive', id),
   onTasksChanged: listen<{ projectId: string }>('tasks:changed'),
+  onTaskNoticeHeld: listen<HeldTaskNotice>('tasks:noticeHeld'),
   onProjectsChanged: listen('projects:changed'),
   reorderTasks: (projectId: string, orderedTaskIds: string[]) =>
     ipcRenderer.invoke('db:reorderTasks', { projectId, orderedTaskIds }),
@@ -187,6 +189,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onBeforeQuit: listen('app:beforeQuit'),
   onFocusTask: listen<{ taskId: string; projectId?: string }>('app:focusTask'),
   onShowFile: listen<import('@shared/showFile').ShowFileRequest>('app:showFile'),
+  onOpenPr: listen<{ taskId: string; projectId: string; pr: import('@shared/types').PrRef }>(
+    'app:openPr',
+  ),
   onOrchestratorAccessRequest: (callback: (request: { id: string; open: boolean }) => void) => {
     const opened = (_event: unknown, r: { id: string }) => callback({ id: r.id, open: true });
     const ended = (_event: unknown, r: { id: string }) => callback({ id: r.id, open: false });
@@ -308,8 +313,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }) => ipcRenderer.invoke('prReview:setViewed', args),
   prReviewGetSummary: (args: { taskId: string; provider: string; number: number }) =>
     ipcRenderer.invoke('prReview:getSummary', args),
-  prReviewSetSummary: (args: { taskId: string; provider: string; number: number; body: string }) =>
-    ipcRenderer.invoke('prReview:setSummary', args),
+  prReviewSetSummary: (args: {
+    taskId: string;
+    provider: string;
+    number: number;
+    body: string;
+    ifUnchangedSince?: string;
+  }) => ipcRenderer.invoke('prReview:setSummary', args),
   onDiffCommentsChanged: listen<{ taskId: string }>('diffComments:changed'),
 
   // Azure DevOps

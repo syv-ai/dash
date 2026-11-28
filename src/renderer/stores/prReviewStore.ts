@@ -14,6 +14,7 @@ import type {
 } from '../../shared/types';
 import { toggleReaction } from '../../shared/prReactions';
 import { generalReplyBody } from '../../shared/prGeneralReply';
+import { toast } from '../components/ui/toast';
 
 /** The store key of a PR's review. */
 export const prKey = (provider: PrProvider, number: number): string => `${provider}:${number}`;
@@ -46,7 +47,11 @@ export interface ReplyPoster {
 
 export type PrLoadResult = { ok: true; review: PrReview } | { ok: false; error: string };
 /** `posted`: drafts that reached the PR before the error (ADO posts one at a time). */
-export type PrWriteResult = { ok: true } | { ok: false; error: PrWriteError; posted?: number };
+/** `heldBack`: line comments a submit kept as drafts, written on an older head of the
+ *  PR; `posted`: the drafts that reached it. */
+export type PrWriteResult =
+  | { ok: true; heldBack?: number; posted?: number }
+  | { ok: false; error: PrWriteError; posted?: number };
 
 interface PrReviewState {
   /** Per PR (`prKey`), its review as last fetched. */
@@ -150,7 +155,8 @@ interface PrReviewState {
     text: string,
   ) => Promise<PrWriteResult>;
   /** Submit the task's drafts for the PR with a verdict; refetches the review
-   *  when anything reached the PR, and drops the summary when everything did. */
+   *  when anything reached the PR, and drops the summary when everything did
+   *  (drafts written on an older head are held back, as drafts). */
   submit: (
     projectId: string,
     cwd: string,
@@ -229,13 +235,82 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
   const loading = new Map<string, Promise<PrLoadResult>>();
   // Saves waiting for the person to stop typing, per review key.
   const pendingSaves = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Per review, the stored summary's version ('' for none) the person's typing
+   *  builds on: a save from it doesn't overwrite what the agent wrote since. */
+  const summaryBase = new Map<string, string>();
+  /** Per review, the person's summary text not yet saved: a reload doesn't
+   *  replace it. */
+  const unsaved = new Map<string, string>();
+
+  /**
+   * Save the person's summary, built on version `since` (null: regardless). If
+   * the agent rewrote it since, nothing is overwritten: the summary shows the
+   * agent's, as a draft the agent changed does, and one toast per review
+   * offers the person's text back (its ✕ keeps theirs).
+   */
+  const saveSummary = async (
+    taskId: string,
+    provider: PrProvider,
+    number: number,
+    body: string,
+    since: string | null,
+  ) => {
+    const key = reviewKey(taskId, provider, number);
+    const cancelPending = () => {
+      clearTimeout(pendingSaves.get(key));
+      pendingSaves.delete(key);
+    };
+    try {
+      const resp = await window.electronAPI.prReviewSetSummary({
+        taskId,
+        provider,
+        number,
+        body,
+        ...(since === null ? {} : { ifUnchangedSince: since }),
+      });
+      if (resp.success) {
+        summaryBase.set(key, resp.data?.updatedAt ?? '');
+        // Typing since this save was sent is still unsaved.
+        if (unsaved.get(key) === body) unsaved.delete(key);
+        return;
+      }
+      if (resp.code !== 'CONFLICT') return;
+      const theirs = (resp.data as PrReviewSummary | null | undefined) ?? null;
+      const said = theirs?.body ?? '';
+      const mine = unsaved.get(key) ?? body;
+      cancelPending();
+      unsaved.delete(key);
+      putSummary(key, theirs);
+      summaryBase.set(key, theirs?.updatedAt ?? '');
+      toast.offer('The agent rewrote the review summary while you were writing it.', {
+        key: `summary-conflict-${key}`,
+        description: said
+          ? `Theirs: ${said.length > 80 ? `${said.slice(0, 80)}…` : said}`
+          : 'They cleared it.',
+        action: {
+          label: 'Use mine',
+          onClick: () => {
+            cancelPending();
+            unsaved.set(key, mine);
+            putSummary(key, { body: mine, author: 'user' });
+            void saveSummary(taskId, provider, number, mine, null);
+          },
+        },
+      });
+    } catch {
+      /* stays as typed; the next edit saves again */
+    }
+  };
 
   const loadSummary = async (taskId: string, provider: PrProvider, number: number) => {
     const key = reviewKey(taskId, provider, number);
     try {
       const resp = await window.electronAPI.prReviewGetSummary({ taskId, provider, number });
-      // An edit still being saved wins over what main had.
-      if (resp.success && !pendingSaves.has(key)) putSummary(key, resp.data ?? null);
+      // An edit not yet saved wins over what main had.
+      if (resp.success && !unsaved.has(key)) {
+        putSummary(key, resp.data ?? null);
+        summaryBase.set(key, resp.data?.updatedAt ?? '');
+      }
     } catch {
       /* stays as it was */
     }
@@ -274,14 +349,15 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
     setSummary: (taskId, provider, number, body) => {
       const key = reviewKey(taskId, provider, number);
       putSummary(key, { body, author: 'user' });
+      unsaved.set(key, body);
       clearTimeout(pendingSaves.get(key));
       pendingSaves.set(
         key,
         setTimeout(() => {
           pendingSaves.delete(key);
-          void window.electronAPI
-            .prReviewSetSummary({ taskId, provider, number, body })
-            .catch(() => undefined);
+          // Before the stored summary has loaded, build on "none": one the agent
+          // already wrote isn't overwritten unseen.
+          void saveSummary(taskId, provider, number, body, summaryBase.get(key) ?? '');
         }, 400),
       );
     },
@@ -477,16 +553,22 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
         });
         if (!resp.success || !resp.data)
           return { ok: false, error: ipcError(resp.error ?? 'unknown error') };
-        const { postedDraftIds, error } = resp.data;
-        // Main clears the summary once everything got through.
+        const { postedDraftIds, error, heldBackDraftIds = [] } = resp.data;
+        // Main clears the summary once the submit got through (drafts written
+        // on an older head are held back, as drafts).
         if (!error) {
           const key = reviewKey(taskId, review.provider, review.number);
           clearTimeout(pendingSaves.get(key));
           pendingSaves.delete(key);
+          unsaved.delete(key);
           putSummary(key, null);
+          summaryBase.set(key, '');
         }
         if (postedDraftIds.length > 0 || !error) await get().load(projectId, cwd, review.number);
-        return error ? { ok: false, error, posted: postedDraftIds.length } : { ok: true };
+        if (error) return { ok: false, error, posted: postedDraftIds.length };
+        return heldBackDraftIds.length > 0
+          ? { ok: true, heldBack: heldBackDraftIds.length, posted: postedDraftIds.length }
+          : { ok: true };
       } catch (err) {
         return { ok: false, error: ipcError(String(err)) };
       }

@@ -14,6 +14,7 @@ import {
 import { loadPrDetails, loadPrReview } from '../services/prReview/loadReview';
 import { checkoutVsHead } from '../services/prReview/localCommits';
 import { taskReviews } from '../services/prReview/taskReview';
+import { SummaryConflictError } from '../services/prReviewSummariesRepo';
 import { prsForCheckout } from '../services/prReview/checkoutPrs';
 import { writeCiReport } from '../services/prReview/ciReportFile';
 import { GitService } from '../services/GitService';
@@ -310,15 +311,38 @@ export function registerPrReviewIpc(): void {
     },
   );
 
-  /** The person's edit of the draft summary; an empty one clears it. */
+  /** The person's edit of the draft summary; an empty one clears it. Given the
+   *  version they started from, a summary the agent wrote since isn't overwritten. */
   ipcMain.handle(
     'prReview:setSummary',
-    (_e, args: { taskId: string; provider: PrProvider; number: number; body: string }) => {
+    (
+      _e,
+      args: {
+        taskId: string;
+        provider: PrProvider;
+        number: number;
+        body: string;
+        ifUnchangedSince?: string;
+      },
+    ) => {
       try {
-        parseArgs('prReview:setSummary', z.looseObject({ ...reviewOf, body: z.string() }), args);
-        taskReviews().setSummary(args.taskId, args, { body: args.body, author: 'user' });
-        return { success: true };
+        parseArgs(
+          'prReview:setSummary',
+          z.looseObject({ ...reviewOf, body: z.string(), ifUnchangedSince: z.string().optional() }),
+          args,
+        );
+        const reviews = taskReviews();
+        reviews.setSummary(
+          args.taskId,
+          args,
+          { body: args.body, author: 'user' },
+          args.ifUnchangedSince,
+        );
+        return { success: true, data: reviews.getSummary(args.taskId, args) };
       } catch (err) {
+        if (err instanceof SummaryConflictError) {
+          return { success: false, error: err.message, code: 'CONFLICT', data: err.current };
+        }
         return errorResponse(err);
       }
     },

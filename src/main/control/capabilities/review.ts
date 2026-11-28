@@ -9,10 +9,11 @@ import type {
   PrReviewThread,
   Task,
 } from '../../../shared/types';
-import { prScope } from '../../../shared/prScope';
-import { canDemote, replyAnchor } from '../../../shared/diffComments';
+import { parsePrScope, prScope } from '../../../shared/prScope';
+import { anchorStatus, canDemote, isReplyDraft, replyAnchor } from '../../../shared/diffComments';
 import { ControlError, defineCapability, type Registry } from '../registry';
 import type { TaskReviews } from '../../services/prReview/taskReview';
+import { SummaryConflictError } from '../../services/prReviewSummariesRepo';
 
 export interface ReviewCapabilityDeps {
   /** Where the project's PRs live (from its remote). */
@@ -24,6 +25,13 @@ export interface ReviewCapabilityDeps {
   defaultPr(taskId: string): Promise<PrRef | null>;
   /** The PR's review as the editor loads it, from the task's checkout. Reads only. */
   loadReview(task: Task, pr: PrRef): Promise<PrReview>;
+  /** PR `number`'s head commit now. */
+  prHead(task: Task, number: number): Promise<string>;
+  /** The id of PR `number`'s thread that `ref` names, as the provider posts replies to; null if none. */
+  replyThread(task: Task, number: number, ref: string): Promise<string | null>;
+  /** Bring Dash to the front on the task in review mode for the PR. Throws a
+   *  ControlError when it can't. */
+  openPr(task: Task, pr: PrRef): void;
 }
 
 const TASK_ID_FIELD = z
@@ -44,6 +52,7 @@ const PROVIDER = z
   .describe("Where the PR lives; defaults to the project's remote");
 const BODY = z.string().trim().min(1).max(65_536).describe('The comment, in Markdown');
 const LINE = z.number().int().min(1);
+const PATH = z.string().min(1).describe("Repo-relative path in the PR's version of the file");
 const KIND = z
   .enum(['note', 'comment'])
   .describe(
@@ -51,11 +60,26 @@ const KIND = z
       "'note': for the developer working on the task, something to be aware of; it never reaches the PR. " +
       'The person can promote a note to a comment.',
   );
+const AUTHOR = z.enum(['user', 'agent']);
+const COMMIT = z
+  .string()
+  .regex(/^[0-9a-f]{40}([0-9a-f]{24})?$/i, 'a full commit hash')
+  .describe(
+    "The PR head commit the lines are in, in full; defaults to the PR's head now. Submit holds back a draft written on an older head",
+  );
+const IF_UNCHANGED_SINCE = z
+  .string()
+  .optional()
+  .describe(
+    'Refuse (409) unless it is still this version: the updatedAt you last read. Guards against overwriting what the person changed since',
+  );
 
-/** What an agent sees of a draft. */
-function view(c: DiffComment) {
+/** What an agent sees of a draft. `head` is its PR's head now, when known: a line
+ *  draft says whether it was written on it. */
+function view(c: DiffComment, head?: string | null) {
   return {
     id: c.id,
+    number: parsePrScope(c.viewScope)?.number,
     path: c.filePath,
     startLine: c.startLine,
     endLine: c.endLine,
@@ -64,8 +88,13 @@ function view(c: DiffComment) {
     kind: c.kind,
     body: c.text,
     author: c.author,
+    ...(isReplyDraft(c) ? {} : { commit: c.commit, status: anchorStatus(c, head) }),
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
   };
 }
+
+const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 /** What an agent sees of a posted comment. */
 const commentView = (c: PrReviewComment) => ({
@@ -165,29 +194,94 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
     return { filePath: input.path.replace(/^\/+/, ''), startLine: input.startLine, endLine };
   };
 
-  /** A reply's file and lines: its thread's, which must be on the PR. */
+  /** A reply's file and lines: its thread's, which must be on the PR, and the
+   *  thread's id. `replyTo` may name the thread or one of its comments (on
+   *  GitHub its node or REST id), which the provider resolves; an unknown one
+   *  would fail the whole review at Submit. */
   const replyLines = async (
     taskId: string,
     pr: PrRef,
-    input: { replyTo?: string; kind: string; path?: string; startLine?: number; endLine?: number },
-  ): Promise<Pick<DiffComment, 'filePath' | 'startLine' | 'endLine'>> => {
+    input: {
+      replyTo: string;
+      kind: string;
+      path?: string;
+      startLine?: number;
+      endLine?: number;
+      commit?: string;
+    },
+  ): Promise<Pick<DiffComment, 'filePath' | 'startLine' | 'endLine' | 'replyTo'>> => {
     if (input.kind !== 'comment') {
       throw new ControlError(400, 'a reply is a comment: pass --kind comment');
     }
     if (input.path !== undefined || input.startLine !== undefined || input.endLine !== undefined) {
       throw new ControlError(400, "a reply sits on its thread's lines: drop --path and the lines");
     }
-    const thread = (await reviewOf(taskId, pr)).threads.find((t) => t.id === input.replyTo);
-    if (!thread) throw new ControlError(404, `thread not found on PR #${pr.number}`);
-    return replyAnchor(thread);
+    if (input.commit !== undefined) {
+      throw new ControlError(400, 'a reply sits on its thread, not on a commit: drop --commit');
+    }
+    const task = deps.getTask(taskId)!;
+    const [threadId, review] = await Promise.all([
+      fromProvider(`check --reply-to against PR #${pr.number}`, () =>
+        deps.replyThread(task, pr.number, input.replyTo),
+      ),
+      reviewOf(taskId, pr),
+    ]);
+    const thread = threadId ? review.threads.find((t) => t.id === threadId) : undefined;
+    if (!thread) {
+      throw new ControlError(
+        404,
+        `PR #${pr.number} has no thread ${JSON.stringify(input.replyTo)}: --reply-to takes the id of a thread or of one of its comments`,
+      );
+    }
+    return { ...replyAnchor(thread), replyTo: thread.id };
   };
 
   /** The target task's PR note or draft, the person's or an agent's, or a 404.
    *  Nothing here reaches the PR, so the person still reviews every change. */
   const draftOrThrow = (taskId: string, id: string): DiffComment => {
     const draft = deps.reviews.draft(taskId, id);
-    if (!draft) throw new ControlError(404, 'draft not found');
+    if (!draft) throw new ControlError(404, `draft ${id} not found`);
     return draft;
+  };
+
+  /** Refuse a write to a draft that changed since the version the agent read. */
+  const assertUnchanged = (draft: DiffComment, since: string | undefined) => {
+    if (since !== undefined && draft.updatedAt !== since) {
+      throw new ControlError(
+        409,
+        `draft ${draft.id} changed since ${since} (it's at ${draft.updatedAt} now); read it again with drafts-get`,
+        view(draft),
+      );
+    }
+  };
+
+  /** A call to the PR's provider; its failure is a 502 saying what couldn't be done. */
+  async function fromProvider<T>(what: string, call: () => Promise<T>): Promise<T> {
+    try {
+      return await call();
+    } catch (err) {
+      throw new ControlError(502, `could not ${what}: ${message(err)}`);
+    }
+  }
+
+  /** PR `number`'s head now, to anchor a line draft to; null when it can't be
+   *  read (the draft is still written, its status 'unknown'). */
+  const headOrNull = (taskId: string, number: number) =>
+    deps.prHead(deps.getTask(taskId)!, number).catch(() => null);
+
+  const numberOf = (c: DiffComment) => parsePrScope(c.viewScope)!.number;
+
+  /** Each PR's head now, for the drafts' statuses; a head that can't be read is left out. */
+  const headsFor = async (taskId: string, drafts: DiffComment[]) => {
+    const numbers = new Set(drafts.filter((c) => !isReplyDraft(c) && c.commit).map(numberOf));
+    const heads = new Map<number, string>();
+    await Promise.all(
+      [...numbers].map(async (n) => {
+        const head = await headOrNull(taskId, n);
+        if (head) heads.set(n, head);
+      }),
+    );
+    return (c: DiffComment) => heads.get(numberOf(c));
   };
 
   registry.register(
@@ -250,18 +344,67 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
     defineCapability({
       name: 'review.drafts_list',
       summary:
-        "List a task's notes and draft review comments on a PR (on lines, or replies to its threads), the user's and the agent's.",
-      input: z.object({ taskId: TASK_ID_FIELD, number: NUMBER, provider: PROVIDER }),
+        "List a task's notes and draft review comments (on lines, or replies to threads), the user's and the agent's: on one PR, or with --all-prs on every PR the task has drafts on. A line draft's status says whether it was written on the PR's head now ('current'), on an older one ('moved': Submit holds it back), or isn't known.",
+      input: z.object({
+        taskId: TASK_ID_FIELD,
+        number: NUMBER,
+        provider: PROVIDER,
+        allPrs: z
+          .boolean()
+          .optional()
+          .describe('Every PR the task has drafts on, instead of one; not with --number'),
+        kind: KIND.optional().describe('Only notes, or only comments'),
+        author: AUTHOR.optional().describe("Only the person's, or only an agent's"),
+        path: PATH.optional().describe('Only drafts on this file'),
+      }),
       callers: ['orchestrator', 'task'],
       readOnly: true,
       target: { taskId: 'taskId' },
       defaultTargetToSelf: true,
       handler: async (_ctx, input) => {
-        const pr = await prFor(input.taskId!, input.number, input.provider);
-        return deps.reviews
-          .drafts(input.taskId!, pr)
-          .sort((a, b) => a.filePath.localeCompare(b.filePath) || a.startLine - b.startLine)
-          .map(view);
+        const taskId = input.taskId!;
+        if (input.allPrs && input.number !== undefined) {
+          throw new ControlError(400, 'give --number or --all-prs, not both');
+        }
+        const listed = input.allPrs
+          ? deps.reviews.allDrafts(taskId)
+          : deps.reviews.drafts(taskId, await prFor(taskId, input.number, input.provider));
+        const drafts = listed.filter(
+          (c) =>
+            (!input.provider || parsePrScope(c.viewScope)?.provider === input.provider) &&
+            (!input.kind || c.kind === input.kind) &&
+            (!input.author || c.author === input.author) &&
+            (!input.path || c.filePath === input.path.replace(/^\/+/, '')),
+        );
+        const headOfDraft = await headsFor(taskId, drafts);
+        return drafts
+          .sort(
+            (a, b) =>
+              numberOf(a) - numberOf(b) ||
+              a.filePath.localeCompare(b.filePath) ||
+              a.startLine - b.startLine,
+          )
+          .map((c) => view(c, headOfDraft(c)));
+      },
+    }),
+  );
+
+  registry.register(
+    defineCapability({
+      name: 'review.drafts_get',
+      summary: "One of a task's notes or draft review comments, as drafts-list shows it.",
+      input: z.object({
+        taskId: TASK_ID_FIELD,
+        id: z.string().describe('From `dashctl review drafts-list`'),
+      }),
+      callers: ['orchestrator', 'task'],
+      cli: { args: ['id'] },
+      readOnly: true,
+      target: { taskId: 'taskId' },
+      defaultTargetToSelf: true,
+      handler: async (_ctx, input) => {
+        const draft = draftOrThrow(input.taskId!, input.id);
+        return view(draft, (await headsFor(input.taskId!, [draft]))(draft));
       },
     }),
   );
@@ -275,11 +418,9 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
         taskId: TASK_ID_FIELD,
         number: NUMBER,
         provider: PROVIDER,
-        path: z
-          .string()
-          .min(1)
-          .optional()
-          .describe("Repo-relative path in the PR's version of the file; not with --reply-to"),
+        path: PATH.optional().describe(
+          "Repo-relative path in the PR's version of the file; not with --reply-to",
+        ),
         startLine: LINE.optional().describe(
           "First line, in the PR's version of the file; not with --reply-to",
         ),
@@ -291,8 +432,9 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
           .min(1)
           .optional()
           .describe(
-            "Reply to this thread (its id from `dashctl review threads`) instead of starting one; it sits on the thread's lines, and is a comment",
+            "Reply to this thread instead of starting one: the thread's id (from `dashctl review threads`), or the id of one of its comments (on GitHub, its node id or REST id). It sits on the thread's lines, and is a comment",
           ),
+        commit: COMMIT.optional(),
       }),
       callers: ['orchestrator', 'task'],
       cli: { stdin: 'body' },
@@ -302,17 +444,22 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
       handler: async (_ctx, input) => {
         const taskId = input.taskId!;
         const pr = await prFor(taskId, input.number, input.provider);
-        const where = input.replyTo ? await replyLines(taskId, pr, input) : lines(input);
+        const replyTo = input.replyTo;
+        const where = replyTo
+          ? await replyLines(taskId, pr, { ...input, replyTo })
+          : { ...lines(input), replyTo: null };
+        // A line draft records the head its lines are in; Submit checks it.
+        const head = where.replyTo || input.commit ? null : await headOrNull(taskId, pr.number);
         const draft = deps.reviews.saveAgentDraft({
           id: randomUUID(),
           taskId,
           ...where,
           text: input.body,
           viewScope: prScope(pr.provider, pr.number),
-          replyTo: input.replyTo ?? null,
+          commit: where.replyTo ? null : (input.commit ?? head),
           kind: input.kind,
         });
-        return view(draft);
+        return view(draft, head ?? (await headsFor(taskId, [draft]))(draft));
       },
     }),
   );
@@ -321,14 +468,26 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
     defineCapability({
       name: 'review.drafts_update',
       summary:
-        "Change a note or draft review comment, the person's or the agent's: its text, lines or kind.",
+        "Change a note or draft review comment, the person's or the agent's: its text or kind, or move it to other lines, another file or another PR, keeping its id and author. A moved line draft is anchored to its PR's head now, unless --commit says otherwise.",
       input: z.object({
         taskId: TASK_ID_FIELD,
         id: z.string().describe('From `dashctl review drafts-list`'),
         body: BODY.optional(),
-        startLine: LINE.optional(),
-        endLine: LINE.optional(),
         kind: KIND.optional(),
+        number: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Move it to this PR (the project's); a reply can't move"),
+        provider: PROVIDER,
+        path: PATH.optional().describe("Move it to this file; a reply can't move"),
+        startLine: LINE.optional().describe(
+          'New first line; without endLine the range moves with it, keeping its length',
+        ),
+        endLine: LINE.optional(),
+        commit: COMMIT.optional(),
+        ifUnchangedSince: IF_UNCHANGED_SINCE,
       }),
       callers: ['orchestrator', 'task'],
       cli: { args: ['id'], stdin: 'body' },
@@ -337,34 +496,79 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
       defaultTargetToSelf: true,
       handler: async (_ctx, input) => {
         const taskId = input.taskId!;
+        const changes = [
+          input.body,
+          input.kind,
+          input.number,
+          input.path,
+          input.startLine,
+          input.endLine,
+          input.commit,
+        ];
         // dashctl reads a piped body only for `--body -`: say so rather than exit 0.
-        if (
-          input.body === undefined &&
-          input.startLine === undefined &&
-          input.endLine === undefined &&
-          input.kind === undefined
-        ) {
-          throw new ControlError(400, 'nothing to change: give a body, startLine, endLine or kind');
+        if (changes.every((v) => v === undefined)) {
+          throw new ControlError(
+            400,
+            'nothing to change: give a body, kind, number, path, startLine, endLine or commit',
+          );
         }
         const draft = draftOrThrow(taskId, input.id);
+        assertUnchanged(draft, input.ifUnchangedSince);
         if (input.kind === 'note' && input.kind !== draft.kind && !canDemote(draft)) {
           throw new ControlError(400, 'a reply stays a comment');
         }
+        const from = parsePrScope(draft.viewScope)!;
+        const number = input.number ?? from.number;
+        // The draft's own PR, unless it moves: its provider is the scope's.
+        const pr =
+          input.number === undefined
+            ? { provider: from.provider, number }
+            : await prFor(taskId, number, input.provider);
+        if (input.provider && input.provider !== pr.provider) {
+          throw new ControlError(400, `this PR is on ${pr.provider}`);
+        }
+        const filePath = input.path?.replace(/^\/+/, '') ?? draft.filePath;
+        const reply = isReplyDraft(draft);
+        if (reply && (number !== from.number || filePath !== draft.filePath || input.commit)) {
+          throw new ControlError(
+            400,
+            "a reply belongs to its thread: it can't move to another PR, file or commit. Delete it and draft it again",
+          );
+        }
         const startLine = input.startLine ?? draft.startLine;
-        const endLine = input.endLine ?? Math.max(startLine, draft.endLine);
+        const endLine = input.endLine ?? startLine + (draft.endLine - draft.startLine);
         if (endLine < startLine) throw new ControlError(400, '--end-line is before --start-line');
+        // Placing a line draft again anchors it to the code it's on now. Its own
+        // PR's number given back is a check, not a move.
+        const moved =
+          !reply &&
+          (number !== from.number ||
+            filePath !== draft.filePath ||
+            [input.startLine, input.endLine, input.commit].some((v) => v !== undefined));
+        const head = moved && !input.commit ? await headOrNull(taskId, number) : undefined;
+        // The head lookup awaited: the person may have edited the draft meanwhile,
+        // and this write is built on the version read before it.
+        const now = draftOrThrow(taskId, input.id);
+        if (now.updatedAt !== draft.updatedAt) {
+          throw new ControlError(
+            409,
+            `draft ${draft.id} changed while it was being updated; read it again with drafts-get`,
+            view(now),
+          );
+        }
         const saved = deps.reviews.saveAgentDraft({
           id: draft.id,
           taskId,
-          filePath: draft.filePath,
+          filePath,
           startLine,
           endLine,
           text: input.body ?? draft.text,
-          viewScope: draft.viewScope,
+          viewScope: prScope(pr.provider, number),
           replyTo: draft.replyTo,
+          commit: moved ? (input.commit ?? head ?? null) : draft.commit,
           kind: input.kind ?? draft.kind,
         });
-        return view(saved);
+        return view(saved, head ?? (await headsFor(taskId, [saved]))(saved));
       },
     }),
   );
@@ -372,21 +576,73 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
   registry.register(
     defineCapability({
       name: 'review.drafts_delete',
-      summary: "Delete a note or draft review comment, the person's or the agent's.",
+      summary:
+        "Delete notes and draft review comments, the person's or the agent's: the ones named by id, or with --all every one on a PR (narrowed by --kind and --author). All or nothing: an id that isn't the task's refuses the lot.",
       input: z.object({
         taskId: TASK_ID_FIELD,
-        id: z.string().describe('From `dashctl review drafts-list`'),
+        ids: z
+          .array(z.string())
+          .optional()
+          .describe('From `dashctl review drafts-list`; several may be given'),
+        number: NUMBER.describe(
+          'With --all, the PR to clear (defaults as other commands do); with ids, refuse any draft not on it',
+        ),
+        provider: PROVIDER,
+        all: z.boolean().optional().describe('Every draft on the PR'),
+        kind: KIND.optional().describe('With --all, only notes or only comments'),
+        author: AUTHOR.optional().describe("With --all, only the person's or only an agent's"),
+        ifUnchangedSince: IF_UNCHANGED_SINCE.describe(
+          'With one id: refuse (409) unless the draft is still at this version, the updatedAt you last read',
+        ),
       }),
       callers: ['orchestrator', 'task'],
-      cli: { args: ['id'] },
+      cli: { args: ['ids'] },
       readOnly: false,
       target: { taskId: 'taskId' },
       defaultTargetToSelf: true,
       handler: async (_ctx, input) => {
         const taskId = input.taskId!;
-        draftOrThrow(taskId, input.id);
-        deps.reviews.deleteAgentDraft(taskId, input.id);
-        return { ok: true };
+        const ids = [...new Set(input.ids ?? [])];
+        if (input.all === true) {
+          if (ids.length > 0) throw new ControlError(400, 'give draft ids or --all, not both');
+          if (input.ifUnchangedSince !== undefined) {
+            throw new ControlError(400, '--if-unchanged-since takes one draft id, not --all');
+          }
+        } else {
+          if (ids.length === 0) throw new ControlError(400, 'give draft ids, or --all');
+          if (input.kind || input.author) {
+            throw new ControlError(400, '--kind and --author narrow --all; ids name the drafts');
+          }
+          if (input.ifUnchangedSince !== undefined && ids.length !== 1) {
+            throw new ControlError(400, '--if-unchanged-since takes exactly one draft id');
+          }
+        }
+        // With ids, a PR is a check only when one is named.
+        const pr =
+          input.all || input.number !== undefined
+            ? await prFor(taskId, input.number, input.provider)
+            : null;
+        const targets = input.all
+          ? deps.reviews
+              .drafts(taskId, pr!)
+              .filter(
+                (c) =>
+                  (!input.kind || c.kind === input.kind) &&
+                  (!input.author || c.author === input.author),
+              )
+          : ids.map((id) => draftOrThrow(taskId, id));
+        for (const c of targets) {
+          if (pr && c.viewScope !== prScope(pr.provider, pr.number)) {
+            throw new ControlError(
+              400,
+              `draft ${c.id} is on PR #${numberOf(c)}, not #${pr.number}; nothing was deleted`,
+            );
+          }
+          assertUnchanged(c, input.ifUnchangedSince);
+        }
+        const deleted = targets.map((c) => c.id);
+        deps.reviews.deleteAgentDrafts(taskId, deleted);
+        return { deleted };
       },
     }),
   );
@@ -395,7 +651,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
     defineCapability({
       name: 'review.summary_get',
       summary:
-        "The task's draft summary for a PR: the review's PR-level comment, posted with the verdict on Submit. Null when there is none.",
+        "The task's draft summary for a PR: the review's PR-level comment, posted with the verdict on Submit, and its updatedAt. Null when there is none.",
       input: z.object({ taskId: TASK_ID_FIELD, number: NUMBER, provider: PROVIDER }),
       callers: ['orchestrator', 'task'],
       readOnly: true,
@@ -418,6 +674,9 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
         number: NUMBER,
         provider: PROVIDER,
         body: z.string().max(65_536).describe('The summary, in Markdown; empty clears it'),
+        ifUnchangedSince: IF_UNCHANGED_SINCE.describe(
+          "Refuse (409) unless the summary is still at this version, the updatedAt you last read ('' for none)",
+        ),
       }),
       callers: ['orchestrator', 'task'],
       cli: { stdin: 'body' },
@@ -427,8 +686,40 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
       handler: async (_ctx, input) => {
         const taskId = input.taskId!;
         const pr = await prFor(taskId, input.number, input.provider);
-        deps.reviews.setSummary(taskId, pr, { body: input.body, author: 'agent' });
+        try {
+          deps.reviews.setSummary(
+            taskId,
+            pr,
+            { body: input.body, author: 'agent' },
+            input.ifUnchangedSince,
+          );
+        } catch (err) {
+          if (!(err instanceof SummaryConflictError)) throw err;
+          throw new ControlError(
+            409,
+            `the summary changed since ${input.ifUnchangedSince || 'there was none'}; read it again with summary-get`,
+            err.current,
+          );
+        }
         return deps.reviews.getSummary(taskId, pr);
+      },
+    }),
+  );
+
+  registry.register(
+    defineCapability({
+      name: 'review.open',
+      summary:
+        'Bring Dash to the front on the task in review mode for a PR: where the person reads your drafts on it and posts them. Use it for a PR the task is not reviewing yet.',
+      input: z.object({ taskId: TASK_ID_FIELD, number: NUMBER, provider: PROVIDER }),
+      callers: ['orchestrator', 'task'],
+      readOnly: false,
+      target: { taskId: 'taskId' },
+      defaultTargetToSelf: true,
+      handler: async (_ctx, input) => {
+        const taskId = input.taskId!;
+        deps.openPr(deps.getTask(taskId)!, await prFor(taskId, input.number, input.provider));
+        return {};
       },
     }),
   );

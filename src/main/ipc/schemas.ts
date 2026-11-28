@@ -145,4 +145,6 @@ export const diffCommentInputSchema = z.object({
   side: z.enum(['LEFT', 'RIGHT']).optional(),
   replyTo: z.string().nullable().optional(),
   kind: z.enum(['note', 'comment']).optional(),
+  commit: z.string().nullable().optional(),
+  ifUnchangedSince: z.string().optional(),
 });

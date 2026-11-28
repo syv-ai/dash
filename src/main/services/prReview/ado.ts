@@ -1070,6 +1070,22 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
       });
     },
 
+    async head(ctx, number) {
+      const at = `${prPath(ctx, number)}/iterations`;
+      const { head } = latestIteration(await deps.request(adoOf(ctx), at));
+      if (!head) throw new Error(`PR #${number} has no head commit`);
+      return head;
+    },
+
+    async replyThread(ctx, number, ref) {
+      // A comment's id is numbered within its thread, so only the PR view's
+      // "<thread>:<comment>" form of it (see adoReviewFrom) names a thread.
+      const tid = ref.split(':')[0]!;
+      const threads = await deps.request(adoOf(ctx), `${prPath(ctx, number)}/threads`);
+      const found = list<RawThread>(threads).some((t) => isHumanThread(t) && String(t.id) === tid);
+      return found ? tid : null;
+    },
+
     /**
      * ADO has no pending review: each comment posts on its own, then the
      * replies, the vote and the summary. The first failure stops the run, and the drafts

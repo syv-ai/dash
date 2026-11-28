@@ -72,7 +72,10 @@ export function commandLine(c: CapabilityListing): string {
   const required = requiredOf(c);
   const args = c.cli?.args ?? [];
   const parts = ['dashctl', ...words(c.name)];
-  for (const a of args) parts.push(required.has(a) ? `<${flagFor(a)}>` : `[${flagFor(a)}]`);
+  for (const a of args) {
+    const many = propsOf(c)[a]?.type === 'array' ? '…' : '';
+    parts.push(required.has(a) ? `<${flagFor(a)}>${many}` : `[${flagFor(a)}]${many}`);
+  }
   let optional = false;
   for (const [prop, schema] of Object.entries(props)) {
     if (args.includes(prop)) continue;
@@ -240,13 +243,19 @@ export function resolveArgv(
       else throw new UsageError(`--${flagFor(prop)} needs a value`);
     }
     const args = c.cli?.args ?? [];
-    if (positional.length > args.length) {
+    // An array as the last positional takes every word left.
+    const variadic = props[args.at(-1) ?? '']?.type === 'array';
+    if (positional.length > args.length && !variadic) {
       throw new UsageError(`unexpected argument ${JSON.stringify(positional[args.length])}`);
     }
-    positional.forEach((value, i) => {
-      const prop = args[i]!;
-      if (prop in raw) throw new UsageError(`${flagFor(prop)} given twice`);
-      raw[prop] = value;
+    args.forEach((prop, i) => {
+      const values =
+        variadic && i === args.length - 1 ? positional.slice(i) : positional.slice(i, i + 1);
+      if (values.length === 0) return;
+      // A list taken as positionals adds to its flag's values.
+      if (props[prop]!.type === 'array') (lists[prop] ??= []).push(...values);
+      else if (prop in raw) throw new UsageError(`${flagFor(prop)} given twice`);
+      else raw[prop] = values[0]!;
     });
     const fromStdin = c.cli?.stdin;
     const askedForStdin = fromStdin !== undefined && raw[fromStdin] === '-';

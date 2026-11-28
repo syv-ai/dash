@@ -33,19 +33,24 @@ const draft = (over: Partial<DiffCommentInput> & { id: string }): DiffCommentInp
   ...over,
 });
 
-/** An adapter that posts what `posted` names, then answers with `error`. */
-function target(posted: (s: PrSubmission) => string[], error?: SubmitResult['error']) {
+/** An adapter that posts what `posted` names, then answers with `error`; the PR is at `head`. */
+function target(
+  posted: (s: PrSubmission) => string[],
+  error?: SubmitResult['error'],
+  headNow = 'H2',
+) {
   const submit = vi.fn(
     async (_ctx: unknown, _n: number, s: PrSubmission): Promise<SubmitResult> => ({
       postedDraftIds: posted(s),
       ...(error ? { error } : {}),
     }),
   );
+  const head = vi.fn(async () => headNow);
   const t: SubmitTarget = {
-    adapter: { submit },
+    adapter: { submit, head },
     ctx: { cwd: '/wt', projectId: 'p1', remote: null },
   };
-  return { t, submit };
+  return { t, submit, head };
 }
 const all = (s: PrSubmission) => [...s.comments, ...s.replies].map((d) => d.draftId);
 
@@ -108,7 +113,7 @@ describe('TaskReviews.submit', () => {
     });
     expect(ids()).toEqual(['n1', 'other', 'r1']);
     expect(changed).toEqual(['t1']);
-    expect(reviews.getSummary('t1', pr)).toEqual({ body: 'Looks good', author: 'agent' });
+    expect(reviews.getSummary('t1', pr)).toMatchObject({ body: 'Looks good', author: 'agent' });
   });
 
   it('changes nothing when the provider refuses before posting', async () => {
@@ -170,7 +175,60 @@ describe('TaskReviews.reply', () => {
   });
 });
 
+describe('TaskReviews.submit and a PR that moved', () => {
+  it('holds back a line comment written on an older head, as a draft', async () => {
+    comments.upsertFromUser(draft({ id: 'c1', commit: 'H1' }));
+    comments.upsertFromUser(draft({ id: 'c2', commit: 'H2', startLine: 9, endLine: 9 }));
+    const { t, submit } = target(all, undefined, 'H2');
+    expect(await reviews.submit('t1', pr, t, 'comment', '')).toEqual({
+      postedDraftIds: ['c2', 'r1'],
+      heldBackDraftIds: ['c1'],
+    });
+    expect(submit.mock.calls[0]![2].comments.map((c) => c.draftId)).toEqual(['c2']);
+    expect(ids()).toEqual(['c1', 'n1', 'other']);
+    expect(reviews.getSummary('t1', pr)).toBeNull();
+  });
+
+  it("posts nothing when every comment is held back and there's nothing else to say", async () => {
+    comments.deleteByIds(['r1']);
+    comments.upsertFromUser(draft({ id: 'c1', commit: 'H1' }));
+    const { t, submit } = target(all, undefined, 'H2');
+    expect(await reviews.submit('t1', pr, t, 'comment', ' ')).toEqual({
+      postedDraftIds: [],
+      heldBackDraftIds: ['c1'],
+    });
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("posts nothing, and says why, when the PR's head can't be read", async () => {
+    comments.upsertFromUser(draft({ id: 'c1', commit: 'H1' }));
+    const { t, submit, head } = target(all);
+    head.mockRejectedValueOnce(new Error('offline'));
+    const result = await reviews.submit('t1', pr, t, 'comment', '');
+    expect(result.postedDraftIds).toEqual([]);
+    expect(result.error).toMatchObject({ kind: 'other' });
+    expect((result.error as { message: string }).message).toContain('offline');
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("posts drafts that don't know their head, without asking for it", async () => {
+    const { t, head } = target(all);
+    expect((await reviews.submit('t1', pr, t, 'comment', '')).heldBackDraftIds).toBeUndefined();
+    expect(head).not.toHaveBeenCalled();
+  });
+});
+
 describe('TaskReviews drafts', () => {
+  it('lists the drafts of every PR', () => {
+    comments.upsertFromUser(draft({ id: 'live', viewScope: 'live', kind: 'note' }));
+    expect(
+      reviews
+        .allDrafts('t1')
+        .map((c) => c.id)
+        .sort(),
+    ).toEqual(['c1', 'n1', 'other', 'r1']);
+  });
+
   it("finds the task's PR drafts only", () => {
     comments.upsertFromUser(draft({ id: 'live', viewScope: 'live', kind: 'note' }));
     expect(reviews.draft('t1', 'c1')?.id).toBe('c1');
@@ -188,8 +246,14 @@ describe('TaskReviews drafts', () => {
     reviews.setSummary('t1', pr, { body: 'mine', author: 'user' });
     expect(changed).toEqual([]);
     reviews.setSummary('t1', pr, { body: 'theirs', author: 'agent' });
-    reviews.saveAgentDraft({ ...draft({ id: 'a1' }), replyTo: null, kind: 'comment' });
-    reviews.deleteAgentDraft('t1', 'a1');
+    reviews.saveAgentDraft({
+      ...draft({ id: 'a1' }),
+      replyTo: null,
+      commit: null,
+      kind: 'comment',
+    });
+    reviews.deleteAgentDrafts('t1', ['a1']);
+    reviews.deleteAgentDrafts('t1', []);
     expect(changed).toEqual(['t1', 't1', 't1']);
   });
 });

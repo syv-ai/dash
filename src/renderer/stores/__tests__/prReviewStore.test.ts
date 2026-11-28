@@ -3,6 +3,10 @@ import { makeElectronApiMock, installWindow, resetWindow } from './helpers/elect
 import type { PrProvider, PrReview } from '../../../shared/types';
 import { FORGE_CAPABILITIES } from '../../../shared/forgeCapabilities';
 
+vi.mock('../../components/ui/toast', () => ({
+  toast: { info: vi.fn(), success: vi.fn(), warning: vi.fn(), error: vi.fn(), offer: vi.fn() },
+}));
+
 const review = (n: number, provider: PrProvider = 'github'): PrReview => ({
   provider,
   capabilities: FORGE_CAPABILITIES[provider],
@@ -385,6 +389,38 @@ describe('prReviewStore summaries', () => {
       provider: 'ado',
       number: 7,
       body: 'Mine',
+      // Built on what was loaded, which had no version: the save is refused if the agent wrote since.
+      ifUnchangedSince: '',
     });
+  });
+
+  it("shows the agent's rewrite after a refused save, and offers the person's text back", async () => {
+    vi.useFakeTimers();
+    const theirs = { body: 'Agent rewrote it', author: 'agent', updatedAt: 'v2' };
+    api.prReviewGetSummary = vi.fn(() => Promise.resolve({ success: true, data: theirs }));
+    api.prReviewSetSummary = vi.fn(() =>
+      Promise.resolve({ success: false, code: 'CONFLICT', error: 'changed', data: theirs }),
+    );
+    const { usePrReviews, reviewKey } = await freshStore();
+    const { toast } = await import('../../components/ui/toast');
+    const key = reviewKey('t1', 'ado', 7);
+    usePrReviews.getState().setSummary('t1', 'ado', 7, 'Mine');
+    vi.advanceTimersByTime(500);
+    await vi.waitFor(() => expect(toast.offer).toHaveBeenCalledTimes(1));
+    // An agent write elsewhere on the task refetches summaries meanwhile.
+    await usePrReviews.getState().refreshSummaries('t1');
+    expect(usePrReviews.getState().summaries[key]!.body).toBe('Agent rewrote it');
+    // "Use mine" saves the person's text over theirs, unconditionally.
+    const [, offer] = vi.mocked(toast.offer).mock.calls[0]!;
+    offer.action.onClick();
+    expect(usePrReviews.getState().summaries[key]!.body).toBe('Mine');
+    await vi.waitFor(() =>
+      expect(api.prReviewSetSummary).toHaveBeenLastCalledWith({
+        taskId: 't1',
+        provider: 'ado',
+        number: 7,
+        body: 'Mine',
+      }),
+    );
   });
 });

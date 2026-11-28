@@ -30,6 +30,7 @@ export function BubbleHeader({
   scopeLabel,
   byAgent,
   sent,
+  movedFrom,
   actions,
 }: {
   kind: DiffCommentKind;
@@ -41,6 +42,8 @@ export function BubbleHeader({
   byAgent?: boolean;
   /** Already sent to the agent. */
   sent?: boolean;
+  /** A PR line draft written on an older head of the PR: that commit. */
+  movedFrom?: string | null;
   actions?: ReactNode;
 }) {
   return (
@@ -52,6 +55,15 @@ export function BubbleHeader({
       {scopeLabel && <Badge size="sm">{scopeLabel}</Badge>}
       {byAgent && <Badge size="sm">Agent</Badge>}
       {sent && <Badge size="sm">Sent</Badge>}
+      {movedFrom && (
+        <Badge
+          size="sm"
+          tone="warn"
+          title={`Written on ${movedFrom.slice(0, 7)}; the PR has changed since, so these lines may be other code now. Posting the review holds it back until you keep it here, edit its lines, or delete it.`}
+        >
+          PR moved
+        </Badge>
+      )}
       {actions && <div className="-mr-1.5 ml-auto flex items-center">{actions}</div>}
     </div>
   );

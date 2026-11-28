@@ -112,7 +112,18 @@ function Sheet({
     const r = await usePrReviews.getState().submit(projectId, cwd, taskId, review, verdict, body);
     posting.current = false;
     setBusy(false);
-    if (r.ok) {
+    if (r.ok && r.heldBack) {
+      const n = r.heldBack;
+      // With nothing else to post, the review posted nothing at all.
+      const nothing = !r.posted && verdict === 'comment' && !body.trim();
+      toast.warning(
+        `${nothing ? 'Nothing was posted' : 'Review posted'}. ${n} ${n === 1 ? 'comment was' : 'comments were'} kept as drafts`,
+        {
+          description: `Written on an older version of the PR, ${n === 1 ? 'its lines' : 'their lines'} may be other code now. Check ${n === 1 ? 'it' : 'them'} (marked "PR moved"), then post again.`,
+        },
+      );
+      close();
+    } else if (r.ok) {
       toast.success('Review posted');
       close();
     } else {

@@ -297,6 +297,8 @@ export function EditorPane({
     filePath,
     isFileLoaded,
   });
+  // A PR view's head: the version of the files its line drafts are written on.
+  const prHead = view.kind === 'pr' ? view.head : null;
   const binding = useFileComments({
     enabled: commentsOn,
     filePath,
@@ -305,6 +307,7 @@ export function EditorPane({
     monaco,
     scope,
     newKind: pr.newKind,
+    commit: prHead,
   });
   const liveComments = binding.liveComments;
   const shadeById = useCommentShades(liveComments);
@@ -663,6 +666,8 @@ export function EditorPane({
                     }
                   : undefined
               }
+              prHead={prHead}
+              onAnchorComment={(id) => prHead && store().setCommit(id, prHead)}
               pendingRange={dragging ? null : pendingRange}
               pendingText={draftApi.pendingText}
               editingId={draftApi.editingId}

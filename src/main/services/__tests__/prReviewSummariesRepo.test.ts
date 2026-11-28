@@ -5,7 +5,7 @@ let db: Database.Database;
 vi.mock('../../db/client', () => ({ getRawDb: () => db }));
 
 import { runMigrations } from '../../db/migrate';
-import { createPrReviewSummariesRepo } from '../prReviewSummariesRepo';
+import { createPrReviewSummariesRepo, SummaryConflictError } from '../prReviewSummariesRepo';
 
 describe('prReviewSummariesRepo', () => {
   beforeEach(() => {
@@ -17,13 +17,28 @@ describe('prReviewSummariesRepo', () => {
     ).run();
   });
 
+  it('writes the summary only if it is still the version named', () => {
+    const repo = createPrReviewSummariesRepo(db);
+    repo.setSummary('t1', 'ado', 7, { body: 'first', author: 'agent' }, '');
+    const first = repo.getSummary('t1', 'ado', 7)!.updatedAt!;
+    expect(() => repo.setSummary('t1', 'ado', 7, { body: 'x', author: 'user' }, '')).toThrow(
+      SummaryConflictError,
+    );
+    repo.setSummary('t1', 'ado', 7, { body: 'second', author: 'user' }, first);
+    expect(repo.getSummary('t1', 'ado', 7)!.updatedAt).not.toBe(first);
+    expect(() => repo.setSummary('t1', 'ado', 7, { body: 'x', author: 'user' }, first)).toThrow(
+      SummaryConflictError,
+    );
+    expect(repo.getSummary('t1', 'ado', 7)!.body).toBe('second');
+  });
+
   it('keeps a draft summary per task and PR, and clears it when emptied', () => {
     const repo = createPrReviewSummariesRepo(db);
     expect(repo.getSummary('t1', 'ado', 7)).toBeNull();
     repo.setSummary('t1', 'ado', 7, { body: 'Looks good', author: 'agent' });
-    expect(repo.getSummary('t1', 'ado', 7)).toEqual({ body: 'Looks good', author: 'agent' });
+    expect(repo.getSummary('t1', 'ado', 7)).toMatchObject({ body: 'Looks good', author: 'agent' });
     repo.setSummary('t1', 'ado', 7, { body: 'Mine now', author: 'user' });
-    expect(repo.getSummary('t1', 'ado', 7)).toEqual({ body: 'Mine now', author: 'user' });
+    expect(repo.getSummary('t1', 'ado', 7)).toMatchObject({ body: 'Mine now', author: 'user' });
     expect(repo.getSummary('t1', 'ado', 8)).toBeNull();
     repo.setSummary('t1', 'ado', 7, { body: '  ', author: 'user' });
     expect(repo.getSummary('t1', 'ado', 7)).toBeNull();

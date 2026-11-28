@@ -1,4 +1,4 @@
-import type { ControlInfo, IpcResponse, TaskEffort } from '../../shared/types';
+import type { ControlInfo, IpcResponse, PrRef, TaskEffort } from '../../shared/types';
 import type { ToastPayload } from '../../shared/toast';
 import type { ShowFileRequest } from '../../shared/showFile';
 
@@ -41,6 +41,10 @@ export interface SystemApi {
   onFocusTask: (callback: (target: { taskId: string; projectId?: string }) => void) => () => void;
   /** `dashctl show`: a file for a task's editor to show. */
   onShowFile: (callback: (request: ShowFileRequest) => void) => () => void;
+  /** Show a task in review mode for a PR (the control API's `review.open`). */
+  onOpenPr: (
+    callback: (target: { taskId: string; projectId: string; pr: PrRef }) => void,
+  ) => () => void;
   /** An agent outside Dash asks to control it (`open`), or the ask timed out (`!open`). */
   onOrchestratorAccessRequest: (
     callback: (request: { id: string; open: boolean }) => void,

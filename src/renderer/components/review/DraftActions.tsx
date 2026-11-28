@@ -1,4 +1,4 @@
-import type * as React from 'react';
+import { useState, type ReactNode } from 'react';
 import { Bot, Pencil, Trash2 } from 'lucide-react';
 import { canDemote } from '../../../shared/diffComments';
 import type { DiffComment } from '../../../shared/types';
@@ -49,16 +49,18 @@ export function DraftEditor({
   mentions?: readonly string[];
   onDone: () => void;
 }) {
+  // The draft as editing began, so a save can tell whether the agent changed it meanwhile.
+  const [from] = useState(c);
   return (
     <Composer>
       <CommentInputBar
         lineRange={null}
-        initialText={c.text}
+        initialText={from.text}
         mentions={mentions}
         submitLabel="Save"
         cancelButton
         onSubmit={(text) => {
-          useCommentsStore.getState().updateText(c.id, text);
+          useCommentsStore.getState().updateText(c.id, text, from);
           onDone();
         }}
         onCancel={onDone}
@@ -68,7 +70,7 @@ export function DraftEditor({
 }
 
 /** The composer's well, for a draft written or edited in a list or card. */
-export function Composer({ children }: { children: React.ReactNode }) {
+export function Composer({ children }: { children: ReactNode }) {
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-line bg-well px-3 py-2.5">
       {children}

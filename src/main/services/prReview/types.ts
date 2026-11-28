@@ -67,6 +67,11 @@ export interface ForgeProvider {
    *  base tip present in the checkout. */
   load(ctx: PrContext, number: number): Promise<ForgeLoad>;
   setResolved(ctx: PrContext, number: number, threadId: string, resolved: boolean): Promise<void>;
+  /** The PR's head commit now: the version of its files a line draft is written on. */
+  head(ctx: PrContext, number: number): Promise<string>;
+  /** The id of the PR's thread that `ref` names (the thread's own id, or on GitHub
+   *  one of its comments' node or REST ids), as a reply is posted to; null if none. */
+  replyThread(ctx: PrContext, number: number, ref: string): Promise<string | null>;
   submit(ctx: PrContext, number: number, submission: PrSubmission): Promise<SubmitResult>;
   /** Post a reply to a thread at once, outside any review. */
   reply(ctx: PrContext, number: number, threadId: string, body: string): Promise<PrReviewComment>;

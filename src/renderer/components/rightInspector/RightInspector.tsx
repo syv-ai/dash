@@ -327,6 +327,17 @@ export function RightInspector({
     setAgentPane('memory');
     if (railedRef.current) onShowRef.current({ terminal: false });
   }, [memoryAsked, showSegment]);
+  // Asked to show a PR (`dashctl review open`): review mode for it, which
+  // lands on Overview, shown narrow if collapsed.
+  const prAsked = useUi((s) => (s.prRequest?.taskId === task.id ? s.prRequest.pr : null));
+  const enterReviewRef = useRef(review.enter);
+  enterReviewRef.current = review.enter;
+  useEffect(() => {
+    if (!prAsked) return;
+    useUi.getState().setPrRequest(null);
+    enterReviewRef.current(prAsked);
+    if (railedRef.current) onShowRef.current({ terminal: false });
+  }, [prAsked]);
   // A file `dashctl show`n: the sidebar out of its rail (hidden expanded, it
   // shows narrow first, as the rail's click does), the editor expanded, the
   // list folded beside it.

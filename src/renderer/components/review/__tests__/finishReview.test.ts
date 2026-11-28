@@ -25,6 +25,7 @@ const draft = (id: string, over: Partial<DiffComment>): DiffComment => ({
   viewScope: 'pr:github:7',
   side: 'RIGHT',
   replyTo: null,
+  commit: null,
   author: 'user',
   kind: 'note',
   createdAt: '',

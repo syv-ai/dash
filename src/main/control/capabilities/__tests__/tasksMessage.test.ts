@@ -11,6 +11,7 @@ import {
   setTaskInbox,
   type TaskInbox,
 } from '../../../services/taskInbox';
+import { resetTaskNotices } from '../../../services/taskNotices';
 import { createReplyReader, registerTaskCapabilities, type TaskCapabilityDeps } from '../tasks';
 
 const orch = { kind: 'orchestrator' } as const;
@@ -74,6 +75,7 @@ beforeEach(() => {
     postToInbox: vi.fn(async () => {}),
     transcriptPathFor: vi.fn(() => null),
     readTranscript: vi.fn(async (file: string) => transcripts[file] ?? null),
+    showHeldNotice: vi.fn(),
   } as never;
   registry = createRegistry(fakeLookups(projects, tasks));
   registerTaskCapabilities(registry, deps as never);
@@ -407,5 +409,134 @@ describe('tasks.watch reply lines', () => {
     ]);
     w.ac.abort();
     await w.done;
+  });
+});
+
+describe('tasks.notify', () => {
+  beforeEach(() => {
+    resetTaskNotices();
+    task('child').dashAccess = true;
+  });
+
+  /** A watch by `caller` of every task it sees, its lines collected. */
+  function watchAs(
+    caller: typeof orch | ReturnType<typeof asTask>,
+    input: Record<string, unknown> = {},
+  ) {
+    const lines: Array<Record<string, unknown>> = [];
+    const ac = new AbortController();
+    const done = registry.call(caller, 'tasks.watch', input, {
+      emit: (l) => lines.push(l as Record<string, unknown>),
+      signal: ac.signal,
+    });
+    const notices = () => lines.filter((l) => l.event === 'notice');
+    const stop = async () => {
+      ac.abort();
+      await done;
+    };
+    return { notices, stop };
+  }
+  const notify = (to: string, text = 'PR #12 got a review') =>
+    registry.call(asTask('child'), 'tasks.notify', { to, text }) as Promise<{
+      delivered: boolean;
+    }>;
+
+  it('tells a task with Dash access how to reach the sender later, not one without', async () => {
+    running();
+    const { messageId } = await send();
+    expect(deps.postToInbox.mock.calls[0]![1]).toContain(
+      `to reach the sender later: dashctl tasks notify --to ${messageId}, the text on stdin]`,
+    );
+    task('child').dashAccess = false;
+    await send();
+    expect(deps.postToInbox.mock.calls[1]![1]).not.toContain('tasks notify');
+  });
+
+  it("reaches the sender's running watch as a notice line", async () => {
+    running();
+    const { messageId } = await send();
+    const w = watchAs(orch);
+    expect(await notify(messageId)).toEqual({ delivered: true });
+    expect(w.notices()).toEqual([
+      {
+        event: 'notice',
+        taskId: 'child',
+        inReplyTo: messageId,
+        text: 'PR #12 got a review',
+        sentAt: expect.any(Number),
+      },
+    ]);
+    expect(deps.showHeldNotice).not.toHaveBeenCalled();
+    await w.stop();
+  });
+
+  it("goes to the task that sent the message, not to the orchestrator's watch", async () => {
+    running();
+    const { messageId } = await send({}, asTask('me'));
+    const theirs = watchAs(orch);
+    const mine = watchAs(asTask('me'));
+    expect(await notify(messageId)).toEqual({ delivered: true });
+    expect(mine.notices()).toHaveLength(1);
+    expect(theirs.notices()).toEqual([]);
+    await theirs.stop();
+    await mine.stop();
+  });
+
+  it("is held when the sender isn't watching, shown to the person, and given to its next watch", async () => {
+    running();
+    const { messageId } = await send();
+    expect(await notify(messageId)).toEqual({ delivered: false });
+    expect(deps.showHeldNotice).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'child' }),
+      expect.objectContaining({ inReplyTo: messageId, text: 'PR #12 got a review' }),
+    );
+    const w = watchAs(orch);
+    expect(w.notices()).toHaveLength(1);
+    await w.stop();
+    const again = watchAs(orch);
+    expect(again.notices()).toEqual([]);
+    await again.stop();
+  });
+
+  it("reaches every orchestrator's watch, which tells its own by inReplyTo", async () => {
+    running();
+    const { messageId } = await send();
+    const a = watchAs(orch);
+    const b = watchAs(orch);
+    expect(await notify(messageId)).toEqual({ delivered: true });
+    for (const w of [a, b]) {
+      expect(w.notices()).toEqual([expect.objectContaining({ inReplyTo: messageId })]);
+    }
+    await a.stop();
+    await b.stop();
+  });
+
+  it("stays held while the sender's only watch doesn't see the task", async () => {
+    running();
+    const { messageId } = await send();
+    const other = watchAs(orch, { taskId: 'me' });
+    expect(await notify(messageId)).toEqual({ delivered: false });
+    expect(other.notices()).toEqual([]);
+    const all = watchAs(orch);
+    expect(all.notices()).toEqual([expect.objectContaining({ inReplyTo: messageId })]);
+    await other.stop();
+    await all.stop();
+  });
+
+  it('keeps a return address after more messages than tasks reply remembers', async () => {
+    running();
+    const first = await send();
+    for (let i = 0; i < 25; i++) await send();
+    expect(await notify(first.messageId)).toEqual({ delivered: false });
+  });
+
+  it('refuses a message id the task was never sent, and callers other than tasks', async () => {
+    running();
+    expect(await status(notify('m_00000000'))).toBe(404);
+    const { messageId } = await send();
+    const from = (caller: typeof orch | ReturnType<typeof asTask>) =>
+      status(registry.call(caller, 'tasks.notify', { to: messageId, text: 'x' }));
+    expect(await from(orch)).toBe(403);
+    expect(await from(asTask('me'))).toBe(404);
   });
 });

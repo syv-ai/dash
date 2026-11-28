@@ -11,11 +11,12 @@ export type TaskWatchEvent =
  * task's reply to a message): given the watch, it returns its check, which the
  * watch runs after each of its own (every change and every poll) with the
  * views of the tasks watched now. It emits its own lines, async if it likes:
- * `emit` drops them once the watch has ended.
+ * `emit` drops them once the watch has ended, and `onEnded` runs its cleanup then.
  */
 export type TaskWatchSource = (watch: {
   emit(line: { event: string } & Record<string, unknown>): void;
   ended(): boolean;
+  onEnded(cleanup: () => void): void;
 }) => (watched: ReadonlyMap<string, TaskView>) => void;
 
 export interface TaskWatchOptions {
@@ -91,6 +92,10 @@ export function watchTasks(opts: TaskWatchOptions, stream: StreamSink): Promise<
         if (!done) stream.emit(line);
       },
       ended: () => done,
+      onEnded: (cleanup: () => void) => {
+        if (done) cleanup();
+        else unsubscribes.push(cleanup);
+      },
     };
     sourceChecks = (opts.sources ?? []).map((source) => source(watch));
     check();

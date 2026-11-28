@@ -48,6 +48,10 @@ interface Props {
   onPromoteComment?(id: string): void;
   /** A line comment offers this to make it a note. */
   onDemoteComment?(id: string): void;
+  /** In a PR view, its head: a draft written on an older one shows as moved. */
+  prHead?: string | null;
+  /** Anchor a moved draft to the PR's head, as it sits now. */
+  onAnchorComment?(id: string): void;
   /** The draft's submit button ('Add note', 'Add comment'). */
   draftSubmitLabel?: string;
   /** A fresh draft's note/comment switch. */
@@ -85,6 +89,8 @@ export function CommentOverlay({
   bubbleWidthFraction = DEFAULT_BUBBLE_FRACTION,
   onPromoteComment,
   onDemoteComment,
+  prHead,
+  onAnchorComment,
   draftSubmitLabel,
   draftKind,
   onSendNowDraft,
@@ -292,6 +298,8 @@ export function CommentOverlay({
                 scopeLabel={scopeLabel}
                 onPromote={onPromoteComment}
                 onDemote={onDemoteComment}
+                prHead={prHead}
+                onAnchor={onAnchorComment}
               />
             </div>
             {editingComment && pendingRange && (

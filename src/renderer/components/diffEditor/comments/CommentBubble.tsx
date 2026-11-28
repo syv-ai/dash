@@ -1,5 +1,5 @@
 import type { MouseEvent, ReactNode } from 'react';
-import { Bot, MessageSquare, Pencil, Undo2, X } from 'lucide-react';
+import { Anchor, Bot, MessageSquare, Pencil, Undo2, X } from 'lucide-react';
 import type { DiffCommentKind } from '../../../../shared/types';
 import type { Shade } from './types';
 import { BUBBLE_FADE, BubbleShell } from './BubbleShell';
@@ -46,6 +46,11 @@ interface Props {
   onPromote?(): void;
   /** Make this comment a note to the agent (a PR's line comment only). */
   onDemote?(): void;
+  /** A PR line draft written on an older head of the PR: that commit. Its lines
+   *  may sit on other code now, and posting the review holds it back. Null otherwise. */
+  movedFrom?: string | null;
+  /** Anchor a moved draft to the PR's head, where it sits now. */
+  onAnchor?(): void;
 }
 
 /** One persisted speech-bubble card: its header (where it sits, what kind
@@ -71,6 +76,8 @@ export function CommentBubble({
   kind,
   onPromote,
   onDemote,
+  movedFrom,
+  onAnchor,
 }: Props) {
   // A sent comment fades back so it reads as "already pushed" without
   // disappearing (it stays editable/removable). A bubble mid-edit takes
@@ -119,6 +126,7 @@ export function CommentBubble({
             scopeLabel={scopeLabel}
             byAgent={byAgent}
             sent={sent}
+            movedFrom={movedFrom}
             actions={
               <div className="flex items-center opacity-0 transition-opacity group-hover/bubble:opacity-100 focus-within:opacity-100">
                 {action('Edit', <Pencil size={14} strokeWidth={1.8} />, onDoubleClick)}
@@ -130,6 +138,13 @@ export function CommentBubble({
                   )}
                 {onDemote &&
                   action('Make it a note to agent', <Bot size={14} strokeWidth={1.8} />, onDemote)}
+                {movedFrom &&
+                  onAnchor &&
+                  action(
+                    "Keep it here: it's about these lines in the PR as it is now",
+                    <Anchor size={14} strokeWidth={1.8} />,
+                    onAnchor,
+                  )}
                 {sent &&
                   action(
                     'Reopen — include in the next send',

@@ -16,7 +16,7 @@ import { LOCAL_CONFIG_EXCLUDE_ENTRY } from '../../services/gitExclude';
 import { taskEvents } from '../../services/taskEvents';
 import { broadcastProjectsChanged } from '../../services/projectEvents';
 import { TelemetryService } from '../../services/TelemetryService';
-import { focusTaskInWindow, showInWindow } from '../../services/focusTask';
+import { focusTaskInWindow, openPrInWindow, showInWindow } from '../../services/focusTask';
 import { outsideRoots } from '../../services/editorRoots';
 import {
   getUntrustedRoot,
@@ -47,6 +47,8 @@ import { GithubService } from '../../services/GithubService';
 import { AzureDevOpsService } from '../../services/AzureDevOpsService';
 import { ConnectionConfigService } from '../../services/ConnectionConfigService';
 import { linkedAdoWorkItem, linkedGithubIssue } from '../../../shared/taskContext';
+import { broadcast } from '../../utils/broadcast';
+import type { HeldTaskNotice } from '../../../shared/types';
 
 /**
  * The capabilities' real dependencies: the app's services. Kept apart from the
@@ -182,6 +184,13 @@ export function taskDeps(): TaskCapabilityDeps {
     postToInbox: (inbox, text) => postToInbox(inbox, text),
     transcriptPathFor: sessionTranscriptPath,
     readTranscript: (file) => fs.promises.readFile(file, 'utf8').catch(() => null),
+    showHeldNotice: (task, notice) =>
+      broadcast('tasks:noticeHeld', {
+        taskId: task.id,
+        projectId: task.projectId,
+        taskName: task.name,
+        text: notice.text,
+      } satisfies HeldTaskNotice),
   };
 }
 
@@ -204,10 +213,21 @@ export function serviceDeps(): ServiceCapabilityDeps {
 export function reviewDeps(): ReviewCapabilityDeps {
   return {
     providerFor: (projectId) =>
-      prProviderFor(
-        DatabaseService.getProjects().find((p) => p.id === projectId) ?? { gitRemote: null },
-      ),
+      prProviderFor(appPrContextDeps.getProject(projectId) ?? { gitRemote: null }),
     getTask: (id) => DatabaseService.getTask(id),
+    prHead: async (task, number) => {
+      const { adapter, ctx } = prContextFor(task.projectId, task.path, appPrContextDeps);
+      return adapter.head(ctx, number);
+    },
+    replyThread: async (task, number, ref) => {
+      const { adapter, ctx } = prContextFor(task.projectId, task.path, appPrContextDeps);
+      return adapter.replyThread(ctx, number, ref);
+    },
+    openPr: (task, pr) => {
+      if (!openPrInWindow({ taskId: task.id, projectId: task.projectId, pr })) {
+        throw new ControlError(409, 'Dash has no window open');
+      }
+    },
     // Read per call, so a database that failed to open fails the call, not the API's start.
     get reviews() {
       return taskReviews();

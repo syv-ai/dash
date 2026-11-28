@@ -542,6 +542,34 @@ export function App() {
     });
   }, []);
 
+  // A task's notice (`dashctl tasks notify`) that no watch of whoever messaged
+  // it took: Dash holds it for their next watch, and shows it here so it isn't
+  // missed. One toast per task, updated in place with the latest and a count.
+  useEffect(() => {
+    const unseen = new Map<string, number>();
+    return window.electronAPI.onTaskNoticeHeld(({ taskId, projectId, taskName, text }) => {
+      const count = (unseen.get(taskId) ?? 0) + 1;
+      unseen.set(taskId, count);
+      const forget = () => unseen.delete(taskId);
+      toast.offer(
+        count === 1
+          ? `${taskName} sent a notice no one was watching for`
+          : `${taskName} sent ${count} notices no one was watching for`,
+        {
+          key: `task-notice-${taskId}`,
+          description: text.length > 300 ? `${text.slice(0, 300)}…` : text,
+          action: {
+            label: 'Open task',
+            onClick: () => {
+              forget();
+              useProjects.getState().selectTask(projectId, taskId);
+            },
+          },
+        },
+      );
+    });
+  }, []);
+
   // Main changed the project list (the control API added a project): reload
   // it. The active project stays as it is.
   useEffect(() => {
@@ -609,6 +637,15 @@ export function App() {
     return window.electronAPI.onFocusTask(({ taskId, projectId }) => {
       if (projectId) setActiveProjectId(projectId);
       setActiveTaskId(taskId);
+    });
+  }, []);
+
+  // Show a task in review mode for a PR (the control API's review.open): its
+  // sidebar enters the mode once it shows.
+  useEffect(() => {
+    return window.electronAPI.onOpenPr(({ taskId, projectId, pr }) => {
+      useProjects.getState().selectTask(projectId, taskId);
+      useUi.getState().setPrRequest({ taskId, pr });
     });
   }, []);
 

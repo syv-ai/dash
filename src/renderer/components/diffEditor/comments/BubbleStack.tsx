@@ -1,6 +1,6 @@
 import type { LiveComment, Shade } from './types';
 import { CommentBubble } from './CommentBubble';
-import { canDemote, canPromote } from '../../../../shared/diffComments';
+import { canDemote, canPromote, isMoved, isPrComment } from '../../../../shared/diffComments';
 
 interface Props {
   /** Comments anchored at this line. ≥1; >1 means stacked. */
@@ -30,6 +30,10 @@ interface Props {
   onPromote?(id: string): void;
   /** Let a line comment become a note. */
   onDemote?(id: string): void;
+  /** In a PR view, its head: a draft written on an older one shows as moved. */
+  prHead?: string | null;
+  /** Anchor a moved draft to the PR's head, as it sits now. */
+  onAnchor?(id: string): void;
 }
 
 function metaLabel(c: LiveComment): string {
@@ -58,6 +62,8 @@ export function BubbleStack({
   scopeLabel,
   onPromote,
   onDemote,
+  prHead,
+  onAnchor,
 }: Props) {
   return (
     <div className="flex flex-col gap-[4px] pointer-events-auto">
@@ -85,6 +91,9 @@ export function BubbleStack({
             kind={c.kind}
             onPromote={onPromote && canPromote(c) ? () => onPromote(c.id) : undefined}
             onDemote={onDemote && canDemote(c) ? () => onDemote(c.id) : undefined}
+            // Only comments are submitted, so only they are held back.
+            movedFrom={isPrComment(c) && isMoved(c, prHead) ? c.commit : null}
+            onAnchor={onAnchor ? () => onAnchor(c.id) : undefined}
           />
         );
       })}

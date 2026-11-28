@@ -524,5 +524,13 @@ export function runMigrations(): void {
       SELECT id, session_id FROM tasks WHERE session_id IS NOT NULL;
   `);
 
+  // A PR line draft records the PR head its lines are in, so one written before
+  // the author pushed isn't posted on other code. Older drafts don't know it.
+  try {
+    rawDb.exec(`ALTER TABLE diff_editor_comments ADD COLUMN commit_sha TEXT`);
+  } catch {
+    /* already exists */
+  }
+
   rawDb.pragma('foreign_keys = ON');
 }

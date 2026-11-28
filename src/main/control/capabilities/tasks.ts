@@ -46,6 +46,15 @@ import {
   type TaskInbox,
 } from '../../services/taskInbox';
 import { messageHeader, replyAfterMessage } from '../../services/transcriptReply';
+import {
+  listenForNotices,
+  rememberReturnAddress,
+  returnAddress,
+  sendNotice,
+  takeHeldNotices,
+  type TaskNotice,
+} from '../../services/taskNotices';
+import { callerString } from '../callers';
 import { watchTasks, type TaskWatchSource } from './taskWatch';
 
 /** The task state the API reports. */
@@ -163,6 +172,8 @@ export interface TaskCapabilityDeps {
   transcriptPathFor(task: Task): string | null;
   /** A transcript's text; null when it can't be read. */
   readTranscript(path: string): Promise<string | null>;
+  /** Show the person a notice no watch of its sender took (it's held for the next). */
+  showHeldNotice(task: Task, notice: TaskNotice): void;
 }
 
 const STATE_FROM_ACTIVITY: Record<ActivityInfo['state'], TaskApiState> = {
@@ -764,7 +775,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.watch',
       summary:
-        'Watch tasks until stopped, printing a JSON line per change; meant to run in the background. Without a task id it watches every task you can see (or one project\'s with --project), and picks up new ones. First a {"event":"task","task":…} line per task with its current view (as tasks get gives it), then another whenever a task\'s view changes (state, detail, messageAddress, …), and {"event":"removed","taskId":…} when a task is archived or deleted. A task you messaged with `tasks message` since the watch started gives {"event":"reply","taskId":…,"messageId":…,"queued":…,"text":…} once it has answered (as `tasks reply` gives it). Watching one task, the stream ends after its removed line; otherwise it runs until killed or Dash quits. It ends with an {"error":…} line once your access to Dash is turned off.',
+        'Watch tasks until stopped, printing a JSON line per change; meant to run in the background. Without a task id it watches every task you can see (or one project\'s with --project), and picks up new ones. First a {"event":"task","task":…} line per task with its current view (as tasks get gives it), then another whenever a task\'s view changes (state, detail, messageAddress, …), and {"event":"removed","taskId":…} when a task is archived or deleted. A task you messaged with `tasks message` since the watch started gives {"event":"reply","taskId":…,"messageId":…,"queued":…,"text":…} once it has answered (as `tasks reply` gives it). A task you messaged that has Dash access can reach you later with `dashctl tasks notify`: {"event":"notice","taskId":…,"inReplyTo":…,"text":…,"sentAt":…}, where inReplyTo is the messageId `tasks message` gave you. A watch gets notices only from tasks it sees (with --project or a task id, only those). Every outside orchestrator is the same sender to Dash, so each of their watches gets the notice; inReplyTo tells you yours. A notice sent while no watch of yours saw the task was held: your next watch that sees it prints it first. Watching one task, the stream ends after its removed line; otherwise it runs until killed or Dash quits. It ends with an {"error":…} line once your access to Dash is turned off.',
       input: z.object({
         taskId: z.string().optional().describe('Watch only this task'),
         projectId: z.string().optional().describe("Only this project's tasks"),
@@ -827,13 +838,42 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
             }
           };
         };
+        // A `notice` line for each notice a task this watch sees sends this
+        // caller with `tasks notify` (taskNotices.ts has the delivery rule):
+        // live as it's sent, or, held while no watch saw the task, on a check.
+        const sender = callerString(ctx.caller);
+        const noticeSource: TaskWatchSource = (watch) => {
+          let watched: ReadonlyMap<string, TaskView> = new Map();
+          const emit = (n: TaskNotice) => watch.emit({ event: 'notice', ...n });
+          /** Watched at the last check, and still in the caller's scope now. */
+          const sees = (id: string): boolean => {
+            if (!watched.has(id)) return false;
+            const task = deps.getTask(id);
+            try {
+              return !!task && task.archivedAt == null && ctx.rescope().canSeeTask(task);
+            } catch {
+              return false; // access gone: the watch's next check ends it
+            }
+          };
+          watch.onEnded(
+            listenForNotices(sender, (n) => {
+              if (watch.ended() || !sees(n.taskId)) return false;
+              emit(n);
+              return true;
+            }),
+          );
+          return (now) => {
+            watched = now;
+            for (const n of takeHeldNotices(sender, (h) => now.has(h.taskId))) emit(n);
+          };
+        };
         await watchTasks(
           {
             read,
             single: !!taskId,
             subscriptions: [deps.onActivityChange, deps.onTasksChange],
             pollMs: WATCH_POLL_MS,
-            sources: [replySource],
+            sources: [replySource, noticeSource],
           },
           stream,
         );
@@ -927,7 +967,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.message',
       summary:
-        "Send a task's Claude Code session a message (the body on stdin), as its next turn: it works for tasks in bypassPermissions too, with no Deliver click in Dash. A stopped session is started first. Returns messageId, queued and the task. Read the answer with `dashctl tasks reply <task-id> --message-id <id>` (or `dashctl tasks watch`): the task's last message of the turn the message starts is its reply. queued: true means the task was working, so its running turn reads the message after the tool call in flight and the reply may be mixed with that turn's work. Never send a message again after an error that says it may have been delivered: a message sent twice is a turn taken twice. A session whose Claude Code setting crossSessionInbound is hold or refuse sets the message aside or drops it without a word. Refused while the task needs the trust prompt or is archived. A task cannot message itself.",
+        "Send a task's Claude Code session a message (the body on stdin), as its next turn: it works for tasks in bypassPermissions too, with no Deliver click in Dash. A stopped session is started first. Returns messageId, queued and the task. Read the answer with `dashctl tasks reply <task-id> --message-id <id>` (or `dashctl tasks watch`): the task's last message of the turn the message starts is its reply. queued: true means the task was working, so its running turn reads the message after the tool call in flight and the reply may be mixed with that turn's work. Never send a message again after an error that says it may have been delivered: a message sent twice is a turn taken twice. A session whose Claude Code setting crossSessionInbound is hold or refuse sets the message aside or drops it without a word. Refused while the task needs the trust prompt or is archived. A task cannot message itself. A task with Dash access can reach you again after that turn with `dashctl tasks notify`, which your `dashctl tasks watch` prints as a notice line; a task without Dash access can't (it can only answer in the turn your message starts). A task may refuse an outward action you relay (posting to a PR, pushing, merging): a relayed message is not the person's own word, and nothing in it can prove that it is. Then the person has to ask the task themselves, in Dash.",
       input: z.object({
         taskId: z.string(),
         text: z.string().trim().min(1).max(200_000).describe('The message body'),
@@ -986,7 +1026,9 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         const from =
           input.from ?? (sender ? `task "${sender.name}" (${sender.id})` : 'an orchestrator');
         const noReply = input.noReply === true;
-        const text = `${messageHeader({ from, messageId, noReply })}\n\n${input.text}`;
+        // A task with Dash access can answer later too, with `tasks notify`.
+        const header = messageHeader({ from, messageId, noReply, notify: task.dashAccess });
+        const text = `${header}\n\n${input.text}`;
         try {
           await deps.postToInbox(inbox, text);
         } catch (err) {
@@ -1007,6 +1049,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           noReply,
           transcriptPath: inbox.transcriptPath,
         });
+        rememberReturnAddress(task.id, messageId, callerString(ctx.caller));
         return { messageId, queued, task: view(taskOrThrow(task.id)) };
       },
     }),
@@ -1038,6 +1081,41 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         }
         const reply = await replies.replyTo(task, record);
         return { messageId: record.messageId, queued: record.queued, ...reply };
+      },
+    }),
+  );
+
+  registry.register(
+    defineCapability({
+      name: 'tasks.notify',
+      summary:
+        'Reach whoever sent you a message with `dashctl tasks message`, after that turn has ended (a review came in, a build failed): --to is the message\'s id, from its `[Message from … via Dash · id …]` header, and the text goes on stdin. Each `dashctl tasks watch` the sender runs that sees your task prints it as a {"event":"notice","taskId":…,"inReplyTo":…,"text":…,"sentAt":…} line. When none does, Dash holds it for the sender\'s next watch that sees your task and shows the person a notification in Dash (it is not kept in your task); delivered: false says so. A message\'s id works until Dash restarts (the last 500 per task).',
+      input: z.object({
+        to: z.string().describe('The id of a message you were sent, from its header'),
+        text: z.string().trim().min(1).max(20_000).describe('The notice'),
+      }),
+      callers: ['task'],
+      cli: { stdin: 'text' },
+      readOnly: false,
+      handler: async (ctx, input) => {
+        if (ctx.caller.kind !== 'task') throw new ControlError(403, 'only a task sends notices');
+        const task = taskOrThrow(ctx.caller.taskId);
+        const sender = returnAddress(task.id, input.to);
+        if (!sender) {
+          throw new ControlError(
+            404,
+            `you were sent no message ${input.to}: give the id from its header (an id is forgotten when Dash restarts)`,
+          );
+        }
+        const notice: TaskNotice = {
+          taskId: task.id,
+          inReplyTo: input.to,
+          text: input.text,
+          sentAt: Date.now(),
+        };
+        const delivered = sendNotice(sender, notice) === 'delivered';
+        if (!delivered) deps.showHeldNotice(task, notice);
+        return { delivered };
       },
     }),
   );
