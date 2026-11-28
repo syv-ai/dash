@@ -56,6 +56,7 @@ import { DetailSection } from '../ui/DetailList';
 import { EmptyState } from '../ui/EmptyState';
 import { IconButton } from '../ui/IconButton';
 import { Input } from '../ui/Input';
+import { Badge } from '../ui/Badge';
 import { ListRow } from '../ui/ListRow';
 import { Notice } from '../ui/Notice';
 import { Tooltip } from '../ui/Tooltip';
@@ -480,9 +481,15 @@ function MemoryPane({
                           `${entry.file} · edited ${formatRelativeTime(entry.mtimeMs / 1000, now)}`,
                           ...(listed ? memoryIssueTexts(listed) : []),
                         ].join('\n')}
+                        // Each flag a caution badge, as the task header's
+                        // labels are drawn (`md`, `normal`), in the warn role.
                         trailing={
                           flags.length > 0
-                            ? flags.map((i) => MEMORY_ISSUE_LABELS[i]).join(' · ')
+                            ? flags.map((i) => (
+                                <Badge key={i} tone="warn" size="md" weight="normal">
+                                  {MEMORY_ISSUE_LABELS[i]}
+                                </Badge>
+                              ))
                             : undefined
                         }
                         onClick={() => onOpenFile(pathOf(entry.file))}
