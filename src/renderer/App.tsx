@@ -57,6 +57,7 @@ import { useSystemHealth } from './hooks/useSystemHealth';
 import { useAutoSleep } from './hooks/useAutoSleep';
 import type { Task, WorktreeMigrationProject, WorktreeMigrationResult } from '../shared/types';
 import { defaultEffortFrom } from '../shared/effort';
+import { canShareFolder, folderSharers } from '../shared/folderSharing';
 import type { CreateTaskOptions, TaskFromPr, TaskModalDefaults } from './components/task/TaskModal';
 import { matchesBinding } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
@@ -700,7 +701,9 @@ export function App() {
         groups.set(t.path, list);
       }
       for (const [path, group] of groups) {
-        if (group.length > 1) {
+        // Tasks with no branch share a folder by design (folderSharing; the
+        // sidebar marks them); only a task on a branch needs it to itself.
+        if (group.some((t, i) => group.some((u, j) => i < j && !canShareFolder(t, u)))) {
           const project = projects.find((p) => p.id === projectId);
           offenders.push({
             projectName: project?.name ?? projectId,
@@ -718,7 +721,7 @@ export function App() {
       .map((o) => `"${o.projectName}": ${o.tasks.map((n) => `"${n}"`).join(', ')}`)
       .join('; ');
     toast.error('Multiple tasks share a directory', {
-      description: `They may cross-resume each other's Claude sessions. Archive the duplicates: ${summary}`,
+      description: `A task on a branch needs its folder to itself, or the tasks switch branches under each other. Archive the extras: ${summary}`,
       key: 'duplicate-task-dirs',
       lasting: true,
     });
@@ -1736,8 +1739,9 @@ export function App() {
           const modalProjectId = taskModalProjectId || activeProjectId;
           const modalProject = projects.find((p) => p.id === modalProjectId);
           const modalTasks = modalProjectId ? (tasksByProject[modalProjectId] ?? []) : [];
-          const existingNonWorktreeTask =
-            modalTasks.find((t) => !t.useWorktree && !t.archivedAt) ?? null;
+          const inPlaceTasks = modalProject
+            ? folderSharers({ id: '', path: modalProject.path, useWorktree: false }, modalTasks)
+            : [];
           return (
             <TaskModal
               projectPath={modalProject?.path ?? ''}
@@ -1745,11 +1749,7 @@ export function App() {
               projectId={modalProjectId || undefined}
               isGitRepo={modalProject?.isGitRepo ?? false}
               gitRemote={modalProject?.gitRemote ?? null}
-              existingNonWorktreeTask={
-                existingNonWorktreeTask
-                  ? { id: existingNonWorktreeTask.id, name: existingNonWorktreeTask.name }
-                  : null
-              }
+              inPlaceTasks={inPlaceTasks}
               ghAvailable={ghAvailable}
               adoConfigured={modalProjectId ? (adoConfiguredById[modalProjectId] ?? false) : false}
               initialBranches={modalProjectId ? branchesByProject[modalProjectId] : undefined}

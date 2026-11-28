@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ArrowDown, FolderGit2, GitBranch, Loader2 } from 'lucide-react';
+import { ArrowDown, FolderGit2, GitBranch, Loader2, Users } from 'lucide-react';
 import { SearchableMultiSelect } from '../ui/SearchableMultiSelect';
 import type {
   BranchInfo,
@@ -36,6 +36,7 @@ import { BranchPrPicker } from './BranchPrPicker';
 import { findBranchHolder, describeBranchHolder } from './branchHolder';
 import { useProjects } from '../../stores/projectsStore';
 import { useSlashCommands } from './useSlashCommands';
+import { sharedFolderWarning } from './sharedFolder';
 import { useBypassAvailability } from './changeSessionSetting';
 import { ExtraArgsField } from './ExtraArgsField';
 import { validateExtraArgs } from '../../../shared/extraArgs';
@@ -78,7 +79,8 @@ interface TaskModalProps {
   projectId?: string;
   isGitRepo: boolean;
   gitRemote: string | null;
-  existingNonWorktreeTask?: { id: string; name: string } | null;
+  /** The active tasks already working in the project's folder (not in a worktree). */
+  inPlaceTasks?: readonly { id: string; name: string }[];
   /** Pre-resolved at App-level so the issue picker + branch banner render at
    *  their final size on first paint, avoiding a visible "settle" as the modal grows. */
   ghAvailable: boolean;
@@ -100,7 +102,7 @@ export function TaskModal(props: TaskModalProps) {
         projectId={props.projectId}
         isGitRepo={props.isGitRepo}
         gitRemote={props.gitRemote}
-        existingNonWorktreeTask={props.existingNonWorktreeTask}
+        inPlaceTasks={props.inPlaceTasks}
         ghAvailable={props.ghAvailable}
         adoConfigured={props.adoConfigured}
         initialBranches={props.initialBranches}
@@ -119,7 +121,7 @@ interface TaskModalBodyProps {
   projectId?: string;
   isGitRepo: boolean;
   gitRemote: string | null;
-  existingNonWorktreeTask?: { id: string; name: string } | null;
+  inPlaceTasks?: readonly { id: string; name: string }[];
   ghAvailable: boolean;
   adoConfigured: boolean;
   initialBranches?: BranchInfo[];
@@ -166,13 +168,15 @@ function AdoWorkItemRow({ item }: { item: AzureDevOpsWorkItem }) {
   );
 }
 
+const NO_TASKS: readonly { id: string; name: string }[] = [];
+
 function TaskModalBody({
   projectPath,
   fromPr,
   projectId,
   isGitRepo,
   gitRemote,
-  existingNonWorktreeTask,
+  inPlaceTasks = NO_TASKS,
   ghAvailable,
   adoConfigured,
   initialBranches,
@@ -183,7 +187,10 @@ function TaskModalBody({
   const close = useModalClose();
   const [name, setName] = useState('');
   const [gitReady, setGitReady] = useState(isGitRepo);
-  const worktreeForced = !!existingNonWorktreeTask;
+  // A repository's folder takes one task on a branch (folderSharing): with one
+  // there, the next gets a worktree.
+  const folderHolder = gitReady ? inPlaceTasks[0] : undefined;
+  const worktreeForced = !!folderHolder;
   const [useWorktree, setUseWorktree] = useState(
     taskDefaults?.useWorktree ?? (isGitRepo || worktreeForced),
   );
@@ -306,6 +313,10 @@ function TaskModalBody({
     branchCount: branches.length,
     hasSelectedBranch: !!selectedBranch,
   });
+
+  // Tasks with no branch share the folder; say their edits can collide.
+  const sharedWarning =
+    !gitReady || repoHasNoCommits ? sharedFolderWarning(inPlaceTasks.map((t) => t.name)) : null;
 
   const directCheckout = isDirectCheckout({ createNewBranch, useWorktree });
   // A worktree can't be created on a branch that's already checked out (primary
@@ -452,6 +463,12 @@ function TaskModalBody({
               />
             </Field>
 
+            {sharedWarning && (
+              <Notice tone="warn" icon={<Users size={14} strokeWidth={1.8} />}>
+                {sharedWarning}
+              </Notice>
+            )}
+
             {gitReady && repoHasNoCommits ? (
               <Notice icon={<FolderGit2 size={14} strokeWidth={1.8} />}>
                 No commits yet, so this task runs in the project folder. Make a first commit to use
@@ -479,7 +496,7 @@ function TaskModalBody({
                   hint="An isolated checkout for this task."
                   helperText={
                     worktreeForced
-                      ? `A task outside a worktree already exists: ${existingNonWorktreeTask.name}`
+                      ? `A task outside a worktree already exists: ${folderHolder.name}`
                       : undefined
                   }
                   checked={useWorktree}
