@@ -947,6 +947,20 @@ export interface PrReview {
   files: PrFile[];
 }
 
+/** The fields of a PrReview that take local git: the merge-base its diff
+ *  starts from, its files, its commit count and how far behind base it is. */
+export type PrGitField = 'base' | 'files' | 'commits' | 'behindBase';
+
+/** A review thread as its forge alone tells it: `isOutdated` is null where
+ *  only local git can tell (ADO, whose `line` is then where ADO tracked it). */
+export type PrDetailsThread = Omit<PrReviewThread, 'isOutdated'> & { isOutdated: boolean | null };
+
+/** A PR's review as its forge alone tells it, read without a git call (the
+ *  project's PR list): the git-derived fields aren't in the type, so they
+ *  can't be read off it. `head` is the forge's head commit, which needn't be
+ *  in any checkout. */
+export type PrDetails = Omit<PrReview, PrGitField | 'threads'> & { threads: PrDetailsThread[] };
+
 /** A task's draft summary for a PR: the review's PR-level comment. */
 export interface PrReviewSummary {
   body: string;

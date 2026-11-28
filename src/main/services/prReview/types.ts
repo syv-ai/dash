@@ -1,6 +1,8 @@
 import type {
   AzureDevOpsConfig,
   ForgeCapabilities,
+  PrDetails,
+  PrGitField,
   PrReview,
   PullRequest,
   PullRequestInfo,
@@ -22,12 +24,17 @@ export interface PrContext {
   ado?: AzureDevOpsConfig & { repository: string };
 }
 
-/** The part of a PrReview local git provides, the same on every forge (see `loadPrReview`). */
-export type LocalPrFields = 'files' | 'commits' | 'behindBase';
+/** The part of a PrReview local git provides the same way on every forge
+ *  (see `loadPrReview`); the merge-base is the provider's to find. */
+export type LocalPrFields = Exclude<PrGitField, 'base'>;
 
 /** What a provider knows of a PR's review: everything but the local-git part
  *  and its forge's capabilities, which `loadPrReview` adds. */
 export type ForgeReview = Omit<PrReview, LocalPrFields | 'capabilities'>;
+
+/** What a provider tells of a PR without git: its details but for its
+ *  forge's capabilities, which `loadPrDetails` adds. */
+export type ForgeDetails = Omit<PrDetails, 'capabilities'>;
 
 /** A provider's load: its review, and the base branch's tip now (present in
  *  the checkout), which local git counts how far behind head is against; null
@@ -54,7 +61,10 @@ export interface ForgeProvider {
   commitAuthorUrl(cwd: string, sha: string): Promise<string | null>;
   /** Open PRs, newest first; only those from or into a branch with `filter`. */
   list(ctx: PrContext, filter?: PrListFilter): Promise<RelevantPr[]>;
-  /** The PR's review, with its base, head and base tip present in the checkout. */
+  /** The PR's review as the forge tells it, with no git call (see `PrDetails`). */
+  details(ctx: PrContext, number: number): Promise<ForgeDetails>;
+  /** The PR's details and what git adds to them, with its base, head and
+   *  base tip present in the checkout. */
   load(ctx: PrContext, number: number): Promise<ForgeLoad>;
   setResolved(ctx: PrContext, number: number, threadId: string, resolved: boolean): Promise<void>;
   submit(ctx: PrContext, number: number, submission: PrSubmission): Promise<SubmitResult>;

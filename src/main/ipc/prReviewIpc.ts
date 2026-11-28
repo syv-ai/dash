@@ -1,13 +1,17 @@
 import { ipcMain } from 'electron';
 import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
-import { prContextFor, UnsupportedForgeError } from '../services/prReview/resolve';
+import {
+  prContextFor,
+  prContextForProject,
+  UnsupportedForgeError,
+} from '../services/prReview/resolve';
 import {
   appPrContextDeps as appDeps,
   appSetReviewMode,
   appTaskPrs,
 } from '../services/prReview/appDeps';
-import { loadPrReview } from '../services/prReview/loadReview';
+import { loadPrDetails, loadPrReview } from '../services/prReview/loadReview';
 import { checkoutVsHead } from '../services/prReview/localCommits';
 import { taskReviews } from '../services/prReview/taskReview';
 import { prsForCheckout } from '../services/prReview/checkoutPrs';
@@ -123,6 +127,18 @@ export function registerPrReviewIpc(): void {
       }
     },
   );
+
+  /** PR `number` of the project as its forge tells it, with no git call
+   *  (see `PrDetails`): the project's PR list expands a row into it. */
+  ipcMain.handle('pr:details', async (_e, args: { projectId: string; number: number }) => {
+    try {
+      parseArgs('pr:details', z.looseObject({ projectId: z.string(), number: z.number() }), args);
+      const { adapter, ctx } = prContextForProject(args.projectId, appDeps);
+      return { success: true, data: await loadPrDetails(adapter, ctx, args.number) };
+    } catch (err) {
+      return errorResponse(err);
+    }
+  });
 
   ipcMain.handle(
     'prReview:load',

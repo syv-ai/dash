@@ -7,11 +7,12 @@ import {
   githubReactionRequest,
   githubRelevantPrsFrom,
   githubReplyRequest,
-  githubReviewFrom,
+  githubDetailsFrom,
   githubViewerReview,
   githubWriteError,
   makeGithubProvider,
   restCommentFrom,
+  type GithubGit,
   type Gql,
   type Rest,
 } from '../github';
@@ -28,9 +29,9 @@ const comment = (
   createdAt,
   url: `u/${id}`,
 });
-const at = { number: 4, base: 'B', head: 'H', viewer: 'me' };
+const at = { number: 4, viewer: 'me' };
 
-describe('githubReviewFrom', () => {
+describe('githubDetailsFrom', () => {
   it('keeps every review thread, resolved or not, with its comments', () => {
     const pr = {
       reviewThreads: {
@@ -67,7 +68,7 @@ describe('githubReviewFrom', () => {
         ],
       },
     };
-    const { threads } = githubReviewFrom(pr, at);
+    const { threads } = githubDetailsFrom(pr, at);
     expect(
       threads.map((t) => [t.id, t.resolved, t.side, t.line, t.startLine, t.isOutdated]),
     ).toEqual([
@@ -107,12 +108,12 @@ describe('githubReviewFrom', () => {
         ],
       },
     };
-    expect(githubReviewFrom(pr, at).conversation.map((c) => c.id)).toEqual(['IC1', 'R1', 'IC2']);
+    expect(githubDetailsFrom(pr, at).conversation.map((c) => c.id)).toEqual(['IC1', 'R1', 'IC2']);
   });
 
   it('keeps what a reply to a conversation item quotes: its id, author and text', () => {
     const pr = { comments: { nodes: [comment('IC_1', 'bo', 'Split this?')] } };
-    expect(githubReviewFrom(pr, at).conversation[0]).toMatchObject({
+    expect(githubDetailsFrom(pr, at).conversation[0]).toMatchObject({
       id: 'IC_1',
       author: 'bo',
       body: 'Split this?',
@@ -120,25 +121,24 @@ describe('githubReviewFrom', () => {
   });
 
   it('describes the PR and offers only "comment" on your own PR', () => {
-    const base = { title: 'Fix it', body: 'Because', url: 'https://x/pull/4' };
-    const theirs = githubReviewFrom({ ...base, viewerDidAuthor: false }, at);
+    const base = { title: 'Fix it', body: 'Because', url: 'https://x/pull/4', headRefOid: 'H' };
+    const theirs = githubDetailsFrom({ ...base, viewerDidAuthor: false }, at);
     expect(theirs).toMatchObject({
       provider: 'github',
       number: 4,
       title: 'Fix it',
       body: 'Because',
       url: 'https://x/pull/4',
-      base: 'B',
       head: 'H',
       viewerIsAuthor: false,
       verdicts: ['comment', 'approve', 'request_changes'],
     });
     expect(theirs.partial).toBeUndefined();
-    expect(githubReviewFrom({ ...base, viewerDidAuthor: true }, at).verdicts).toEqual(['comment']);
+    expect(githubDetailsFrom({ ...base, viewerDidAuthor: true }, at).verdicts).toEqual(['comment']);
   });
 
   it('describes who wrote it, where it stands, its branches, people and checks', () => {
-    const review = githubReviewFrom(prFixture, at);
+    const review = githubDetailsFrom(prFixture, at);
     expect(review).toMatchObject({
       author: 'bo',
       authorUrl: 'https://github.com/bo',
@@ -170,7 +170,7 @@ describe('githubReviewFrom', () => {
       { name: 'deploy', state: 'skipped', url: null },
       { name: 'ci/circleci', state: 'pending', url: 'https://circleci.com/x' },
     ]);
-    const state = (over: object) => githubReviewFrom({ ...prFixture, ...over }, at).state;
+    const state = (over: object) => githubDetailsFrom({ ...prFixture, ...over }, at).state;
     expect(state({ isDraft: true })).toBe('draft');
     expect(state({ state: 'MERGED' })).toBe('merged');
     expect(state({ state: 'CLOSED', isDraft: true })).toBe('closed');
@@ -182,10 +182,10 @@ describe('githubReviewFrom', () => {
         nodes: [{ requestedReviewer: { login: 'other' } }, { requestedReviewer: {} }],
       },
     };
-    expect(githubReviewFrom(pr, at).viewerIsRequestedReviewer).toBe(false);
+    expect(githubDetailsFrom(pr, at).viewerIsRequestedReviewer).toBe(false);
     pr.reviewRequests.nodes.push({ requestedReviewer: { login: 'me' } });
-    expect(githubReviewFrom(pr, at).viewerIsRequestedReviewer).toBe(true);
-    expect(githubReviewFrom(pr, { ...at, viewer: '' }).viewerIsRequestedReviewer).toBe(false);
+    expect(githubDetailsFrom(pr, at).viewerIsRequestedReviewer).toBe(true);
+    expect(githubDetailsFrom(pr, { ...at, viewer: '' }).viewerIsRequestedReviewer).toBe(false);
   });
 
   it("says whether you're assigned and whether you've commented, by your login", () => {
@@ -196,24 +196,24 @@ describe('githubReviewFrom', () => {
       reviews: { nodes: [{ ...comment('me'), state: 'PENDING' }] },
       reviewThreads: { nodes: [{ comments: { nodes: [comment('other')] } }] },
     };
-    expect(githubReviewFrom(pr, at)).toMatchObject({
+    expect(githubDetailsFrom(pr, at)).toMatchObject({
       viewerIsAssignee: false,
       viewerCommented: false,
     });
     pr.assignees.nodes.push({ login: 'me' });
     pr.reviewThreads.nodes[0]!.comments.nodes.push(comment('me'));
-    expect(githubReviewFrom(pr, at)).toMatchObject({
+    expect(githubDetailsFrom(pr, at)).toMatchObject({
       viewerIsAssignee: true,
       viewerCommented: true,
     });
-    expect(githubReviewFrom(pr, { ...at, viewer: '' })).toMatchObject({
+    expect(githubDetailsFrom(pr, { ...at, viewer: '' })).toMatchObject({
       viewerIsAssignee: false,
       viewerCommented: false,
     });
   });
 
   it("links each comment's author and keeps the reactions someone gave", () => {
-    const review = githubReviewFrom(prFixture, at);
+    const review = githubDetailsFrom(prFixture, at);
     const [first, second] = review.threads[0]!.comments;
     expect(first).toMatchObject({
       author: 'ann',
@@ -232,11 +232,11 @@ describe('githubReviewFrom', () => {
 
   it('flags a review with more threads than were loaded', () => {
     const pr = { reviewThreads: { pageInfo: { hasNextPage: true }, nodes: [] } };
-    expect(githubReviewFrom(pr, at).partial).toBe(true);
+    expect(githubDetailsFrom(pr, at).partial).toBe(true);
   });
 
   it('tolerates junk', () => {
-    expect(githubReviewFrom(null, at)).toMatchObject({
+    expect(githubDetailsFrom(null, at)).toMatchObject({
       threads: [],
       conversation: [],
       title: '',
@@ -247,7 +247,7 @@ describe('githubReviewFrom', () => {
       checks: [],
     });
     expect(
-      githubReviewFrom({ reviewThreads: { nodes: [null, { isResolved: false }] } }, at).threads,
+      githubDetailsFrom({ reviewThreads: { nodes: [null, { isResolved: false }] } }, at).threads,
     ).toEqual([
       {
         id: '',
@@ -452,6 +452,44 @@ describe('githubRelevantPrsFrom', () => {
 
   it('is empty for an answer without the repository', () => {
     expect(githubRelevantPrsFrom({})).toEqual([]);
+  });
+});
+
+describe('githubProvider.details and load', () => {
+  const answer = { viewer: { login: 'me' }, repository: { pullRequest: prFixture } };
+  const gql: Gql = async () => answer;
+  const fakeGit = () => {
+    const git: string[] = [];
+    const deps: GithubGit = {
+      ensureCommits: async (_cwd, shas, _run, refs) =>
+        void git.push(`fetch ${[...shas, ...(refs ?? [])].join(' ')}`),
+      mergeBase: async (_cwd, a, b) => {
+        git.push(`merge-base ${a} ${b}`);
+        return 'MB';
+      },
+    };
+    return { git, deps };
+  };
+
+  it('tells the PR as GitHub does, without a git call', async () => {
+    const { git, deps } = fakeGit();
+    const details = await makeGithubProvider(gql, undefined, deps).details(ctx, 4);
+    expect(details).toEqual(githubDetailsFrom(prFixture, at));
+    expect(details).not.toHaveProperty('base');
+    expect(git).toEqual([]);
+  });
+
+  it('loads the details with the base tip and head fetched, diffed from their merge-base', async () => {
+    const { git, deps } = fakeGit();
+    const forge = makeGithubProvider(gql, undefined, deps);
+    const review = await forge.load(ctx, 4);
+    expect(git).toEqual(['fetch B0 H refs/pull/4/head', 'merge-base B0 H']);
+    expect(review).toEqual({ ...(await forge.details(ctx, 4)), base: 'MB', baseTip: 'B0' });
+  });
+
+  it('rejects a PR GitHub does not have', async () => {
+    const forge = makeGithubProvider(async () => ({ repository: { pullRequest: null } }));
+    await expect(forge.details(ctx, 9)).rejects.toThrow('PR #9 not found');
   });
 });
 

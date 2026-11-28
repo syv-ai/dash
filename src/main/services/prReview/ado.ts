@@ -8,6 +8,7 @@ import type {
   PrReactionContent,
   PrReviewComment,
   PrReviewer,
+  PrDetailsThread,
   PrViewerInvolvement,
   PrViewerReview,
   PrReviewThread,
@@ -29,7 +30,7 @@ import { adoBuildIdOf, adoLogExcerpt, adoLogStartLine, adoTimelineFailure } from
 import { ciOf } from '../prRelevance';
 import { ensureCommits, filesAtCommit, localDiffStat, runGit } from './localCommits';
 import { adoForkBranch, adoForkHead, fetchAdoForkHead } from './adoFork';
-import type { ForgeReview, PrContext, ForgeProvider } from './types';
+import type { ForgeDetails, ForgeReview, PrContext, ForgeProvider } from './types';
 
 const execFileAsync = promisify(execFile);
 
@@ -418,35 +419,39 @@ export function adoIssuesFrom(items: unknown, ctx: AdoRepoContext): PrIssue[] {
   );
 }
 
+/** What ADO tells of a pull request (see `adoDetailsFrom`). */
+export interface AdoRawPr {
+  pr: unknown;
+  iterations: unknown;
+  threads: unknown;
+  me: string;
+  checks: PrCheck[];
+  /** Its linked work items; none when not given. */
+  issues?: PrIssue[];
+}
+
+/** What local git tells of an ADO pull request's threads (see `adoReviewFrom`). */
+export interface AdoGitFacts {
+  filesAtHead: ReadonlySet<string>;
+  /** Threads whose lines have changed since they were left (see
+   *  `adoThreadOrigins`, `linesChanged`); none when not given. */
+  changedSince?: ReadonlySet<string>;
+}
+
 /**
- * The ForgeReview of an ADO pull request: its threads (fetched with
+ * The details of an ADO pull request: its threads (fetched with
  * `$iteration=N&$baseIteration=0`, so their positions are tracked onto the
  * latest diff), with ADO's own bookkeeping threads left out. ADO has no
- * "outdated" flag; a thread is outdated, as on GitHub, once its file is gone
- * at head or its lines changed since it was left (`changedSince`).
+ * "outdated" flag and only local git can tell (see `adoReviewFrom`), so
+ * each thread's is null and its line is where ADO tracked it.
  */
-export function adoReviewFrom(
-  raw: {
-    pr: unknown;
-    iterations: unknown;
-    threads: unknown;
-    me: string;
-    filesAtHead: ReadonlySet<string>;
-    /** Threads whose lines have changed since they were left (see
-     *  `adoThreadOrigins`, `linesChanged`); none when not given. */
-    changedSince?: ReadonlySet<string>;
-    checks: PrCheck[];
-    /** Its linked work items; none when not given. */
-    issues?: PrIssue[];
-  },
-  ctx: AdoRepoContext,
-): ForgeReview {
+export function adoDetailsFrom(raw: AdoRawPr, ctx: AdoRepoContext): ForgeDetails {
   const pr = (raw.pr ?? {}) as RawPr;
   const number = pr.pullRequestId ?? 0;
   const viewer = adoViewerOn(pr, raw.me);
-  const { head, base } = latestIteration(raw.iterations);
+  const { head } = latestIteration(raw.iterations);
   const url = prUrl(ctx, number);
-  const threads: PrReviewThread[] = [];
+  const threads: PrDetailsThread[] = [];
   const conversation: PrReviewComment[] = [];
 
   for (const t of list<RawThread>(raw.threads).filter(isHumanThread)) {
@@ -463,15 +468,14 @@ export function adoReviewFrom(
     const right = where.rightFileStart ? 'RIGHT' : where.leftFileStart ? 'LEFT' : null;
     const start = right === 'RIGHT' ? where.rightFileStart : where.leftFileStart;
     const end = (right === 'RIGHT' ? where.rightFileEnd : where.leftFileEnd) ?? start;
-    const isOutdated = !raw.filesAtHead.has(path) || !!raw.changedSince?.has(tid);
-    const line = right && !isOutdated ? (end?.line ?? null) : null;
+    const line = right ? (end?.line ?? null) : null;
     threads.push({
       id: tid,
       path,
       line,
       startLine: line !== null && start?.line && start.line !== line ? start.line : null,
       side: right === 'LEFT' ? 'LEFT' : 'RIGHT',
-      isOutdated,
+      isOutdated: null,
       resolved: RESOLVED.has(t.status ?? ''),
       comments,
     });
@@ -497,7 +501,6 @@ export function adoReviewFrom(
           ),
         ),
     verdicts: ADO_VERDICTS,
-    base,
     head,
     threads,
     conversation,
@@ -514,6 +517,23 @@ export function adoReviewFrom(
     issues: raw.issues ?? [],
     checks: raw.checks,
   };
+}
+
+/**
+ * The ForgeReview of an ADO pull request: its details (`adoDetailsFrom`),
+ * diffed from the latest iteration's base, with each thread outdated, as on
+ * GitHub, once its file is gone at head or its lines changed since it was
+ * left (`changedSince`); an outdated thread has no line.
+ */
+export function adoReviewFrom(raw: AdoRawPr & AdoGitFacts, ctx: AdoRepoContext): ForgeReview {
+  const details = adoDetailsFrom(raw, ctx);
+  const threads = details.threads.map(
+    (t): PrReviewThread =>
+      !raw.filesAtHead.has(t.path) || !!raw.changedSince?.has(t.id)
+        ? { ...t, isOutdated: true, line: null, startLine: null }
+        : { ...t, isOutdated: false },
+  );
+  return { ...details, base: latestIteration(raw.iterations).base, threads };
 }
 
 // ── Requests (pure) ─────────────────────────────────────────
@@ -845,6 +865,26 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
     return adoIssuesFrom(items, repoContext(ado));
   };
 
+  /** What ADO tells of PR `number`: the PR, its iterations, its threads
+   *  tracked onto the latest, your id, its checks and its work items. */
+  const fetchPr = async (ctx: PrContext, number: number): Promise<AdoRawPr> => {
+    const ado = adoOf(ctx);
+    const at = prPath(ctx, number);
+    const [pr, iterations, me] = await Promise.all([
+      deps.request(ado, at),
+      deps.request(ado, `${at}/iterations`),
+      deps.getMyId(ado).catch(() => ''),
+    ]);
+    const { id } = latestIteration(iterations);
+    const [threads, checks, issues] = await Promise.all([
+      deps.request(ado, `${at}/threads?$iteration=${id}&$baseIteration=0`),
+      deps.checks(ado, number, (pr as RawPr | null)?.repository?.project?.id),
+      // Never fails the read: none when ADO won't say.
+      workItems(ado, at).catch((): PrIssue[] => []),
+    ]);
+    return { pr, iterations, threads, me, checks, issues };
+  };
+
   const rowFactsCache = new Map<string, { at: number; facts: Promise<Partial<RelevantPr>> }>();
 
   /**
@@ -973,21 +1013,17 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
       return rows.map((row) => ({ ...row, ...facts.get(row.number) }));
     },
 
+    details: async (ctx, number) =>
+      adoDetailsFrom(await fetchPr(ctx, number), repoContext(adoOf(ctx))),
+
+    /** The details, with the latest iteration's base and head and the
+     *  target's tip fetched into the checkout, and each thread's outdated
+     *  flag from them (see `adoReviewFrom`). */
     async load(ctx, number) {
       const ado = adoOf(ctx);
-      const at = prPath(ctx, number);
-      const [pr, iterations, me] = await Promise.all([
-        deps.request(ado, at),
-        deps.request(ado, `${at}/iterations`),
-        deps.getMyId(ado).catch(() => ''),
-      ]);
+      const raw = await fetchPr(ctx, number);
+      const { pr, iterations, threads } = raw;
       const { id, head, base } = latestIteration(iterations);
-      const [threads, checks, issues] = await Promise.all([
-        deps.request(ado, `${at}/threads?$iteration=${id}&$baseIteration=0`),
-        deps.checks(ado, number, (pr as RawPr | null)?.repository?.project?.id),
-        // Never fails the load: none when ADO won't say.
-        workItems(ado, at).catch((): PrIssue[] => []),
-      ]);
       const baseTip = (pr as RawPr | null)?.lastMergeTargetCommit?.commitId || null;
       // The PR's merge ref holds its head (a fork's too) and the target, should
       // Azure Repos refuse a fetch by sha.
@@ -998,13 +1034,7 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
         deps.filesAtCommit(ctx.cwd, head, threadPaths(threads)),
         changedThreads(ctx.cwd, adoThreadOrigins(threads, iterations, id), head),
       ]);
-      return {
-        ...adoReviewFrom(
-          { pr, iterations, threads, me, filesAtHead, changedSince, checks, issues },
-          repoContext(ado),
-        ),
-        baseTip,
-      };
+      return { ...adoReviewFrom({ ...raw, filesAtHead, changedSince }, repoContext(ado)), baseTip };
     },
 
     reply,

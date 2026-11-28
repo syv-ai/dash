@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import type { AzureDevOpsConfig, Project } from '../../../../shared/types';
-import { prContextFor, UnsupportedForgeError, type PrContextDeps } from '../resolve';
+import {
+  prContextFor,
+  prContextForProject,
+  UnsupportedForgeError,
+  type PrContextDeps,
+} from '../resolve';
 
 const project = (gitRemote: string | null): Project => ({
   id: 'p1',
@@ -55,5 +60,20 @@ describe('prContextFor', () => {
 
   it('refuses an unknown project', () => {
     expect(() => prContextFor('nope', '/wt', deps(null))).toThrow('Unknown project');
+  });
+});
+
+describe('prContextForProject', () => {
+  it("runs at the project's own checkout", () => {
+    const remote = 'git@github.com:o/r.git';
+    expect(prContextForProject('p1', deps(remote)).ctx).toEqual({
+      cwd: '/repo',
+      projectId: 'p1',
+      remote,
+    });
+  });
+
+  it('refuses a project it does not know', () => {
+    expect(() => prContextForProject('nope', deps(null))).toThrow('Unknown project');
   });
 });

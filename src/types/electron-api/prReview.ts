@@ -1,6 +1,7 @@
 import type {
   CheckoutVsHead,
   IpcResponse,
+  PrDetails,
   PrProvider,
   PrReactionContent,
   PrRef,
@@ -52,6 +53,9 @@ export interface PrReviewApi {
     cwd: string;
     number: number;
   }) => Promise<IpcResponse<PrReview>>;
+  /** PR `number` of the project as its forge tells it, with no git call:
+   *  its review without the git-derived fields (see `PrDetails`). */
+  prDetails: (args: { projectId: string; number: number }) => Promise<IpcResponse<PrDetails>>;
   /** Resolve or reactivate a thread on the PR, at once. */
   prReviewSetResolved: (args: {
     projectId: string;

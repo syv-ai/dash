@@ -249,6 +249,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   prReviewRelevant: (args: { taskId: string }) => ipcRenderer.invoke('prReview:relevant', args),
   prReviewLoad: (args: { projectId: string; cwd: string; number: number }) =>
     ipcRenderer.invoke('prReview:load', args),
+  prDetails: (args: { projectId: string; number: number }) =>
+    ipcRenderer.invoke('pr:details', args),
   prReviewSetResolved: (args: {
     projectId: string;
     cwd: string;

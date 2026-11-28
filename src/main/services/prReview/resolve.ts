@@ -54,3 +54,14 @@ export function prContextFor(
   }
   return { provider, adapter: adapters[provider], ctx };
 }
+
+/** `prContextFor` at the project's own checkout, for what belongs to the
+ *  project rather than a task (its PR list). */
+export function prContextForProject(
+  projectId: string,
+  deps: PrContextDeps,
+): ReturnType<typeof prContextFor> {
+  const project = deps.getProject(projectId);
+  if (!project) throw new Error('Unknown project');
+  return prContextFor(projectId, project.path, deps);
+}

@@ -1,4 +1,4 @@
-import type { PrReview } from '@shared/types';
+import type { PrDetails, PrReview } from '@shared/types';
 import { prLocalStats } from './localCommits';
 import type { PrContext, ForgeProvider } from './types';
 
@@ -20,4 +20,14 @@ export async function loadPrReview(
     capabilities: adapter.capabilities,
     ...(await stats(ctx.cwd, { ...review, baseTip })),
   };
+}
+
+/** A PR's details: what its provider tells of it with no git call, and the
+ *  forge's capabilities. */
+export async function loadPrDetails(
+  adapter: Pick<ForgeProvider, 'details' | 'capabilities'>,
+  ctx: PrContext,
+  number: number,
+): Promise<PrDetails> {
+  return { ...(await adapter.details(ctx, number)), capabilities: adapter.capabilities };
 }

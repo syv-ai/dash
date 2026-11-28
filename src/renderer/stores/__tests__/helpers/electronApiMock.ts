@@ -56,6 +56,7 @@ export function makeElectronApiMock(overrides: Record<string, unknown> = {}) {
     prForCheckout: vi.fn(() => ok([])),
     prWriteCiReport: vi.fn(() => ok(null)),
     prReviewLoad: vi.fn(() => ok(null)),
+    prDetails: vi.fn(() => ok(null)),
     prReviewRelevant: vi.fn(() => ok({ relevant: null, mode: null })),
     gitCurrentBranch: vi.fn(() => ok(null)),
     onPtyActivity: vi.fn((_cb: (d: Record<string, unknown>) => void) => () => {}),

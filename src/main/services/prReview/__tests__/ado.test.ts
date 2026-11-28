@@ -5,6 +5,7 @@ import type { PrSubmission } from '../../../../shared/types';
 import { AdoRequestError } from '../../AzureDevOpsService';
 import {
   adoCommentRef,
+  adoDetailsFrom,
   adoLikeRequest,
   adoLikes,
   adoReplyBody,
@@ -440,7 +441,76 @@ const submission: PrSubmission = {
   replies: [{ draftId: 'd3', threadId: '101', body: 'agreed' }],
 };
 
+describe('adoDetailsFrom', () => {
+  const raw = { pr, iterations, threads: threadsFixture, me: 'me-id', checks };
+
+  it("is the review but for what git tells: no base, no thread's outdated flag", () => {
+    const details = adoDetailsFrom(raw, ctx);
+    const review = adoReviewFrom({ ...raw, filesAtHead, changedSince: new Set() }, ctx);
+    const { base, threads, ...rest } = review;
+    expect(base).toBe('BASE11');
+    expect(details).toEqual({
+      ...rest,
+      threads: details.threads.map((t, i) => {
+        const r = threads[i]!;
+        // Where git found the thread outdated, it has no line; elsewhere ADO's line stands.
+        return {
+          ...r,
+          isOutdated: null,
+          ...(r.isOutdated ? { line: t.line, startLine: t.startLine } : {}),
+        };
+      }),
+    });
+    expect(details.threads.every((t) => t.isOutdated === null)).toBe(true);
+  });
+
+  it("keeps ADO's tracked line on a thread git would call outdated", () => {
+    const gone = adoReviewFrom({ ...raw, filesAtHead: new Set(), changedSince: new Set() }, ctx);
+    const details = adoDetailsFrom(raw, ctx);
+    const i = gone.threads.findIndex((t) => t.side === 'RIGHT');
+    expect(gone.threads[i]).toMatchObject({ isOutdated: true, line: null, startLine: null });
+    expect(details.threads[i]?.line).not.toBeNull();
+  });
+});
+
 describe('adoProvider', () => {
+  it('tells a PR as ADO does, without a git call', async () => {
+    const { deps } = fakeDeps();
+    const git: string[] = [];
+    const noGit: AdoDeps = {
+      ...deps,
+      ensureCommits: async () => void git.push('ensureCommits'),
+      filesAtCommit: async () => (git.push('filesAtCommit'), filesAtHead),
+      diffHunks: async () => (git.push('diffHunks'), ''),
+      diffStat: async () => (git.push('diffStat'), null),
+    };
+    const details = await makeAdoProvider(noGit).details(pctx, 7204);
+    expect(git).toEqual([]);
+    expect(details).not.toHaveProperty('base');
+    expect(details).not.toHaveProperty('baseTip');
+    expect(details.issues).toEqual([
+      {
+        number: 42,
+        title: 'Wire it',
+        url: 'https://dev.azure.com/org/My%20Proj/_workitems/edit/42',
+      },
+    ]);
+  });
+
+  it('loads the details with what git adds: the base, the base tip and outdated threads', async () => {
+    const { deps } = fakeDeps();
+    const forge = makeAdoProvider(deps);
+    const [details, review] = await Promise.all([
+      forge.details(pctx, 7204),
+      forge.load(pctx, 7204),
+    ]);
+    const { base, baseTip, threads, ...rest } = review;
+    const { threads: detailThreads, ...detailRest } = details;
+    expect(rest).toEqual(detailRest);
+    expect([base, baseTip]).toEqual(['BASE11', null]);
+    expect(threads.map((t) => t.id)).toEqual(detailThreads.map((t) => t.id));
+  });
+
   it('loads threads tracked onto the latest iteration', async () => {
     const { deps, calls } = fakeDeps();
     const review = await makeAdoProvider(deps).load(pctx, 7204);

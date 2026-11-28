@@ -22,7 +22,7 @@ import { FORGE_CAPABILITIES } from '@shared/forgeCapabilities';
 import { githubChecks } from '../prRelevance';
 import { GithubService } from '../GithubService';
 import { ensureCommits, runGit } from './localCommits';
-import type { ForgeReview, ForgeProvider } from './types';
+import type { ForgeReview, ForgeProvider, PrContext } from './types';
 
 const execFileAsync = promisify(execFile);
 const TIMEOUT_MS = 15_000;
@@ -305,11 +305,13 @@ function checksFrom(p: Node): PrCheck[] {
   return githubChecks(nodes(rollup?.contexts));
 }
 
-/** The ForgeReview of PR_REVIEW_QUERY's `pullRequest` node, given the commits its diff spans. */
-export function githubReviewFrom(
+/** What PR_REVIEW_QUERY's `pullRequest` node tells of the PR: its review
+ *  but for the merge-base, which takes local git. GitHub's own outdated flag
+ *  is kept: it is the forge's. */
+export function githubDetailsFrom(
   pr: unknown,
-  { number, base, head, viewer }: { number: number; base: string; head: string; viewer: string },
-): ForgeReview {
+  { number, viewer }: { number: number; viewer: string },
+): Omit<ForgeReview, 'base'> {
   const p = (pr && typeof pr === 'object' ? pr : {}) as Node;
   const viewerIsAuthor = p.viewerDidAuthor === true;
   const viewerIsRequestedReviewer = isRequestedOf(p, viewer);
@@ -341,8 +343,7 @@ export function githubReviewFrom(
     viewerName: viewer || null,
     viewerCommented,
     verdicts: viewerIsAuthor ? ['comment'] : GITHUB_VERDICTS,
-    base,
-    head,
+    head: str(p.headRefOid),
     threads: nodes(p.reviewThreads).map(threadFrom),
     conversation,
     ...(threads?.pageInfo?.hasNextPage === true ? { partial: true } : {}),
@@ -534,8 +535,33 @@ export const githubReactionRequest = (
   vars: { subject: subjectId, content },
 });
 
-/** The GitHub adapter, over a GraphQL transport (the real one runs `gh`). */
-export function makeGithubProvider(gql: Gql = ghGql, rest: Rest = ghRest): ForgeProvider {
+/** The git calls a GitHub load makes in the checkout; the app's by default. */
+export interface GithubGit {
+  ensureCommits: typeof ensureCommits;
+  mergeBase: (cwd: string, a: string, b: string) => Promise<string>;
+}
+
+const appGit: GithubGit = {
+  ensureCommits,
+  mergeBase: async (cwd, a, b) => (await runGit(cwd, ['merge-base', a, b], TIMEOUT_MS)).trim(),
+};
+
+/** The GitHub adapter, over a GraphQL transport (the real one runs `gh`) and
+ *  the checkout's git. */
+export function makeGithubProvider(
+  gql: Gql = ghGql,
+  rest: Rest = ghRest,
+  git: GithubGit = appGit,
+): ForgeProvider {
+  /** The PR's review as GitHub tells it, and its base branch's tip. */
+  const fetchDetails = async (ctx: PrContext, number: number) => {
+    const data = await gql(ctx.cwd, PR_REVIEW_QUERY, repoVars(number));
+    const pr = pick(data, 'repository', 'pullRequest') as Node | undefined;
+    if (!pr) throw new Error(`PR #${number} not found`);
+    const viewer = str(pick(data, 'viewer', 'login'));
+    return { details: githubDetailsFrom(pr, { number, viewer }), baseTip: str(pr.baseRefOid) };
+  };
+
   return {
     capabilities: FORGE_CAPABILITIES.github,
 
@@ -553,16 +579,16 @@ export function makeGithubProvider(gql: Gql = ghGql, rest: Rest = ghRest): Forge
     list: async (ctx, filter) =>
       githubRelevantPrsFrom(await gql(ctx.cwd, RELEVANT_PRS_QUERY, listVars(filter))),
 
+    details: async (ctx, number) => (await fetchDetails(ctx, number)).details,
+
+    /** The details, with the base branch's tip and the head fetched into the
+     *  checkout, and their merge-base. */
     async load(ctx, number) {
-      const data = await gql(ctx.cwd, PR_REVIEW_QUERY, repoVars(number));
-      const pr = pick(data, 'repository', 'pullRequest') as Node | undefined;
-      if (!pr) throw new Error(`PR #${number} not found`);
-      const head = str(pr.headRefOid);
-      const baseTip = str(pr.baseRefOid);
-      await ensureCommits(ctx.cwd, [baseTip, head], undefined, [`refs/pull/${number}/head`]);
-      const base = (await runGit(ctx.cwd, ['merge-base', baseTip, head], TIMEOUT_MS)).trim();
-      const viewer = str(pick(data, 'viewer', 'login'));
-      return { ...githubReviewFrom(pr, { number, base, head, viewer }), baseTip };
+      const { details, baseTip } = await fetchDetails(ctx, number);
+      const { head } = details;
+      await git.ensureCommits(ctx.cwd, [baseTip, head], undefined, [`refs/pull/${number}/head`]);
+      const base = await git.mergeBase(ctx.cwd, baseTip, head);
+      return { ...details, base, baseTip };
     },
 
     async reply(ctx, number, threadId, body) {
