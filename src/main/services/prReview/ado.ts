@@ -13,6 +13,7 @@ import type {
   PrState,
   PrVerdict,
   PrWriteError,
+  RelevantPr,
 } from '@shared/types';
 import {
   AdoRequestError,
@@ -25,7 +26,7 @@ import { adoPrListQuery, mapAdoPrList, mapAdoRelevantPrs } from '../adoPr';
 import type { FailedCheck } from '../ciReport';
 import { adoBuildIdOf, adoLogExcerpt, adoLogStartLine, adoTimelineFailure } from '../adoCi';
 import { ciOf } from '../prRelevance';
-import { ensureCommits, filesAtCommit, runGit } from './localCommits';
+import { ensureCommits, filesAtCommit, localDiffStat, runGit } from './localCommits';
 import type { ForgeReview, PrContext, ForgeProvider } from './types';
 
 const execFileAsync = promisify(execFile);
@@ -277,6 +278,24 @@ const isHumanThread = (t: RawThread) =>
   !t.properties?.CodeReviewThreadType &&
   (t.comments ?? []).some((c) => c.commentType !== 'system' && !c.isDeleted);
 
+/** A listed PR's row facts from its threads (`pullRequests/{id}/threads`):
+ *  its people's threads, open and all, and its latest activity, the newest
+ *  of its creation and every thread and comment (ADO's own push and vote
+ *  threads included, so a push counts). */
+export function adoRowFacts(
+  pr: unknown,
+  threads: unknown,
+): { updatedAt: string | null; threads: { open: number; total: number } } {
+  const human = list<RawThread>(threads).filter(isHumanThread);
+  return {
+    updatedAt: lastActivity((pr ?? {}) as RawPr, [], threads) || null,
+    threads: {
+      open: human.filter((t) => !RESOLVED.has(t.status ?? '')).length,
+      total: human.length,
+    },
+  };
+}
+
 /** The paths (without ADO's leading '/') that threads sit on. */
 export function threadPaths(threads: unknown): string[] {
   const paths = list<RawThread>(threads)
@@ -526,6 +545,9 @@ export interface AdoDeps {
   ) => Promise<PrCheck[]>;
   /** Fetch branch `branch` from origin into the checkout at `cwd`. */
   fetchBranch: (cwd: string, branch: string) => Promise<void>;
+  /** Lines added and deleted from `base`'s merge-base with `head` to `head`,
+   *  from local git; null unless both are in the checkout (nothing is fetched). */
+  diffStat: typeof localDiffStat;
 }
 
 const defaultDeps: AdoDeps = {
@@ -546,7 +568,16 @@ const defaultDeps: AdoDeps = {
   fetchBranch: async (cwd, branch) => {
     await runGit(cwd, ['fetch', 'origin', branch], 60_000);
   },
+  diffStat: localDiffStat,
 };
+
+/** How many of a listing's PRs get their row facts, newest first, and how
+ *  many PRs are asked about at once: each costs three calls (threads, policy
+ *  evaluations, statuses). */
+const ROW_FACTS_LIMIT = 10;
+const ROW_FACTS_CONCURRENCY = 4;
+/** How long a PR's row facts are reused before they're asked again. */
+const ROW_FACTS_TTL_MS = 60_000;
 
 function adoOf(ctx: PrContext): NonNullable<PrContext['ado']> {
   if (!ctx.ado) throw new Error('Azure DevOps not configured');
@@ -647,6 +678,41 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
     );
   };
 
+  const rowFactsCache = new Map<string, { at: number; facts: Promise<Partial<RelevantPr>> }>();
+
+  /**
+   * What ADO's PR list leaves out of a row, a few calls per PR: its threads
+   * and latest activity (`adoRowFacts`), its checks as one state, and its
+   * line counts from local git when its head and target are in the checkout.
+   * Whatever can't be read stays null. Reused for a minute per PR and head.
+   */
+  const rowFacts = (ctx: PrContext, pr: RawPr): Promise<Partial<RelevantPr>> => {
+    const ado = adoOf(ctx);
+    const id = pr.pullRequestId ?? 0;
+    const head = pr.lastMergeSourceCommit?.commitId ?? '';
+    const key = `${ado.organizationUrl}|${ado.repository}|${id}|${head}`;
+    const hit = rowFactsCache.get(key);
+    if (hit && Date.now() - hit.at < ROW_FACTS_TTL_MS) return hit.facts;
+    const facts = (async (): Promise<Partial<RelevantPr>> => {
+      const [threads, checks, lines] = await Promise.allSettled([
+        deps.request(ado, `${repoPath(ado)}/pullRequests/${id}/threads`),
+        deps.checks(ado, id, pr.repository?.project?.id),
+        deps.diffStat(ctx.cwd, pr.lastMergeTargetCommit?.commitId ?? '', head),
+      ]);
+      const stat = lines.status === 'fulfilled' ? lines.value : null;
+      return {
+        ...(threads.status === 'fulfilled' ? adoRowFacts(pr, threads.value) : {}),
+        ...(checks.status === 'fulfilled' ? { ci: ciOf(checks.value) } : {}),
+        ...(stat ? stat : {}),
+      };
+    })();
+    for (const [k, v] of rowFactsCache) {
+      if (Date.now() - v.at >= ROW_FACTS_TTL_MS) rowFactsCache.delete(k);
+    }
+    rowFactsCache.set(key, { at: Date.now(), facts });
+    return facts;
+  };
+
   /** A reply under the thread's first comment, posted at once. */
   const reply: ForgeProvider['reply'] = async (ctx, number, threadId, body) => {
     const ado = adoOf(ctx);
@@ -727,6 +793,8 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
     // ADO doesn't match a commit's author to a profile page.
     commitAuthorUrl: async () => null,
 
+    /** The listing, with the row facts ADO's list leaves out (see
+     *  `rowFacts`) filled in for its newest PRs. */
     async list(ctx, filter) {
       const ado = adoOf(ctx);
       const res = (await deps.request(
@@ -735,7 +803,19 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
       )) as {
         value?: unknown;
       } | null;
-      return mapAdoRelevantPrs(res?.value, repoContext(ado));
+      const raw = list<RawPr>(res);
+      const rows = mapAdoRelevantPrs(raw, repoContext(ado));
+      const newest = rows
+        .map((row, i) => ({ row, raw: raw[i]! }))
+        .sort((a, b) => b.row.number - a.row.number)
+        .slice(0, ROW_FACTS_LIMIT);
+      const facts = new Map<number, Partial<RelevantPr>>();
+      for (let i = 0; i < newest.length; i += ROW_FACTS_CONCURRENCY) {
+        const batch = newest.slice(i, i + ROW_FACTS_CONCURRENCY);
+        const got = await Promise.all(batch.map((n) => rowFacts(ctx, n.raw)));
+        batch.forEach((n, j) => facts.set(n.row.number, got[j]!));
+      }
+      return rows.map((row) => ({ ...row, ...facts.get(row.number) }));
     },
 
     async load(ctx, number) {

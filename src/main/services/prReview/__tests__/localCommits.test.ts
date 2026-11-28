@@ -7,6 +7,7 @@ import {
   checkoutVsHead,
   ensureCommits,
   filesAtCommit,
+  localDiffStat,
   parseRawNumstat,
   prLocalStats,
   runGit,
@@ -150,5 +151,37 @@ describe('prLocalStats', () => {
 
   it('tolerates empty output', () => {
     expect(parseRawNumstat('')).toEqual([]);
+  });
+});
+
+describe('localDiffStat', () => {
+  it('counts the lines a head changed since its merge-base with the target, from local git', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'dash-diffstat-'));
+    const g = (...args: string[]) =>
+      execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
+    try {
+      g('init', '-q');
+      g('config', 'user.email', 't@t');
+      g('config', 'user.name', 't');
+      writeFileSync(path.join(dir, 'f.txt'), 'a\nb\nc\n');
+      g('add', '.');
+      g('commit', '-qm', 'base');
+      const target0 = g('rev-parse', 'HEAD');
+      g('checkout', '-qb', 'pr');
+      writeFileSync(path.join(dir, 'f.txt'), 'a\nB\nc\nd\n');
+      g('commit', '-qam', 'pr');
+      const prHead = g('rev-parse', 'HEAD');
+      // The target moves on; its own change isn't the PR's.
+      g('checkout', '-q', target0);
+      writeFileSync(path.join(dir, 'g.txt'), 'x\ny\n');
+      g('add', '.');
+      g('commit', '-qm', 'main');
+      const target = g('rev-parse', 'HEAD');
+      expect(await localDiffStat(dir, target, prHead)).toEqual({ additions: 2, deletions: 1 });
+      expect(await localDiffStat(dir, target, 'f'.repeat(40))).toBeNull();
+      expect(await localDiffStat(dir, '', prHead)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

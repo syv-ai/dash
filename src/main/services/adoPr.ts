@@ -47,8 +47,8 @@ export function mapAdoPrList(raw: unknown, ctx: AdoPrContext): PullRequest[] {
 
 /**
  * The relevant-PR rows of the same listing. ADO's list carries a draft flag
- * but no update time, line counts, threads or checks; each is a call per PR,
- * so the row goes without them (null).
+ * but no update time, line counts, threads or checks: they're null here, and
+ * the ADO forge fills them in for the newest rows (`list` in `prReview/ado.ts`).
  */
 export function mapAdoRelevantPrs(raw: unknown, ctx: AdoPrContext): RelevantPr[] {
   const entries = Array.isArray(raw) ? (raw as RawAdoPr[]) : [];

@@ -396,6 +396,7 @@ function fakeDeps(failOnCall?: number) {
     showFile: async () => 'one\ntwo\nthree four\n',
     checks: async () => checks,
     fetchBranch: async () => {},
+    diffStat: async () => null,
   };
   return { deps, calls };
 }

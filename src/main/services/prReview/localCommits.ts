@@ -36,6 +36,27 @@ export async function ensureCommits(
   }
 }
 
+/**
+ * Lines added and deleted on `head` since its merge-base with `base` (`git
+ * diff --shortstat base...head`); null unless both commits are in the
+ * checkout already, since nothing is fetched for it, or git can't say.
+ */
+export async function localDiffStat(
+  cwd: string,
+  base: string,
+  head: string,
+  run: RunGit = runGit,
+): Promise<{ additions: number; deletions: number } | null> {
+  if (!base || !head || !(await has(cwd, base, run)) || !(await has(cwd, head, run))) return null;
+  try {
+    const out = await run(cwd, ['diff', '--shortstat', `${base}...${head}`], 15_000);
+    const count = (what: string) => Number(new RegExp(`(\\d+) ${what}`).exec(out)?.[1] ?? 0);
+    return { additions: count('insertion'), deletions: count('deletion') };
+  } catch {
+    return null;
+  }
+}
+
 /** Which of `paths` exist in commit `sha`. */
 export async function filesAtCommit(
   cwd: string,
