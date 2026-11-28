@@ -20,7 +20,7 @@ import { FinishReviewSheet } from './FinishReviewSheet';
 import { ThreadsTab } from './ThreadsTab';
 import { NotesTray } from './NotesTray';
 import { fileRows, reviewComments } from './outline';
-import { headFromFork } from './prList';
+import { forkHeadUrl, headFromFork } from './prList';
 import { ReviewFiles, type RepoFiles } from './ReviewFiles';
 import { ReviewHeader } from './ReviewHeader';
 import { ReviewOverview } from './ReviewOverview';
@@ -142,6 +142,7 @@ function Review({
           review={{
             ...review,
             headFromFork: headFromFork(review.number, relevant, task.branch),
+            forkHeadUrl: forkHeadUrl(review.number, relevant),
           }}
           remote={remote}
           error={error}

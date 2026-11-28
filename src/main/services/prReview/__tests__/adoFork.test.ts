@@ -219,3 +219,28 @@ describe('fetchAdoForkHead', () => {
     ).rejects.toThrow(/names no head commit/);
   });
 });
+
+describe('adoForkBranchUrl', () => {
+  it("links a fork PR's head on the fork's page, dropping user info", async () => {
+    const { adoForkBranchUrl } = await import('../adoFork');
+    expect(
+      adoForkBranchUrl({
+        sourceRefName: 'refs/heads/fix/typo',
+        forkSource: {
+          repository: { remoteUrl: 'https://me@dev.azure.com/org/proj/_git/fork' },
+        },
+      }),
+    ).toBe('https://dev.azure.com/org/proj/_git/fork?version=GBfix%2Ftypo');
+  });
+
+  it('is null for a same-repo PR or a fork without an https URL', async () => {
+    const { adoForkBranchUrl } = await import('../adoFork');
+    expect(adoForkBranchUrl({ sourceRefName: 'refs/heads/x' })).toBeNull();
+    expect(
+      adoForkBranchUrl({
+        sourceRefName: 'refs/heads/x',
+        forkSource: { repository: { remoteUrl: 'git@ssh.dev.azure.com:v3/org/proj/fork' } },
+      }),
+    ).toBeNull();
+  });
+});

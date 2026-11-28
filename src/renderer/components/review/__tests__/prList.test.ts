@@ -12,6 +12,8 @@ import {
   prsTabShown,
   taskPrList,
   otherAssignees,
+  prCardFacts,
+  forkHeadUrl,
 } from '../prList';
 
 const listed = (number: number): RelevantPr => ({
@@ -32,6 +34,8 @@ const listed = (number: number): RelevantPr => ({
   ci: null,
   viewer: null,
   issues: null,
+  verdict: null,
+  headUrl: null,
 });
 
 type Viewer = Parameters<typeof prInvolvement>[0];
@@ -152,6 +156,7 @@ describe('prHead', () => {
       baseRef: 'main',
       headRef: 'feat/x',
       headFromFork: false,
+      forkHeadUrl: null,
     });
     expect(prHead(pr, null, null).authorUrl).toBeNull();
   });
@@ -237,5 +242,24 @@ describe('prOpenByDefault', () => {
     expect(prOpenByDefault(own, 0)).toBe(true);
     expect(prOpenByDefault(own, 1)).toBe(false);
     expect(prOpenByDefault(intoOnly, 0)).toBe(false);
+  });
+});
+
+describe('the listing at a glance', () => {
+  it("a folded card shows the listing's verdict before any review is fetched", () => {
+    expect(prCardFacts({ ...listed(1), verdict: 'approved' }, null).verdict).toBe('approved');
+  });
+
+  it("a fork PR's head links to the fork where the listing gave its page", () => {
+    const relevant = {
+      branch: 'main',
+      from: [],
+      into: [{ ...listed(3), fromFork: true, headUrl: 'https://x/fork/tree/feat' }],
+    };
+    expect(forkHeadUrl(3, relevant)).toBe('https://x/fork/tree/feat');
+    expect(prHead({ ...listed(4), fromFork: true, headUrl: 'u' }, null, null).forkHeadUrl).toBe(
+      'u',
+    );
+    expect(forkHeadUrl(9, relevant)).toBeNull();
   });
 });

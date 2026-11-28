@@ -1,3 +1,4 @@
+import { reviewVerdict, type ReviewVerdict } from '../../../shared/prVerdict';
 import type {
   PrDetails,
   PrGitField,
@@ -33,11 +34,12 @@ export type PrCardReview = PrDetails & Partial<Pick<PrReview, PrGitField>>;
 
 /** What a PR's head (`ReviewHeader`) says of it; the commit count only where
  *  git counted it. `headFromFork`: its head branch is a fork's, which origin's
- *  same-named branch (if any) isn't, so the header doesn't link it there. */
+ *  same-named branch (if any) isn't, so the header doesn't link it there;
+ *  `forkHeadUrl` is that branch on the fork's own page, where the forge said. */
 export type PrHead = Pick<
   PrReview,
   'provider' | 'number' | 'title' | 'url' | 'state' | 'author' | 'authorUrl' | 'baseRef' | 'headRef'
-> & { commits: number | null; headFromFork: boolean };
+> & { commits: number | null; headFromFork: boolean; forkHeadUrl: string | null };
 
 /**
  * Whether PR `number`'s head is a fork's, as far as the renderer can tell
@@ -53,6 +55,10 @@ export function headFromFork(
   if (listed) return listed.fromFork;
   return !!taskBranch && forkPrOfBranch(taskBranch)?.number === number;
 }
+
+/** PR `number`'s head branch on its fork's page, from the task's listing. */
+export const forkHeadUrl = (number: number, relevant: RelevantPrs | null): string | null =>
+  taskPrList(relevant).find((p) => p.number === number)?.headUrl ?? null;
 
 /**
  * A listed PR's head: its fetched review's once there is one (with no commit
@@ -73,6 +79,7 @@ export function prHead(pr: RelevantPr, review: PrCardReview | null, remote: stri
       baseRef: review.baseRef,
       headRef: review.headRef,
       headFromFork: pr.fromFork,
+      forkHeadUrl: pr.headUrl,
     };
   return {
     provider: pr.provider,
@@ -86,6 +93,7 @@ export function prHead(pr: RelevantPr, review: PrCardReview | null, remote: stri
     baseRef: pr.baseRefName,
     headRef: pr.headRefName,
     headFromFork: pr.fromFork,
+    forkHeadUrl: pr.headUrl,
   };
 }
 
@@ -176,29 +184,7 @@ export function otherAssignees(
   return me ? review.assignees.filter((a) => a !== me) : review.assignees;
 }
 
-/** Where a PR's review stands, at a glance: someone asked for changes, a
- *  required review is still to come or no one has approved yet, or it's
- *  approved. */
-export type ReviewVerdict = 'changes_requested' | 'pending' | 'approved';
-
-const APPROVING = new Set<PrReviewer['state']>(['approved', 'approved_with_suggestions']);
-/** GitHub's change request; ADO's rejection and "waiting for author". */
-const BLOCKING = new Set<PrReviewer['state']>(['changes_requested', 'rejected', 'waiting']);
-
-/**
- * A PR's review verdict from its reviewers' states (GitHub's latest reviews,
- * ADO's votes), those who declined left out: changes requested if anyone
- * asked for them; else pending while a required reviewer hasn't approved;
- * else approved once anyone has; else pending while anyone is still asked.
- * Null with no one asked.
- */
-export function reviewVerdict(reviewers: readonly PrReviewer[]): ReviewVerdict | null {
-  const asked = reviewers.filter((r) => !r.declined);
-  if (asked.some((r) => BLOCKING.has(r.state))) return 'changes_requested';
-  if (asked.some((r) => r.required && !APPROVING.has(r.state))) return 'pending';
-  if (asked.some((r) => APPROVING.has(r.state))) return 'approved';
-  return asked.some((r) => r.state === 'pending') ? 'pending' : null;
-}
+export { reviewVerdict, type ReviewVerdict };
 
 /** How the person is part of a listed PR before its review is fetched: what
  *  the listing says (author, assigned, asked to review), as `prInvolvement`
@@ -221,8 +207,7 @@ export const prOpenByDefault = (relevant: RelevantPrs | null, index: number): bo
 
 /** What a PR card's head says of it, from the listing until its review is
  *  fetched, then from the review (newer, and with the person's own review
- *  and comments). `files` only where git listed them; `verdict` only once
- *  the reviewers are known (the listing doesn't carry them). */
+ *  and comments). `files` only where git listed them. */
 export interface PrCardFacts {
   additions: number | null;
   deletions: number | null;
@@ -239,7 +224,7 @@ export function prCardFacts(pr: RelevantPr, review: PrCardReview | null): PrCard
       deletions: pr.deletions,
       files: null,
       threads: pr.threads,
-      verdict: null,
+      verdict: pr.verdict,
       involvement: listedInvolvement(pr.viewer),
     };
   const totals = review.files ? diffTotals(review.files) : null;

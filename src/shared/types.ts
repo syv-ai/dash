@@ -1,4 +1,5 @@
 import type { TaskEffort } from './effort';
+import type { ReviewVerdict } from './prVerdict';
 
 export type { TaskEffort } from './effort';
 
@@ -1047,6 +1048,12 @@ export interface RelevantPr extends PullRequest {
   /** The issues it closes (GitHub) or its linked work items (ADO); null
    *  where the listing didn't ask (ADO, past its newest rows). */
   issues: PrIssue[] | null;
+  /** Where its review stands (`shared/prVerdict`): GitHub's review decision
+   *  or latest reviews, ADO's votes. Null with no one asked. */
+  verdict: ReviewVerdict | null;
+  /** A fork PR's head branch page on the fork; null for a same-repo PR or
+   *  where the forge didn't say. */
+  headUrl: string | null;
 }
 
 /** Where you stand on a listed PR. */

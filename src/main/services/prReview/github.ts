@@ -17,6 +17,7 @@ import type {
   RelevantPr,
 } from '@shared/types';
 import { GITHUB_REACTIONS } from '@shared/prReactions';
+import { reviewVerdict, type ReviewVerdict } from '@shared/prVerdict';
 import { quoteReply, type GeneralReplyTarget } from '@shared/prGeneralReply';
 import { FORGE_CAPABILITIES } from '@shared/forgeCapabilities';
 import { githubChecks } from '../prRelevance';
@@ -103,8 +104,10 @@ export const RELEVANT_PRS_QUERY = `query($owner: String!, $name: String!, $head:
       orderBy: { field: CREATED_AT, direction: DESC }
     ) {
       nodes {
-        number title url state isDraft isCrossRepository
+        number title url state isDraft isCrossRepository reviewDecision
         headRefName baseRefName updatedAt additions deletions
+        headRepository { url }
+        latestReviews(first: 20) { nodes { state } }
         author { login }
         viewerDidAuthor
         assignees(first: 20) { nodes { login } }
@@ -230,8 +233,45 @@ export function githubRelevantPrsFrom(data: Node): RelevantPr[] {
           }
         : null,
       issues: issuesFrom(p),
+      verdict: listedVerdict(p),
+      headUrl: p.isCrossRepository === true ? forkHeadUrl(p) : null,
     };
   });
+}
+
+const DECISIONS: Record<string, ReviewVerdict> = {
+  APPROVED: 'approved',
+  CHANGES_REQUESTED: 'changes_requested',
+  REVIEW_REQUIRED: 'pending',
+};
+
+/**
+ * A listed PR's verdict: GitHub's `reviewDecision` where branch protection
+ * sets one; otherwise its latest reviews and open requests, read by the same
+ * rule as a loaded review (`reviewVerdict`).
+ */
+export function listedVerdict(p: Node): ReviewVerdict | null {
+  const decision = DECISIONS[str(p.reviewDecision)];
+  if (decision) return decision;
+  const states: PrReviewer['state'][] = [
+    ...nodes(p.latestReviews).flatMap((r): PrReviewer['state'][] => {
+      const s = str(r.state);
+      return s === 'APPROVED'
+        ? ['approved']
+        : s === 'CHANGES_REQUESTED'
+          ? ['changes_requested']
+          : [];
+    }),
+    ...nodes(p.reviewRequests).map((): PrReviewer['state'] => 'pending'),
+  ];
+  return reviewVerdict(states.map((state) => ({ name: '', url: null, state })));
+}
+
+/** A fork PR's head branch on the fork's own page. */
+function forkHeadUrl(p: Node): string | null {
+  const repo = str(pick(p, 'headRepository', 'url'));
+  const head = str(p.headRefName);
+  return repo && head ? `${repo}/tree/${head.split('/').map(encodeURIComponent).join('/')}` : null;
 }
 
 /** RELEVANT_PRS_QUERY's variables for `filter`; an unset side isn't sent. */

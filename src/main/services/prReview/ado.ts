@@ -36,7 +36,8 @@ import {
   preparePrBranch,
   runGit,
 } from './localCommits';
-import { adoForkHead, fetchAdoForkHead } from './adoFork';
+import { adoForkBranchUrl, adoForkHead, fetchAdoForkHead } from './adoFork';
+import { reviewVerdict } from '@shared/prVerdict';
 import type { ForgeDetails, ForgeReview, PrContext, ForgeProvider } from './types';
 
 const execFileAsync = promisify(execFile);
@@ -1003,6 +1004,8 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): ForgeProvider {
       const rows = mapAdoRelevantPrs(raw, repoContext(ado)).map((row, i) => ({
         ...row,
         viewer: adoViewerOn(raw[i], me),
+        verdict: reviewVerdict(reviewersFrom(raw[i] ?? {})),
+        headUrl: adoForkBranchUrl((raw[i] ?? {}) as Parameters<typeof adoForkBranchUrl>[0]),
       }));
       const newest = rows
         .map((row, i) => ({ row, raw: raw[i]! }))

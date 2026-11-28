@@ -98,3 +98,25 @@ const firstLine = (err: unknown) => {
     : undefined;
   return line ? ` (${line})` : '';
 };
+
+/**
+ * A fork PR's head branch on the fork's own web page (Azure Repos browses a
+ * branch as `?version=GB<branch>`); null for a same-repo PR or a fork without
+ * an https URL. Any user info in the clone URL is dropped.
+ */
+export function adoForkBranchUrl(pr: RawForkPr): string | null {
+  if (!pr.forkSource) return null;
+  const remote = pr.forkSource.repository?.remoteUrl ?? '';
+  const branch = (pr.sourceRefName || pr.forkSource.name || '').replace(/^refs\/heads\//, '');
+  let url: URL;
+  try {
+    url = new URL(remote);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:' || !branch) return null;
+  url.username = '';
+  url.password = '';
+  url.search = `version=GB${encodeURIComponent(branch)}`;
+  return url.toString();
+}

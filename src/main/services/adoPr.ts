@@ -63,6 +63,8 @@ export function mapAdoRelevantPrs(raw: unknown, ctx: AdoPrContext): RelevantPr[]
     ci: null,
     viewer: null,
     issues: null,
+    verdict: null,
+    headUrl: null,
   }));
 }
 

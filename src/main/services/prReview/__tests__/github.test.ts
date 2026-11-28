@@ -431,6 +431,9 @@ describe('githubRelevantPrsFrom', () => {
       issues: [
         { number: 12, title: 'Tabs for review mode', url: 'https://github.com/o/r/issues/12' },
       ],
+      // Asked of you (and others), no review in yet.
+      verdict: 'pending',
+      headUrl: null,
     });
     expect(draft).toMatchObject({
       state: 'open',
@@ -652,5 +655,30 @@ describe('githubWriteError', () => {
       kind: 'other',
       message: 'GraphQL: Not Found',
     });
+  });
+});
+
+describe('listedVerdict', () => {
+  // Imported late so the block stays self-contained.
+  it('takes reviewDecision where branch protection set one', async () => {
+    const { listedVerdict } = await import('../github');
+    expect(listedVerdict({ reviewDecision: 'APPROVED' })).toBe('approved');
+    expect(listedVerdict({ reviewDecision: 'CHANGES_REQUESTED' })).toBe('changes_requested');
+    expect(listedVerdict({ reviewDecision: 'REVIEW_REQUIRED' })).toBe('pending');
+  });
+
+  it('reads the latest reviews and open requests without a decision', async () => {
+    const { listedVerdict } = await import('../github');
+    const reviews = (...states: string[]) => ({ nodes: states.map((state) => ({ state })) });
+    expect(listedVerdict({ reviewDecision: null, latestReviews: reviews('APPROVED') })).toBe(
+      'approved',
+    );
+    expect(listedVerdict({ latestReviews: reviews('APPROVED', 'CHANGES_REQUESTED') })).toBe(
+      'changes_requested',
+    );
+    expect(
+      listedVerdict({ latestReviews: reviews('COMMENTED'), reviewRequests: { nodes: [{}] } }),
+    ).toBe('pending');
+    expect(listedVerdict({ latestReviews: reviews('COMMENTED') })).toBeNull();
   });
 });

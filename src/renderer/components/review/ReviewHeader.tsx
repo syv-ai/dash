@@ -7,8 +7,18 @@ import { mergeVerb, plural, providerName } from './labels';
 import type { PrHead } from './prList';
 
 /** A branch, linked to its page on the forge when the remote names one. */
-export function Branch({ remote, name }: { remote: string | null; name: string }) {
-  const href = remote ? branchUrl(remote, name) : null;
+/** A branch, linked to its page: `href` where the caller knows it (a fork's
+ *  branch), else origin's by `remote`; plain text with neither. */
+export function Branch({
+  remote,
+  name,
+  href: given = null,
+}: {
+  remote: string | null;
+  name: string;
+  href?: string | null;
+}) {
+  const href = given ?? (remote ? branchUrl(remote, name) : null);
   return href ? (
     <TextLink href={href} title={`Open ${name} on the forge`}>
       <span className="wrap-anywhere">{name}</span>
@@ -129,8 +139,12 @@ export function PrMergeLine({
         </>
       )}
       into <Branch remote={remote} name={review.baseRef} /> from{' '}
-      {/* A fork's branch isn't origin's: named, not linked. */}
-      <Branch remote={review.headFromFork ? null : remote} name={review.headRef} />
+      {/* A fork's branch isn't origin's: linked to the fork, where known. */}
+      {review.headFromFork ? (
+        <Branch remote={null} href={review.forkHeadUrl} name={review.headRef} />
+      ) : (
+        <Branch remote={remote} name={review.headRef} />
+      )}
     </p>
   );
 }

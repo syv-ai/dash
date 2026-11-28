@@ -97,6 +97,8 @@ describe('mapAdoRelevantPrs', () => {
         ci: null,
         viewer: null,
         issues: null,
+        verdict: null,
+        headUrl: null,
       },
     ]);
   });
