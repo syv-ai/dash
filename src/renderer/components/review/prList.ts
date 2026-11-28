@@ -2,6 +2,8 @@ import type {
   PrDetails,
   PrGitField,
   PrReview,
+  PrReviewer,
+  PrViewerInvolvement,
   RelevantPr,
   RelevantPrs,
 } from '../../../shared/types';
@@ -9,6 +11,7 @@ import { forkPrOfBranch } from '../../../shared/prBranch';
 import { githubProfileUrl } from '../../../shared/urls';
 import { shownPrState } from '../ui/prStatusColors';
 import { OWN_REVIEW_LABELS } from './finishReview';
+import { diffTotals } from './labels';
 
 /**
  * The PRs view's PRs, in order: the branch's own PRs first (opened from it),
@@ -171,4 +174,84 @@ export function otherAssignees(
 ): string[] {
   const me = review.viewerIsAssignee ? review.viewerName : null;
   return me ? review.assignees.filter((a) => a !== me) : review.assignees;
+}
+
+/** Where a PR's review stands, at a glance: someone asked for changes, a
+ *  required review is still to come or no one has approved yet, or it's
+ *  approved. */
+export type ReviewVerdict = 'changes_requested' | 'pending' | 'approved';
+
+const APPROVING = new Set<PrReviewer['state']>(['approved', 'approved_with_suggestions']);
+/** GitHub's change request; ADO's rejection and "waiting for author". */
+const BLOCKING = new Set<PrReviewer['state']>(['changes_requested', 'rejected', 'waiting']);
+
+/**
+ * A PR's review verdict from its reviewers' states (GitHub's latest reviews,
+ * ADO's votes), those who declined left out: changes requested if anyone
+ * asked for them; else pending while a required reviewer hasn't approved;
+ * else approved once anyone has; else pending while anyone is still asked.
+ * Null with no one asked.
+ */
+export function reviewVerdict(reviewers: readonly PrReviewer[]): ReviewVerdict | null {
+  const asked = reviewers.filter((r) => !r.declined);
+  if (asked.some((r) => BLOCKING.has(r.state))) return 'changes_requested';
+  if (asked.some((r) => r.required && !APPROVING.has(r.state))) return 'pending';
+  if (asked.some((r) => APPROVING.has(r.state))) return 'approved';
+  return asked.some((r) => r.state === 'pending') ? 'pending' : null;
+}
+
+/** How the person is part of a listed PR before its review is fetched: what
+ *  the listing says (author, assigned, asked to review), as `prInvolvement`
+ *  words it; nothing when the forge couldn't say who they are. */
+export function listedInvolvement(viewer: PrViewerInvolvement | null): Involvement[] {
+  if (!viewer) return [];
+  return prInvolvement({
+    viewerIsAuthor: viewer.isAuthor,
+    viewerIsAssignee: viewer.isAssignee,
+    viewerIsRequestedReviewer: viewer.isRequestedReviewer,
+    viewerReview: null,
+    viewerCommented: false,
+  });
+}
+
+/** The task PRs view's drawers open at first: the only PR, or the branch's
+ *  own (listed first); the rest folded. */
+export const prOpenByDefault = (relevant: RelevantPrs | null, index: number): boolean =>
+  index === 0 && (taskPrList(relevant).length === 1 || (relevant?.from.length ?? 0) > 0);
+
+/** What a PR card's head says of it, from the listing until its review is
+ *  fetched, then from the review (newer, and with the person's own review
+ *  and comments). `files` only where git listed them; `verdict` only once
+ *  the reviewers are known (the listing doesn't carry them). */
+export interface PrCardFacts {
+  additions: number | null;
+  deletions: number | null;
+  files: number | null;
+  threads: { open: number; total: number } | null;
+  verdict: ReviewVerdict | null;
+  involvement: Involvement[];
+}
+
+export function prCardFacts(pr: RelevantPr, review: PrCardReview | null): PrCardFacts {
+  if (!review)
+    return {
+      additions: pr.additions,
+      deletions: pr.deletions,
+      files: null,
+      threads: pr.threads,
+      verdict: null,
+      involvement: listedInvolvement(pr.viewer),
+    };
+  const totals = review.files ? diffTotals(review.files) : null;
+  return {
+    additions: totals?.additions ?? pr.additions,
+    deletions: totals?.deletions ?? pr.deletions,
+    files: totals?.files ?? null,
+    threads: {
+      open: review.threads.filter((t) => !t.resolved).length,
+      total: review.threads.length,
+    },
+    verdict: reviewVerdict(review.reviewers),
+    involvement: prInvolvement(review),
+  };
 }

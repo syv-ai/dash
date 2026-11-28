@@ -1,4 +1,4 @@
-import { Fragment, type KeyboardEvent } from 'react';
+import { Fragment, type KeyboardEvent, type ReactNode } from 'react';
 import { CircleAlert, CircleDot, GitPullRequestArrow, MessageSquare, Plus } from 'lucide-react';
 import type { ProjectPr } from '../../../shared/projectPrs';
 import type { Project, PullRequest, RelevantPr } from '../../../shared/types';
@@ -115,8 +115,9 @@ export function ProjectPrs({
   );
 }
 
-/** One PR: its row, and its card unfolding under it. The fold is kept for
- *  the session, per project PR. */
+/** One PR: its row, which unfolds into its card (`PrCard`), the card's
+ *  fold folding it back to the row. The fold is kept for the session, per
+ *  project PR. */
 function PrItem({
   entry,
   project,
@@ -130,62 +131,62 @@ function PrItem({
   const sectionId = `projectPrs.${project.id}.${prKey(pr.provider, pr.number)}`;
   const row = useSectionOpen(sectionId, false);
   const route = prRowRoute(taskId);
-  const onReview = () =>
-    route.kind === 'task' ? actions.reviewInTask(route.taskId, pr) : actions.startTask(pr, true);
-  return (
-    <div>
+  if (!row.open)
+    return (
       <PrRow
         pr={pr}
         projectId={project.id}
         route={route}
-        open={row.open}
-        onToggle={() => row.onOpenChange(!row.open)}
+        onUnfold={() => row.onOpenChange(true)}
         actions={actions}
       />
-      <div className="collapse-grid" data-open={row.open}>
-        <div>
-          {row.open && (
-            <ExpandedPr
-              pr={pr}
-              taskId={taskId}
-              project={project}
-              sectionId={sectionId}
-              onReview={onReview}
-            />
-          )}
-        </div>
-      </div>
-    </div>
+    );
+  return (
+    <ExpandedPr
+      pr={pr}
+      taskId={taskId}
+      project={project}
+      sectionId={sectionId}
+      fold={row}
+      task={<TaskCell pr={pr} projectId={project.id} route={route} actions={actions} />}
+      onReview={() =>
+        route.kind === 'task' ? actions.reviewInTask(route.taskId, pr) : actions.startTask(pr, true)
+      }
+    />
   );
 }
 
-/** The card, its details fetched from the forge while its About is open. */
+/** The card, its details fetched from the forge while it's unfolded. */
 function ExpandedPr({
   pr,
   taskId,
   project,
   sectionId,
+  fold,
+  task,
   onReview,
 }: {
   pr: RelevantPr;
   taskId: string | null;
   project: Pick<Project, 'id' | 'gitRemote'>;
   sectionId: string;
+  fold: { open: boolean; onOpenChange: (open: boolean) => void };
+  /** Its task, or Start task: the row's, at the card's title. */
+  task: ReactNode;
   onReview: () => void;
 }) {
-  const about = useSectionOpen(`${sectionId}.about`, true);
-  const { details, error } = usePrDetails(project.id, about.open ? pr : null);
+  const { details, error } = usePrDetails(project.id, pr);
   return (
-    // Under the row's title, as wide as reads well.
-    <div className="max-w-3xl pt-1 pb-4 pl-7">
+    <div className="py-1">
       <PrCard
         pr={pr}
         review={details}
         error={error}
         remote={project.gitRemote ?? null}
         taskId={taskId}
-        about={about}
-        sectionId={`${sectionId}.card`}
+        about={fold}
+        sectionId={sectionId}
+        actions={task}
         // Every way into review mode goes through a task: the view it lands
         // on is review mode's own (Overview).
         onReview={() => onReview()}
@@ -204,15 +205,14 @@ function PrRow({
   pr,
   projectId,
   route,
-  open,
-  onToggle,
+  onUnfold,
   actions,
 }: {
   pr: RelevantPr;
   projectId: string;
   route: PrRowRoute;
-  open: boolean;
-  onToggle: () => void;
+  /** Unfold it into its card. */
+  onUnfold: () => void;
   actions: ProjectPrActions;
 }) {
   const state = shownPrState(pr);
@@ -221,21 +221,20 @@ function PrRow({
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
     e.preventDefault();
-    onToggle();
+    onUnfold();
   };
   return (
     <ListRow
       as="div"
       role="button"
       tabIndex={0}
-      aria-expanded={open}
-      selected={open}
-      onClick={onToggle}
+      aria-expanded={false}
+      onClick={onUnfold}
       onKeyDown={onKeyDown}
       className="cursor-pointer"
       leading={
         <span className="flex items-center gap-1.5">
-          <DisclosureChevron open={open} />
+          <DisclosureChevron open={false} />
           <StateIcon
             size={14}
             strokeWidth={1.8}
@@ -255,7 +254,7 @@ function PrRow({
           <Issues pr={pr} />
           {/* A column of its own, so the issues before it line up too. */}
           <span className="flex w-44 justify-end">
-            <TaskCell pr={pr} projectId={projectId} route={route} actions={actions} />
+            <TaskCell pr={pr} projectId={projectId} route={route} actions={actions} inRow />
           </span>
           <span className="flex w-5 justify-center">
             {pr.ci && <ChecksRollupIcon ci={pr.ci} />}
@@ -309,18 +308,26 @@ function TaskCell({
   projectId,
   route,
   actions,
+  inRow = false,
 }: {
   pr: RelevantPr;
   projectId: string;
   route: PrRowRoute;
   actions: ProjectPrActions;
+  /** In a folded row: Start task shows on the row's hover or focus only. */
+  inRow?: boolean;
 }) {
   if (route.kind === 'task')
     return <TaskChip projectId={projectId} taskId={route.taskId} actions={actions} />;
   return (
-    // On the row's hover, focus or unfolding only: on every row at rest it
-    // would be the list's loudest word. Its room is kept, so nothing shifts.
-    <span className="opacity-0 transition-opacity duration-quick group-focus-within/row:opacity-100 group-hover/row:opacity-100 group-data-[selected=true]/row:opacity-100">
+    // In a row, on its hover or focus only: on every row at rest it would be
+    // the list's loudest word. Its room is kept, so nothing shifts.
+    <span
+      className={cn(
+        inRow &&
+          'opacity-0 transition-opacity duration-quick group-focus-within/row:opacity-100 group-hover/row:opacity-100',
+      )}
+    >
       <Tooltip content="A new task on its branch, to work on or review it">
         <Button
           variant="ghost"

@@ -146,7 +146,8 @@ export function ReviewOverview({
  * opened and last moved, its files and lines changed (the count a link to
  * Files, given `onShowFiles`; only where git listed them), threads (the count
  * a link to Threads, given `onShowThreads`), reviewers, assignees and linked
- * issues, then `tail`. A review read from the forge alone (the project page)
+ * issues, then `tail`; a card leaves the counts to its head (`counts`). A
+ * review read from the forge alone (the project page)
  * has no files and no distance behind base, so says neither.
  */
 export function PrAbout({
@@ -157,6 +158,7 @@ export function PrAbout({
   onShowThreads,
   lead,
   tail,
+  counts = true,
 }: {
   review: PrCardReview;
   remote: string | null;
@@ -167,9 +169,12 @@ export function PrAbout({
   /** Bullets before the PR's facts, and after them. */
   lead?: ReactNode;
   tail?: ReactNode;
+  /** Its files, lines and threads counts; false where a card's head already
+   *  says them (`PrCard`). */
+  counts?: boolean;
 }) {
   const resolved = threadsResolved(review.threads);
-  const totals = review.files && diffTotals(review.files);
+  const totals = counts && review.files && diffTotals(review.files);
   const created = prDateTime(review.createdAt);
   const active = prDateTime(review.lastActivityAt);
   return (
@@ -195,7 +200,7 @@ export function PrAbout({
             <LineStats add={totals.additions} del={totals.deletions} />
           </li>
         )}
-        {resolved && (
+        {counts && resolved && (
           <li className="tabular-nums">
             <CountLink title="Show them in Threads" onClick={onShowThreads}>
               {plural(review.threads.length, 'thread')}

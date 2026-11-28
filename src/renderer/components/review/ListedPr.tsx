@@ -1,5 +1,12 @@
-import { useEffect, useState } from 'react';
-import { Pencil } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import {
+  CircleCheck,
+  CircleDashed,
+  FileDiff,
+  MessageSquare,
+  Pencil,
+  type LucideIcon,
+} from 'lucide-react';
 import { prScope } from '../../../shared/prScope';
 import type { PrReview, RelevantPr } from '../../../shared/types';
 import { useSectionOpen } from '../../lib/useSectionOpen';
@@ -10,21 +17,25 @@ import { useTaskReview } from '../diffEditor/prReview/useTaskReview';
 import type { ReviewLanding } from '../rightInspector/sidebarState';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
-import { DetailSection } from '../ui/DetailList';
+import { FoldCard } from '../ui/FoldCard';
+import { LineStats } from '../ui/LineStats';
+import { PrStateBadge } from '../ui/PrBadge';
+import { TextLink } from '../ui/TextLink';
 import { Tooltip } from '../ui/Tooltip';
 import { ChecksRollupIcon } from './ChecksRollupIcon';
 import { draftCount, pendingReviewLine, unsentNoteCount } from './finishReview';
-import { reviewComments } from './outline';
+import { plural } from './labels';
+import { checksRollup, reviewComments } from './outline';
 import {
   needsDetails,
   otherAssignees,
+  prCardFacts,
   prHead,
-  prInvolvement,
   type DetailsFetch,
-  type Involvement,
   type PrCardReview,
+  type ReviewVerdict,
 } from './prList';
-import { ReviewHeader } from './ReviewHeader';
+import { PrMergeLine, PrTitle } from './ReviewHeader';
 import { Checks, PrAbout } from './ReviewOverview';
 
 /** Per PR (`prKey`): when its details were last asked for, this session. */
@@ -121,18 +132,35 @@ export function ListedPr({
   );
 }
 
+/** The verdict's word and mark: neutral, as a review's standing isn't the
+ *  PR's state (D133) nor an agent's. */
+const VERDICTS: Record<ReviewVerdict, { label: string; icon: LucideIcon; title: string }> = {
+  approved: { label: 'Approved', icon: CircleCheck, title: 'Its reviewers have approved it' },
+  changes_requested: {
+    label: 'Changes requested',
+    icon: FileDiff,
+    title: 'A reviewer asked for changes',
+  },
+  pending: {
+    label: 'Review required',
+    icon: CircleDashed,
+    title: "A review it needs hasn't come in yet",
+  },
+};
+
 /**
- * A PR drawn with review mode's own pieces, wherever PRs are listed (the
- * task's PRs view, the project page's Pull requests): its head
- * (`ReviewHeader`: state, title to the forge, who wants to merge what into
- * what) with the way into review mode at its end, then About (`PrAbout`) as a
- * band that folds, led by how the person is part of it (neutral badges:
- * involvement isn't state) and closed by the task's review of it still in
- * hand, and its Checks band. Its commits, files and threads counts enter
- * review mode on History, Files and Threads, as review mode's own do; the
- * commits and files only where git read them (`PrCardReview`). The caller
- * fetches `review` as About opens; till then the band, folded, carries the
- * listing's checks.
+ * A PR as a drawer (`FoldCard`), wherever PRs are listed (the task's PRs
+ * view, the project page's Pull requests). Its head always shows what to
+ * know at a glance: the title row (`PrTitle`: state, title to the forge,
+ * number) with the way into review mode at its end, who wants to merge what
+ * into what (`PrMergeLine`), then its state, the review's verdict, the diff
+ * totals, open threads, checks and how the person is part of it
+ * (`prCardFacts`: the listing's until the review is fetched). Unfolded: the
+ * rest of About (dates, reviewers, assignees, issues, the task's review
+ * still in hand) and the Checks band. Its commits, files and threads counts
+ * enter review mode on History, Files and Threads; the commits and files only
+ * where git read them (`PrCardReview`). The caller fetches `review` as it
+ * unfolds.
  */
 export function PrCard({
   pr,
@@ -142,6 +170,7 @@ export function PrCard({
   taskId,
   about,
   sectionId,
+  actions,
   onReview,
 }: {
   pr: RelevantPr;
@@ -153,46 +182,95 @@ export function PrCard({
   remote: string | null;
   /** The task whose drafts and notes it counts; null where none is on it. */
   taskId: string | null;
-  /** About's fold (`useSectionOpen`). */
+  /** The card's fold (`useSectionOpen`). */
   about: { open: boolean; onOpenChange: (open: boolean) => void };
-  /** Where its folds are kept: About's, and Checks' under it. */
+  /** Where its folds are kept: the card's, and Checks' under it. */
   sectionId: string;
+  /** More ways on from it, before Review (the project page's task). */
+  actions?: ReactNode;
   /** Enter review mode on it, on Overview or the view given. */
   onReview: (on?: ReviewLanding) => void;
 }) {
   const pending = usePendingReview(taskId, pr);
+  const head = prHead(pr, review, remote);
+  const facts = prCardFacts(pr, review);
+  const ci = (review && checksRollup(review.checks)) ?? pr.ci;
+  const showThreads = () => {
+    useUi.getState().setReviewThreadsPane('threads');
+    onReview('threads');
+  };
   return (
-    <section>
-      <ReviewHeader
-        review={prHead(pr, review, remote)}
-        remote={remote}
-        error={review && error}
-        onShowCommits={() => onReview('history')}
-        action={
-          <Tooltip content="Its files, threads and commits, in review mode">
-            <Button variant="secondary" size="sm" onClick={() => onReview()}>
-              Review
-            </Button>
-          </Tooltip>
-        }
-      />
-      <DetailSection
-        title="About"
-        collapsible
-        {...about}
-        closedHint={!review && pr.ci && <ChecksRollupIcon ci={pr.ci} />}
-      >
+    <FoldCard
+      {...about}
+      label="this pull request"
+      head={(fold) => (
+        <>
+          <PrTitle
+            review={head}
+            lead={fold}
+            action={
+              <div className="flex items-center gap-1.5">
+                {actions}
+                <Tooltip content="Its files, threads and commits, in review mode">
+                  <Button variant="secondary" size="sm" onClick={() => onReview()}>
+                    Review
+                  </Button>
+                </Tooltip>
+              </div>
+            }
+          />
+          <PrMergeLine review={head} remote={remote} onShowCommits={() => onReview('history')} />
+          <div className="type-caption flex flex-wrap items-center gap-x-3 gap-y-1.5 tabular-nums">
+            <PrStateBadge state={head.state} />
+            {facts.verdict && <Verdict verdict={facts.verdict} />}
+            {(facts.additions !== null || facts.files !== null) && (
+              <span className="flex items-center gap-1.5">
+                {facts.files !== null && (
+                  <TextLink title="Show them in Files" onClick={() => onReview('files')}>
+                    {plural(facts.files, 'file')}
+                  </TextLink>
+                )}
+                {facts.additions !== null && facts.deletions !== null && (
+                  <LineStats add={facts.additions} del={facts.deletions} />
+                )}
+              </span>
+            )}
+            {facts.threads && facts.threads.total > 0 && (
+              <Tooltip
+                content={`${facts.threads.open} unresolved of ${plural(facts.threads.total, 'thread')}`}
+              >
+                <span>
+                  <TextLink title="Show them in Threads" onClick={showThreads}>
+                    <span className="inline-flex items-center gap-1">
+                      <MessageSquare size={14} strokeWidth={1.8} aria-hidden />
+                      {facts.threads.open} of {facts.threads.total}
+                    </span>
+                  </TextLink>
+                </span>
+              </Tooltip>
+            )}
+            {ci && <ChecksRollupIcon ci={ci} />}
+            {facts.involvement.map((i) => (
+              <Tooltip key={i.key} content={i.title}>
+                <Badge size="sm">{i.label}</Badge>
+              </Tooltip>
+            ))}
+          </div>
+          {review && error && (
+            <p className="type-caption wrap-break-word" role="status">
+              Could not reload: {error}
+            </p>
+          )}
+        </>
+      )}
+    >
+      <div className="px-3 pt-2.5 pb-2">
         {review ? (
           <PrAbout
             review={review}
             remote={remote}
+            counts={false}
             assignees={otherAssignees(review)}
-            onShowFiles={() => onReview('files')}
-            onShowThreads={() => {
-              useUi.getState().setReviewThreadsPane('threads');
-              onReview('threads');
-            }}
-            lead={<You involvement={prInvolvement(review)} />}
             tail={pending.line && <PendingReview {...pending} line={pending.line} />}
           />
         ) : (
@@ -200,27 +278,22 @@ export function PrCard({
             {error ? `Could not fetch its details: ${error}` : 'Fetching its details…'}
           </p>
         )}
-      </DetailSection>
+      </div>
       {review && <Checks checks={review.checks} sectionId={`${sectionId}.checks`} />}
-    </section>
+    </FoldCard>
   );
 }
 
-/** "You [Author] [Assigned]": how the person is part of the PR; nothing when
- *  they aren't. */
-function You({ involvement }: { involvement: Involvement[] }) {
-  if (involvement.length === 0) return null;
+/** "✓ Approved": the review's verdict, a quiet mark and its word. */
+function Verdict({ verdict }: { verdict: ReviewVerdict }) {
+  const { label, icon: Icon, title } = VERDICTS[verdict];
   return (
-    <li>
-      <span className="type-label">You</span>{' '}
-      <span className="inline-flex flex-wrap gap-1 align-middle">
-        {involvement.map((i) => (
-          <Tooltip key={i.key} content={i.title}>
-            <Badge size="sm">{i.label}</Badge>
-          </Tooltip>
-        ))}
+    <Tooltip content={title}>
+      <span className="flex items-center gap-1 text-ink-2">
+        <Icon size={14} strokeWidth={1.8} className="text-icon" aria-hidden />
+        {label}
       </span>
-    </li>
+    </Tooltip>
   );
 }
 

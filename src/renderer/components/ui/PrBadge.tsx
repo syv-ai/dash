@@ -15,7 +15,7 @@ import { buttonVariants } from './Button';
 import { menuItem, menuLabel } from './styles';
 import { cn } from '../../lib/cn';
 import { fixCi } from '../../utils/fixCi';
-import type { PullRequestInfo, PullRequestState } from '../../../shared/types';
+import type { PrState, PullRequestInfo, PullRequestState } from '../../../shared/types';
 
 interface PrBadgeProps {
   /** The PRs standing for the branch now, newest first (see relevantPrs). */
@@ -213,6 +213,16 @@ export function PrBadge({ prs, allPrs, size = 'md', variant = 'pill', taskId }: 
 }
 
 /** A PR's number on its state's tint, not clickable (inside a picker's field). */
+/** A PR's state in a word, on its state's tint (D133): Open, Draft, Merged,
+ *  Closed. */
+export function PrStateBadge({ state }: { state: PrState }) {
+  return (
+    <span className={cn(badgeVariants({ tone: 'neutral', size: 'sm' }), prStatusTint(state))}>
+      {state.charAt(0).toUpperCase() + state.slice(1)}
+    </span>
+  );
+}
+
 export function PrNumberBadge({ number, state }: { number: number; state: PullRequestState }) {
   return (
     <span className={cn(badgeVariants({ tone: 'neutral', size: 'sm' }), prStatusTint(state))}>

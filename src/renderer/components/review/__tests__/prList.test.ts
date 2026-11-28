@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import type { PrDetails, PrReview, RelevantPr } from '../../../../shared/types';
+import type { PrDetails, PrReview, PrReviewer, RelevantPr } from '../../../../shared/types';
 import {
   DETAILS_FRESH_MS,
   needsDetails,
   headFromFork,
+  listedInvolvement,
   prHead,
+  prOpenByDefault,
+  reviewVerdict,
   prInvolvement,
   prsTabShown,
   taskPrList,
@@ -185,5 +188,54 @@ describe('headFromFork', () => {
     expect(headFromFork(9, relevant, 'pr/9/fix')).toBe(true);
     expect(headFromFork(9, relevant, 'pr/10/fix')).toBe(false);
     expect(headFromFork(9, null, 'fix')).toBe(false);
+  });
+});
+
+describe('reviewVerdict', () => {
+  const r = (state: PrReviewer['state'], o: Partial<PrReviewer> = {}): PrReviewer => ({
+    name: state,
+    url: null,
+    state,
+    ...o,
+  });
+  it('says changes requested when anyone asked for them (an ADO rejection or wait too)', () => {
+    expect(reviewVerdict([r('approved'), r('changes_requested')])).toBe('changes_requested');
+    expect(reviewVerdict([r('rejected')])).toBe('changes_requested');
+    expect(reviewVerdict([r('waiting')])).toBe('changes_requested');
+  });
+  it('is pending while a required review is to come, approved once in', () => {
+    expect(reviewVerdict([r('approved'), r('pending', { required: true })])).toBe('pending');
+    expect(reviewVerdict([r('approved_with_suggestions'), r('pending')])).toBe('approved');
+  });
+  it('leaves out those who declined, and says nothing with no one asked', () => {
+    expect(reviewVerdict([r('approved'), r('changes_requested', { declined: true })])).toBe(
+      'approved',
+    );
+    expect(reviewVerdict([r('pending')])).toBe('pending');
+    expect(reviewVerdict([r('commented')])).toBeNull();
+    expect(reviewVerdict([])).toBeNull();
+  });
+});
+
+describe('listedInvolvement', () => {
+  it("words the listing's facts as the review's would", () => {
+    expect(
+      listedInvolvement({ isAuthor: true, isAssignee: true, isRequestedReviewer: false }).map(
+        (i) => i.label,
+      ),
+    ).toEqual(['Author', 'Assigned']);
+    expect(listedInvolvement(null)).toEqual([]);
+  });
+});
+
+describe('prOpenByDefault', () => {
+  const one = { branch: 'b', from: [], into: [listed(1)] };
+  const own = { branch: 'b', from: [listed(1)], into: [listed(2), listed(3)] };
+  const intoOnly = { branch: 'b', from: [], into: [listed(2), listed(3)] };
+  it("opens the only PR, or the branch's own; folds the rest", () => {
+    expect(prOpenByDefault(one, 0)).toBe(true);
+    expect(prOpenByDefault(own, 0)).toBe(true);
+    expect(prOpenByDefault(own, 1)).toBe(false);
+    expect(prOpenByDefault(intoOnly, 0)).toBe(false);
   });
 });
