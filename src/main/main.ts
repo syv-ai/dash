@@ -141,6 +141,9 @@ void app.whenReady().then(async () => {
   // Watch every project's Claude memory for the project rows' "new memories" badge.
   const { startMemoryBadges } = await import('./services/memoryBadge');
   void startMemoryBadges();
+  // Follow each project's folder gaining or losing git while Dash runs.
+  const { startProjectGitWatches } = await import('./services/projectGit');
+  startProjectGitWatches();
 
   // The app menu, with Dash's zoom items.
   const { installAppMenu } = await import('./zoom');
@@ -468,6 +471,14 @@ app.on('before-quit', (event) => {
     try {
       const { stopAll: stopPortsConfigWatchers } = await import('./services/PortsConfigWatcher');
       stopPortsConfigWatchers();
+    } catch {
+      // Best effort
+    }
+
+    // Stop the git presence watchers
+    try {
+      const { stopGitPresenceWatches } = await import('./services/gitPresenceWatch');
+      stopGitPresenceWatches();
     } catch {
       // Best effort
     }

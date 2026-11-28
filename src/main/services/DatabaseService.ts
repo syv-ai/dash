@@ -59,6 +59,7 @@ function parseAddDirs(value: string | null): string[] {
   }
 }
 import { syncMemoryWatches } from './MemoryWatcher';
+import { syncGitPresenceWatches } from './gitPresenceWatch';
 
 function normalizePermissionMode(value: string | null | undefined): PermissionMode {
   return isPermissionMode(value) ? value : 'default';
@@ -128,6 +129,7 @@ export class DatabaseService {
     const rows = db.select().from(projects).where(eq(projects.id, id)).all();
     // Every way a project is added or moved comes through here: keep its memory watched.
     void syncMemoryWatches(this.getProjects());
+    syncGitPresenceWatches(this.getProjects());
     return this.mapProject(rows[0]!);
   }
 
@@ -135,6 +137,7 @@ export class DatabaseService {
     const db = getDb();
     db.delete(projects).where(eq(projects.id, id)).run();
     void syncMemoryWatches(this.getProjects());
+    syncGitPresenceWatches(this.getProjects());
   }
 
   static setProjectArchived(id: string, archived: boolean): void {
@@ -144,6 +147,7 @@ export class DatabaseService {
       .set({ archivedAt: archived ? now : null, updatedAt: now })
       .where(eq(projects.id, id))
       .run();
+    syncGitPresenceWatches(this.getProjects());
   }
 
   /** When the project's memory was last seen (epoch ms); null for an unknown project. */
