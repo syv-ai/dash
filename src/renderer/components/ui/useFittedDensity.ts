@@ -42,7 +42,10 @@ export function useFittedDensity<D>(
       // Not rendered (a hidden ancestor, e.g. the collapsed task sidebar):
       // every copy measures 0, which would report a least width of nothing
       // and feed back into its host's layout. Keep the last real measure.
-      if (root.getClientRects().length === 0) return;
+      // Nor one not yet laid out at its width (a panel's first frame, before
+      // its size is restored, is 0 wide): that picks the floor, and the row
+      // pops to its real density a frame later.
+      if (root.getClientRects().length === 0 || root.clientWidth === 0) return;
       // Rects are scaled by any transform above (a dialog's scale-in), and
       // `clientWidth` isn't: unscale them, or a row measured mid-animation
       // reads too narrow and truncates for good (no resize follows).
